@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const {existsSync,readFileSync}=require('fs'),{join}=require('path');const f=join(process.cwd(),'.pi-orchestrator','checkpoint.json');if(existsSync(f)){try{const e=JSON.parse(readFileSync(f,'utf8'));const s=e.state;if(s&&s.phase&&s.phase!=='idle'&&s.phase!=='complete'){const goal=s.selectedGoal?(' goal=\"'+s.selectedGoal+'\"'):'';console.log('\\u26a0\\ufe0f  Previous orchestration session detected: phase='+s.phase+goal+'. Run /claude-orchestrator:orchestrate to resume or /claude-orchestrator:orchestrate-stop to reset.');}}catch(err){}}\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "orch_approve_beads",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Bead approval processed. Run /claude-orchestrator:orchestrate-status to check progress.'"
+          }
+        ]
+      }
+    ]
+  }
+}
