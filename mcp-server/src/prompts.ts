@@ -1065,6 +1065,9 @@ export const SWARM_STAGGER_DELAY_MS = 30_000; // 30 seconds between agent starts
 // Format: "provider/modelId" as accepted by `claude --model`.
 // Update these when new model versions ship or providers change.
 
+/** CC Agent subagent_type for the installed Codex plugin. Use instead of a model string. */
+export const CODEX_SUBAGENT_TYPE = "codex:codex-rescue" as const;
+
 /** Default models used by the multi-model deep planning agents (fallbacks). */
 export const DEEP_PLAN_MODELS = {
   correctness: "anthropic/claude-opus-4-6",

@@ -5,7 +5,7 @@
  * and SwarmTender monitoring integration.
  */
 
-import { swarmMarchingOrders, SWARM_STAGGER_DELAY_MS, SWARM_MODELS } from "./prompts.js";
+import { swarmMarchingOrders, SWARM_STAGGER_DELAY_MS, SWARM_MODELS, CODEX_SUBAGENT_TYPE } from "./prompts.js";
 import type { Bead } from "./types.js";
 import type { AgentStatus } from "./tender.js";
 
@@ -16,8 +16,10 @@ export interface SwarmAgentConfig {
   name: string;
   /** Marching orders prompt. */
   task: string;
-  /** Optional model override. */
+  /** Optional model override (CC model shorthand, e.g. "opus", "sonnet"). */
   model?: string;
+  /** Optional CC subagent_type override (takes precedence over model). */
+  subagent_type?: string;
   /** Working directory. */
   cwd: string;
   /** Delay before spawning (ms) — for staggered starts. */
@@ -93,15 +95,23 @@ export function generateAgentConfigs(
 
   for (let i = 0; i < count; i++) {
     const model = modelQueue[i % modelQueue.length];
-    const modelShort = model.split("/").pop()?.slice(0, 12) ?? `agent-${i}`;
+    const isCodex = model === SWARM_MODELS.codex;
+    const modelShort = isCodex ? "codex" : (model.split("/").pop()?.slice(0, 12) ?? `agent-${i}`);
 
-    configs.push({
+    const config: SwarmAgentConfig = {
       name: `swarm-${i + 1}-${modelShort}`,
       task: swarmMarchingOrders(cwd),
-      model,
       cwd,
       delayMs: i * SWARM_STAGGER_DELAY_MS,
-    });
+    };
+
+    if (isCodex) {
+      config.subagent_type = CODEX_SUBAGENT_TYPE;
+    } else {
+      config.model = model;
+    }
+
+    configs.push(config);
   }
 
   return configs;

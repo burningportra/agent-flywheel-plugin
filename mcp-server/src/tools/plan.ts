@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult } from '../types.js';
 import { slugifyGoal, pickRefinementModel, DEEP_PLAN_MODELS } from './shared.js';
+import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 
 interface PlanArgs {
   cwd: string;
@@ -139,7 +140,7 @@ Focus on: type safety, edge cases, error handling, validation, data integrity, i
 Ask: What can go wrong? What are the failure modes? Are the interfaces correct?`,
     },
     {
-      model: DEEP_PLAN_MODELS.robustness,
+      subagent_type: CODEX_SUBAGENT_TYPE,
       perspective: 'robustness',
       task: `${basePrompt}
 

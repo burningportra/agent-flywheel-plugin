@@ -46,7 +46,7 @@ Ask the user:
 1. Spawn 3 Plan agents IN PARALLEL using the Agent tool:
    - `Agent(subagent_type: "Plan", model: "opus", prompt: "Analyze this repository and create a correctness-focused implementation plan. Emphasize safety, avoiding regressions, and proper error handling. Goal: <goal>")`
    - `Agent(subagent_type: "Plan", model: "sonnet", prompt: "Analyze this repository and create an ergonomics-focused plan. Emphasize developer experience, clarity, API design, and simplicity. Goal: <goal>")`
-   - `Agent(subagent_type: "general-purpose", prompt: "Analyze this repository and create a robustness-focused plan. Emphasize edge cases, failure modes, and resilience. Goal: <goal>")`
+   - `Agent(subagent_type: "codex:codex-rescue", prompt: "Analyze this repository and create a robustness-focused plan. Emphasize edge cases, failure modes, and resilience. Goal: <goal>")`
 2. Wait for all 3 to complete.
 3. Spawn a synthesis Agent(Plan): "Synthesize these 3 implementation plans into one optimal plan. Preserve the best insights from each perspective."
 4. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planContent` = synthesized plan text.

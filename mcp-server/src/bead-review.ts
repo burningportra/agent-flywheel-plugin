@@ -108,8 +108,9 @@ Check for: parallel-ready beads that modify the same files, closure extraction f
  * Tries to select a model different from the likely current session model.
  */
 function pickAlternativeModel(): string | undefined {
-  // Default to codex — different provider perspective from Claude
-  return "codex";
+  // crossModelBeadReview uses exec("pi") which is not available in CC.
+  // Return undefined so no --model flag is passed.
+  return undefined;
 }
 
 /**
