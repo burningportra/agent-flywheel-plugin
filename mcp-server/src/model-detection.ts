@@ -95,7 +95,7 @@ function buildRefinementRotation(providerMap: Map<string, Set<string>>): string[
     rotation.push("anthropic/claude-opus-4-6");
   }
   if (rotation.length === 1) {
-    rotation.push("openai-codex/gpt-5.4");
+    rotation.push("codex");
   }
   if (rotation.length === 2) {
     rotation.push("anthropic/claude-sonnet-4-6");
@@ -219,10 +219,10 @@ export function getDeepPlanModels(availableModelIds?: string[]): {
   } catch {
     // Fallback to hardcoded defaults
     return {
-      correctness: "openai-codex/gpt-5.4",
+      correctness: "anthropic/claude-opus-4-6",
       robustness: "anthropic/claude-opus-4-6",
       ergonomics: "anthropic/claude-sonnet-4-6",
-      synthesis: "openai-codex/gpt-5.4",
+      synthesis: "codex",
     };
   }
 }
@@ -239,7 +239,7 @@ export function getRefinementModel(round: number, availableModelIds?: string[]):
     // Fallback to hardcoded rotation
     const fallbacks = [
       "anthropic/claude-opus-4-6",
-      "openai-codex/gpt-5.4",
+      "codex",
       "anthropic/claude-sonnet-4-6",
     ];
     return fallbacks[round % fallbacks.length];

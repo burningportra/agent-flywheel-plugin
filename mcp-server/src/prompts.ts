@@ -1067,16 +1067,16 @@ export const SWARM_STAGGER_DELAY_MS = 30_000; // 30 seconds between agent starts
 
 /** Default models used by the multi-model deep planning agents (fallbacks). */
 export const DEEP_PLAN_MODELS = {
-  correctness: "openai-codex/gpt-5.4",
-  robustness: "anthropic/claude-opus-4-6",
+  correctness: "anthropic/claude-opus-4-6",
+  robustness: "codex",
   ergonomics: "anthropic/claude-sonnet-4-6",
-  synthesis: "openai-codex/gpt-5.4",
+  synthesis: "anthropic/claude-opus-4-6",
 } as const;
 
 /** Models used by the swarm launcher. */
 export const SWARM_MODELS = {
   opus: "anthropic/claude-opus-4-6",
-  gpt: "openai-codex/gpt-5.4",
+  codex: "codex",
   haiku: "anthropic/claude-haiku-4-5",
 } as const;
 
@@ -1084,15 +1084,15 @@ export const SWARM_MODELS = {
 export const MODEL_ROUTING_TIERS = {
   simple: {
     implementation: "anthropic/claude-haiku-4-5",
-    review: "anthropic/claude-opus-4-6",
+    review: "anthropic/claude-sonnet-4-6",
   },
   medium: {
     implementation: "anthropic/claude-opus-4-6",
-    review: "openai-codex/gpt-5.4",
+    review: "anthropic/claude-sonnet-4-6",
   },
   complex: {
     implementation: "anthropic/claude-opus-4-6",
-    review: "openai-codex/gpt-5.4",
+    review: "anthropic/claude-opus-4-6",
   },
 } as const;
 
@@ -1102,7 +1102,7 @@ export const MODEL_ROUTING_TIERS = {
  */
 export const REFINEMENT_MODELS = [
   "anthropic/claude-opus-4-6",
-  "openai-codex/gpt-5.4",
+  "codex",
   "anthropic/claude-sonnet-4-6",
 ] as const;
 

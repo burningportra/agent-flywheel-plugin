@@ -108,8 +108,8 @@ Check for: parallel-ready beads that modify the same files, closure extraction f
  * Tries to select a model different from the likely current session model.
  */
 function pickAlternativeModel(): string | undefined {
-  // Default to gemini — different provider perspective from Claude
-  return "gemini-2.5-pro";
+  // Default to codex — different provider perspective from Claude
+  return "codex";
 }
 
 /**

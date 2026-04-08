@@ -42,7 +42,7 @@ export function recommendComposition(openBeadCount: number): SwarmComposition {
       total: 10,
       models: [
         { model: SWARM_MODELS.opus, count: 4 },
-        { model: SWARM_MODELS.gpt, count: 4 },
+        { model: SWARM_MODELS.codex, count: 4 },
         { model: SWARM_MODELS.haiku, count: 2 },
       ],
       rationale: `${openBeadCount} open beads — large project, full swarm recommended`,
@@ -53,7 +53,7 @@ export function recommendComposition(openBeadCount: number): SwarmComposition {
       total: 8,
       models: [
         { model: SWARM_MODELS.opus, count: 3 },
-        { model: SWARM_MODELS.gpt, count: 3 },
+        { model: SWARM_MODELS.codex, count: 3 },
         { model: SWARM_MODELS.haiku, count: 2 },
       ],
       rationale: `${openBeadCount} open beads — medium project, moderate swarm`,
@@ -63,7 +63,7 @@ export function recommendComposition(openBeadCount: number): SwarmComposition {
     total: 3,
     models: [
       { model: SWARM_MODELS.opus, count: 1 },
-      { model: SWARM_MODELS.gpt, count: 1 },
+      { model: SWARM_MODELS.codex, count: 1 },
       { model: SWARM_MODELS.haiku, count: 1 },
     ],
     rationale: `${openBeadCount} open beads — small project, minimal swarm`,
