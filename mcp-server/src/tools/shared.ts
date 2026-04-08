@@ -71,7 +71,7 @@ export function pickRefinementModel(round: number): string {
 export const DEEP_PLAN_MODELS = {
   correctness: 'claude-opus-4-6',
   robustness: 'claude-sonnet-4-6',
-  ergonomics: 'claude-opus-4-6',
+  ergonomics: 'claude-sonnet-4-6',
   synthesis: 'claude-opus-4-6',
 } as const;
 

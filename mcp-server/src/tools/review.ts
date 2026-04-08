@@ -27,7 +27,7 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
 
   // ── Special sentinels ─────────────────────────────────────────
   if (beadId === '__gates__') {
-    return runGates(ctx);
+    return runGates(ctx, args.action);
   }
   if (beadId === '__regress_to_plan__') {
     return regressToPhase(ctx, 'planning', 'plan revision');
@@ -338,31 +338,69 @@ ${JSON.stringify({ agents: agentConfigs }, null, 2)}
   };
 }
 
-async function runGates(ctx: ToolContext): Promise<McpToolResult> {
+async function runGates(ctx: ToolContext, action: 'hit-me' | 'looks-good' | 'skip'): Promise<McpToolResult> {
   const { state, saveState, cwd } = ctx;
-
-  state.iterationRound = (state.iterationRound ?? 0) + 1;
-  const round = state.iterationRound;
-
-  // Check for two consecutive clean rounds
-  const consecutiveClean = state.consecutiveCleanRounds ?? 0;
 
   const gateChecks = [
     `### Gate 1: Tests passing\nRun \`npm test\` or equivalent. Report results.`,
-    `### Gate 2: No regressions\nRun \`git diff HEAD~${Math.min(round, 5)} -- "*.test.*"\` to check test changes. Are all tests intentional?`,
+    `### Gate 2: No regressions\nCheck test changes are all intentional.`,
     `### Gate 3: Code quality\nCheck for: TODO/FIXME left over, console.log not cleaned up, dead code. Report findings.`,
     `### Gate 4: Documentation\nAre new features/APIs documented? Do AGENTS.md, README need updates?`,
     `### Gate 5: Integration sanity\nDo a quick end-to-end smoke test if possible. Does the feature work as described in the goal?`,
   ];
 
-  const currentGate = gateChecks[state.currentGateIndex ?? 0] ?? gateChecks[0];
-  const gateIndex = (state.currentGateIndex ?? 0) % gateChecks.length;
-  state.currentGateIndex = (gateIndex + 1) % gateChecks.length;
-  saveState(state);
+  // action="looks-good": gate passed — advance gate index and increment clean counter
+  if (action === 'looks-good') {
+    const gateIndex = (state.currentGateIndex ?? 0) % gateChecks.length;
+    const nextGateIndex = (gateIndex + 1) % gateChecks.length;
+    state.currentGateIndex = nextGateIndex;
+    state.consecutiveCleanRounds = (state.consecutiveCleanRounds ?? 0) + 1;
+    const consecutiveClean = state.consecutiveCleanRounds;
 
-  const completionHint = consecutiveClean >= 1
-    ? `\n\nAfter completing this gate: if everything passes clean, call \`orch_review\` with beadId="__gates__" again. After 2 consecutive clean gate rounds, the orchestration is complete.`
-    : '';
+    if (consecutiveClean >= 2) {
+      state.phase = 'complete';
+      saveState(state);
+      return {
+        content: [{
+          type: 'text',
+          text: `## Orchestration Complete
+
+All gates passed for ${consecutiveClean} consecutive rounds. The implementation is done.
+
+**Summary:** All beads closed, all review gates clean.
+
+Run \`/claude-orchestrator:orchestrate-status\` for a final report.`,
+        }],
+      };
+    }
+
+    saveState(state);
+    const nextGate = gateChecks[nextGateIndex];
+    return {
+      content: [{
+        type: 'text',
+        text: `Gate passed. Moving to next gate (${consecutiveClean}/2 clean rounds needed to finish).
+
+## Next Review Gate
+
+${nextGate}
+
+After checking:
+- If it **passes**: call \`orch_review\` with beadId="__gates__" and action="looks-good"
+- If it **fails**: fix it, then call \`orch_review\` with beadId="__gates__" and action="hit-me"
+
+**cwd:** ${cwd}`,
+      }],
+    };
+  }
+
+  // action="hit-me" or first entry: show current gate and reset clean streak
+  state.iterationRound = (state.iterationRound ?? 0) + 1;
+  const round = state.iterationRound;
+  state.consecutiveCleanRounds = 0; // issue found — reset streak
+  const gateIndex = (state.currentGateIndex ?? 0) % gateChecks.length;
+  const currentGate = gateChecks[gateIndex];
+  saveState(state);
 
   return {
     content: [{
@@ -373,7 +411,7 @@ ${currentGate}
 
 After completing this gate check:
 - If it **passes**: call \`orch_review\` with beadId="__gates__" and action="looks-good" to advance
-- If it **fails**: fix the issue and call \`orch_review\` with beadId="__gates__" and action="hit-me" to spawn fixers${completionHint}
+- If it **fails**: fix the issue and call \`orch_review\` with beadId="__gates__" and action="hit-me" to spawn fixers
 
 **cwd:** ${cwd}`,
     }],

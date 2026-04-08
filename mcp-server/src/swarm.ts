@@ -187,16 +187,22 @@ export function formatLaunchInstructions(configs: SwarmAgentConfig[]): string {
   ];
 
   for (const config of configs) {
+    const typeLabel = config.subagent_type ?? config.model ?? "(default)";
     lines.push(`### ${config.name}`);
-    lines.push(`- **Model:** ${config.model}`);
+    lines.push(`- **Model/Type:** ${typeLabel}`);
     lines.push(`- **Delay:** ${config.delayMs / 1000}s after launch`);
     lines.push("```json");
-    lines.push(JSON.stringify({
+    const agentSpec: Record<string, unknown> = {
       name: config.name,
       task: config.task,
-      model: config.model,
       cwd: config.cwd,
-    }, null, 2));
+    };
+    if (config.subagent_type) {
+      agentSpec.subagent_type = config.subagent_type;
+    } else if (config.model) {
+      agentSpec.model = config.model;
+    }
+    lines.push(JSON.stringify(agentSpec, null, 2));
     lines.push("```");
     lines.push("");
   }

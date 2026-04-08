@@ -222,7 +222,7 @@ export function getDeepPlanModels(availableModelIds?: string[]): {
       correctness: "anthropic/claude-opus-4-6",
       robustness: "anthropic/claude-opus-4-6",
       ergonomics: "anthropic/claude-sonnet-4-6",
-      synthesis: "codex",
+      synthesis: "anthropic/claude-opus-4-6",
     };
   }
 }
@@ -239,8 +239,8 @@ export function getRefinementModel(round: number, availableModelIds?: string[]):
     // Fallback to hardcoded rotation
     const fallbacks = [
       "anthropic/claude-opus-4-6",
-      "codex",
       "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-opus-4-6",
     ];
     return fallbacks[round % fallbacks.length];
   }

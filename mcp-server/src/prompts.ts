@@ -1068,10 +1068,12 @@ export const SWARM_STAGGER_DELAY_MS = 30_000; // 30 seconds between agent starts
 /** CC Agent subagent_type for the installed Codex plugin. Use instead of a model string. */
 export const CODEX_SUBAGENT_TYPE = "codex:codex-rescue" as const;
 
-/** Default models used by the multi-model deep planning agents (fallbacks). */
+/** Default models used by the multi-model deep planning agents (fallbacks).
+ * Note: the robustness perspective is handled via CODEX_SUBAGENT_TYPE in plan.ts.
+ * This constant is the fallback for callers that only support model strings. */
 export const DEEP_PLAN_MODELS = {
   correctness: "anthropic/claude-opus-4-6",
-  robustness: "codex",
+  robustness: "anthropic/claude-opus-4-6",
   ergonomics: "anthropic/claude-sonnet-4-6",
   synthesis: "anthropic/claude-opus-4-6",
 } as const;
@@ -1105,8 +1107,8 @@ export const MODEL_ROUTING_TIERS = {
  */
 export const REFINEMENT_MODELS = [
   "anthropic/claude-opus-4-6",
-  "codex",
   "anthropic/claude-sonnet-4-6",
+  "anthropic/claude-opus-4-6",
 ] as const;
 
 /** Pick a refinement model based on round number (rotates through available models). */
