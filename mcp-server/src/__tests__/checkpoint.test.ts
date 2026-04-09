@@ -119,21 +119,21 @@ describe('writeCheckpoint', () => {
   it('writes file and returns true', () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-write-'));
     const state = createInitialState();
-    const ok = writeCheckpoint(dir, state, '1.0.0-test');
+    const ok = writeCheckpoint(dir, state);
     expect(ok).toBe(true);
     expect(existsSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE))).toBe(true);
   });
 
   it('creates the checkpoint directory if missing', () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-mkdir-'));
-    writeCheckpoint(dir, createInitialState(), '1.0.0-test');
+    writeCheckpoint(dir, createInitialState());
     expect(existsSync(join(dir, CHECKPOINT_DIR))).toBe(true);
   });
 
   it('produces valid JSON with correct stateHash', () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-json-'));
     const state = createInitialState();
-    writeCheckpoint(dir, state, '1.0.0-test');
+    writeCheckpoint(dir, state);
     const raw = readFileSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE), 'utf8');
     const envelope = JSON.parse(raw) as CheckpointEnvelope;
     expect(envelope.stateHash).toBe(computeStateHash(state));
@@ -142,7 +142,7 @@ describe('writeCheckpoint', () => {
 
   it('does not leave .tmp file after successful write (atomic rename)', () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-atomic-'));
-    writeCheckpoint(dir, createInitialState(), '1.0.0-test');
+    writeCheckpoint(dir, createInitialState());
     expect(existsSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_TMP))).toBe(false);
   });
 });
@@ -208,7 +208,7 @@ describe('readCheckpoint', () => {
   it('returns valid envelope on happy path', () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-happy-'));
     const state = createInitialState();
-    writeCheckpoint(dir, state, '1.0.0-test');
+    writeCheckpoint(dir, state);
 
     const result = readCheckpoint(dir);
     expect(result).not.toBeNull();
@@ -229,7 +229,7 @@ describe('clearCheckpoint', () => {
 
   it('removes the checkpoint file', () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-clear-'));
-    writeCheckpoint(dir, createInitialState(), '1.0.0-test');
+    writeCheckpoint(dir, createInitialState());
     expect(existsSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE))).toBe(true);
 
     clearCheckpoint(dir);

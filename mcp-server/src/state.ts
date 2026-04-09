@@ -3,7 +3,6 @@ import { createInitialState, type OrchestratorState } from './types.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger("state");
-const VERSION = '2.0.0';
 
 export function loadState(cwd: string): OrchestratorState {
   const result = readCheckpoint(cwd);
@@ -15,7 +14,7 @@ export function loadState(cwd: string): OrchestratorState {
 }
 
 export function saveState(cwd: string, state: OrchestratorState): void {
-  writeCheckpoint(cwd, state, VERSION);
+  writeCheckpoint(cwd, state);
 }
 
 export function clearState(cwd: string): void {
