@@ -96,7 +96,7 @@ claude --plugin-dir ./claude-orchestrator
 ├── hooks/hooks.json        ← SessionStart: restore notice
 │
 ├── .mcp.json
-│    ├── agent-mail (url)   ← Coordination: messaging, file reservations
+│    ├── agent-mail (http)  ← Coordination: messaging, file reservations
 │    └── orchestrator (stdio) ← State machine + br/bv/git CLI glue
 │
 └── mcp-server/src/         ← TypeScript MCP server
@@ -104,9 +104,13 @@ claude --plugin-dir ./claude-orchestrator
      ├── state.ts            ← Load/save OrchestratorState via checkpoint
      ├── checkpoint.ts       ← Atomic disk persistence
      ├── beads.ts            ← br CLI wrapper
-     ├── agent-mail.ts       ← agent-mail JSON-RPC client
+     ├── agent-mail.ts       ← agent-mail JSON-RPC client + checkAgentMailHealth()
+     ├── exec.ts             ← ExecFn type; shell exec with timeout + AbortSignal
      ├── logger.ts           ← Structured stderr logger (createLogger)
-     ├── tender.ts           ← SwarmTender: agent health monitoring + auto-escalation
+     ├── profiler.ts         ← Repo profiler; collects file tree, commits, TODOs
+     ├── scan.ts             ← ccc-based codebase analysis with signal propagation
+     ├── deep-plan.ts        ← 3-agent deep planning with fault isolation + synthesis
+     ├── tender.ts           ← SwarmTender: agent health monitoring, nudge budget (maxNudgesPerPoll), auto-escalation
      └── tools/              ← orch_profile, orch_discover, orch_select,
                                 orch_plan, orch_approve_beads, orch_review,
                                 orch_memory
@@ -119,7 +123,7 @@ claude --plugin-dir ./claude-orchestrator
 - **Commands drive the conversation** — each `.md` file instructs Claude how to orchestrate the workflow, ask the user questions, and call the MCP tools.
 - **agent-mail handles coordination** — file reservations prevent concurrent writes; messaging lets agents report progress.
 - **Structured logging via `createLogger`** — all diagnostic output writes JSON lines to stderr (`ORCH_LOG_LEVEL` controls verbosity). Never touches stdout, keeping the MCP JSON-RPC channel clean.
-- **SwarmTender auto-escalation** — `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudges` times), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `orchestratorAgentName`; backward compatible when unset.
+- **SwarmTender auto-escalation** — `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudgesPerPoll` per poll cycle, default 3), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `orchestratorAgentName`; backward compatible when unset.
 
 ## Models used
 
