@@ -1,74 +1,134 @@
-# Proposed Changes to orchestrate.md
+# Proposed Changes to orchestrate SKILL.md
 
-## Change 1: Clarify orch_approve_beads two-call behavior (Step 6)
-
-BEFORE:
-> Use `br list` to display the current beads. Ask:
-> "Here are the implementation beads. What would you like to do?
-> 1. **Start implementing** — launch the implementation loop
-> ...
-> - "Start" → call `orch_approve_beads` with `action: "start"`
-
-AFTER (add note after the "Start" bullet):
-> - "Start" → call `orch_approve_beads` with `action: "start"`
->   **Note:** If the plan was just registered via `orch_plan`, the first `orch_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `orch_approve_beads` with `action: "start"` a second time to get the quality score and launch.
+Session: 2026-04-09 | Evidence-driven refinements
 
 ---
 
-## Change 2: Fix review team creation in Step 8 (Fresh-eyes)
+## Change 1: Promote "already-closed beads" from edge case to expected default (Step 8)
 
-BEFORE:
-> - **"Fresh-eyes `<id>`"** → call `orch_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
->   1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
->   2. Spawn all 5 with `run_in_background: true`, each with `team_name` set...
+**Problem:** `orch_review` errored with "Cannot read properties of undefined (reading 'split')" for ALL 7 Wave 1 beads. The skill documents this as an "Edge case" but it is the common case — impl agents call `br update --status closed` in Step 3 of their prompt, so beads are always closed before the coordinator requests review.
 
-AFTER:
-> - **"Fresh-eyes `<id>`"** → call `orch_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
->   1. **Team for reviewers**: If an impl team is already active, **reuse it** by passing `team_name: "impl-<goal-slug>"` to the review agents — `TeamCreate` will fail with "already leading a team" if you try to create a second one. Only call `TeamCreate(team_name: "review-<bead-id>")` if no team is currently active.
->   2. Spawn all 5 with `run_in_background: true`, each with `team_name` set...
+**BEFORE** (lines 269):
+```markdown
+  > **Edge case — already-closed beads:** If `orch_review` errors (e.g. "Cannot read properties of undefined"), the bead was likely already closed by the impl agent before review was requested. Skip the MCP tool and spawn review agents manually. Give each reviewer the specific git commit SHA (from `git log --oneline`) and instruct them to review via `git diff <commit>~1 <commit>` directly.
+```
 
----
-
-## Change 3: Fix br dep add syntax in Step 5.5
-
-BEFORE:
-> 2. After all beads are created, add dependency edges:
->    ```
->    br dep add <downstream-bead-id> <upstream-bead-id>
->    ```
-
-AFTER:
-> 2. After all beads are created, add dependency edges:
->    ```
->    br dep add <downstream-bead-id> <upstream-bead-id>
->    ```
->    **Syntax note:** Arguments are positional — `<downstream>` is the bead that depends on `<upstream>`. The `--depends-on` flag does NOT exist. If the command fails, check you are passing two positional IDs without any flags.
+**AFTER:**
+```markdown
+  > **Expected behavior — beads are already closed:** Because impl agents close beads in their Step 3 (`br update --status closed`), `orch_review` will typically error (e.g. "Cannot read properties of undefined (reading 'split')") when called on completed beads. This is the **normal** case, not an edge case. When this happens:
+  > 1. Skip the `orch_review` MCP tool entirely.
+  > 2. Find the bead's commit SHA: `git log --oneline | grep "<bead-id>"` (or search for the bead title).
+  > 3. Spawn review agents manually with `git diff <sha>~1 <sha>` as their review target instead of relying on `orch_review` output.
+  >
+  > Only use `orch_review` with `action: "looks-good"` if you confirmed the bead is still in an open state (check with `br list`).
+```
 
 ---
 
-## Change 4: Simplify impl agent prompts for sequential worktree workflows (Step 7)
+## Change 2: Add reviewer nudge-by-name to monitoring loop (Step 8)
 
-BEFORE (in impl agent prompt template):
->       ## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY — DO THIS BEFORE ANYTHING ELSE)
->       Do NOT read any files or run any commands until all 3 sub-steps below are complete.
->       0a. Call macro_start_session(...)
->       0b. Call file_reservation_paths to reserve every file you plan to edit...
->       0c. Send a 'started' message to '<coordinator-agent-name>' via send_message...
+**Problem:** A reviewer's findings message never appeared in the coordinator's inbox. The coordinator had to explicitly nudge the reviewer by name to get the message resent.
 
-AFTER (add note before the template):
->    **When to use Agent Mail bootstrap in impl agents:**
->    - For **parallel beads** (multiple agents editing different files simultaneously): include the full STEP 0 bootstrap with `macro_start_session`, `file_reservation_paths`, and started notification. File reservation prevents conflicts.
->    - For **sequential beads** (linear chain, one agent at a time): the bootstrap is optional overhead. A simpler prompt without STEP 0 works fine since there are no concurrent file conflicts. Still include the completion report (subject "[impl] <bead-id> done") so the coordinator knows when to proceed.
+**BEFORE** (lines 263-266):
+```markdown
+  1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
+  2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt
+  3. If any go idle without reporting, nudge by name: `SendMessage(to: "<reviewer-name>", message: "Please send your review findings.")`
+  4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
+```
+
+**AFTER:**
+```markdown
+  1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
+  2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt
+  3. **Monitor with mandatory nudge loop** — reviewer messages frequently fail to arrive in the coordinator's inbox on the first attempt. After spawning, poll `fetch_inbox` every 30-60 seconds. For each reviewer that has not delivered findings within 2 minutes, nudge by name:
+     ```
+     SendMessage(to: "<reviewer-name>", message: "Your review findings for bead <id> have not arrived. Please resend to <coordinator-name> via Agent Mail with subject '[review] <id> findings'.")
+     ```
+     Nudge up to 3 times per reviewer before considering them failed.
+  4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
+```
 
 ---
 
-## Change 5: Add quality score clarification to Step 6 (user-visible UX)
+## Change 3: Add `retire_agent` fallback for unresponsive impl agents (Step 7)
 
-BEFORE:
-> After calling `orch_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
-> Wait for user confirmation before proceeding to Step 7
+**Problem:** After sending `shutdown_request` to impl agents, two agents (fix-deep-plan and impl-3do) remained idle without exiting. Required `retire_agent` via Agent Mail as a fallback.
 
-AFTER (add before "Wait for user confirmation"):
-> If the user asks "what's the quality score?" before choosing to start, call `orch_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. The score appears in the tool output. Present it, then wait for confirmation before proceeding to implementation.
-> Wait for user confirmation before proceeding to Step 7
+**BEFORE** (lines 227-230):
+```markdown
+4. When the agent completes, mark task as `completed`. Send shutdown:
+   ```
+   SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
+   ```
+```
 
+**AFTER:**
+```markdown
+4. When the agent completes, mark task as `completed`. Send shutdown:
+   ```
+   SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
+   ```
+   **If the agent remains idle after shutdown_request** (check via `TaskList` — task still shows as active after 60 seconds):
+   - Force-stop with `TaskStop(task_id: "<saved-task-id>")` if the task ID is available.
+   - Retire in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`.
+   - If still listed in the team, edit `~/.claude/teams/<team>/config.json` to remove from the `"members"` array, then retry `TeamDelete` when ready.
+```
+
+---
+
+## Change 4: Fix "Collect plans" to read from disk, not inbox bodies (Step 5, sub-step 5)
+
+**Problem:** The skill says `fetch_inbox(include_bodies: true)` to collect plan bodies. But agents write plans to disk and send only file paths. Large plan bodies in inbox messages are unwieldy and may be truncated. The working approach from the session was: `fetch_inbox(include_bodies: false)` to get file paths, then read plans from disk.
+
+**BEFORE** (line 85):
+```markdown
+5. **Collect plans** — call `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: true)` to retrieve all 3 plan bodies.
+```
+
+**AFTER:**
+```markdown
+5. **Collect plans** — call `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` to retrieve message summaries. Each agent sent the file path to their plan on disk (e.g. `docs/plans/<date>-<perspective>.md`). Read the plan files directly from disk using the Read tool — do NOT rely on inbox message bodies for large plan content, as they may be truncated or unwieldy.
+```
+
+---
+
+## Change 5: Add `broadcast shutdown_request does not work` warning to Step 7 (implement)
+
+**Problem:** Broadcasting `shutdown_request` to `"*"` does NOT work for structured messages. This is already documented in Step 5 (deep plan) sub-step 6, but not in Step 7 (implement), where the coordinator also needs to shut down multiple impl agents.
+
+**BEFORE** (lines 227-230 — Step 7, sub-step 4 only has the single-agent shutdown example):
+```markdown
+4. When the agent completes, mark task as `completed`. Send shutdown:
+   ```
+   SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
+   ```
+```
+
+**AFTER** (add a note after the shutdown block, in addition to the retire_agent fallback from Change 3):
+```markdown
+4. When the agent completes, mark task as `completed`. Send shutdown:
+   ```
+   SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
+   ```
+   > **Important:** Structured shutdown messages CANNOT be broadcast to `"*"`. You must send to each impl agent individually by name. This applies to all structured JSON messages (shutdown_request, plan_approval_request, etc.).
+
+   **If the agent remains idle after shutdown_request** (check via `TaskList` — task still shows as active after 60 seconds):
+   - Force-stop with `TaskStop(task_id: "<saved-task-id>")` if the task ID is available.
+   - Retire in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`.
+   - If still listed in the team, edit `~/.claude/teams/<team>/config.json` to remove from the `"members"` array, then retry `TeamDelete` when ready.
+```
+
+*Note: Changes 3 and 5 both modify the same section (Step 7, sub-step 4). When applying, merge them into a single replacement — the broadcast warning goes before the retire_agent fallback.*
+
+---
+
+## Summary of changes
+
+| # | Section | Problem | Fix |
+|---|---------|---------|-----|
+| 1 | Step 8 "Fresh-eyes" edge case | orch_review errors on closed beads treated as edge case; it's the default | Promote to expected behavior with explicit workaround steps |
+| 2 | Step 8 "Fresh-eyes" monitoring | Reviewer messages silently lost | Add mandatory nudge-by-name polling loop with retry count |
+| 3 | Step 7 sub-step 4 | No fallback when impl agents ignore shutdown_request | Add retire_agent + config.json edit fallback chain |
+| 4 | Step 5 sub-step 5 | Collect plans reads from inbox bodies (unwieldy) | Read from disk paths instead |
+| 5 | Step 7 sub-step 4 | No broadcast warning for impl agent shutdown | Add "cannot broadcast structured messages" note |
