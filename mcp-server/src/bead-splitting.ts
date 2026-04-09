@@ -36,6 +36,13 @@ export interface SplitProposal {
   reason?: string;
 }
 
+// ─── Helpers ───────────────────────────────────────────────
+
+/** Escape characters that are dangerous inside double-quoted shell strings. */
+function shellEscape(s: string): string {
+  return s.replace(/[\\"$`!]/g, "\\$&");
+}
+
 // ─── Bottleneck Detection ───────────────────────────────────
 
 /**
@@ -48,7 +55,7 @@ export function identifyBottlenecks(
   threshold: number = 0.3
 ): Array<{ bead: Bead; betweenness: number }> {
   return (insights.Bottlenecks ?? [])
-    .filter((b) => b.Value >= threshold)
+    .filter((b) => typeof b.Value === "number" && !Number.isNaN(b.Value) && b.Value >= threshold)
     .map((b) => {
       const bead = beads.find((bead) => bead.id === b.ID);
       return bead ? { bead, betweenness: b.Value } : null;
@@ -144,14 +151,41 @@ export function parseSplitProposal(
       }
     }
 
+    // Detect overlapping files across children
+    const fileCounts = new Map<string, number>();
+    for (const child of children) {
+      for (const f of child.files) {
+        fileCounts.set(f, (fileCounts.get(f) ?? 0) + 1);
+      }
+    }
+    const overlapping = [...fileCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([f]) => f);
+
+    let finalSplittable = splittable && children.length >= 2;
+    let finalReason = reason;
+
+    // Single-child override
+    if (splittable && children.length < 2) {
+      finalSplittable = false;
+      const overrideMsg = `LLM proposed split but returned ${children.length} child(ren) — need at least 2 for meaningful parallelism`;
+      finalReason = finalReason ? `${finalReason}; ${overrideMsg}` : overrideMsg;
+    }
+
+    // Overlapping files warning
+    if (overlapping.length > 0) {
+      const warnMsg = `Warning: overlapping files across children: ${overlapping.join(", ")}`;
+      finalReason = finalReason ? `${finalReason}; ${warnMsg}` : warnMsg;
+    }
+
     return {
       originalBeadId: beadId,
       originalTitle: beadTitle,
       betweennessScore: betweenness,
       dependentCount: 0,
       children,
-      splittable: splittable && children.length >= 2,
-      reason,
+      splittable: finalSplittable,
+      reason: finalReason,
     };
   } catch {
     return {
@@ -210,10 +244,11 @@ export function formatSplitCommands(proposal: SplitProposal): string {
   ];
 
   for (const child of proposal.children) {
-    const desc = child.description.replace(/"/g, '\\"');
-    const filesLine = child.files.length > 0 ? `\\n### Files: ${child.files.join(", ")}` : "";
+    const desc = shellEscape(child.description);
+    const title = shellEscape(child.title);
+    const filesLine = child.files.length > 0 ? `\\n### Files: ${child.files.map(shellEscape).join(", ")}` : "";
     commands.push(
-      `br create "${child.title}" -t task -p 2 --description "${desc}${filesLine}"`,
+      `br create "${title}" -t task -p 2 --description "${desc}${filesLine}"`,
     );
   }
 
