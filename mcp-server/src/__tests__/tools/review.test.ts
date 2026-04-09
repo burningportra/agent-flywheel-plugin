@@ -177,6 +177,61 @@ describe('runReview', () => {
     expect(result.content[0].text).toContain('test-bead-2');
   });
 
+  // ── Parent auto-close ──────────────────────────────────────
+
+  describe('parent auto-close', () => {
+    it('auto-closes parent when all siblings done', async () => {
+      const bead = makeBead({ id: 'child-1', parent: 'parent-bead-1' });
+      const siblingClosed = makeBead({ id: 'child-2', parent: 'parent-bead-1', status: 'closed' });
+      const { ctx, state } = makeCtx({}, [
+        brShowCall(bead),
+        brUpdateCall('child-1', 'closed'),
+        brListCall([bead, siblingClosed]),
+        brUpdateCall('parent-bead-1', 'closed'),
+        brReadyCall([]),
+      ]);
+
+      await runReview(ctx, { cwd: '/fake/cwd', beadId: 'child-1', action: 'looks-good' });
+
+      expect(state.beadResults!['parent-bead-1']).toEqual({
+        beadId: 'parent-bead-1',
+        status: 'success',
+        summary: 'All subtasks complete',
+      });
+    });
+
+    it('does not auto-close parent when siblings still open', async () => {
+      const bead = makeBead({ id: 'child-1', parent: 'parent-bead-1' });
+      const siblingOpen = makeBead({ id: 'child-2', parent: 'parent-bead-1', status: 'in_progress' });
+      const { ctx, state } = makeCtx({}, [
+        brShowCall(bead),
+        brUpdateCall('child-1', 'closed'),
+        brListCall([bead, siblingOpen]),
+        brReadyCall([]),
+      ]);
+
+      await runReview(ctx, { cwd: '/fake/cwd', beadId: 'child-1', action: 'looks-good' });
+
+      expect(state.beadResults!['parent-bead-1']).toBeUndefined();
+    });
+
+    it('gracefully handles br list failure during parent auto-close', async () => {
+      const bead = makeBead({ id: 'child-1', parent: 'parent-bead-1' });
+      const { ctx, state } = makeCtx({}, [
+        brShowCall(bead),
+        brUpdateCall('child-1', 'closed'),
+        { cmd: 'br', args: ['list', '--json'], result: { code: 1, stdout: '', stderr: 'error' } },
+        brReadyCall([]),
+      ]);
+
+      const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'child-1', action: 'looks-good' });
+
+      // Should not crash, parent not closed
+      expect(state.beadResults!['parent-bead-1']).toBeUndefined();
+      expect(result.isError).toBeUndefined();
+    });
+  });
+
   it('spawns parallel agents when multiple beads are ready', async () => {
     const bead = makeBead();
     const nextBeads = [

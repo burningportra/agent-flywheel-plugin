@@ -13,7 +13,7 @@ export interface ExecCall {
  */
 export function createMockExec(calls: ExecCall[] = []) {
   return async (cmd: string, args: string[], _opts?: unknown) => {
-    const match = calls.find(c => c.cmd === cmd && c.args.every((a, i) => args[i] === a));
+    const match = calls.find(c => c.cmd === cmd && c.args.length === args.length && c.args.every((a, i) => args[i] === a));
     return match?.result ?? { code: 1, stdout: '', stderr: 'not mocked' };
   };
 }

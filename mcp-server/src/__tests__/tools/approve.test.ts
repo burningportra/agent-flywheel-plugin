@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -187,6 +187,31 @@ describe('runApprove', () => {
     expect(text).toContain('bead-2');
   });
 
+  it('falls back to first 3 beads when br ready fails', async () => {
+    const beads = [
+      makeBead({ id: 'bead-1', title: 'First' }),
+      makeBead({ id: 'bead-2', title: 'Second' }),
+      makeBead({ id: 'bead-3', title: 'Third' }),
+    ];
+    const execCalls: ExecCall[] = [
+      { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
+      { cmd: 'br', args: ['ready', '--json'], result: { code: 1, stdout: '', stderr: 'br ready failed' } },
+      ...beads.map(b => ({
+        cmd: 'br',
+        args: ['update', b.id, '--status', 'in_progress'],
+        result: { code: 0, stdout: '', stderr: '' },
+      })),
+    ];
+    const { ctx, state } = makeCtx({}, execCalls);
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+
+    expect(state.phase).toBe('implementing');
+    expect(result.content[0].text).toContain('Beads approved');
+    // Should have used the fallback (first 3 beads)
+    expect(result.content[0].text).toContain('bead-1');
+  });
+
   it('includes bead quality score in output on start', async () => {
     const bead = makeBead();
     const { ctx } = makeCtx({}, makeExecCalls([bead]));
@@ -349,6 +374,59 @@ describe('runApprove', () => {
 
     // The state should be in refining_beads after polish
     expect(state1.phase).toBe('refining_beads');
+
+    // Second call should track changes
+    vi.resetModules();
+    const runApprove2 = await importApprove();
+    // First call sets snapshot
+    const { ctx: ctx2a, state: state2a } = makeCtx(
+      { phase: 'refining_beads', polishRound: 0, polishChanges: [] },
+      calls,
+    );
+    await runApprove2(ctx2a, { cwd: '/fake/cwd', action: 'polish' });
+    // Second call detects changes
+    const { ctx: ctx2b } = makeCtx(
+      { phase: 'refining_beads', polishRound: state2a.polishRound, polishChanges: [...state2a.polishChanges] },
+      calls,
+    );
+    Object.assign(ctx2b, { exec: ctx2a.exec });
+    await runApprove2(ctx2b, { cwd: '/fake/cwd', action: 'polish' });
+    expect(ctx2b.state.polishChanges).toBeInstanceOf(Array);
+    expect(ctx2b.state.polishChanges.length).toBeGreaterThanOrEqual(1);
+    expect(ctx2b.state.polishRound).toBeGreaterThanOrEqual(1);
+  });
+
+  it('sets polishConverged when two consecutive zero-change rounds', async () => {
+    const beads = [makeBead({ id: 'bead-1' })];
+    const calls = makeExecCalls(beads);
+
+    vi.resetModules();
+    const runApproveConv = await importApprove();
+
+    // Round 1: sets snapshot (no _lastBeadSnapshot yet)
+    const { ctx: ctxA, state: stateA } = makeCtx(
+      { phase: 'refining_beads', polishRound: 0, polishChanges: [] },
+      calls,
+    );
+    await runApproveConv(ctxA, { cwd: '/fake/cwd', action: 'polish' });
+
+    // Round 2: same beads → 0 changes
+    const { ctx: ctxB } = makeCtx(
+      { phase: 'refining_beads', polishRound: stateA.polishRound, polishChanges: [...stateA.polishChanges] },
+      calls,
+    );
+    Object.assign(ctxB, { exec: ctxA.exec });
+    await runApproveConv(ctxB, { cwd: '/fake/cwd', action: 'polish' });
+
+    // Round 3: same beads again → second 0-change round → converged
+    const { ctx: ctxC } = makeCtx(
+      { phase: 'refining_beads', polishRound: ctxB.state.polishRound, polishChanges: [...ctxB.state.polishChanges] },
+      calls,
+    );
+    Object.assign(ctxC, { exec: ctxA.exec });
+    await runApproveConv(ctxC, { cwd: '/fake/cwd', action: 'polish' });
+
+    expect(ctxC.state.polishConverged).toBe(true);
   });
 
   it('stores activeBeadIds from open beads', async () => {
