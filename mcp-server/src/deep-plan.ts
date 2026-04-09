@@ -34,7 +34,13 @@ export async function runDeepPlanAgents(
   try {
     mkdirSync(outputDir, { recursive: true });
   } catch (err) {
-    resolvedOutputDir = tmpdir();
+    const fallbackDir = join(tmpdir(), `claude-deep-plan-fallback-${Date.now()}`);
+    try {
+      mkdirSync(fallbackDir, { recursive: true });
+      resolvedOutputDir = fallbackDir;
+    } catch {
+      resolvedOutputDir = tmpdir(); // last resort
+    }
     process.stderr.write(`[deep-plan] WARNING: Could not create output dir ${outputDir}, falling back to ${resolvedOutputDir}\n`);
   }
 
@@ -60,6 +66,7 @@ export async function runDeepPlanAgents(
       const result = await exec("claude", args, {
         timeout: 180000, // 3 min timeout per planner
         cwd,
+        signal,
       });
 
       const plan = result.stdout.trim();
@@ -73,7 +80,11 @@ export async function runDeepPlanAgents(
         } as DeepPlanResult;
       }
 
-      writeFileSync(outputFile, plan, "utf8");
+      try {
+        writeFileSync(outputFile, plan, "utf8");
+      } catch (writeErr) {
+        process.stderr.write(`[deep-plan] WARNING: Could not write output file ${outputFile}: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}\n`);
+      }
 
       return {
         name: agent.name,
@@ -94,8 +105,9 @@ export async function runDeepPlanAgents(
     }
   });
 
-  // Run all in parallel
-  return Promise.all(promises);
+  // Run all in parallel, then filter to only viable results for synthesis
+  const allResults = await Promise.all(promises);
+  return filterViableResults(allResults);
 }
 
 /**
