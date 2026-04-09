@@ -5,24 +5,127 @@ import type { OrchestratorState } from '../../types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-/** Minimal exec mocks for a successful profile run. */
+/**
+ * profileRepo uses:
+ *   - find with -maxdepth 4 + many exclusions
+ *   - git log --no-decorate -n 20 --format=%H\0%s\0%ai\0%an
+ *   - grep for TODOs
+ *   - head -c 4096 <file> for key files
+ *
+ * The repo name comes from cwd.split("/").pop().
+ */
+function makeFindArgs(stdout: string) {
+  return {
+    cmd: 'find',
+    args: [
+      '.', '-maxdepth', '4',
+      '-not', '-path', '*/node_modules/*',
+      '-not', '-path', '*/.git/*',
+      '-not', '-path', '*/dist/*',
+      '-not', '-path', '*/__pycache__/*',
+      '-not', '-path', '*/.venv/*',
+      '-not', '-path', '*/vendor/*',
+      '-not', '-path', '*/target/*',
+    ],
+    result: { code: 0, stdout, stderr: '' },
+  };
+}
+
+function makeGitLogArgs(stdout: string) {
+  return {
+    cmd: 'git',
+    args: ['log', '--oneline', '--no-decorate', '-n', '20', '--format=%H%x00%s%x00%ai%x00%an'],
+    result: { code: 0, stdout, stderr: '' },
+  };
+}
+
+function makeHeadArgs(file: string, stdout: string) {
+  return {
+    cmd: 'head',
+    args: ['-c', '4096', file],
+    result: { code: 0, stdout, stderr: '' },
+  };
+}
+
+function makeTodosArgs(stdout: string = '', code: number = 1) {
+  return {
+    cmd: 'grep',
+    args: [
+      '-rn',
+      '--include=*.ts', '--include=*.js', '--include=*.tsx', '--include=*.jsx',
+      '--include=*.py', '--include=*.rs', '--include=*.go', '--include=*.rb',
+      '--include=*.java', '--include=*.kt', '--include=*.swift',
+      '--exclude-dir=node_modules',
+      '--exclude-dir=.git',
+      '--exclude-dir=dist',
+      '--exclude-dir=build',
+      '--exclude-dir=vendor',
+      '--exclude-dir=target',
+      '--exclude-dir=__pycache__',
+      '--exclude-dir=.venv',
+      '--exclude-dir=.pi-orchestrator',
+      '-E', '(TODO|FIXME|HACK|XXX):',
+      '.',
+    ],
+    result: { code, stdout, stderr: '' },
+  };
+}
+
+// File tree with TypeScript files, test dir, docs dir, and .github/workflows
+const BASE_FILE_TREE =
+  './src/index.ts\n./src/utils.ts\n./src/__tests__/foo.test.ts\n./docs/guide.md\n./.github/workflows/ci.yml\n./package.json\n./README.md';
+
+// git log with null-byte delimiters
+const BASE_GIT_LOG =
+  'abc1234full\x00feat: add foo\x002024-01-01\x00Alice\ndef5678full\x00fix: bar bug\x002024-01-02\x00Bob\n';
+
+const BASE_PACKAGE_JSON = JSON.stringify({
+  name: 'myrepo',
+  devDependencies: { vitest: '^1.0.0' },
+});
+
+/** Minimal exec mocks for a successful profile run using profileRepo patterns. */
 function baseExecCalls() {
   return [
-    { cmd: 'git', args: ['remote', 'get-url', 'origin'], result: { code: 0, stdout: 'https://github.com/org/myrepo.git', stderr: '' } },
-    { cmd: 'git', args: ['log', '--oneline', '--format=%H|%s|%ai|%an', '-20'], result: { code: 0, stdout: 'abc1234|feat: add foo|2024-01-01|Alice\ndef5678|fix: bar bug|2024-01-02|Bob\n', stderr: '' } },
-    { cmd: 'find', args: ['.', '-maxdepth', '3', '-not', '-path', './.git/*', '-not', '-path', './node_modules/*', '-not', '-path', './.claude-orchestrator/*'], result: { code: 0, stdout: './src/index.ts\n./src/utils.ts\n./package.json\n./README.md\n', stderr: '' } },
-    // Key file cats — most return "not found" (code 1 via default mock)
-    { cmd: 'cat', args: ['package.json'], result: { code: 0, stdout: JSON.stringify({ name: 'myrepo', devDependencies: { vitest: '^1.0.0' } }), stderr: '' } },
-    { cmd: 'cat', args: ['README.md'], result: { code: 0, stdout: '# My Repo', stderr: '' } },
+    // profileRepo collectors (run in parallel)
+    makeFindArgs(BASE_FILE_TREE),
+    makeGitLogArgs(BASE_GIT_LOG),
+    makeTodosArgs('', 1),
+    // Key files via head -c 4096
+    makeHeadArgs('README.md', '# My Repo'),
+    makeHeadArgs('CLAUDE.md', ''),   // not present — default mock returns code:1 fine
+    makeHeadArgs('AGENTS.md', ''),   // not present
+    makeHeadArgs('package.json', BASE_PACKAGE_JSON),
+    makeHeadArgs('Cargo.toml', ''),
+    makeHeadArgs('pyproject.toml', ''),
+    makeHeadArgs('go.mod', ''),
+    makeHeadArgs('Gemfile', ''),
+    makeHeadArgs('Makefile', ''),
+    makeHeadArgs('Dockerfile', ''),
+    makeHeadArgs('docker-compose.yml', ''),
+    makeHeadArgs('.github/workflows/ci.yml', 'name: CI'),
+    makeHeadArgs('.github/workflows/ci.yaml', ''),
+    makeHeadArgs('.gitlab-ci.yml', ''),
+    makeHeadArgs('tsconfig.json', ''),
+    makeHeadArgs('vite.config.ts', ''),
+    makeHeadArgs('webpack.config.js', ''),
+    makeHeadArgs('jest.config.ts', ''),
+    makeHeadArgs('jest.config.js', ''),
+    makeHeadArgs('vitest.config.ts', ''),
+    makeHeadArgs('.eslintrc.json', ''),
+    makeHeadArgs('.prettierrc', ''),
+    makeHeadArgs('README', ''),
+    // bestPracticesGuides
+    makeHeadArgs('BEST_PRACTICES.md', ''),
+    makeHeadArgs('docs/best-practices.md', ''),
+    makeHeadArgs('docs/BEST_PRACTICES.md', ''),
+    makeHeadArgs('best_practices.md', ''),
+    makeHeadArgs('CONTRIBUTING.md', ''),
+    makeHeadArgs('ARCHITECTURE.md', ''),
+    makeHeadArgs('docs/architecture.md', ''),
     // br CLI
     { cmd: 'br', args: ['--version'], result: { code: 0, stdout: 'br 0.5.0', stderr: '' } },
     { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify([{ status: 'open', id: 'b1', title: 'open bead' }]), stderr: '' } },
-    // CI detection
-    { cmd: 'ls', args: ['.github/workflows'], result: { code: 1, stdout: '', stderr: 'no such file' } },
-    // Docs detection
-    { cmd: 'ls', args: ['docs'], result: { code: 1, stdout: '', stderr: 'no such file' } },
-    // TODOs
-    { cmd: 'grep', args: ['-rn', '--include=*.ts', '--include=*.js', '--include=*.py', '--include=*.go', '--include=*.rs', '-E', 'TODO|FIXME|HACK|XXX', '.', '--exclude-dir=node_modules', '--exclude-dir=.git'], result: { code: 1, stdout: '', stderr: '' } },
   ];
 }
 
@@ -54,8 +157,10 @@ describe('runProfile', () => {
 
   it('sets state.repoProfile with detected repo name', async () => {
     const { ctx, state } = makeCtx();
+    // profileRepo derives name from cwd.split("/").pop()
+    ctx.cwd = '/projects/myrepo';
 
-    await runProfile(ctx, { cwd: '/fake/cwd' });
+    await runProfile(ctx, { cwd: '/projects/myrepo' });
 
     expect(state.repoProfile).toBeDefined();
     expect(state.repoProfile!.name).toBe('myrepo');
@@ -69,23 +174,32 @@ describe('runProfile', () => {
     expect(state.repoProfile!.languages).toContain('TypeScript');
   });
 
-  it('sets hasTests=true when package.json contains vitest', async () => {
+  it('sets hasTests=true when file tree contains test directory', async () => {
     const { ctx, state } = makeCtx();
+    // BASE_FILE_TREE includes ./src/__tests__/foo.test.ts
 
     await runProfile(ctx, { cwd: '/fake/cwd' });
 
     expect(state.repoProfile!.hasTests).toBe(true);
-    expect(state.repoProfile!.testFramework).toBe('vitest');
   });
 
-  it('sets hasCI=true when .github/workflows ls succeeds', async () => {
+  it('detects vitest as testFramework when vitest.config.ts present', async () => {
     const calls = baseExecCalls().map(c => {
-      if (c.cmd === 'ls' && c.args[0] === '.github/workflows') {
-        return { ...c, result: { code: 0, stdout: 'ci.yml\n', stderr: '' } };
+      if (c.cmd === 'head' && c.args[2] === 'vitest.config.ts') {
+        return { ...c, result: { code: 0, stdout: 'export default {}', stderr: '' } };
       }
       return c;
     });
     const { ctx, state } = makeCtx(calls);
+
+    await runProfile(ctx, { cwd: '/fake/cwd' });
+
+    expect(state.repoProfile!.testFramework).toBe('Vitest');
+  });
+
+  it('sets hasCI=true when .github/workflows appears in file tree', async () => {
+    const { ctx, state } = makeCtx();
+    // BASE_FILE_TREE includes .github/workflows/ci.yml
 
     await runProfile(ctx, { cwd: '/fake/cwd' });
 
@@ -128,10 +242,12 @@ describe('runProfile', () => {
   });
 
   it('does not show AGENTS.md gap when AGENTS.md is present', async () => {
-    const calls = [
-      ...baseExecCalls(),
-      { cmd: 'cat', args: ['AGENTS.md'], result: { code: 0, stdout: '# Agent Guidance', stderr: '' } },
-    ];
+    const calls = baseExecCalls().map(c => {
+      if (c.cmd === 'head' && c.args[2] === 'AGENTS.md') {
+        return { ...c, result: { code: 0, stdout: '# Agent Guidance', stderr: '' } };
+      }
+      return c;
+    });
     const { ctx } = makeCtx(calls);
 
     const result = await runProfile(ctx, { cwd: '/fake/cwd' });
@@ -139,14 +255,8 @@ describe('runProfile', () => {
     expect(result.content[0].text).not.toContain('No AGENTS.md found');
   });
 
-  it('falls back to dirname when git remote fails', async () => {
-    const calls = baseExecCalls().map(c => {
-      if (c.cmd === 'git' && c.args[0] === 'remote') {
-        return { ...c, result: { code: 1, stdout: '', stderr: 'fatal: no remote' } };
-      }
-      return c;
-    });
-    const { ctx, state } = makeCtx(calls);
+  it('falls back to dirname when cwd is the path', async () => {
+    const { ctx, state } = makeCtx();
     ctx.cwd = '/projects/my-cool-project';
 
     await runProfile(ctx, { cwd: '/projects/my-cool-project' });
@@ -199,9 +309,19 @@ describe('runProfile', () => {
   });
 
   it('returns text with profile info and workflow roadmap', async () => {
-    const { ctx } = makeCtx();
+    // Use a cwd that ends in 'myrepo' so name is 'myrepo'
+    const calls = baseExecCalls();
+    const exec = createMockExec(calls);
+    const state = makeState();
+    const ctx = {
+      exec,
+      cwd: '/projects/myrepo',
+      state,
+      saveState: (_s: OrchestratorState) => {},
+      clearState: () => {},
+    };
 
-    const result = await runProfile(ctx, { cwd: '/fake/cwd' });
+    const result = await runProfile(ctx, { cwd: '/projects/myrepo' });
 
     const text = result.content[0].text;
     expect(text).toContain('profile');
@@ -228,14 +348,9 @@ describe('runProfile', () => {
     expect(result.content[0].text).toContain('1 open/in-progress');
   });
 
-  it('detects hasDocs when docs directory exists', async () => {
-    const calls = baseExecCalls().map(c => {
-      if (c.cmd === 'ls' && c.args[0] === 'docs') {
-        return { ...c, result: { code: 0, stdout: 'guide.md\n', stderr: '' } };
-      }
-      return c;
-    });
-    const { ctx, state } = makeCtx(calls);
+  it('detects hasDocs when docs directory appears in file tree', async () => {
+    const { ctx, state } = makeCtx();
+    // BASE_FILE_TREE includes ./docs/guide.md which contains "docs/"
 
     await runProfile(ctx, { cwd: '/fake/cwd' });
 
@@ -243,8 +358,12 @@ describe('runProfile', () => {
   });
 
   it('reports no test framework gap when package.json has no test deps', async () => {
+    const noTestFileTree = './src/index.ts\n./package.json\n./README.md';
     const calls = baseExecCalls().map(c => {
-      if (c.cmd === 'cat' && c.args[0] === 'package.json') {
+      if (c.cmd === 'find') {
+        return { ...c, result: { code: 0, stdout: noTestFileTree, stderr: '' } };
+      }
+      if (c.cmd === 'head' && c.args[2] === 'package.json') {
         return { ...c, result: { code: 0, stdout: JSON.stringify({ name: 'bare', dependencies: {} }), stderr: '' } };
       }
       return c;
