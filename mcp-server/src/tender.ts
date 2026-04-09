@@ -4,8 +4,8 @@ import {
   fetchInbox,
   sendMessage,
   whoisAgent,
-  type ExecFn,
 } from "./agent-mail.js";
+import type { ExecFn } from "./exec.js";
 import { createLogger } from "./logger.js";
 
 // ─── Types ─────────────────────────────────────────────────────

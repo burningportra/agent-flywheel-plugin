@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SwarmTender } from '../tender.js';
 import type { SwarmTenderOptions, AgentStatus, SwarmCompletionSummary } from '../tender.js';
-import type { ExecFn } from '../agent-mail.js';
+import type { ExecFn } from '../exec.js';
 
 // ─── Mocks ──────────────────────────────────────────────────────
 
