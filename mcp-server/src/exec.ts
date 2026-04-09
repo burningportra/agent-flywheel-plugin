@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 
 export type ExecFn = (
-  cmd: string, args: string[], opts?: { timeout?: number; cwd?: string }
+  cmd: string, args: string[], opts?: { timeout?: number; cwd?: string; signal?: AbortSignal }
 ) => Promise<{ code: number; stdout: string; stderr: string }>;
 
 export function makeExec(defaultCwd?: string): ExecFn {
@@ -10,6 +10,7 @@ export function makeExec(defaultCwd?: string): ExecFn {
       cwd: opts.cwd ?? defaultCwd,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
+      signal: opts.signal,
     });
     let stdout = '', stderr = '';
     child.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
