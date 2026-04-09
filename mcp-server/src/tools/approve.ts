@@ -1,14 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ToolContext, McpToolResult, Bead } from '../types.js';
+import type { ToolContext, McpToolResult, Bead, ApproveArgs } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, pickRefinementModel, slugifyGoal } from './shared.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
-
-interface ApproveArgs {
-  cwd: string;
-  action: 'start' | 'polish' | 'reject' | 'advanced' | 'git-diff-review';
-  advancedAction?: 'fresh-agent' | 'same-agent' | 'blunder-hunt' | 'dedup' | 'cross-model' | 'graph-fix';
-}
 
 // Module-level bead snapshot for change tracking
 type BeadSnapshot = Map<string, { title: string; descFingerprint: string }>;

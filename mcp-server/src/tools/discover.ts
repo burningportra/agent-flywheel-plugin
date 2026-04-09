@@ -1,12 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { ToolContext, McpToolResult, CandidateIdea } from '../types.js';
-
-interface DiscoverArgs {
-  cwd: string;
-  ideas: CandidateIdea[];
-}
+import type { ToolContext, McpToolResult, CandidateIdea, DiscoverArgs } from '../types.js';
 
 /**
  * orch_discover — Accept LLM-generated ideas and store them in state.

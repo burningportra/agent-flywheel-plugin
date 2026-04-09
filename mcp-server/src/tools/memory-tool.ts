@@ -1,12 +1,5 @@
 import { execSync } from 'node:child_process';
-import type { ToolContext, McpToolResult } from '../types.js';
-
-interface MemoryArgs {
-  cwd: string;
-  query?: string;
-  operation?: 'search' | 'store';
-  content?: string;
-}
+import type { ToolContext, McpToolResult, MemoryArgs } from '../types.js';
 
 /**
  * orch_memory — Search and interact with CASS memory (cm CLI).

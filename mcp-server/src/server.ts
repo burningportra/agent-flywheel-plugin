@@ -5,6 +5,7 @@ import { makeExec } from './exec.js';
 import { loadState, saveState, clearState } from './state.js';
 import { VERSION } from './version.js';
 import { createLogger } from './logger.js';
+import type { ProfileArgs, DiscoverArgs, SelectArgs, PlanArgs, ApproveArgs, ReviewArgs, MemoryArgs } from './types.js';
 
 const log = createLogger("server");
 import { runProfile } from './tools/profile.js';
@@ -217,7 +218,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-
   const validationError = validateToolArgs(name, (args ?? {}) as Record<string, unknown>);
   if (validationError) {
     return {
@@ -226,7 +226,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  const cwd = (args as any).cwd as string;
+  const cwd = (args as { cwd?: string })?.cwd as string;
 
   const exec = makeExec(cwd);
   const state = loadState(cwd);
@@ -241,19 +241,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "orch_profile":
-        return await runProfile(ctx, args as any);
+        return await runProfile(ctx, args as unknown as ProfileArgs);
       case "orch_discover":
-        return await runDiscover(ctx, args as any);
+        return await runDiscover(ctx, args as unknown as DiscoverArgs);
       case "orch_select":
-        return await runSelect(ctx, args as any);
+        return await runSelect(ctx, args as unknown as SelectArgs);
       case "orch_plan":
-        return await runPlan(ctx, args as any);
+        return await runPlan(ctx, args as unknown as PlanArgs);
       case "orch_approve_beads":
-        return await runApprove(ctx, args as any);
+        return await runApprove(ctx, args as unknown as ApproveArgs);
       case "orch_review":
-        return await runReview(ctx, args as any);
+        return await runReview(ctx, args as unknown as ReviewArgs);
       case "orch_memory":
-        return await runMemory(ctx, args as any);
+        return await runMemory(ctx, args as unknown as MemoryArgs);
       default:
         return {
           content: [{ type: "text", text: `Unknown tool: ${name}` }],
