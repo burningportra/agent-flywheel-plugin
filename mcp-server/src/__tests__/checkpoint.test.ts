@@ -14,6 +14,7 @@ import {
   CHECKPOINT_TMP,
   CHECKPOINT_CORRUPT,
 } from '../checkpoint.js';
+import { VERSION } from '../version.js';
 import { createInitialState } from '../types.js';
 import type { OrchestratorState, CheckpointEnvelope } from '../types.js';
 
@@ -23,7 +24,7 @@ function makeEnvelope(state: OrchestratorState, overrides: Partial<CheckpointEnv
   return {
     schemaVersion: 1,
     writtenAt: new Date().toISOString(),
-    orchestratorVersion: '0.0.0-test',
+    orchestratorVersion: VERSION,
     state,
     stateHash: computeStateHash(state),
     ...overrides,
@@ -264,5 +265,88 @@ describe('cleanupOrphanedTmp', () => {
   it('does not throw if no .tmp file exists', () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-notmp-'));
     expect(() => cleanupOrphanedTmp(dir)).not.toThrow();
+  });
+});
+
+// ─── Edge case: VERSION matches package.json ─────────────────────
+
+describe('VERSION constant', () => {
+  it('matches the version in package.json', async () => {
+    const { createRequire } = await import('module');
+    const require = createRequire(import.meta.url);
+    const pkg = require('../../package.json') as { version: string };
+    expect(VERSION).toBe(pkg.version);
+  });
+});
+
+// ─── Edge case: version mismatch warning ─────────────────────────
+
+describe('version mismatch', () => {
+  let dir: string;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('produces a warning in ValidationResult when checkpoint version differs from current', () => {
+    const state = createInitialState();
+    const oldVersion = '0.0.0-old';
+    const envelope = makeEnvelope(state, { orchestratorVersion: oldVersion });
+    const result = validateCheckpoint(envelope);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.length).toBeGreaterThan(0);
+      expect(result.warnings![0]).toContain(oldVersion);
+      expect(result.warnings![0]).toContain(VERSION);
+    }
+  });
+
+  it('old checkpoint still loads (version mismatch is not a rejection)', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'ckpt-vermis-'));
+    const state = createInitialState();
+    // Write with current version, then patch the file to an old version
+    await writeCheckpoint(dir, state);
+    const filePath = join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE);
+    const raw = readFileSync(filePath, 'utf8');
+    const envelope = JSON.parse(raw) as CheckpointEnvelope;
+    // Patch orchestratorVersion to something old while keeping hash intact
+    (envelope as any).orchestratorVersion = '0.0.0-legacy';
+    // Recompute hash to match the unchanged state so validation passes
+    (envelope as any).stateHash = computeStateHash(envelope.state);
+    writeFileSync(filePath, JSON.stringify(envelope, null, 2), 'utf8');
+
+    const result = readCheckpoint(dir);
+    expect(result).not.toBeNull();
+    expect(result!.envelope.state.phase).toBe('idle');
+    expect(result!.warnings.some((w) => w.includes('0.0.0-legacy'))).toBe(true);
+  });
+});
+
+// ─── Edge case: concurrent writes are serialized ──────────────────
+
+describe('concurrent writes', () => {
+  let dir: string;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('serializes concurrent writeCheckpoint calls to the same cwd', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'ckpt-concurrent-'));
+    const writes = 5;
+    const results = await Promise.all(
+      Array.from({ length: writes }, (_, i) => {
+        const state = { ...createInitialState(), phase: 'idle' as const };
+        return writeCheckpoint(dir, state);
+      })
+    );
+    // All writes must succeed
+    expect(results.every((ok) => ok === true)).toBe(true);
+    // The checkpoint file must exist and be valid JSON
+    const raw = readFileSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE), 'utf8');
+    expect(() => JSON.parse(raw)).not.toThrow();
+    // No orphaned tmp file
+    expect(existsSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_TMP))).toBe(false);
   });
 });

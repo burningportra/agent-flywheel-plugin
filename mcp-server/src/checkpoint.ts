@@ -70,7 +70,7 @@ function getGitHead(cwd: string): string | undefined {
 // ─── Validation ───────────────────────────────────────────────
 
 export type ValidationResult =
-  | { valid: true }
+  | { valid: true; warnings?: string[] }
   | { valid: false; reason: string };
 
 /**
@@ -126,7 +126,12 @@ export function validateCheckpoint(envelope: unknown): ValidationResult {
     return { valid: false, reason: "state.phase is not a string" };
   }
 
-  return { valid: true };
+  // Collect non-fatal warnings
+  const warnings: string[] = [];
+  if (e.orchestratorVersion !== VERSION) {
+    warnings.push(`Checkpoint was written by v${String(e.orchestratorVersion)}, current is v${VERSION}`);
+  }
+  return warnings.length > 0 ? { valid: true, warnings } : { valid: true };
 }
 
 // ─── Write ────────────────────────────────────────────────────
@@ -232,7 +237,7 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
     }
 
     const envelope = parsed as CheckpointEnvelope;
-    const warnings: string[] = [];
+    const warnings: string[] = validation.warnings ? [...validation.warnings] : [];
 
     // Check staleness
     const age = Date.now() - Date.parse(envelope.writtenAt);
