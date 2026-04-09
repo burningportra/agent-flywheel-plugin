@@ -7,7 +7,7 @@
     "orchestrator": {
       "type": "stdio",
       "command": "node",
-      "args": ["mcp-server/dist/server.js"],
+      "args": ["/Users/kevtrinh/Documents/GitHub/claude-orchestrator/mcp-server/dist/server.js"],
       "env": {}
     }
   }

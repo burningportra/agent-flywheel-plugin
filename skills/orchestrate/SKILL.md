@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Start or resume the full agentic coding flywheel. Drives the complete workflow: scan → discover → plan → implement → review.
+description: "Start or resume the full agentic coding flywheel. Drives the complete workflow: scan → discover → plan → implement → review."
 ---
 
 # Orchestrate: Full Flywheel
