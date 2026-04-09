@@ -117,6 +117,7 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
    ```
    br dep add <downstream-bead-id> <upstream-bead-id>
    ```
+   > **Syntax note:** Arguments are positional — `<downstream>` depends on `<upstream>`. The `--depends-on` flag does NOT exist. If the command fails, verify you are passing two positional IDs with no flags.
 
 3. Verify with `br list` — confirm all beads and dependencies look correct.
 
@@ -132,8 +133,11 @@ Use `br list` to display the current beads. Ask:
 > 3. **Reject** — start over with a different goal"
 
 - "Start" → call `orch_approve_beads` with `action: "start"`
+  > **Note:** If the plan was just registered via `orch_plan`, the first `orch_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `orch_approve_beads` with `action: "start"` a second time to get the quality score and launch.
 - "Polish" → call `orch_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
 - "Reject" → call `orch_approve_beads` with `action: "reject"`, return to Step 3
+
+If the user asks "what's the quality score?" before choosing to start, call `orch_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
 
 After calling `orch_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
 
@@ -156,7 +160,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    ```
    > **NOTE:** If a planning team (e.g. `"deep-plan-<slug>"`) is still active from Step 5, you must delete it first via `TeamDelete(team_name: "deep-plan-<slug>")` before creating the impl team. If `TeamDelete` fails because agents are still registered, retire them via Agent Mail `retire_agent` first, then retry `TeamDelete`. Alternatively, reuse the existing planning team by passing its `team_name` to impl agents.
 
-2. Spawn an implementation agent with team membership and **strict Agent Mail bootstrap**:
+2. Spawn an implementation agent with team membership. **Agent Mail bootstrap is only required for parallel beads** — if beads are sequential (linear dependency chain, one agent at a time), omit STEP 0 to reduce overhead. For parallel beads, include the strict bootstrap to prevent file conflicts:
    ```
    Agent(
      subagent_type: "general-purpose",
@@ -256,6 +260,8 @@ Actions:
   5. Collect and summarize results.
 
   > **Edge case — already-closed beads:** If `orch_review` errors (e.g. "Cannot read properties of undefined"), the bead was likely already closed by the impl agent before review was requested. Skip the MCP tool and spawn review agents manually. Give each reviewer the specific git commit SHA (from `git log --oneline`) and instruct them to review via `git diff <commit>~1 <commit>` directly.
+
+  > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
 
 ## Step 9: Loop until complete
 
