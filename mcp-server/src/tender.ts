@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   forceReleaseFileReservation,
   checkFileReservations,
@@ -37,6 +38,8 @@ export interface TenderConfig {
   maxNudges: number;
   /** How long to wait after last nudge before kill (default 120_000). */
   killWaitMs: number;
+  /** Max nudges to send across all agents in a single poll cycle (default 3). */
+  maxNudgesPerPoll?: number;
 }
 
 export interface ConflictAlert {
@@ -115,6 +118,10 @@ export class SwarmTender {
     this.exec = exec;
     this.cwd = cwd;
     this.config = { ...DEFAULT_CONFIG, ...options?.config };
+    this.config.maxNudgesPerPoll = this.config.maxNudgesPerPoll ?? 3;
+    if (this.config.nudgeDelayMs > this.config.killWaitMs) {
+      process.stderr.write(`[tender] WARNING: nudgeDelayMs (${this.config.nudgeDelayMs}) > killWaitMs (${this.config.killWaitMs}) — agents will never be killed after nudging\n`);
+    }
     this.onStuck = options?.onStuck;
     this.onConflict = options?.onConflict;
     this.onTick = options?.onTick;
@@ -176,6 +183,7 @@ export class SwarmTender {
   private async poll(): Promise<void> {
     const now = Date.now();
     const allChangedFiles = new Map<string, number[]>(); // file → stepIndices
+    let nudgesThisCycle = 0;
 
     for (const [stepIndex, agent] of this.agents) {
       try {
@@ -220,12 +228,18 @@ export class SwarmTender {
           const shouldKill = agent.nudgesSent >= this.config.maxNudges &&
             (now - agent.lastNudgedAt) >= this.config.killWaitMs;
 
-          if (canNudge) {
-            // Find a threadId — use worktreePath as a stable identifier
-            this.nudgeStuckAgent(agent.worktreePath, agent.worktreePath).catch(() => {});
-            agent.nudgesSent++;
-            agent.lastNudgedAt = now;
-            this.log.warn("Nudged stuck agent", { stepIndex: agent.stepIndex, nudgesSent: agent.nudgesSent });
+          if (canNudge && nudgesThisCycle < (this.config.maxNudgesPerPoll ?? 3)) {
+            const agentName = path.basename(agent.worktreePath);
+            this.nudgeStuckAgent(agentName, agent.worktreePath)
+              .then(() => {
+                agent.nudgesSent++;
+                agent.lastNudgedAt = now;
+                nudgesThisCycle++;
+                this.log.warn("Nudged stuck agent", { stepIndex: agent.stepIndex, nudgesSent: agent.nudgesSent });
+              })
+              .catch(err => {
+                process.stderr.write(`[tender] Nudge delivery failed for step ${agent.stepIndex}: ${err instanceof Error ? err.message : String(err)}\n`);
+              });
           } else if (shouldKill) {
             this.log.warn("Killing stuck agent after max nudges", { stepIndex: agent.stepIndex });
             this.killedAgents.push(agent.worktreePath);
