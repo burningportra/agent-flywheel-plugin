@@ -457,6 +457,60 @@ Acceptance criteria:
       },
     ],
   }),
+  defineTemplate({
+    id: "improve-performance",
+    label: "Improve performance",
+    summary: "Optimize a slow path with measurable before/after evidence.",
+    descriptionTemplate: `Optimize {{targetArea}} to meet a measurable performance target. The current baseline is: {{currentBehavior}}. The goal is to {{performanceGoal}} by applying the approach described below while preserving all existing behavior.
+
+Why this bead exists:
+- The current performance of {{targetArea}} is insufficient: {{currentBehavior}}.
+- A concrete optimization approach has been identified: {{optimizationApproach}}.
+
+Acceptance criteria:
+- [ ] Improve {{targetArea}} from the current baseline ({{currentBehavior}}) to meet the goal: {{performanceGoal}}.
+- [ ] Implement the optimization using the planned approach: {{optimizationApproach}}.
+- [ ] Add a benchmark or performance test to prevent future regressions.
+- [ ] Verify that all existing tests continue to pass with no behavior changes.
+
+### Files:
+- {{implementationFile}}
+- {{testFile}}`,
+    placeholders: [
+      { name: "targetArea", description: "Module or function being optimized", example: "plan-to-bead token overlap scoring", required: true },
+      { name: "currentBehavior", description: "Current performance baseline with measurable detail", example: "scoring 50 beads against a 20-section plan takes 4s", required: true },
+      { name: "performanceGoal", description: "Target improvement with measurable threshold", example: "complete scoring in under 500ms", required: true },
+      { name: "optimizationApproach", description: "Planned optimization strategy", example: "pre-compute section token sets and use set intersection", required: true },
+      { name: "implementationFile", description: "Primary source file to optimize", example: "src/beads.ts", required: true },
+      { name: "testFile", description: "Benchmark or test file for performance verification", example: "src/beads.bench.ts", required: true },
+    ],
+    acceptanceCriteria: [
+      "Achieve the stated performance goal with measurable evidence.",
+      "Add a benchmark or performance test to prevent future regressions.",
+      "Preserve all existing behavior and passing tests.",
+    ],
+    filePatterns: ["src/**/*.ts", "src/**/*.test.ts", "src/**/*.bench.ts"],
+    dependencyHints: "Performance beads should depend on the implementation bead that creates the code being optimized. Avoid parallelizing with beads that modify the same hot path.",
+    examples: [
+      {
+        description: `Optimize the product search query builder to meet a measurable performance target. The current baseline is: searching 10,000 products with 3 filter facets takes 2.8s average response time. The goal is to return filtered results in under 200ms at p95 by applying the approach described below while preserving all existing behavior.
+
+Why this bead exists:
+- The current performance of the product search query builder is insufficient: searching 10,000 products with 3 filter facets takes 2.8s average response time.
+- A concrete optimization approach has been identified: add composite database indexes for common filter combinations and cache parsed filter ASTs.
+
+Acceptance criteria:
+- [ ] Improve the product search query builder from the current baseline (searching 10,000 products with 3 filter facets takes 2.8s average response time) to meet the goal: return filtered results in under 200ms at p95.
+- [ ] Implement the optimization using the planned approach: add composite database indexes for common filter combinations and cache parsed filter ASTs.
+- [ ] Add a benchmark or performance test to prevent future regressions.
+- [ ] Verify that all existing tests continue to pass with no behavior changes.
+
+### Files:
+- src/search/query-builder.ts
+- src/search/query-builder.bench.ts`,
+      },
+    ],
+  }),
 ];
 
 export const TEMPLATE_INTEGRITY_WARNINGS = validateTemplateIntegrity(BUILTIN_TEMPLATES);
