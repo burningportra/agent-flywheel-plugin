@@ -10,14 +10,32 @@ export async function profileRepo(
   cwd: string,
   signal?: AbortSignal
 ): Promise<RepoProfile> {
-  const [fileTree, commits, todos, keyFiles] = await Promise.all([
+  const results = await Promise.allSettled([
     collectFileTree(exec, cwd, signal),
     collectCommits(exec, cwd, signal),
     collectTodos(exec, cwd, signal),
     collectKeyFiles(exec, cwd, signal),
   ]);
 
-  const bestPracticesGuides = await collectBestPracticesGuides(exec, cwd, fileTree, signal);
+  const fileTree = results[0].status === "fulfilled" ? results[0].value : "";
+  const commits = results[1].status === "fulfilled" ? results[1].value : [];
+  const todos = results[2].status === "fulfilled" ? results[2].value : [];
+  const keyFiles = results[3].status === "fulfilled" ? results[3].value : {};
+
+  for (const [i, label] of (["fileTree", "commits", "todos", "keyFiles"] as const).entries()) {
+    if (results[i].status === "rejected") {
+      process.stderr.write(
+        `[profiler] ${label} collector failed: ${(results[i] as PromiseRejectedResult).reason}\n`
+      );
+    }
+  }
+
+  let bestPracticesGuides: Array<{ name: string; content: string }> = [];
+  try {
+    bestPracticesGuides = await collectBestPracticesGuides(exec, cwd, fileTree, signal);
+  } catch {
+    // Best practices collection is non-critical
+  }
 
   // Detect languages from extensions
   const extCounts = new Map<string, number>();
@@ -365,4 +383,25 @@ function detectPackageManager(
   if (keyFiles["pyproject.toml"]) return "pip";
   if (keyFiles["Gemfile"]) return "bundler";
   return undefined;
+}
+
+export function createEmptyRepoProfile(cwd: string): RepoProfile {
+  return {
+    name: cwd.split("/").pop() ?? "unknown",
+    languages: [],
+    frameworks: [],
+    structure: "",
+    entrypoints: [],
+    recentCommits: [],
+    hasTests: false,
+    testFramework: undefined,
+    hasDocs: false,
+    hasCI: false,
+    ciPlatform: undefined,
+    todos: [],
+    keyFiles: {},
+    readme: undefined,
+    packageManager: undefined,
+    bestPracticesGuides: [],
+  };
 }
