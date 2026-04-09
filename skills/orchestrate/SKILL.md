@@ -9,9 +9,43 @@ Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--
 
 ## Step 0: Show version
 
-Read `mcp-server/package.json` and display the version as the first line of output:
+Attempt to find `mcp-server/package.json` by searching the Claude plugins directory:
+```bash
+find ~/.claude/plugins -path "*/claude-orchestrator/mcp-server/package.json" 2>/dev/null | head -1
+```
+If found, read it and display the version:
 
 > **claude-orchestrator v`<version>`**
+
+If not found, display and continue — do NOT block:
+
+> **claude-orchestrator (version unknown — MCP server not installed)**
+
+## Step 0.5: Verify MCP tools are available
+
+Before proceeding, check that the orchestrator MCP tools are registered:
+
+1. Use `ToolSearch` with query `"select:orch_profile"`.
+2. If the tool schema is returned: proceed to Step 1.
+3. If NOT found, display:
+
+> **Orchestrator MCP server is not configured.**
+> The `orch_*` tools (`orch_profile`, `orch_discover`, `orch_plan`, etc.) are not available.
+>
+> **To install:** Run `/orchestrate-setup` to configure the MCP server.
+>
+> **To continue without it:** The structured flywheel (planning quality scores, bead management, session memory) will not be available. Type "continue anyway" to proceed in degraded mode.
+
+4. If the user chooses to continue in degraded mode, set an internal flag `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
+   - **Step 2:** Use Explore subagent only (skip `orch_profile`).
+   - **Step 3:** Use Explore-derived ideas (skip `orch_discover`).
+   - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `orch_plan`).
+   - **Step 5.5:** Create beads with `br create` as normal.
+   - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
+   - **Step 8:** Offer "Looks good" and "Self review" only (skip `orch_review`).
+   - **Step 10:** Skip `orch_memory` — remind user that session learnings were not auto-persisted.
+
+5. If the user declines, stop gracefully.
 
 ## Step 1: Check for existing session
 
@@ -25,11 +59,15 @@ If the user chooses to start fresh, delete the checkpoint file.
 
 ## Step 2: Scan and profile the repository
 
-Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits. Then call the `orch_profile` MCP tool (from the `orchestrator` MCP server) with `cwd` set to the current working directory.
+Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits.
+
+If `MCP_DEGRADED` is false, call `orch_profile` with `cwd`. If the call fails, set `MCP_DEGRADED = true` and inform the user: "orch_profile failed — continuing with manual profiling only." Proceed with the Explore results regardless.
 
 ## Step 3: Discover improvement ideas
 
-Call `orch_discover` with `cwd`. This returns a list of candidate improvement ideas ranked by potential impact.
+If `MCP_DEGRADED` is false, call `orch_discover` with `cwd`.
+
+If `MCP_DEGRADED` is true (or `orch_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
 
 Present the top ideas to the user clearly. Ask:
 
