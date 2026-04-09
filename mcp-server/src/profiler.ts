@@ -90,7 +90,7 @@ async function collectFileTree(
       "-not", "-path", "*/vendor/*",
       "-not", "-path", "*/target/*",
     ],
-    { timeout: 10000, cwd }
+    { timeout: 10000, cwd, signal }
   );
   return result.stdout.trim();
 }
@@ -103,7 +103,7 @@ async function collectCommits(
   const result = await exec(
     "git",
     ["log", "--oneline", "--no-decorate", "-n", "20", "--format=%H%x00%s%x00%ai%x00%an"],
-    { timeout: 5000, cwd }
+    { timeout: 5000, cwd, signal }
   );
   if (result.code !== 0) return [];
   return result.stdout
@@ -145,7 +145,7 @@ async function collectTodos(
       "-E", "(TODO|FIXME|HACK|XXX):",
       ".",
     ],
-    { timeout: 10000, cwd }
+    { timeout: 10000, cwd, signal }
   );
   if (result.code !== 0) return [];
   return result.stdout
@@ -189,6 +189,7 @@ async function collectKeyFiles(
       const r = await exec("head", ["-c", "4096", p], {
         timeout: 2000,
         cwd,
+        signal,
       });
       if (r.code === 0 && r.stdout.trim()) {
         files[p] = r.stdout.trim();
@@ -235,7 +236,7 @@ async function collectBestPracticesGuides(
   await Promise.all(
     allPaths.map(async (p) => {
       try {
-        const r = await exec("head", ["-c", "3000", p], { timeout: 2000, cwd });
+        const r = await exec("head", ["-c", "3000", p], { timeout: 2000, cwd, signal });
         if (r.code === 0 && r.stdout.trim()) {
           guides.push({ name: p, content: r.stdout.trim() });
         }

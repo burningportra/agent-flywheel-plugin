@@ -1,11 +1,15 @@
 import { spawn } from 'node:child_process';
 
 export type ExecFn = (
-  cmd: string, args: string[], opts?: { timeout?: number; cwd?: string }
+  cmd: string, args: string[], opts?: { timeout?: number; cwd?: string; signal?: AbortSignal }
 ) => Promise<{ code: number; stdout: string; stderr: string }>;
 
 export function makeExec(defaultCwd?: string): ExecFn {
   return (cmd, args, opts = {}) => new Promise((resolve, reject) => {
+    if (opts.signal?.aborted) {
+      reject(new Error("Aborted"));
+      return;
+    }
     const child = spawn(cmd, args, {
       cwd: opts.cwd ?? defaultCwd,
       shell: false,
@@ -21,7 +25,19 @@ export function makeExec(defaultCwd?: string): ExecFn {
         reject(new Error(`Timed out after ${opts.timeout}ms: ${cmd} ${args.join(' ')}`));
       }, opts.timeout);
     }
-    child.on('close', (code) => { if (timer) clearTimeout(timer); resolve({ code: code ?? 1, stdout, stderr }); });
-    child.on('error', (err) => { if (timer) clearTimeout(timer); reject(err); });
+    const abortHandler = () => { child.kill('SIGTERM'); };
+    if (opts.signal) {
+      opts.signal.addEventListener('abort', abortHandler, { once: true });
+    }
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer);
+      if (opts.signal) opts.signal.removeEventListener('abort', abortHandler);
+      resolve({ code: code ?? 1, stdout, stderr });
+    });
+    child.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      if (opts.signal) opts.signal.removeEventListener('abort', abortHandler);
+      reject(err);
+    });
   });
 }
