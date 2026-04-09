@@ -131,8 +131,8 @@ function validateTemplateIntegrity(templates: BeadTemplate[]): string[] {
  * 3. Define one placeholder per `{{marker}}` used in the template — all
  *    placeholders that appear in the template text must have `required: true`.
  * 4. Populate `acceptanceCriteria` with >= 3 specific, verifiable items.
- * 5. Set `filePatterns` to the narrowest globs covering the typical file
- *    scope (e.g., `["src/api/*.ts"]` not `["**/*.ts"]`).
+ * 5. Set `filePatterns` to the narrowest globs that cover the typical
+ *    file scope — prefer specific directory globs over broad wildcards.
  * 6. Write `dependencyHints` naming what this bead typically unblocks
  *    and what it depends on.
  * 7. Add at least one `examples` entry using a different domain than the
