@@ -240,9 +240,9 @@ describe('formatSplitCommands', () => {
       ],
       splittable: true,
     });
-    // Newlines and carriage returns should be replaced with spaces
-    expect(result).not.toContain('\n"');  // No raw newline inside a quoted argument
-    // The description should have been escaped
+    // shellEscape replaces \n and \r with spaces, so the description
+    // should contain "Line1 Line2 Line3" (spaces, not newlines)
+    expect(result).toContain('Line1 Line2 Line3');
     expect(result).toContain('br create');
   });
 });

@@ -54,14 +54,18 @@ describe('classifyBeadComplexity', () => {
     expect(complexity).toBe('complex');
   });
 
-  it('does not throw when bead.priority is undefined', () => {
+  it('does not throw when bead.priority is undefined and excludes priority signal', () => {
     const bead = makeBead({ priority: undefined as unknown as number });
     expect(() => classifyBeadComplexity(bead)).not.toThrow();
+    const { reason } = classifyBeadComplexity(bead);
+    expect(reason).not.toContain('high priority');
   });
 
-  it('does not throw when bead.priority is NaN', () => {
+  it('does not throw when bead.priority is NaN and excludes priority signal', () => {
     const bead = makeBead({ priority: NaN });
     expect(() => classifyBeadComplexity(bead)).not.toThrow();
+    const { reason } = classifyBeadComplexity(bead);
+    expect(reason).not.toContain('high priority');
   });
 
   it('treats priority 0 as high-priority signal', () => {
@@ -119,9 +123,8 @@ describe('routeModel', () => {
     };
     const bead = makeBead({ title: 'Fix typo in docs', description: 'readme fix', priority: 3 });
     const route = routeModel(bead, customTiers);
-    // Should fall back to DEFAULT_TIERS — implementation should not be empty
-    expect(route.implementation).toBeTruthy();
-    expect(route.implementation).not.toBe('');
+    // Should fall back to DEFAULT_TIERS.simple — verify exact model string
+    expect(route.implementation).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('falls back to DEFAULT_TIERS when custom tier is missing a key', () => {
