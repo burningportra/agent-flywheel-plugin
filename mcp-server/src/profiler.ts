@@ -1,5 +1,8 @@
 import type { ExecFn } from "./exec.js";
 import type { RepoProfile, TodoItem, CommitSummary } from "./types.js";
+import { createLogger } from './logger.js';
+
+const log = createLogger('profiler');
 
 /**
  * Collect raw repo signals using exec for shell commands.
@@ -24,9 +27,7 @@ export async function profileRepo(
 
   for (const [i, label] of (["fileTree", "commits", "todos", "keyFiles"] as const).entries()) {
     if (results[i].status === "rejected") {
-      process.stderr.write(
-        `[profiler] ${label} collector failed: ${(results[i] as PromiseRejectedResult).reason}\n`
-      );
+      log.warn(`${label} collector failed`, { reason: String((results[i] as PromiseRejectedResult).reason) });
     }
   }
 
