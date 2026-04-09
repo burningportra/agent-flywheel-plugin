@@ -304,6 +304,56 @@ Acceptance criteria:
       },
     ],
   }),
+  defineTemplate({
+    id: "add-documentation",
+    label: "Add documentation",
+    summary: "Write or update documentation for a feature or API.",
+    descriptionTemplate: `Write documentation for {{docTopic}} targeting {{targetAudience}}. Cross-reference the source implementation to ensure accuracy, include at least one usage example, and avoid assuming context that is not documented elsewhere.
+
+Why this bead exists:
+- {{docTopic}} lacks documentation suitable for {{targetAudience}}.
+- The docs should be written alongside or immediately after the implementation to capture accurate details.
+
+Acceptance criteria:
+- [ ] Document {{docTopic}} in {{docFile}}, accurately reflecting the current implementation in {{primarySourceFile}}.
+- [ ] Include at least one usage example or code snippet demonstrating the documented feature.
+- [ ] Write for {{targetAudience}} without assuming undocumented context.
+
+### Files:
+- {{docFile}}
+- {{primarySourceFile}}`,
+    placeholders: [
+      { name: "docTopic", description: "What is being documented", example: "bead template expansion API", required: true },
+      { name: "targetAudience", description: "Who will read this documentation", example: "developers adding new bead templates", required: true },
+      { name: "docFile", description: "Primary documentation file to create or update", example: "docs/templates.md", required: true },
+      { name: "primarySourceFile", description: "Source code file being documented", example: "src/bead-templates.ts", required: true },
+    ],
+    acceptanceCriteria: [
+      "Documentation accurately reflects the current implementation.",
+      "Include at least one usage example or code snippet.",
+      "Write for the specified target audience without assuming undocumented context.",
+    ],
+    filePatterns: ["docs/**/*.md", "*.md", "src/**/*.ts"],
+    dependencyHints: "Documentation beads usually depend on the implementation bead they document. Create the implementation first, then the documentation.",
+    examples: [
+      {
+        description: `Write documentation for the payment processing webhook lifecycle targeting new backend engineers joining the payments team. Cross-reference the source implementation to ensure accuracy, include at least one usage example, and avoid assuming context that is not documented elsewhere.
+
+Why this bead exists:
+- The payment processing webhook lifecycle lacks documentation suitable for new backend engineers joining the payments team.
+- The docs should be written alongside or immediately after the implementation to capture accurate details.
+
+Acceptance criteria:
+- [ ] Document the payment processing webhook lifecycle in docs/payments/webhooks.md, accurately reflecting the current implementation in src/payments/webhook-handler.ts.
+- [ ] Include at least one usage example or code snippet demonstrating the documented feature.
+- [ ] Write for new backend engineers joining the payments team without assuming undocumented context.
+
+### Files:
+- docs/payments/webhooks.md
+- src/payments/webhook-handler.ts`,
+      },
+    ],
+  }),
 ];
 
 export const TEMPLATE_INTEGRITY_WARNINGS = validateTemplateIntegrity(BUILTIN_TEMPLATES);
