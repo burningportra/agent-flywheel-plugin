@@ -1,5 +1,5 @@
 import type { ExecFn } from "./exec.js";
-import { profileRepo } from "./profiler.js";
+import { profileRepo, createEmptyRepoProfile } from "./profiler.js";
 import type {
   RepoProfile,
   ScanCodebaseAnalysis,
@@ -85,8 +85,28 @@ export async function scanRepo(
   try {
     return await cccScanProvider.scan(exec, cwd, signal);
   } catch (error) {
-    const profile = await profileRepo(exec, cwd, signal);
-    return createFallbackScanResult(profile, "ccc", toScanErrorInfo(error));
+    const errorInfo = toScanErrorInfo(error);
+    process.stderr.write(
+      `[scan] ccc provider failed, falling back to builtin: ${errorInfo.message}\n`
+    );
+    try {
+      const profile = await profileRepo(exec, cwd, signal);
+      return createFallbackScanResult(profile, "ccc", errorInfo);
+    } catch (fallbackError) {
+      // Double fault: both providers failed. Return emergency minimal result.
+      process.stderr.write(
+        `[scan] builtin profiler also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}\n`
+      );
+      const emptyProfile = createEmptyRepoProfile(cwd);
+      const result = createFallbackScanResult(emptyProfile, "ccc", errorInfo);
+      if (result.sourceMetadata) {
+        result.sourceMetadata.warnings = [
+          ...(result.sourceMetadata.warnings ?? []),
+          `Profiler also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+        ];
+      }
+      return result;
+    }
   }
 }
 
