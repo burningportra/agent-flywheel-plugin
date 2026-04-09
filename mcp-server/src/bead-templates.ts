@@ -405,6 +405,58 @@ Acceptance criteria:
       },
     ],
   }),
+  defineTemplate({
+    id: "add-integration",
+    label: "Add integration",
+    summary: "Connect two subsystems or services with error handling at the boundary.",
+    descriptionTemplate: `Integrate {{sourceSystem}} with {{targetSystem}} to {{integrationPurpose}}. Implement the connection following the agreed interface contract, add error handling at the integration boundary, and cover the integration with automated tests.
+
+Why this bead exists:
+- {{sourceSystem}} and {{targetSystem}} need to communicate to {{integrationPurpose}}.
+- The integration must follow the {{interfaceContract}} contract and handle failures gracefully at the boundary.
+
+Acceptance criteria:
+- [ ] Implement the integration between {{sourceSystem}} and {{targetSystem}} following the {{interfaceContract}} contract.
+- [ ] Handle errors at the integration boundary with clear, actionable error messages.
+- [ ] Add an integration test covering the happy path and at least one failure mode.
+
+### Files:
+- {{implementationFile}}
+- {{testFile}}`,
+    placeholders: [
+      { name: "sourceSystem", description: "System or module initiating the integration", example: "orchestrator planning phase", required: true },
+      { name: "targetSystem", description: "System or module being integrated with", example: "MCP tool server", required: true },
+      { name: "integrationPurpose", description: "Why these systems need to communicate", example: "pass approved beads to the tool server for agent execution", required: true },
+      { name: "interfaceContract", description: "Expected interface or data contract between the systems", example: "BeadPayload JSON with id, description, and acceptanceCriteria fields", required: true },
+      { name: "implementationFile", description: "Primary file where the integration is implemented", example: "src/server.ts", required: true },
+      { name: "testFile", description: "Integration test file", example: "src/server.test.ts", required: true },
+    ],
+    acceptanceCriteria: [
+      "Implement the integration following the specified interface contract.",
+      "Handle errors at the integration boundary with clear error messages.",
+      "Add an integration test covering the happy path and at least one failure mode.",
+    ],
+    filePatterns: ["src/**/*.ts", "src/**/*.test.ts"],
+    dependencyHints: "Integration beads depend on the beads that implement both the source and target systems. They should be among the last beads to execute.",
+    examples: [
+      {
+        description: `Integrate the payment processing service with the fraud detection API to validate transactions before settlement. Implement the connection following the agreed interface contract, add error handling at the integration boundary, and cover the integration with automated tests.
+
+Why this bead exists:
+- The payment processing service and the fraud detection API need to communicate to validate transactions before settlement.
+- The integration must follow the FraudCheckRequest JSON with transactionId, amount, currency, and merchantId fields contract and handle failures gracefully at the boundary.
+
+Acceptance criteria:
+- [ ] Implement the integration between the payment processing service and the fraud detection API following the FraudCheckRequest JSON with transactionId, amount, currency, and merchantId fields contract.
+- [ ] Handle errors at the integration boundary with clear, actionable error messages.
+- [ ] Add an integration test covering the happy path and at least one failure mode.
+
+### Files:
+- src/payments/fraud-check.ts
+- src/payments/fraud-check.test.ts`,
+      },
+    ],
+  }),
 ];
 
 export const TEMPLATE_INTEGRITY_WARNINGS = validateTemplateIntegrity(BUILTIN_TEMPLATES);
