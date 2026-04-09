@@ -105,6 +105,8 @@ claude --plugin-dir ./claude-orchestrator
      ├── checkpoint.ts       ← Atomic disk persistence
      ├── beads.ts            ← br CLI wrapper
      ├── agent-mail.ts       ← agent-mail JSON-RPC client
+     ├── logger.ts           ← Structured stderr logger (createLogger)
+     ├── tender.ts           ← SwarmTender: agent health monitoring + auto-escalation
      └── tools/              ← orch_profile, orch_discover, orch_select,
                                 orch_plan, orch_approve_beads, orch_review,
                                 orch_memory
@@ -116,6 +118,8 @@ claude --plugin-dir ./claude-orchestrator
 - **MCP server is stateless** — state lives in `.pi-orchestrator/checkpoint.json`. The server reads and writes it atomically.
 - **Commands drive the conversation** — each `.md` file instructs Claude how to orchestrate the workflow, ask the user questions, and call the MCP tools.
 - **agent-mail handles coordination** — file reservations prevent concurrent writes; messaging lets agents report progress.
+- **Structured logging via `createLogger`** — all diagnostic output writes JSON lines to stderr (`ORCH_LOG_LEVEL` controls verbosity). Never touches stdout, keeping the MCP JSON-RPC channel clean.
+- **SwarmTender auto-escalation** — `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudges` times), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `orchestratorAgentName`; backward compatible when unset.
 
 ## Models used
 

@@ -16,7 +16,7 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 
 ## Hard Constraints
 
-1. **No `console.log` in MCP server code.** The server uses stdin/stdout for JSON-RPC. Any stdout write corrupts the communication channel. Use `process.stderr.write()` for diagnostics.
+1. **No `console.log` in MCP server code.** The server uses stdin/stdout for JSON-RPC. Any stdout write corrupts the communication channel. Use `createLogger(ctx)` from `./logger.js` for all diagnostics — it writes structured JSON to stderr only.
 2. **Never edit `mcp-server/dist/`.** It is compiled output. Edit sources in `mcp-server/src/` and rebuild.
 3. **TypeScript strict mode.** `tsconfig.json` enables `strict: true`. All code must pass strict type checking.
 4. **NodeNext module resolution.** Use `.js` extensions in all relative imports (e.g., `import { foo } from "./bar.js"`), even when the source file is `.ts`.
@@ -55,6 +55,27 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 - Use `Promise.allSettled` for parallel operations where partial results are acceptable.
 - Async functions preferred over callbacks.
 
+## Logging
+
+Use `createLogger(ctx)` from `mcp-server/src/logger.ts` for all diagnostic output. Never use `console.log`, `console.warn`, or `console.error` directly.
+
+```typescript
+import { createLogger } from "./logger.js";
+const log = createLogger("my-module");
+
+log.info("doing thing");
+log.warn("something odd", { detail: value });
+log.error("failed", { err: String(err) });
+```
+
+Log level is controlled by the `ORCH_LOG_LEVEL` env var (default: `"warn"`). Levels: `debug < info < warn < error`.
+
 ## Testing
 
-No test suite is configured yet. Verify changes by running the build: `cd mcp-server && npm run build`.
+Vitest is configured. Run tests with:
+
+```bash
+cd mcp-server && npm test
+```
+
+Test files live in `mcp-server/src/__tests__/`. Follow existing patterns — use `vi.mock` for external deps, `vi.spyOn(process.stderr, 'write')` to capture logger output, `vi.useFakeTimers()` for time-dependent tests. Always add a regression test when fixing a bug.
