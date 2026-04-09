@@ -4,3 +4,4 @@ mcp-server/dist/
 .pi-orchestrator/checkpoint.json.corrupt
 *.log
 .DS_Store
+/.beads
