@@ -158,6 +158,7 @@ Acceptance criteria:
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_]+)\s*}}/g;
 const INVALID_VALUE_PATTERN = /[\r\0]/;
+const MAX_PLACEHOLDER_VALUE_LENGTH = 2000;
 
 function cloneTemplate(template: BeadTemplate): BeadTemplate {
   return {
@@ -179,6 +180,9 @@ export function getTemplateById(templateId: string): BeadTemplate | undefined {
 }
 
 export function formatTemplatesForPrompt(): string {
+  if (BUILTIN_TEMPLATES.length === 0) {
+    return "(No bead templates available — write custom bead descriptions.)";
+  }
   return BUILTIN_TEMPLATES.map((template) => {
     const placeholderNames = template.placeholders.map((placeholder) => placeholder.name).join(", ");
     return `- ${template.id}: ${template.summary} Placeholders: ${placeholderNames}`;
@@ -189,6 +193,9 @@ function validatePlaceholderValues(placeholders: Record<string, string>): string
   for (const [name, value] of Object.entries(placeholders)) {
     if (INVALID_VALUE_PATTERN.test(value)) {
       return `Invalid placeholder value for ${name}. Values must not contain carriage returns or null bytes.`;
+    }
+    if (value.length > MAX_PLACEHOLDER_VALUE_LENGTH) {
+      return `Placeholder value for "${name}" is too long (${value.length} chars, max ${MAX_PLACEHOLDER_VALUE_LENGTH}).`;
     }
   }
   return undefined;
