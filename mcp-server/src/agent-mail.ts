@@ -519,19 +519,33 @@ export function amRpcCmd(tool: string, args: Record<string, unknown>): string {
 }
 
 /**
+ * Safely wrap a string in bash single quotes.
+ * Single-quoted strings in bash are literal — no variable expansion, no command
+ * substitution, no backtick evaluation. The only character that cannot appear
+ * inside a single-quoted string is the single-quote itself, which we handle by
+ * ending the quote, inserting a literal escaped single-quote, then reopening.
+ *
+ * Example: /path/it's/here  →  '/path/it'"'"'s/here'
+ */
+export function shellSingleQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+/**
  * Build a bash helper script that wraps agent-mail calls.
  * Sub-agents source this to get am_send, am_inbox, am_release functions
  * with their agent name and project key baked in — no manual substitution needed.
  */
-function amHelperScript(cwd: string, threadId: string): string {
-  // Escape double-quotes to prevent shell injection (e.g. paths with spaces/quotes)
-  const safeCwd = cwd.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const safeThread = threadId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+export function amHelperScript(cwd: string, threadId: string): string {
+  // Use single-quote wrapping to prevent all forms of shell injection
+  // (variable expansion, command substitution, backtick evaluation, etc.)
+  const safeCwd = shellSingleQuote(cwd);
+  const safeThread = shellSingleQuote(threadId);
   return `
 # ── Agent Mail helper functions (source these) ──────────────
 AM_URL="${AGENT_MAIL_URL}"
-AM_PROJECT="${safeCwd}"
-AM_THREAD="${safeThread}"
+AM_PROJECT=${safeCwd}
+AM_THREAD=${safeThread}
 
 am_rpc() {
   local tool="$1" args="$2"
