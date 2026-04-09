@@ -7,6 +7,12 @@ description: Start or resume the full agentic coding flywheel. Drives the comple
 
 Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
 
+## Step 0: Show version
+
+Read `mcp-server/package.json` and display the version as the first line of output:
+
+> **claude-orchestrator v`<version>`**
+
 ## Step 1: Check for existing session
 
 Read `.pi-orchestrator/checkpoint.json` if it exists. If a non-idle/non-complete session is found, ask the user:
