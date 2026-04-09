@@ -511,6 +511,63 @@ Acceptance criteria:
       },
     ],
   }),
+  defineTemplate({
+    id: "update-configuration",
+    label: "Update configuration",
+    summary: "Add or modify configuration with validation and migration notes.",
+    descriptionTemplate: `Update the {{configArea}} configuration in {{configFile}} to {{changeReason}}. Add input validation for the new values, document migration steps, and ensure existing environments are not broken by the change.
+
+Why this bead exists:
+- The {{configArea}} configuration needs to change to {{changeReason}}.
+- Configuration changes without migration notes risk breaking existing deployments silently.
+
+Migration notes:
+{{migrationNotes}}
+
+Acceptance criteria:
+- [ ] Add or update the {{configArea}} configuration in {{configFile}} with input validation for new values.
+- [ ] Document migration steps so existing environments can adapt without downtime or data loss.
+- [ ] Add validation tests in {{validationFile}} covering valid inputs, invalid inputs, and backwards-compatible defaults.
+
+### Files:
+- {{configFile}}
+- {{validationFile}}`,
+    placeholders: [
+      { name: "configArea", description: "What configuration is being changed", example: "MCP server transport settings", required: true },
+      { name: "changeReason", description: "Why the configuration needs to change", example: "support both stdio and SSE transports", required: true },
+      { name: "migrationNotes", description: "How existing environments should adapt", example: "existing stdio-only setups continue to work with no changes; SSE requires setting TRANSPORT=sse", required: true },
+      { name: "configFile", description: "Primary configuration file", example: "src/config.ts", required: true },
+      { name: "validationFile", description: "File where config validation lives", example: "src/config.test.ts", required: true },
+    ],
+    acceptanceCriteria: [
+      "Add or update configuration with input validation for the new values.",
+      "Document migration steps for existing environments.",
+      "Ensure backwards compatibility or document breaking changes explicitly.",
+    ],
+    filePatterns: ["*.config.*", "*.json", "*.yaml", "*.yml", "*.toml", "src/**/*.ts"],
+    dependencyHints: "Configuration beads are often prerequisites for feature beads that consume the new config. Other beads should depend on this one if they read the changed config.",
+    examples: [
+      {
+        description: `Update the database connection pool configuration in src/db/config.ts to support environment-based pool sizing for production, staging, and development. Add input validation for the new values, document migration steps, and ensure existing environments are not broken by the change.
+
+Why this bead exists:
+- The database connection pool configuration needs to change to support environment-based pool sizing for production, staging, and development.
+- Configuration changes without migration notes risk breaking existing deployments silently.
+
+Migration notes:
+Existing deployments using the default pool size of 10 continue to work unchanged. To opt in to environment-based sizing, set DB_POOL_MIN and DB_POOL_MAX environment variables. Production defaults to min=5, max=20; staging defaults to min=2, max=10; development defaults to min=1, max=5. If neither variable is set, the legacy default of 10 is preserved.
+
+Acceptance criteria:
+- [ ] Add or update the database connection pool configuration in src/db/config.ts with input validation for new values.
+- [ ] Document migration steps so existing environments can adapt without downtime or data loss.
+- [ ] Add validation tests in src/db/config.test.ts covering valid inputs, invalid inputs, and backwards-compatible defaults.
+
+### Files:
+- src/db/config.ts
+- src/db/config.test.ts`,
+      },
+    ],
+  }),
 ];
 
 export const TEMPLATE_INTEGRITY_WARNINGS = validateTemplateIntegrity(BUILTIN_TEMPLATES);
