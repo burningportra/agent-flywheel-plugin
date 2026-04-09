@@ -14,6 +14,7 @@ export function makeExec(defaultCwd?: string): ExecFn {
       cwd: opts.cwd ?? defaultCwd,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
+      signal: opts.signal,
     });
     let stdout = '', stderr = '';
     child.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });

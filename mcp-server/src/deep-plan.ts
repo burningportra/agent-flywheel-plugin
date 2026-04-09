@@ -30,15 +30,28 @@ export async function runDeepPlanAgents(
 ): Promise<DeepPlanResult[]> {
   // Write each agent's task to a temp file and spawn claude in print mode
   const outputDir = join(tmpdir(), `claude-deep-plan-${Date.now()}`);
-  mkdirSync(outputDir, { recursive: true });
+  let resolvedOutputDir = outputDir;
+  try {
+    mkdirSync(outputDir, { recursive: true });
+  } catch (err) {
+    const fallbackDir = join(tmpdir(), `claude-deep-plan-fallback-${Date.now()}`);
+    try {
+      mkdirSync(fallbackDir, { recursive: true });
+      resolvedOutputDir = fallbackDir;
+    } catch {
+      resolvedOutputDir = tmpdir(); // last resort
+    }
+    process.stderr.write(`[deep-plan] WARNING: Could not create output dir ${outputDir}, falling back to ${resolvedOutputDir}\n`);
+  }
 
   const promises = agents.map(async (agent) => {
     const startTime = Date.now();
-    const taskFile = join(outputDir, `${agent.name}-task.md`);
-    const outputFile = join(outputDir, `${agent.name}-output.md`);
-    writeFileSync(taskFile, agent.task, "utf8");
+    const taskFile = join(resolvedOutputDir, `${agent.name}-task.md`);
+    const outputFile = join(resolvedOutputDir, `${agent.name}-output.md`);
 
     try {
+      writeFileSync(taskFile, agent.task, "utf8");
+
       const args = [
         "--print",            // non-interactive, output to stdout
         "--tools", "read,bash,grep,find,ls",  // read-only tools
@@ -53,10 +66,25 @@ export async function runDeepPlanAgents(
       const result = await exec("claude", args, {
         timeout: 180000, // 3 min timeout per planner
         cwd,
+        signal,
       });
 
       const plan = result.stdout.trim();
-      writeFileSync(outputFile, plan, "utf8");
+      if (!plan) {
+        return {
+          name: agent.name,
+          model: agent.model ?? "default",
+          plan: "(AGENT RETURNED EMPTY — exclude from synthesis)",
+          exitCode: result.code,
+          elapsed: Math.floor((Date.now() - startTime) / 1000),
+        } as DeepPlanResult;
+      }
+
+      try {
+        writeFileSync(outputFile, plan, "utf8");
+      } catch (writeErr) {
+        process.stderr.write(`[deep-plan] WARNING: Could not write output file ${outputFile}: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}\n`);
+      }
 
       return {
         name: agent.name,
@@ -69,7 +97,7 @@ export async function runDeepPlanAgents(
       return {
         name: agent.name,
         model: agent.model ?? "default",
-        plan: "",
+        plan: `(AGENT FAILED — exclude from synthesis: ${err instanceof Error ? err.message : String(err)})`,
         exitCode: 1,
         elapsed: Math.floor((Date.now() - startTime) / 1000),
         error: err instanceof Error ? err.message : String(err),
@@ -77,6 +105,15 @@ export async function runDeepPlanAgents(
     }
   });
 
-  // Run all in parallel
-  return Promise.all(promises);
+  // Run all in parallel, then filter to only viable results for synthesis
+  const allResults = await Promise.all(promises);
+  return filterViableResults(allResults);
+}
+
+/**
+ * Filter deep-plan results to only those that are viable for synthesis.
+ * Excludes failed agents and empty results (sentinel strings starting with "(AGENT").
+ */
+export function filterViableResults(results: DeepPlanResult[]): DeepPlanResult[] {
+  return results.filter(r => r.exitCode === 0 && !r.plan.startsWith("(AGENT"));
 }

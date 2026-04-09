@@ -33,6 +33,7 @@ export interface ModelRoute {
 export interface ModelTier {
   implementation: string;
   review: string;
+  fallbacks?: string[];  // for future use
 }
 
 const DEFAULT_TIERS: Record<BeadComplexity, ModelTier> = {
@@ -49,6 +50,16 @@ const DEFAULT_TIERS: Record<BeadComplexity, ModelTier> = {
     review: MODEL_ROUTING_TIERS.complex.review,
   },
 };
+
+// ─── Tier Validation ───────────────────────────────────────
+
+function validateModelTier(tier: ModelTier, label: string): boolean {
+  if (!tier.implementation || !tier.review) {
+    process.stderr.write(`[model-routing] WARNING: tier "${label}" has empty implementation or review model — falling back to DEFAULT_TIERS\n`);
+    return false;
+  }
+  return true;
+}
 
 // ─── Complexity Classification ──────────────────────────────
 
@@ -129,7 +140,7 @@ export function classifyBeadComplexity(bead: Bead): { complexity: BeadComplexity
   }
 
   // Priority (P0/P1 = likely more complex)
-  if (bead.priority <= 1) {
+  if (typeof bead.priority === "number" && !Number.isNaN(bead.priority) && bead.priority <= 1) {
     score += 1;
     reasons.push("high priority");
   }
@@ -166,7 +177,20 @@ export function classifyBeadComplexity(bead: Bead): { complexity: BeadComplexity
 export function routeModel(bead: Bead, tiers?: Record<BeadComplexity, ModelTier>): ModelRoute {
   const { complexity, reason } = classifyBeadComplexity(bead);
   const tierMap = tiers ?? DEFAULT_TIERS;
-  const tier = tierMap[complexity];
+
+  let tier = tierMap[complexity];
+
+  // Validate the resolved tier; fall back to DEFAULT_TIERS if invalid or missing
+  if (!tier || !validateModelTier(tier, complexity)) {
+    process.stderr.write(`[model-routing] falling back to DEFAULT_TIERS["${complexity}"]\n`);
+    tier = DEFAULT_TIERS[complexity];
+
+    // Ultimate fallback to medium if DEFAULT_TIERS entry also fails (shouldn't happen)
+    if (!validateModelTier(tier, `DEFAULT:${complexity}`)) {
+      process.stderr.write(`[model-routing] DEFAULT_TIERS["${complexity}"] also invalid — using DEFAULT_TIERS["medium"]\n`);
+      tier = DEFAULT_TIERS.medium;
+    }
+  }
 
   return {
     implementation: tier.implementation,

@@ -181,7 +181,7 @@ Acceptance criteria:
     ],
     acceptanceCriteria: [
       "Add request validation and explicit error handling for invalid inputs.",
-      "Implement the endpoint behavior in the named module without leaving TODO stubs.",
+      "Implement the endpoint behavior in the named module without leaving stub methods.",
       "Cover the endpoint with automated tests for success and failure paths.",
     ],
     filePatterns: ["src/api/*.ts", "src/**/*.test.ts"],

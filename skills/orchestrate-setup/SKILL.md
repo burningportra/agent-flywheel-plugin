@@ -7,27 +7,48 @@ Set up the orchestrator for this project. $ARGUMENTS
 
 Check and configure all prerequisites:
 
-1. **br CLI**: Run `br --version` via Bash.
+1. **MCP server (build)**: Locate and verify the orchestrator MCP server is built.
+   - Find the plugin directory via Bash:
+     ```bash
+     find ~/.claude/plugins -name "mcp-server" -type d 2>/dev/null | head -1
+     ```
+   - Check that `<plugin-dir>/mcp-server/dist/server.js` exists.
+   - If MISSING: **STOP.** Instruct:
+     ```
+     cd <plugin-dir>/mcp-server && npm install && npm run build
+     ```
+   - Do not proceed to other checks until this passes.
+
+2. **MCP server (registered)**: Verify the MCP server is actually loaded in this Claude Code session.
+   - Run `ToolSearch("orch_profile")` to check if orchestrator tools are available.
+   - If no results: the server is built but not registered. Instruct:
+     "Add the `orchestrator` server entry to your Claude Code MCP config (`.mcp.json` in the plugin dir or `claude_desktop_config.json`) and restart Claude Code."
+
+3. **br CLI**: Run `br --version` via Bash.
    - If not found: "br is not installed. Install from https://github.com/burningportra/br"
    - If found: check `.beads/` directory. If missing, offer to run `br init`.
 
-2. **bv CLI**: Run `bv --version` via Bash. Report status.
+4. **bv CLI**: Run `bv --version` via Bash. Report status.
 
-3. **agent-mail**: Test `curl -s --max-time 3 http://127.0.0.1:8765/health/liveness` via Bash.
+5. **agent-mail**: Test `curl -s --max-time 3 http://127.0.0.1:8765/health/liveness` via Bash.
    - If reachable: call `health_check` via `agent-mail` MCP tool.
    - If not reachable: "agent-mail is not running. Start it with: `uv run python -m mcp_agent_mail.cli serve-http`"
 
-4. **Pre-commit guard**: Call `install_precommit_guard` via `agent-mail` MCP tool with `project_key` and `code_repo_path` set to the current working directory.
+6. **Pre-commit guard**: Call `install_precommit_guard` via `agent-mail` MCP tool with `project_key` and `code_repo_path` set to the current working directory.
 
-5. **Register agent**: Call `register_agent` via `agent-mail` MCP tool with `project_key` and `agent_name: "Orchestrator"`.
+7. **Register agent**: Call `register_agent` via `agent-mail` MCP tool with `project_key` and `agent_name: "Orchestrator"`.
 
-6. **MCP server**: Check that `mcp-server/dist/server.js` exists. If not, instruct: "Build the MCP server first: `cd mcp-server && npm install && npm run build`"
-
-7. Display a health checklist:
+8. Display a health checklist:
    ```
+   ✅ MCP server built (dist/server.js exists)
+   ✅ MCP server registered (orch_profile tool available)
    ✅ br v1.x.x — beads initialized
    ✅ bv v1.x.x
    ✅ agent-mail — healthy
    ✅ pre-commit guard installed
-   ✅ MCP server built
+   ✅ agent registered as "Orchestrator"
    ```
+
+9. **Gate recommendation:**
+   - If ALL checks pass: "All prerequisites met. You can now run `/orchestrate`."
+   - If ANY check failed: "**Do not run `/orchestrate` until all checks pass.** Fix the items marked ❌ above and re-run `/orchestrate-setup`."

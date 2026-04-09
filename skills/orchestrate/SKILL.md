@@ -9,9 +9,43 @@ Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--
 
 ## Step 0: Show version
 
-Read `mcp-server/package.json` and display the version as the first line of output:
+Attempt to find `mcp-server/package.json` by searching the Claude plugins directory:
+```bash
+find ~/.claude/plugins -path "*/claude-orchestrator/mcp-server/package.json" 2>/dev/null | head -1
+```
+If found, read it and display the version:
 
 > **claude-orchestrator v`<version>`**
+
+If not found, display and continue — do NOT block:
+
+> **claude-orchestrator (version unknown — MCP server not installed)**
+
+## Step 0.5: Verify MCP tools are available
+
+Before proceeding, check that the orchestrator MCP tools are registered:
+
+1. Use `ToolSearch` with query `"select:orch_profile"`.
+2. If the tool schema is returned: proceed to Step 1.
+3. If NOT found, display:
+
+> **Orchestrator MCP server is not configured.**
+> The `orch_*` tools (`orch_profile`, `orch_discover`, `orch_plan`, etc.) are not available.
+>
+> **To install:** Run `/orchestrate-setup` to configure the MCP server.
+>
+> **To continue without it:** The structured flywheel (planning quality scores, bead management, session memory) will not be available. Type "continue anyway" to proceed in degraded mode.
+
+4. If the user chooses to continue in degraded mode, set an internal flag `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
+   - **Step 2:** Use Explore subagent only (skip `orch_profile`).
+   - **Step 3:** Use Explore-derived ideas (skip `orch_discover`).
+   - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `orch_plan`).
+   - **Step 5.5:** Create beads with `br create` as normal.
+   - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
+   - **Step 8:** Offer "Looks good" and "Self review" only (skip `orch_review`).
+   - **Step 10:** Skip `orch_memory` — remind user that session learnings were not auto-persisted.
+
+5. If the user declines, stop gracefully.
 
 ## Step 1: Check for existing session
 
@@ -25,11 +59,15 @@ If the user chooses to start fresh, delete the checkpoint file.
 
 ## Step 2: Scan and profile the repository
 
-Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits. Then call the `orch_profile` MCP tool (from the `orchestrator` MCP server) with `cwd` set to the current working directory.
+Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits.
+
+If `MCP_DEGRADED` is false, call `orch_profile` with `cwd`. If the call fails, set `MCP_DEGRADED = true` and inform the user: "orch_profile failed — continuing with manual profiling only." Proceed with the Explore results regardless.
 
 ## Step 3: Discover improvement ideas
 
-Call `orch_discover` with `cwd`. This returns a list of candidate improvement ideas ranked by potential impact.
+If `MCP_DEGRADED` is false, call `orch_discover` with `cwd`.
+
+If `MCP_DEGRADED` is true (or `orch_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
 
 Present the top ideas to the user clearly. Ask:
 
@@ -82,7 +120,7 @@ Ask the user:
    - If an agent is unresponsive after nudging, force-stop it with `TaskStop(task_id: "<saved-task-id>")`. Then retire it in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`. Do not rely on shutdown_request messages alone — in-process agents may not respond to them.
    - **If `TaskStop` fails** (e.g. no task ID found in `TaskList` for in-process agents): retire via Agent Mail `retire_agent(project_key: cwd, agent_name: "<stale-agent-name>")`, then edit `~/.claude/teams/<team>/config.json` to remove the stale member from the `"members"` array. Then retry `TeamDelete`.
 
-5. **Collect plans** — call `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: true)` to retrieve all 3 plan bodies.
+5. **Collect plans** — call `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` to retrieve message summaries. Each agent sent the file path to their plan on disk (e.g. `docs/plans/<date>-<perspective>.md`). Read the plan files directly from disk using the Read tool — do NOT rely on inbox message bodies for large plan content, as they may be truncated or unwieldy.
 
 6. **Shutdown teammates individually** — structured shutdown messages CANNOT be broadcast to `"*"`. Send to each agent by name:
    ```
@@ -228,6 +266,12 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    ```
    SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
    ```
+   > **Important:** Structured shutdown messages CANNOT be broadcast to `"*"`. You must send to each impl agent individually by name. This applies to all structured JSON messages (shutdown_request, plan_approval_request, etc.).
+
+   **If the agent remains idle after shutdown_request** (check via `TaskList` — task still shows as active after 60 seconds):
+   - Force-stop with `TaskStop(task_id: "<saved-task-id>")` if the task ID is available.
+   - Retire in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`.
+   - If still listed in the team, edit `~/.claude/teams/<team>/config.json` to remove from the `"members"` array, then retry `TeamDelete` when ready.
 
 ## Step 8: Review completed beads
 
@@ -262,11 +306,20 @@ Actions:
 - **"Fresh-eyes `<id>`"** → call `orch_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
   1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
   2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt
-  3. If any go idle without reporting, nudge by name: `SendMessage(to: "<reviewer-name>", message: "Please send your review findings.")`
+  3. **Monitor with mandatory nudge loop** — reviewer messages frequently fail to arrive in the coordinator's inbox on the first attempt. After spawning, poll `fetch_inbox` every 30-60 seconds. For each reviewer that has not delivered findings within 2 minutes, nudge by name:
+     ```
+     SendMessage(to: "<reviewer-name>", message: "Your review findings for bead <id> have not arrived. Please resend to <coordinator-name> via Agent Mail with subject '[review] <id> findings'.")
+     ```
+     Nudge up to 3 times per reviewer before considering them failed.
   4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
   5. Collect and summarize results.
 
-  > **Edge case — already-closed beads:** If `orch_review` errors (e.g. "Cannot read properties of undefined"), the bead was likely already closed by the impl agent before review was requested. Skip the MCP tool and spawn review agents manually. Give each reviewer the specific git commit SHA (from `git log --oneline`) and instruct them to review via `git diff <commit>~1 <commit>` directly.
+  > **Expected behavior — beads are already closed:** Because impl agents close beads in their Step 3 (`br update --status closed`), `orch_review` will typically error (e.g. "Cannot read properties of undefined (reading 'split')") when called on completed beads. This is the **normal** case, not an edge case. When this happens:
+  > 1. Skip the `orch_review` MCP tool entirely.
+  > 2. Find the bead's commit SHA: `git log --oneline | grep "<bead-id>"` (or search for the bead title).
+  > 3. Spawn review agents manually with `git diff <sha>~1 <sha>` as their review target instead of relying on `orch_review` output.
+  >
+  > Only use `orch_review` with `action: "looks-good"` if you confirmed the bead is still in an open state (check with `br list`).
 
   > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
 
