@@ -226,6 +226,31 @@ export async function bvPlan(
 
 // ─── Beads Integration ────────────────────────────────────────
 
+function validateBeadStatus(s: unknown): Bead["status"] | null {
+  if (s === "open" || s === "in_progress" || s === "closed" || s === "deferred") return s;
+  return null;
+}
+
+function parseBead(raw: unknown): Bead | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.id !== "string" || typeof obj.title !== "string") return null;
+  return {
+    id: obj.id,
+    title: obj.title,
+    description: typeof obj.description === "string" ? obj.description : "",
+    status: validateBeadStatus(obj.status) ?? "open",
+    priority: typeof obj.priority === "number" ? obj.priority : 0,
+    type: typeof obj.type === "string" ? obj.type : "task",
+    labels: Array.isArray(obj.labels) ? obj.labels.filter((l): l is string => typeof l === "string") : [],
+    estimate: typeof obj.estimate === "number" ? obj.estimate : undefined,
+    parent: typeof obj.parent === "string" ? obj.parent : undefined,
+    created_at: typeof obj.created_at === "string" ? obj.created_at : undefined,
+    updated_at: typeof obj.updated_at === "string" ? obj.updated_at : undefined,
+    closed_at: typeof obj.closed_at === "string" ? obj.closed_at : undefined,
+  };
+}
+
 /**
  * Reads all beads via `br list --json`.
  */
@@ -241,7 +266,8 @@ export async function readBeads(
   ], { timeout: 10000, cwd });
   if (!result.ok) return [];
   const data = result.value;
-  return (Array.isArray(data) ? data : (data as any)?.issues ?? []) as Bead[];
+  const raw: unknown[] = Array.isArray(data) ? data : (data as any)?.issues ?? [];
+  return raw.map(parseBead).filter((b): b is Bead => b !== null);
 }
 
 /**
@@ -255,7 +281,8 @@ export async function readyBeads(
   if (!result.ok) return [];
   const data = result.value;
   // br ready --json returns a bare array, br list --json returns {issues: [...]}
-  return (Array.isArray(data) ? data : (data as any)?.issues ?? []) as Bead[];
+  const raw: unknown[] = Array.isArray(data) ? data : (data as any)?.issues ?? [];
+  return raw.map(parseBead).filter((b): b is Bead => b !== null);
 }
 
 /**
