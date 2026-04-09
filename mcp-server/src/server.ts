@@ -184,20 +184,49 @@ const TOOLS = [
   },
 ];
 
+// ─── Argument validation ──────────────────────────────────────
+
+function validateToolArgs(toolName: string, args: Record<string, unknown>): string | null {
+  const tool = TOOLS.find((t) => t.name === toolName);
+  if (!tool) return null; // unknown tool handled by default case in switch
+
+  // Validate cwd specifically: must be a non-empty string
+  if ("cwd" in args) {
+    if (typeof args.cwd !== "string" || args.cwd.trim() === "") {
+      return `Error: 'cwd' must be a non-empty string, got ${JSON.stringify(args.cwd)}.`;
+    }
+  }
+
+  // Check all required fields from the tool's inputSchema
+  const required: string[] = (tool.inputSchema as any).required ?? [];
+  for (const field of required) {
+    if (args[field] === undefined || args[field] === null) {
+      return `Error: required parameter '${field}' is missing for tool '${toolName}'.`;
+    }
+    if (field === "cwd" && (typeof args[field] !== "string" || (args[field] as string).trim() === "")) {
+      return `Error: 'cwd' must be a non-empty string, got ${JSON.stringify(args[field])}.`;
+    }
+  }
+
+  return null; // validation passed
+}
+
 // ─── Request handlers ─────────────────────────────────────────
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const cwd = (args as any)?.cwd as string;
 
-  if (!cwd) {
+  const validationError = validateToolArgs(name, (args ?? {}) as Record<string, unknown>);
+  if (validationError) {
     return {
-      content: [{ type: "text", text: "Error: cwd parameter is required for all tools." }],
+      content: [{ type: "text", text: validationError }],
       isError: true,
     };
   }
+
+  const cwd = (args as any).cwd as string;
 
   const exec = makeExec(cwd);
   const state = loadState(cwd);
