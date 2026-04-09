@@ -7,6 +7,21 @@ export type ExecFn = (
   opts?: { timeout?: number; cwd?: string }
 ) => Promise<{ code: number; stdout: string; stderr: string }>;
 
+// ─── AgentMailResult discriminated union ──────────────────────
+
+export type AgentMailErrorKind = "network" | "parse" | "rpc_error";
+
+export type AgentMailResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; kind: AgentMailErrorKind; message: string };
+
+/**
+ * Unwrap an AgentMailResult — returns data on success, null on failure.
+ */
+export function unwrapRPC<T>(result: AgentMailResult<T>): T | null {
+  return result.ok ? result.data : null;
+}
+
 export const AGENT_MAIL_URL = "http://127.0.0.1:8765";
 
 export interface AgentMailReservation {
@@ -44,29 +59,49 @@ export interface BuildSlotInfo {
  * Call an agent-mail MCP tool via its JSON-RPC HTTP endpoint.
  * Used by the orchestrator itself (not sub-agents) to manage projects/reservations.
  */
-export async function agentMailRPC(
+export async function agentMailRPC<T = unknown>(
   exec: ExecFn,
   toolName: string,
   args: Record<string, unknown>
-): Promise<any> {
+): Promise<AgentMailResult<T>> {
   const body = JSON.stringify({
     jsonrpc: "2.0",
     id: Date.now(),
     method: "tools/call",
     params: { name: toolName, arguments: args },
   });
-  const result = await exec("curl", [
-    "-s", "-X", "POST", `${AGENT_MAIL_URL}/api`,
-    "-H", "Content-Type: application/json",
-    "-d", body,
-    "--max-time", "5",
-  ], { timeout: 8000 });
+
+  let result: { code: number; stdout: string; stderr: string };
   try {
-    const parsed = JSON.parse(result.stdout);
-    return parsed?.result?.structuredContent ?? parsed?.result ?? null;
-  } catch {
-    return null;
+    result = await exec("curl", [
+      "-s", "-X", "POST", `${AGENT_MAIL_URL}/api`,
+      "-H", "Content-Type: application/json",
+      "-d", body,
+      "--max-time", "5",
+    ], { timeout: 8000 });
+  } catch (err: unknown) {
+    return { ok: false, kind: "network", message: err instanceof Error ? err.message : String(err) };
   }
+
+  if (result.code !== 0) {
+    return { ok: false, kind: "network", message: result.stderr || `curl exited with code ${result.code}` };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch {
+    return { ok: false, kind: "parse", message: "Failed to parse JSON response" };
+  }
+
+  const p = parsed as Record<string, unknown>;
+  if (p?.error) {
+    const err = p.error as Record<string, unknown>;
+    return { ok: false, kind: "rpc_error", message: String(err?.message ?? JSON.stringify(p.error)) };
+  }
+
+  const data = (p?.result as Record<string, unknown>)?.structuredContent ?? p?.result ?? null;
+  return { ok: true, data: data as T };
 }
 
 /**
@@ -106,12 +141,13 @@ export async function ensureAgentMailProject(exec: ExecFn, cwd: string): Promise
 }
 
 async function getAgentMailProjectSlug(exec: ExecFn, cwd: string): Promise<string | null> {
-  const project = await agentMailRPC(exec, "ensure_project", { human_key: cwd });
-  const slug = project?.project?.slug ?? project?.slug;
+  const res = await agentMailRPC(exec, "ensure_project", { human_key: cwd });
+  const project = unwrapRPC(res) as Record<string, unknown> | null;
+  const slug = (project as any)?.project?.slug ?? (project as any)?.slug;
   return typeof slug === "string" && slug.length > 0 ? slug : null;
 }
 
-function matchesReservationPath(file: string, reservation: AgentMailReservation): boolean {
+export function matchesReservationPath(file: string, reservation: AgentMailReservation): boolean {
   const rawPattern = reservation.path_pattern ?? reservation.path;
   if (typeof rawPattern !== "string" || rawPattern.length === 0) return false;
   const normalized = rawPattern.replace(/^\.\//, "");
@@ -129,7 +165,7 @@ function matchesReservationPath(file: string, reservation: AgentMailReservation)
   return file === normalized;
 }
 
-function normalizeReservations(payload: any): AgentMailReservation[] {
+export function normalizeReservations(payload: any): AgentMailReservation[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.reservations)) return payload.reservations;
   if (Array.isArray(payload?.items)) return payload.items;
@@ -365,13 +401,14 @@ export async function fetchInbox(
   agentName: string,
   options?: { limit?: number; urgentOnly?: boolean; includeBodies?: boolean }
 ): Promise<AgentMailMessage[]> {
-  const result = await agentMailRPC(exec, "fetch_inbox", {
+  const res = await agentMailRPC(exec, "fetch_inbox", {
     project_key: cwd,
     agent_name: agentName,
     limit: options?.limit ?? 20,
     ...(options?.urgentOnly ? { urgent_only: true } : {}),
     ...(options?.includeBodies !== false ? { include_bodies: true } : {}),
   });
+  const result = unwrapRPC(res) as any;
   return result?.messages ?? result?.inbox ?? [];
 }
 
@@ -384,11 +421,12 @@ export async function searchMessages(
   query: string,
   limit: number = 20
 ): Promise<AgentMailMessage[]> {
-  const result = await agentMailRPC(exec, "search_messages", {
+  const res = await agentMailRPC(exec, "search_messages", {
     project_key: cwd,
     query,
     limit,
   });
+  const result = unwrapRPC(res) as any;
   return result?.messages ?? result?.results ?? [];
 }
 
@@ -489,7 +527,8 @@ export async function releaseBuildSlot(
  * Returns { status: "healthy" } on success, null on failure.
  */
 export async function healthCheck(exec: ExecFn): Promise<{ status: string } | null> {
-  const result = await agentMailRPC(exec, "health_check", {});
+  const res = await agentMailRPC(exec, "health_check", {});
+  const result = unwrapRPC(res) as any;
   return result?.status ? result : null;
 }
 
