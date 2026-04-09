@@ -206,12 +206,13 @@ async function ensureCccReady(
 async function runCccQuery(
   exec: ExecFn,
   cwd: string,
-  entry: (typeof CCC_SCAN_QUERIES)[number]
+  entry: (typeof CCC_SCAN_QUERIES)[number],
+  signal?: AbortSignal
 ): Promise<Array<{ location: string; snippet: string }>> {
   const result = await exec(
     "ccc",
     ["search", "--limit", "3", ...entry.query.split(" ")],
-    { cwd, timeout: 30000 }
+    { cwd, timeout: 30000, signal }
   );
   if (result.code !== 0) {
     throw new Error(
@@ -234,7 +235,7 @@ async function collectCccCodebaseAnalysis(
   signal?: AbortSignal
 ): Promise<ScanCodebaseAnalysis> {
   const settled = await Promise.allSettled(
-    CCC_SCAN_QUERIES.map((entry) => runCccQuery(exec, cwd, entry))
+    CCC_SCAN_QUERIES.map((entry) => runCccQuery(exec, cwd, entry, signal))
   );
 
   const searches: CccSearchEntry[] = [];

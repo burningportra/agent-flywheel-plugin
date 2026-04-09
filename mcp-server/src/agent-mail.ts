@@ -1,11 +1,5 @@
-/**
- * Minimal exec function signature — avoids depending on the full ExtensionAPI.
- */
-export type ExecFn = (
-  cmd: string,
-  args: string[],
-  opts?: { timeout?: number; cwd?: string }
-) => Promise<{ code: number; stdout: string; stderr: string }>;
+import type { ExecFn } from "./exec.js";
+export type { ExecFn };
 
 export const AGENT_MAIL_URL = "http://127.0.0.1:8765";
 
@@ -500,14 +494,22 @@ export interface AgentMailHealthResult {
 }
 
 let cachedHealthResult: AgentMailHealthResult | null = null;
+let cachedHealthAt: number = 0;
+const FAILURE_TTL_MS = 30_000;
 
 /**
  * Check agent-mail connectivity with a lightweight HTTP request.
- * Uses Node.js fetch with a 3-second timeout. Result is cached for the session.
+ * Uses Node.js fetch with a 3-second timeout.
+ * Successful results are cached permanently; failures are re-checked after 30s.
  * Does not depend on ExecFn — safe to call before exec infrastructure is ready.
  */
 export async function checkAgentMailHealth(): Promise<AgentMailHealthResult> {
-  if (cachedHealthResult !== null) return cachedHealthResult;
+  if (cachedHealthResult) {
+    // Always trust cached successes; re-check failures after TTL expires
+    if (cachedHealthResult.reachable || Date.now() - cachedHealthAt < FAILURE_TTL_MS) {
+      return cachedHealthResult;
+    }
+  }
 
   const endpoint = `${AGENT_MAIL_URL}/mcp`;
   try {
@@ -518,6 +520,10 @@ export async function checkAgentMailHealth(): Promise<AgentMailHealthResult> {
       signal: controller.signal,
     });
     clearTimeout(timer);
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
 
     cachedHealthResult = {
       reachable: true,
@@ -532,6 +538,7 @@ export async function checkAgentMailHealth(): Promise<AgentMailHealthResult> {
     };
   }
 
+  cachedHealthAt = Date.now();
   return cachedHealthResult;
 }
 
