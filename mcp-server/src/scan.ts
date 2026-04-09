@@ -175,27 +175,59 @@ async function ensureCccReady(
   }
 }
 
+async function runCccQuery(
+  exec: ExecFn,
+  cwd: string,
+  entry: (typeof CCC_SCAN_QUERIES)[number]
+): Promise<Array<{ location: string; snippet: string }>> {
+  const result = await exec(
+    "ccc",
+    ["search", "--limit", "3", ...entry.query.split(" ")],
+    { cwd, timeout: 30000 }
+  );
+  if (result.code !== 0) {
+    throw new Error(
+      `ccc search "${entry.id}" exited ${result.code}: ${result.stderr.trim() || result.stdout.trim() || "no output"}`
+    );
+  }
+  return parseCccSearchResults(result.stdout);
+}
+
+type CccSearchEntry = {
+  id: string;
+  title: string;
+  query: string;
+  results: Array<{ location: string; snippet: string }>;
+};
+
 async function collectCccCodebaseAnalysis(
   exec: ExecFn,
   cwd: string,
   signal?: AbortSignal
 ): Promise<ScanCodebaseAnalysis> {
-  const searches = await Promise.all(
-    CCC_SCAN_QUERIES.map(async (entry) => {
-      const result = await exec(
-        "ccc",
-        ["search", "--limit", "3", ...entry.query.split(" ")],
-        { cwd, timeout: 30000 }
-      );
-      if (result.code !== 0) {
-        throw new Error(result.stderr.trim() || result.stdout.trim() || `ccc search failed for ${entry.id}`);
-      }
-      return {
-        ...entry,
-        results: parseCccSearchResults(result.stdout),
-      };
-    })
+  const settled = await Promise.allSettled(
+    CCC_SCAN_QUERIES.map((entry) => runCccQuery(exec, cwd, entry))
   );
+
+  const searches: CccSearchEntry[] = [];
+  for (let i = 0; i < settled.length; i++) {
+    const result = settled[i];
+    const entry = CCC_SCAN_QUERIES[i];
+    if (result.status === "fulfilled") {
+      searches.push({ ...entry, results: result.value });
+    } else {
+      process.stderr.write(
+        `[scan] ccc query "${entry.id}" failed: ${result.reason}\n`
+      );
+    }
+  }
+
+  if (searches.length === 0 && settled.length > 0) {
+    const firstRejected = settled.find(
+      (r): r is PromiseRejectedResult => r.status === "rejected"
+    );
+    throw new Error(firstRejected?.reason?.message ?? "All ccc search queries failed");
+  }
 
   const recommendations: ScanRecommendation[] = searches.map((search) => ({
     id: search.id,
