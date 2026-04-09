@@ -6,6 +6,7 @@ import {
   whoisAgent,
   type ExecFn,
 } from "./agent-mail.js";
+import { createLogger } from "./logger.js";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -17,6 +18,8 @@ export interface AgentStatus {
   health: AgentHealth;
   lastActivity: number; // timestamp ms
   changedFiles: string[];
+  nudgesSent: number;    // how many nudges sent to this agent (default 0)
+  lastNudgedAt: number;  // timestamp of last nudge (default 0)
 }
 
 export interface TenderConfig {
@@ -28,6 +31,12 @@ export interface TenderConfig {
   idleThreshold: number;
   /** Cadence check interval in ms (default 20 * 60 * 1000 = 20 min) */
   cadenceIntervalMs: number;
+  /** Delay after stuck detection before first nudge fires (default 0 = immediate). */
+  nudgeDelayMs: number;
+  /** How many nudges to send before killing (default 2). */
+  maxNudges: number;
+  /** How long to wait after last nudge before kill (default 120_000). */
+  killWaitMs: number;
 }
 
 export interface ConflictAlert {
@@ -36,11 +45,22 @@ export interface ConflictAlert {
   stepIndices: number[];
 }
 
+export interface SwarmCompletionSummary {
+  totalAgents: number;
+  completedNormally: number;
+  killedStuck: number;
+  elapsedMs: number;
+  stuckAgentNames: string[];
+}
+
 const DEFAULT_CONFIG: TenderConfig = {
   pollInterval: 60_000,
   stuckThreshold: 300_000,
   idleThreshold: 120_000,
   cadenceIntervalMs: 20 * 60 * 1000,
+  nudgeDelayMs: 0,
+  maxNudges: 2,
+  killWaitMs: 120_000,
 };
 
 const CADENCE_CHECKLIST = `## Operator Cadence Check (every ~20 min (configurable via cadenceIntervalMs))
@@ -63,6 +83,8 @@ export interface SwarmTenderOptions {
   onCadenceCheck?: (checklist: string) => void;
   /** Agent Mail orchestrator identity (for sending stuck-agent messages). */
   orchestratorAgentName?: string;
+  onKill?: (agent: AgentStatus) => void;
+  onSwarmComplete?: (summary: SwarmCompletionSummary) => void;
 }
 
 export class SwarmTender {
@@ -77,6 +99,12 @@ export class SwarmTender {
   private onCadenceCheck?: (checklist: string) => void;
   private lastCadencePromptAt: number = Date.now();
   private orchestratorAgentName?: string;
+  private onKill?: (agent: AgentStatus) => void;
+  private onSwarmComplete?: (summary: SwarmCompletionSummary) => void;
+  private startedAt: number = Date.now();
+  private killedAgents: string[] = [];
+  private totalRegistered: number = 0;
+  private log = createLogger("tender");
 
   constructor(
     exec: ExecFn,
@@ -92,6 +120,9 @@ export class SwarmTender {
     this.onTick = options?.onTick;
     this.onCadenceCheck = options?.onCadenceCheck;
     this.orchestratorAgentName = options?.orchestratorAgentName;
+    this.onKill = options?.onKill;
+    this.onSwarmComplete = options?.onSwarmComplete;
+    this.totalRegistered = worktrees.length;
 
     this.agents = new Map();
     for (const wt of worktrees) {
@@ -101,6 +132,8 @@ export class SwarmTender {
         health: "active",
         lastActivity: Date.now(),
         changedFiles: [],
+        nudgesSent: 0,
+        lastNudgedAt: 0,
       });
     }
   }
@@ -181,6 +214,26 @@ export class SwarmTender {
           agent.health = "active";
         }
 
+        if (agent.health === "stuck" && this.orchestratorAgentName) {
+          const canNudge = agent.nudgesSent < this.config.maxNudges &&
+            (now - agent.lastNudgedAt) >= this.config.nudgeDelayMs;
+          const shouldKill = agent.nudgesSent >= this.config.maxNudges &&
+            (now - agent.lastNudgedAt) >= this.config.killWaitMs;
+
+          if (canNudge) {
+            // Find a threadId — use worktreePath as a stable identifier
+            this.nudgeStuckAgent(agent.worktreePath, agent.worktreePath).catch(() => {});
+            agent.nudgesSent++;
+            agent.lastNudgedAt = now;
+            this.log.warn("Nudged stuck agent", { stepIndex: agent.stepIndex, nudgesSent: agent.nudgesSent });
+          } else if (shouldKill) {
+            this.log.warn("Killing stuck agent after max nudges", { stepIndex: agent.stepIndex });
+            this.killedAgents.push(agent.worktreePath);
+            this.onKill?.(agent);
+            this.removeAgent(stepIndex);
+          }
+        }
+
         // Track files for conflict detection
         for (const file of files) {
           // Skip generated/ephemeral files
@@ -219,6 +272,15 @@ export class SwarmTender {
     this.agents.delete(stepIndex);
     if (this.agents.size === 0) {
       this.stop();
+      if (this.onSwarmComplete) {
+        this.onSwarmComplete({
+          totalAgents: this.totalRegistered,
+          completedNormally: this.totalRegistered - this.killedAgents.length,
+          killedStuck: this.killedAgents.length,
+          elapsedMs: Date.now() - this.startedAt,
+          stuckAgentNames: [...this.killedAgents],
+        });
+      }
     }
   }
 
