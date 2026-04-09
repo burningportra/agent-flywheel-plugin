@@ -1,317 +1,407 @@
-# Ergonomics Plan: Complete Bead Template Stubs
+# Ergonomics Plan: Error Recovery in scan.ts + AGENTS.md
 
 **Date:** 2026-04-08
-**Perspective:** Ergonomics — developer experience, template clarity, discoverability, ease of extension
+**Perspective:** Ergonomics — developer experience, readability, minimal cognitive load, consistent patterns, great DX for contributors and sub-agents alike.
 
 ---
 
 ## 1. Problem Statement
 
-`mcp-server/src/bead-templates.ts` ships only 3 built-in templates: `add-api-endpoint`, `refactor-module`, and `add-tests`. This sparse library creates two classes of ergonomic friction:
+Two distinct ergonomic gaps exist in the codebase:
 
-1. **Agent friction:** Sub-agents must invent bead structure from scratch for common work types (bug fixes, documentation, data migrations, config changes, dependency upgrades, etc.). The prompt in `prompts.ts` shows the template list via `formatTemplatesForPrompt()` — with only 3 templates, agents miss the scaffolding that helps them produce consistent, quality beads.
+### 1.1 scan.ts — Error Recovery UX
 
-2. **Maintainer friction:** The three existing templates each have a slightly different internal structure in their `descriptionTemplate` — there is no enforced narrative pattern (header sentence, "Why this bead exists" block, acceptance criteria, files section). A new contributor adding a fourth template must reverse-engineer the pattern from reading all three.
+`mcp-server/src/scan.ts` has one top-level try/catch in `scanRepo()` (line 85–91) that handles the full ccc provider failure by falling back to the built-in profiler. But the internal functions `ensureCccReady()` and `collectCccCodebaseAnalysis()` throw raw `Error` objects, and the per-query `Promise.all` in `collectCccCodebaseAnalysis()` (line 183) is all-or-nothing: if any single `ccc search` call fails, the entire codebase analysis is lost, including results from queries that already succeeded.
 
-**Concrete impact measured by the quality-check code in `beads.ts`:**
-- Beads must have `### Files:`, `- [ ]` acceptance criteria, and ≥ 100-char descriptions or they fail quality checks.
-- Templates that don't model this structure by default train agents to produce non-compliant beads.
+**Ergonomic problems:**
 
----
+1. **All-or-nothing query fan-out**: A single failed query aborts all three searches. Callers receive the full built-in fallback instead of partial ccc results — a jarring outcome that discards useful signal.
+2. **Error surfacing is invisible to callers**: `toScanErrorInfo()` only marks every error as `recoverable: true` regardless of the actual error shape. There is no way to distinguish "ccc not installed" from "one search query timed out."
+3. **stderr vs stdout discipline missing**: None of the error paths log diagnostics to stderr. When ccc fails silently, operators have no audit trail.
+4. **Helper functions throw, but throw context is lost**: `ensureCccReady()` builds errors from raw `stderr.trim() || stdout.trim() || "fallback string"` — valid but inconsistent with TypeScript idioms for structured errors. A reader must trace through 4 conditional branches to understand the failure taxonomy.
 
-## 2. Template Structure Design
+### 1.2 AGENTS.md — Missing Entirely
 
-### 2.1 Canonical `descriptionTemplate` Narrative Pattern
+`/Volumes/1tb/Projects/claude-orchestrator/AGENTS.md` does not exist. Sub-agents spawned by the orchestrator bootstrap from skills and commands, but have no single canonical file that answers:
 
-All templates must follow this five-block pattern (already present in the existing three, but not documented):
+- How is this project built?
+- What commands are safe to run?
+- What are the key constraints (file paths, state machine rules, coordination rules)?
+- What does a good agent contribution look like?
 
-```
-{{leadSentence}}                          ← one focused sentence: what is being done and where
-
-Why this bead exists:
-- {{rationale1}}
-- {{rationale2}}
-
-Acceptance criteria:
-- [ ] {{criterion1}}
-- [ ] {{criterion2}}
-- [ ] {{criterion3}}
-
-### Files:
-- {{primaryFile}}
-- {{secondaryFile}}
-```
-
-**Why this pattern:**
-- `beads.ts:validateBeads` scans for `### Files:` and `- [ ]` — the template bakes both in.
-- "Why this bead exists" gives a fresh agent the context they need without consulting the original goal.
-- Lead sentence is what appears in `formatTemplatesForPrompt()` (summary field) — it trains agents to write tight summaries.
-
-### 2.2 New Templates to Add
-
-The following 9 templates cover the most common bead shapes seen in real orchestration sessions and missing from the current library. Each is specified with its intended `id`, narrative coverage, and required placeholders.
-
-| id | Label | Gap Filled |
-|----|-------|------------|
-| `fix-bug` | Fix bug | No template exists for the most common bead type |
-| `add-migration` | Add data migration | DB/schema migrations need special structure (up/down, rollback) |
-| `update-config` | Update configuration | Env var, flag, and settings changes have a consistent shape |
-| `add-documentation` | Add documentation | Docs beads need audience and location specified |
-| `upgrade-dependency` | Upgrade dependency | Dep upgrades need breaking-change and test validation steps |
-| `add-cli-command` | Add CLI command | CLI work needs flag spec, help text, and integration test steps |
-| `add-type-definitions` | Add type definitions | Type-only work is common in TS repos and needs its own template |
-| `extract-module` | Extract module | Split/extract is distinct from refactor — different acceptance criteria |
-| `add-integration` | Add integration | Third-party service integrations need credentials, error handling, and mock spec |
-
-### 2.3 Template Metadata Ergonomics
-
-Each template's `placeholders` array is the primary API surface that agents use. Every placeholder must have:
-- A `name` that is camelCase and self-explanatory without reading the description
-- A `description` that explains the *role* not just the *format* (e.g., "Why the endpoint is being added" not "The purpose")
-- An `example` that is concrete and domain-specific, not abstract (`"Fix the crash when user list is empty"` not `"bug description"`)
-- `required: true` for all placeholders that affect the structural skeleton; `required: false` only for genuinely optional elaboration
-
-### 2.4 `filePatterns` Coverage
-
-`filePatterns` is used by `extractArtifacts` (indirectly via the quality checker) to find file scope. Templates should set `filePatterns` to the actual glob patterns relevant to the work type, not generic wildcards. This helps the `file-overlap` quality check identify parallel execution conflicts.
-
-### 2.5 `dependencyHints` as Agent Guide
-
-Currently `dependencyHints` is only present on `add-api-endpoint` and `refactor-module`. All templates should include this field. The hint should name:
-- What beads this template typically **blocks** (depends on nothing)
-- What beads typically **depend on** this template
-- When to split the work into a separate `add-tests` bead
+The absence of AGENTS.md increases sub-agent cognitive load and causes agents to re-derive project conventions from README.md and scattered command files on every session.
 
 ---
 
-## 3. Implementation Steps
+## 2. Ergonomic Design Principles Applied
 
-### Step 1 — Document the canonical template pattern (T1)
+The changes below are guided by four ergonomic principles:
 
-Add a JSDoc block above `BUILTIN_TEMPLATES` in `bead-templates.ts` explaining the five-block `descriptionTemplate` pattern, placeholder naming conventions, and the contract between `descriptionTemplate` and `formatTemplatesForPrompt`. This is the single place a new template author looks.
+1. **Prefer partial success over total failure**: When work can proceed with degraded results, surface what succeeded alongside what failed rather than aborting everything.
+2. **Errors should be informative at the call site, not just at the throw site**: Callers should not need to re-read internals to understand what went wrong.
+3. **Log to stderr, return to callers**: Diagnostic output (scan failures, fallback decisions) goes to stderr. Structured data (ScanResult) is returned to callers. Never mix them.
+4. **AGENTS.md is a cognitive load document**: Every line in AGENTS.md should reduce the number of files a sub-agent must read before starting work. If the information is already in README.md, link rather than duplicate.
 
-**File:** `mcp-server/src/bead-templates.ts`
+---
 
-### Step 2 — Add `fix-bug` template (T2, depends_on: [T1])
+## 3. scan.ts Changes
+
+### 3.1 Partial Results for `collectCccCodebaseAnalysis`
+
+Replace the all-or-nothing `Promise.all` in `collectCccCodebaseAnalysis` with a per-query settled fan-out. Each query runs independently. Failed queries contribute a fallback `ScanRecommendation` with a `detail` that names the failure, rather than aborting the whole analysis.
+
+**Pattern (ergonomic):**
 
 ```typescript
-{
-  id: "fix-bug",
-  label: "Fix bug",
-  summary: "Diagnose and fix a specific defect with a regression test.",
-  descriptionTemplate: `Fix the {{bugSummary}} bug in {{moduleName}}.
-Reproduce the issue, identify the root cause, apply the minimal fix, and add a regression test to prevent recurrence.
+const settled = await Promise.allSettled(
+  CCC_SCAN_QUERIES.map((entry) => runCccQuery(exec, cwd, entry))
+);
 
-Why this bead exists:
-- {{bugSymptom}} — the current behavior is incorrect.
-- A regression test is required so this exact failure cannot silently reappear.
-
-Acceptance criteria:
-- [ ] Reproduce {{bugSummary}} in a test before fixing it (red-green).
-- [ ] Apply the minimal fix in {{moduleName}} without changing unrelated behavior.
-- [ ] Add a regression test that fails before the fix and passes after.
-
-### Files:
-- {{implementationFile}}
-- {{testFile}}`,
-  placeholders: [
-    { name: "bugSummary", description: "Short name for the bug (used in commit messages and test names)", example: "crash when user list is empty", required: true },
-    { name: "moduleName", description: "Module or function where the defect lives", example: "readyBeads filter logic", required: true },
-    { name: "bugSymptom", description: "Observable symptom: what the user or system experiences", example: "br ready crashes with TypeError on repos with no open beads", required: true },
-    { name: "implementationFile", description: "File containing the defect", example: "src/beads.ts", required: true },
-    { name: "testFile", description: "Test file for the regression test", example: "src/beads.test.ts", required: true },
-  ],
-  acceptanceCriteria: [
-    "Write a failing test that reproduces the bug before changing implementation code.",
-    "Apply the minimal code change that makes the test pass without regressing other tests.",
-    "Leave a comment in the test explaining what scenario it covers.",
-  ],
-  filePatterns: ["src/**/*.ts", "src/**/*.test.ts"],
-  dependencyHints: "fix-bug beads are usually independent. If the bug is in shared infrastructure, other beads that use that infrastructure should depend on this one.",
-}
+const recommendations: ScanRecommendation[] = settled.map((result, i) => {
+  const entry = CCC_SCAN_QUERIES[i];
+  if (result.status === "fulfilled") {
+    return buildRecommendation(entry, result.value);
+  }
+  process.stderr.write(`[scan] ccc query "${entry.id}" failed: ${result.reason}\n`);
+  return buildFailedRecommendation(entry, result.reason);
+});
 ```
 
-### Step 3 — Add `add-migration` template (T3, depends_on: [T1])
+**Why this pattern over alternatives:**
+- `Promise.allSettled` is the standard JS idiom for fan-out with partial failure — readers recognize it immediately.
+- Extracting `runCccQuery` and `buildRecommendation` into named helpers keeps the fan-out loop readable at a glance. No nested try/catch in the map callback.
+- `process.stderr.write` (not `console.error`) is consistent with Node.js MCP server conventions — structured JSON on stdout, diagnostics on stderr.
 
-Covers DB schema migrations (up + down), data transforms, and rollback safety. Key placeholders: `migrationName`, `changeDescription`, `rollbackPlan`, `migrationFile`, `rollbackFile`.
+### 3.2 Named Helper: `runCccQuery`
 
-Acceptance criteria pattern must include: schema validates after migration, rollback returns schema to prior state, migration runs idempotently.
-
-### Step 4 — Add `update-config` template (T4, depends_on: [T1])
-
-Covers env var additions, feature flag introductions, settings file changes. Key placeholders: `configKey`, `configPurpose`, `defaultValue`, `configFile`, `docsFile`.
-
-Acceptance criteria must include: config has a documented default, missing config produces a clear error (not a silent undefined), docs updated.
-
-### Step 5 — Add `add-documentation` template (T5, depends_on: [T1])
-
-Covers README updates, inline JSDoc, architecture docs, runbooks. Key placeholders: `docTopic`, `targetAudience`, `docFile`, `primarySourceFile`.
-
-Acceptance criteria must include: accurate (verified against current code), audience-appropriate (no undefined jargon for target reader), discoverable (linked from the right index).
-
-### Step 6 — Add `upgrade-dependency` template (T6, depends_on: [T1])
-
-Covers semver bumps, major version migrations. Key placeholders: `packageName`, `fromVersion`, `toVersion`, `breakingChanges`, `packageJsonFile`, `testCommand`.
-
-Acceptance criteria: no breaking import paths, all existing tests pass, lock file committed.
-
-### Step 7 — Add `add-cli-command` template (T7, depends_on: [T1])
-
-Covers new subcommands in CLI tools. Key placeholders: `commandName`, `commandPurpose`, `flagSpec`, `implementationFile`, `testFile`.
-
-Acceptance criteria: `--help` output is correct, all flags validate, integration test covers the primary invocation path.
-
-### Step 8 — Add `add-type-definitions` template (T8, depends_on: [T1])
-
-Covers TypeScript interface/type additions in shared type files. Key placeholders: `typeName`, `typeRole`, `typeFile`, `consumerFile`.
-
-Acceptance criteria: type is exported from the right barrel, no `any` usage in the new types, consumer file compiles without changes.
-
-### Step 9 — Add `extract-module` template (T9, depends_on: [T1])
-
-Covers splitting a large file or class into a focused module. Key placeholders: `sourceModule`, `extractedName`, `extractionReason`, `sourceFile`, `newFile`.
-
-Acceptance criteria: external API of `sourceModule` unchanged, new module has its own tests, no circular imports introduced.
-
-### Step 10 — Add `add-integration` template (T10, depends_on: [T1])
-
-Covers third-party API integrations. Key placeholders: `serviceName`, `integrationPurpose`, `authMechanism`, `implementationFile`, `mockFile`.
-
-Acceptance criteria: auth errors produce clear messages, mock used in tests (not live API), integration is feature-flagged or gracefully degraded when service is unavailable.
-
-### Step 11 — Update `formatTemplatesForPrompt` for richer agent guidance (T11, depends_on: [T2..T10])
-
-The current implementation formats each template as a single line:
-```
-- add-api-endpoint: Create a new endpoint... Placeholders: endpointPath, moduleName, ...
-```
-
-Upgrade to a two-line format per template:
-```
-- add-api-endpoint: Create a new endpoint with validation, error handling, and tests.
-  Placeholders: endpointPath (required), moduleName (required), httpMethod (required), implementationFile (required), testFile (required)
-```
-
-This gives agents enough to match a template without reading the full template definition, while still showing required vs optional.
-
-**File:** `mcp-server/src/bead-templates.ts:181`
-
-### Step 12 — Build verification (T12, depends_on: [T11])
-
-Run `cd mcp-server && npm run build` and confirm zero TypeScript errors. All new templates must satisfy the `BeadTemplate` interface in `types.ts:237`.
-
----
-
-## 4. Ergonomic Improvements
-
-### 4.1 Naming Conventions
-
-**Template IDs** should follow `verb-noun` pattern: `add-*`, `fix-*`, `update-*`, `extract-*`, `upgrade-*`. This is consistent with existing IDs and makes the list naturally sorted and scannable.
-
-**Placeholder names** must be camelCase and describe the semantic role, not the syntax:
-- Bad: `file` — is this the source? the test? the output?
-- Good: `implementationFile`, `testFile`, `migrationFile`
-
-**Placeholder descriptions** must answer "what does this value represent in the generated bead?" not "what format does this value take?"
-
-### 4.2 Inline Documentation
-
-Add a block comment above `BUILTIN_TEMPLATES` with:
-1. The five-block narrative pattern all `descriptionTemplate` strings must follow
-2. How `formatTemplatesForPrompt` uses the `summary` and `placeholders` fields
-3. How `expandTemplate` validates required placeholders and resolves `{{name}}` markers
-4. A checklist for adding a new template (the "contributing a template" guide)
-
-### 4.3 Helper Function: `defineTemplate`
-
-Introduce a typed factory function to validate template shape at definition time:
+Extract the per-query exec + parse logic into a small named function:
 
 ```typescript
-function defineTemplate(template: BeadTemplate): BeadTemplate {
-  // Validate that descriptionTemplate references exactly the placeholders defined
-  const usedNames = new Set(
-    Array.from(template.descriptionTemplate.matchAll(PLACEHOLDER_PATTERN)).map(m => m[1])
+async function runCccQuery(
+  exec: ExecFn,
+  cwd: string,
+  entry: (typeof CCC_SCAN_QUERIES)[number]
+): Promise<Array<{ location: string; snippet: string }>> {
+  const result = await exec(
+    "ccc",
+    ["search", "--limit", "3", ...entry.query.split(" ")],
+    { cwd, timeout: 30000 }
   );
-  const definedNames = new Set(template.placeholders.map(p => p.name));
-  const orphaned = [...usedNames].filter(n => !definedNames.has(n));
-  const unused = [...definedNames].filter(n => !usedNames.has(n));
-  if (orphaned.length > 0 || unused.length > 0) {
+  if (result.code !== 0) {
     throw new Error(
-      `Template "${template.id}" has mismatched placeholders.\n` +
-      (orphaned.length > 0 ? `  Used but not defined: ${orphaned.join(', ')}\n` : '') +
-      (unused.length > 0 ? `  Defined but not used: ${unused.join(', ')}\n` : '')
+      `ccc search "${entry.id}" exited ${result.code}: ${result.stderr.trim() || result.stdout.trim() || "no output"}`
     );
   }
-  return template;
+  return parseCccSearchResults(result.stdout);
 }
 ```
 
-This runs at module load time and catches template authoring errors immediately — before any agent call reaches `expandTemplate`. It is the ergonomic equivalent of a compile-time check for template consistency.
+**Ergonomic benefit**: The error message in `runCccQuery` encodes the query ID and exit code — enough to diagnose any failure without reading the exec internals. The throw is intentional (callers use `allSettled`).
 
-### 4.4 Pattern Consistency: `acceptanceCriteria` vs `descriptionTemplate` Criteria
+### 3.3 Structured Error Recovery Helpers
 
-Currently the `acceptanceCriteria` array and the `- [ ]` lines in `descriptionTemplate` are separate and can drift. The ergonomic contract should be:
-- `descriptionTemplate` `- [ ]` lines are the *bead-facing* criteria (filled with placeholder values, agent-readable)
-- `acceptanceCriteria` is the *template-level* summary used for validation tooling
+Replace the flat `toScanErrorInfo` function with a small set of typed helpers:
 
-Both must exist, but they serve different consumers. Document this distinction in the inline docs added in T1.
+```typescript
+function toScanErrorInfo(error: unknown, context?: string): ScanErrorInfo {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    message: context ? `${context}: ${message}` : message,
+    recoverable: true,
+  };
+}
 
-### 4.5 `examples` Array Population
+function logScanWarning(message: string): void {
+  process.stderr.write(`[scan] warning: ${message}\n`);
+}
+```
 
-Currently `add-tests` has an example but it mirrors the template description almost verbatim. Examples should show a *different domain* than the placeholders to demonstrate transferability. Each new template must include at least one example from a domain different from the placeholder examples (e.g., if placeholder examples use `users`, the `examples` entry should use `payments` or `notifications`).
+**Why not a class**: The `ScanErrorInfo` interface is already defined in `types.ts`. A helper function that wraps it is sufficient and keeps the call site one line.
+
+**Context parameter**: Callers pass a short context string (`"ensureCccReady"`, `"collectCccCodebaseAnalysis"`) so errors logged to stderr name their origin without requiring a stack trace.
+
+### 3.4 `ensureCccReady` — Flatten Error Branches
+
+The current `ensureCccReady` has four nested conditional branches (version check → status check → maybe init → index). The ergonomic issue is that readers must trace all branches to understand what can go wrong.
+
+Refactor into a sequential flat style with early returns and named steps:
+
+```typescript
+async function ensureCccReady(exec: ExecFn, cwd: string, signal?: AbortSignal): Promise<void> {
+  await requireCccBinary(exec, cwd);
+  await ensureCccIndexed(exec, cwd);
+}
+
+async function requireCccBinary(exec: ExecFn, cwd: string): Promise<void> {
+  const result = await exec("ccc", ["--help"], { cwd, timeout: 5000 });
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || "ccc binary not found or not executable");
+  }
+}
+
+async function ensureCccIndexed(exec: ExecFn, cwd: string): Promise<void> {
+  const status = await exec("ccc", ["status"], { cwd, timeout: 10000 });
+  const output = `${status.stdout}\n${status.stderr}`;
+
+  if (status.code !== 0 && /Not in an initialized project directory/i.test(output)) {
+    await initCcc(exec, cwd);
+  } else if (status.code !== 0) {
+    throw new Error(status.stderr.trim() || status.stdout.trim() || "ccc status failed");
+  }
+
+  const index = await exec("ccc", ["index"], { cwd, timeout: 120000 });
+  if (index.code !== 0) {
+    throw new Error(index.stderr.trim() || index.stdout.trim() || "ccc index failed");
+  }
+}
+
+async function initCcc(exec: ExecFn, cwd: string): Promise<void> {
+  const result = await exec("ccc", ["init", "-f"], { cwd, timeout: 10000 });
+  if (result.code !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "ccc init failed");
+  }
+}
+```
+
+**Ergonomic benefit**: Each helper has a single, named responsibility. The failure mode of each step is obvious from its name. Reading `ensureCccReady` tells you the two-step sequence; reading `requireCccBinary` tells you the binary check; no need to read both at once.
+
+### 3.5 `scanRepo` — Emit Fallback Warning to stderr
+
+When the ccc provider fails and the built-in fallback is used, log a diagnostic to stderr so operators can see why:
+
+```typescript
+export async function scanRepo(exec: ExecFn, cwd: string, signal?: AbortSignal): Promise<ScanResult> {
+  try {
+    return await cccScanProvider.scan(exec, cwd, signal);
+  } catch (error) {
+    const errorInfo = toScanErrorInfo(error, "ccc provider");
+    logScanWarning(`fell back to builtin provider — ${errorInfo.message}`);
+    const profile = await profileRepo(exec, cwd, signal);
+    return createFallbackScanResult(profile, "ccc", errorInfo);
+  }
+}
+```
 
 ---
 
-## 5. Maintenance Guidelines
+## 4. AGENTS.md
 
-### How to Add a New Bead Type
+### 4.1 What Makes a Great AGENTS.md
 
-1. **Pick an ID** following `verb-noun` (e.g., `send-notification`, `archive-records`)
-2. **Write the `descriptionTemplate`** following the five-block pattern (lead sentence → why → acceptance criteria → files)
-3. **Define placeholders** — one per `{{marker}}` in the template, required unless the marker has a sensible omission behavior
-4. **Populate `acceptanceCriteria`** — at least 3 items, each independently verifiable
-5. **Set `filePatterns`** — use the narrowest glob that covers the typical file scope for this bead type
-6. **Write `dependencyHints`** — name what this bead typically unblocks and what it typically depends on
-7. **Add one `examples` entry** — pick a domain different from the placeholder examples
-8. **Wrap with `defineTemplate()`** — catches placeholder mismatches at load time
-9. **Run `npm run build`** — zero errors required before commit
+An effective AGENTS.md for a multi-agent orchestrator project answers exactly these questions for a sub-agent bootstrapping a new session:
 
-### Quality Checklist for Template PRs
+1. **What is this project?** (1–2 sentences, not duplicating README)
+2. **How do I build it?** (exact commands, no ambiguity)
+3. **How do I run it in dev mode?**
+4. **What paths matter?** (where to find state, skills, commands)
+5. **What must I never do?** (constraints that prevent data loss or broken state)
+6. **How do I coordinate with other agents?** (agent-mail bootstrap pattern)
+7. **What does a good contribution look like?** (code style, test requirements)
 
-- [ ] Template ID follows `verb-noun` convention
-- [ ] `descriptionTemplate` contains `### Files:` and `- [ ]` acceptance criteria blocks
-- [ ] All `{{markers}}` in `descriptionTemplate` have a matching entry in `placeholders`
-- [ ] No `{{marker}}` in `placeholders` is absent from `descriptionTemplate`
-- [ ] `examples[0].description` uses a different domain than the placeholder examples
-- [ ] `dependencyHints` is populated
-- [ ] `defineTemplate()` wrapper used
-- [ ] Build passes
+**What NOT to include in AGENTS.md:**
+- Architecture prose that duplicates README.md
+- Long explanations of why things are designed as they are (that's for docs/)
+- Per-command reference tables (already in README.md)
+- Installation instructions (not relevant to sub-agents working within the repo)
 
-### When to Split a Template vs Extend an Existing One
+### 4.2 AGENTS.md Structure
 
-- **Split** when the new bead type has a fundamentally different acceptance pattern (e.g., a migration bead needs rollback criteria; an API endpoint bead does not)
-- **Extend** (add optional placeholders) when the variant is 80%+ the same and the difference is additive (e.g., adding an optional `authMiddleware` placeholder to `add-api-endpoint`)
-- **Do not** create a template for work that happens fewer than ~3 times per typical orchestration session — custom beads are fine for rare work
+```
+# AGENTS.md
+
+## Project Overview
+## Build
+## Dev
+## Key File Paths
+## Hard Constraints
+## Agent Coordination
+## Code Conventions
+```
+
+**Tone:** Imperative, direct. Write as instructions to the sub-agent, not as documentation for a human reader. "Run `npm run build`" not "The build step compiles TypeScript using `npm run build`."
+
+### 4.3 AGENTS.md Content Design
+
+**Project Overview** (3 sentences max):
+- What the orchestrator does
+- What MCP server does
+- Where the entry point is
+
+**Build:**
+```
+cd mcp-server && npm install && npm run build
+```
+No alternatives, no notes about optional steps.
+
+**Dev:**
+```
+cd mcp-server && npm run dev   # TypeScript watch mode
+```
+
+**Key File Paths:**
+Only paths a sub-agent would need to find things, not an architecture diagram:
+- `mcp-server/src/` — TypeScript source (the thing you'll edit most)
+- `.pi-orchestrator/checkpoint.json` — live session state (read-only unless you are the state owner)
+- `skills/` — skill `.md` files injected into agent system prompts
+- `docs/plans/` — plan artifacts from deep-plan sessions
+
+**Hard Constraints:**
+This section is the most valuable part of AGENTS.md. Include:
+1. Never write directly to `.pi-orchestrator/checkpoint.json` — use `orch_*` MCP tools.
+2. Never run `ccc init` in the project root unless `ccc status` returns "Not in an initialized project directory."
+3. Do not `rm -rf` worktrees — use `orchestrate-cleanup` skill.
+4. Always log diagnostics to stderr, never stdout, in MCP server code.
+5. All `exec` calls must pass a `timeout` — no open-ended shell commands.
+
+**Agent Coordination:**
+Brief bootstrap pattern for agent-mail, referencing the `macro_start_session` tool.
+
+**Code Conventions:**
+- TypeScript strict mode, ESM modules (`.js` imports required in TS source)
+- No `console.log` in MCP server — `process.stderr.write` only
+- Errors throw `new Error(message)` — no custom error classes
+- Async functions are preferred over callbacks
+- Helper functions over nested try/catch
+
+---
+
+## 5. Implementation Tasks
+
+### T1 — Extract `runCccQuery` helper in scan.ts
+
+**File:** `mcp-server/src/scan.ts`
+**What:** Extract the per-query exec+parse logic from the `Promise.all` in `collectCccCodebaseAnalysis` into a standalone `runCccQuery(exec, cwd, entry)` function. Function throws a descriptive `Error` on non-zero exit code.
+**Acceptance criteria:**
+- [ ] `runCccQuery` is a named function at module scope (not inline in a callback)
+- [ ] Error message includes entry.id and exit code
+- [ ] No behavior change for the happy path (successful queries produce same output)
+- [ ] TypeScript build passes: `cd mcp-server && npm run build`
+
+`depends_on: []`
+
+---
+
+### T2 — Replace `Promise.all` with `Promise.allSettled` in `collectCccCodebaseAnalysis`
+
+**File:** `mcp-server/src/scan.ts`
+**What:** Replace `Promise.all(CCC_SCAN_QUERIES.map(...))` with `Promise.allSettled(CCC_SCAN_QUERIES.map((entry) => runCccQuery(exec, cwd, entry)))`. For rejected results, emit a `process.stderr.write` diagnostic and produce a fallback `ScanRecommendation` with a `detail` that names the failure.
+**Acceptance criteria:**
+- [ ] A single failed query no longer aborts the other queries
+- [ ] Failed queries produce a `ScanRecommendation` with `priority: "medium"` and `detail` naming the failure
+- [ ] Successful queries produce the same recommendation shape as before
+- [ ] Fallback recommendations are included in the returned `ScanCodebaseAnalysis`
+- [ ] `process.stderr.write` logs the query ID and error message for failed queries
+- [ ] TypeScript build passes
+
+`depends_on: [T1]`
+
+---
+
+### T3 — Add `logScanWarning` helper + context to `toScanErrorInfo`
+
+**File:** `mcp-server/src/scan.ts`
+**What:** Add `logScanWarning(message: string): void` that writes `[scan] warning: ${message}\n` to `process.stderr`. Update `toScanErrorInfo` to accept an optional `context?: string` parameter prepended to the error message. Update `scanRepo` to call `logScanWarning` when falling back.
+**Acceptance criteria:**
+- [ ] `logScanWarning` is used in `scanRepo` catch block
+- [ ] `toScanErrorInfo` context parameter is used where the caller knows the failing step
+- [ ] No `console.error` or `console.warn` calls introduced
+- [ ] TypeScript build passes
+
+`depends_on: []`
+
+---
+
+### T4 — Flatten `ensureCccReady` into named sub-helpers
+
+**File:** `mcp-server/src/scan.ts`
+**What:** Refactor `ensureCccReady` into three named helpers: `requireCccBinary`, `ensureCccIndexed`, `initCcc`. `ensureCccReady` becomes a two-line sequencer calling the first two. Behavior must be identical to current implementation.
+**Acceptance criteria:**
+- [ ] `ensureCccReady` body is 2–3 lines (calls to named helpers only)
+- [ ] `requireCccBinary` handles the `--help` check
+- [ ] `ensureCccIndexed` handles `status` + optional `init` + `index`
+- [ ] `initCcc` handles the `init -f` step
+- [ ] All error messages preserved (same strings as before or improved — not reduced in clarity)
+- [ ] TypeScript build passes
+
+`depends_on: []`
+
+---
+
+### T5 — Create AGENTS.md at repo root
+
+**File:** `/Volumes/1tb/Projects/claude-orchestrator/AGENTS.md`
+**What:** Create the AGENTS.md file following the structure in section 4.2 above. Content must be accurate to the current codebase (verified against `package.json`, `README.md`, and `mcp-server/src/`).
+**Acceptance criteria:**
+- [ ] File exists at repo root: `AGENTS.md`
+- [ ] Contains all 7 sections: Project Overview, Build, Dev, Key File Paths, Hard Constraints, Agent Coordination, Code Conventions
+- [ ] Build command is exact and runnable: `cd mcp-server && npm install && npm run build`
+- [ ] Hard Constraints section lists at least 5 specific constraints
+- [ ] Agent Coordination section describes `macro_start_session` bootstrap
+- [ ] No content duplicated verbatim from README.md (link instead)
+- [ ] Total length: 80–150 lines (short enough to be read in full, complete enough to be useful)
+
+`depends_on: []`
+
+---
+
+### T6 — Build verification
+
+**File:** N/A
+**What:** Run `cd mcp-server && npm run build` and confirm zero TypeScript errors across all scan.ts changes.
+**Acceptance criteria:**
+- [ ] `npm run build` exits 0
+- [ ] No new TypeScript errors introduced
+- [ ] No regressions in other files that import from `scan.ts` (the public API surface — `scanRepo`, `createBuiltinScanResult`, `createFallbackScanResult`, `createEmptyCodebaseAnalysis` — is unchanged)
+
+`depends_on: [T1, T2, T3, T4]`
 
 ---
 
 ## 6. Dependency Graph
 
 ```
-T1  Document canonical pattern       depends_on: []
-T2  Add fix-bug template             depends_on: [T1]
-T3  Add add-migration template       depends_on: [T1]
-T4  Add update-config template       depends_on: [T1]
-T5  Add add-documentation template   depends_on: [T1]
-T6  Add upgrade-dependency template  depends_on: [T1]
-T7  Add add-cli-command template     depends_on: [T1]
-T8  Add add-type-definitions template depends_on: [T1]
-T9  Add extract-module template      depends_on: [T1]
-T10 Add add-integration template     depends_on: [T1]
-T11 Upgrade formatTemplatesForPrompt depends_on: [T2, T3, T4, T5, T6, T7, T8, T9, T10]
-T12 Build verification               depends_on: [T11]
+T1  Extract runCccQuery helper              depends_on: []
+T2  Switch to Promise.allSettled            depends_on: [T1]
+T3  Add logScanWarning + context param      depends_on: []
+T4  Flatten ensureCccReady                  depends_on: []
+T5  Create AGENTS.md                        depends_on: []
+T6  Build verification                      depends_on: [T1, T2, T3, T4]
 ```
 
-T2–T10 are all parallelizable once T1 is complete. T11 depends on all of T2–T10 (to include all templates in the prompt formatter). T12 gates the entire implementation.
+**Parallelization notes:**
+- T1, T3, T4, T5 are all independent and can run in parallel.
+- T2 depends on T1 (it calls `runCccQuery`).
+- T6 gates the implementation — run it only after T1–T4 are committed.
+- T5 (AGENTS.md) is fully independent and can run any time.
 
-**Critical path:** T1 → T2 (or any of T2–T10) → T11 → T12 (4 hops, but T2–T10 can all run in parallel after T1)
+**Critical path:** T1 → T2 → T6 (3 hops)
+
+---
+
+## 7. Style Consistency with Existing Codebase
+
+### Observations from scan.ts and profiler.ts
+
+- **Named module-level helpers** are already the pattern in `profiler.ts` (`collectFileTree`, `collectCommits`, etc.). The `ensureCccReady` refactor follows this established idiom.
+- **Early return on error** is used throughout `profiler.ts` (`if (result.code !== 0) return []`). The helpers in T4 use the same pattern.
+- **No custom Error subclasses** — `new Error(message)` throughout. Maintain this.
+- **No logging anywhere in the existing codebase** — the stderr logging introduced in T2 and T3 is new, but warranted for fallback visibility. Use `process.stderr.write` to avoid importing a logger.
+- **`signal?: AbortSignal` parameter** is threaded through but not acted on yet (passed to `exec` but exec doesn't use it). Keep the parameter for future use; do not add abort checks in this plan.
+- **TypeScript ESM imports** use `.js` extensions on local imports (`"./types.js"`, `"./exec.js"`). All new helpers in scan.ts must follow this.
+
+### AGENTS.md Tone
+
+Match the imperative, minimal-prose tone of existing `.md` files in `skills/` and `commands/`. Not academic, not chatty. Instructions for a fast reader.
+
+---
+
+## 8. Acceptance Criteria (Overall)
+
+- [ ] `scanRepo()` falls back gracefully when ccc is unavailable, with a stderr warning
+- [ ] A single failed `ccc search` query does not abort the other queries
+- [ ] Failed queries produce a descriptive fallback `ScanRecommendation` rather than an empty analysis
+- [ ] `ensureCccReady` is decomposed into three named helpers with single responsibilities
+- [ ] All diagnostic output goes to `process.stderr`, never `process.stdout`
+- [ ] `AGENTS.md` exists at repo root with all 7 required sections
+- [ ] `npm run build` passes with zero errors after all scan.ts changes
+- [ ] Public API surface of `scan.ts` is unchanged (no signature changes to exported functions)

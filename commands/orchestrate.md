@@ -104,9 +104,27 @@ Ask the user:
 8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
+## Step 5.5: Create beads from the plan
+
+Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them manually from the plan output:
+
+1. For each task/unit-of-work in the plan, create a bead:
+   ```
+   br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority 2 --type task
+   ```
+
+2. After all beads are created, add dependency edges:
+   ```
+   br dep add <downstream-bead-id> <upstream-bead-id>
+   ```
+
+3. Verify with `br list` — confirm all beads and dependencies look correct.
+
+> **WARNING:** Use `br list` for all read-only bead inspection. Never call `orch_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
+
 ## Step 6: Review and approve beads
 
-The plan creates beads (tasks) in the bead tracker. Show the beads list. Ask:
+Use `br list` to display the current beads. Ask:
 
 > "Here are the implementation beads. What would you like to do?
 > 1. **Start implementing** — launch the implementation loop
@@ -114,15 +132,19 @@ The plan creates beads (tasks) in the bead tracker. Show the beads list. Ask:
 > 3. **Reject** — start over with a different goal"
 
 - "Start" → call `orch_approve_beads` with `action: "start"`
-- "Polish" → call `orch_approve_beads` with `action: "polish"`, show updated beads, loop
+- "Polish" → call `orch_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
 - "Reject" → call `orch_approve_beads` with `action: "reject"`, return to Step 3
 
-After calling `orch_approve_beads` with `action: "start"`, display a summary table of approved beads including:
+After calling `orch_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
+
+**Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, discuss with user before proceeding)
 
 | Bead ID | Title | Wave | Effort | Risk Flags |
 |---------|-------|------|--------|------------|
 
 Populate **Wave** from the bead's dependency wave assignment, **Effort** from the plan's effort estimate, and **Risk Flags** from any warnings or risk notes in the plan output. This gives the user visibility into what is about to be implemented and in what order.
+
+Wait for user confirmation before proceeding to Step 7 — the quality score may prompt them to polish further.
 
 ## Step 7: Implement each bead
 
@@ -132,6 +154,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    ```
    TeamCreate(team_name: "impl-<goal-slug>")
    ```
+   > **NOTE:** If a planning team (e.g. `"deep-plan-<slug>"`) is still active from Step 5, you must delete it first via `TeamDelete(team_name: "deep-plan-<slug>")` before creating the impl team. If `TeamDelete` fails because agents are still registered, retire them via Agent Mail `retire_agent` first, then retry `TeamDelete`. Alternatively, reuse the existing planning team by passing its `team_name` to impl agents.
 
 2. Spawn an implementation agent with team membership and **strict Agent Mail bootstrap**:
    ```
@@ -169,8 +192,10 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        ## STEP 2 — VALIDATE
        Run tests and linting relevant to your changes. Fix any failures.
 
-       ## STEP 3 — COMMIT
+       ## STEP 3 — COMMIT & CLOSE BEAD
        Create a commit with a descriptive message referencing bead <id>.
+       Then mark the bead closed: `br update <bead-id> --status closed`
+       (Note: the br CLI uses `closed`, NOT `done`.)
 
        ## STEP 4 — RELEASE + REPORT (MANDATORY)
        4a. Release all file reservations via release_file_reservations.
@@ -229,6 +254,8 @@ Actions:
   3. If any go idle without reporting, nudge by name: `SendMessage(to: "<reviewer-name>", message: "Please send your review findings.")`
   4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
   5. Collect and summarize results.
+
+  > **Edge case — already-closed beads:** If `orch_review` errors (e.g. "Cannot read properties of undefined"), the bead was likely already closed by the impl agent before review was requested. Skip the MCP tool and spawn review agents manually. Give each reviewer the specific git commit SHA (from `git log --oneline`) and instruct them to review via `git diff <commit>~1 <commit>` directly.
 
 ## Step 9: Loop until complete
 

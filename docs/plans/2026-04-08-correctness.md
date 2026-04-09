@@ -1,446 +1,467 @@
-# Correctness Plan: Complete Bead Template Stubs
+# Correctness Plan: Error Recovery in scan.ts + AGENTS.md
+
+**Perspective:** Correctness — technically correct, complete, no silent failures, proper TypeScript types maintained.
+
+---
 
 ## 1. Problem Statement
 
-`mcp-server/src/bead-templates.ts` defines a `BUILTIN_TEMPLATES` array that currently contains only **3 templates**:
+### scan.ts: Missing Error Recovery
 
-| ID | Covers |
-|---|---|
-| `add-api-endpoint` | Creating a new API endpoint with validation and tests |
-| `refactor-module` | Restructuring an existing module while preserving behavior |
-| `add-tests` | Adding missing test coverage for existing behavior |
+`mcp-server/src/scan.ts` contains multiple file-system and CLI operations that can fail at runtime. The top-level `scanRepo()` function (line 80-91) already has a try/catch that falls back from the `ccc` provider to the built-in profiler. However, **within** each provider and the profiler itself, individual operations lack error isolation:
 
-The `Bead.type` field (`types.ts:166`) is a free-form string documented as `"task" | "feature" | "bug" etc.`, and the `IdeaCategory` type (`types.ts:283-291`) enumerates eight categories: `feature`, `refactor`, `docs`, `dx`, `performance`, `reliability`, `security`, `testing`.
+**Unprotected operations in `profiler.ts`:**
 
-The orchestrator's bead-creation prompts (`prompts.ts:295-321`, `prompts.ts:414-419`) present the template library via `formatTemplatesForPrompt()` as **optional shortcuts** for common bead shapes. Templates are never required -- agents can always write custom bead descriptions -- but having templates for common patterns:
+| Function | Line | Operation | Failure mode |
+|---|---|---|---|
+| `collectFileTree` | 56-77 | `exec("find", ...)` | `find` not available on system, permission denied, timeout |
+| `collectCommits` | 79-103 | `exec("git", ["log", ...])` | Not a git repo, corrupted repo, timeout |
+| `collectTodos` | 105-149 | `exec("grep", ...)` | `grep` not available (e.g., minimal container), timeout |
+| `collectKeyFiles` | 151-183 | `exec("head", ...)` per file | Individual file read failures (already try/caught — good) |
+| `collectBestPracticesGuides` | 185-229 | `exec("head", ...)` per file | Individual file read failures (already try/caught — good) |
+| `profileRepo` | 8-52 | `Promise.all([...])` | **Any single collector failure aborts the entire profile** |
 
-1. **Reduces hallucination risk**: agents follow a proven structure instead of improvising field names and acceptance criteria.
-2. **Enables template hygiene enforcement**: `beads.ts:454-519` already validates that beads don't contain raw template markers, unresolved `{{placeholders}}`, or `[Use template: ...]` shorthand. More templates give agents more structural starting points, reducing the likelihood of shallow/underspecified beads.
-3. **Improves plan-to-bead audit quality**: `auditPlanToBeads()` (`beads.ts:80-116`) scores section-to-bead token overlap. Templates with well-chosen keywords improve matching.
+The critical issue is `profileRepo` at line 13: it uses `Promise.all` to run `collectFileTree`, `collectCommits`, `collectTodos`, and `collectKeyFiles` in parallel. If **any one** of these throws, the entire `profileRepo` call fails, and the scan produces nothing — even though the other 3 collectors may have succeeded.
 
-The gap: the 3 existing templates cover only `add-api-endpoint` (a narrow feature type), `refactor-module`, and `add-tests`. There are no templates for:
-- **Bug fixes** (the most common bead type in practice)
-- **Documentation** changes
-- **Configuration/infrastructure** changes
-- **Data migration** or schema changes
-- **Performance** improvements
-- **Integration** work (connecting two subsystems)
+**Unprotected operations in `scan.ts`:**
 
-This plan addresses completing the template library with correctness as the primary lens.
+| Function | Line | Operation | Failure mode |
+|---|---|---|---|
+| `ensureCccReady` | 138-176 | `exec("ccc", ["--help"])`, `exec("ccc", ["status"])`, etc. | ccc not installed, init fails — **already throws (correct for ccc path)** |
+| `collectCccCodebaseAnalysis` | 178-237 | `Promise.all` over `CCC_SCAN_QUERIES` | Single query failure aborts all queries |
+| `scanRepo` | 80-91 | Fallback `profileRepo` in catch block | **If the fallback itself throws, the error is unrecoverable** |
 
-## 2. Bead Type Taxonomy
+**Key correctness concern:** In `scanRepo` (line 86-90), the catch block calls `profileRepo(exec, cwd, signal)`. If this fallback call also throws (e.g., `find` is missing), the entire scan fails with an unhandled exception. There is no "profile of last resort."
 
-### 2.1 Type System Constraints
+### AGENTS.md: Missing Sub-Agent Guidance
 
-The `BeadTemplate` interface (`types.ts:237-247`) requires:
+No `AGENTS.md` file exists at the project root. Sub-agents spawned by the orchestrator (implementation agents, review agents, audit agents) currently receive no project-level guidance about:
+- Build commands
+- TypeScript/NodeNext constraints
+- Which directories are generated (never edit)
+- MCP server stdio constraint (no `console.log` to stdout)
+- Available CLI tools (`br`, `bv`)
+
+---
+
+## 2. Implementation Plan
+
+### T1: Make `profileRepo` collectors resilient with `Promise.allSettled`
+
+**File:** `mcp-server/src/profiler.ts`
+
+**What:** Replace `Promise.all` at line 13 with `Promise.allSettled` so individual collector failures don't abort the entire profile. Return partial results with sensible defaults for failed collectors.
+
+**Exact changes:**
+
+1. Change `Promise.all` to `Promise.allSettled` at line 13:
+   ```typescript
+   const [fileTreeResult, commitsResult, todosResult, keyFilesResult] = await Promise.allSettled([
+     collectFileTree(exec, cwd, signal),
+     collectCommits(exec, cwd, signal),
+     collectTodos(exec, cwd, signal),
+     collectKeyFiles(exec, cwd, signal),
+   ]);
+   ```
+
+2. Extract values with defaults for rejected promises:
+   ```typescript
+   const fileTree = fileTreeResult.status === "fulfilled" ? fileTreeResult.value : "";
+   const commits = commitsResult.status === "fulfilled" ? commitsResult.value : [];
+   const todos = todosResult.status === "fulfilled" ? todosResult.value : [];
+   const keyFiles = keyFilesResult.status === "fulfilled" ? keyFilesResult.value : {};
+   ```
+
+3. Wrap `collectBestPracticesGuides` call (line 20) in try/catch since it depends on `fileTree`:
+   ```typescript
+   let bestPracticesGuides: Array<{ name: string; content: string }> = [];
+   try {
+     bestPracticesGuides = await collectBestPracticesGuides(exec, cwd, fileTree, signal);
+   } catch {
+     // Best practices collection is non-critical
+   }
+   ```
+
+4. The rest of the function (`extCounts`, `languages`, `frameworks`, etc.) operates on data that now has safe defaults — empty string fileTree means no extensions detected (empty languages array), empty keyFiles means no frameworks detected.
+
+**Correctness constraints:**
+- The return type `Promise<RepoProfile>` is unchanged — the function always returns a valid `RepoProfile`, just with potentially empty fields.
+- `collectCommits` already handles `result.code !== 0` by returning `[]` (line 89), so it rarely throws. But exec itself can throw on spawn failure or timeout (see `exec.ts` line 20-25: the timeout handler calls `reject()`, and spawn errors call `reject()`).
+- `collectTodos` similarly handles `result.code !== 0` (line 131), but can throw on spawn/timeout.
+- `collectFileTree` does NOT check `result.code` — it just returns `result.stdout.trim()`. A non-zero exit code gives empty/partial output, which is acceptable. But it can still throw on spawn/timeout.
+- `collectKeyFiles` is already wrapped in try/catch per file (line 169-179), so individual file failures are handled. But the outer `Promise.all(reads)` can still propagate unexpected errors.
+
+**What NOT to do:**
+- Do NOT add return types or change the `RepoProfile` interface — the partial profile is still a valid `RepoProfile` with all required fields present (just empty).
+- Do NOT log errors to console (MCP server uses stdio — any console.log corrupts the JSON-RPC stream).
+- Do NOT swallow errors silently without providing defaults — every rejected promise must produce a typed default value.
+
+**Acceptance criteria:**
+- `profileRepo` never throws, always returns a valid `RepoProfile`
+- If `find` command fails, profile is returned with `structure: ""`, `languages: []`, `hasTests: false`, etc.
+- If `git log` fails, profile is returned with `recentCommits: []`
+- If `grep` fails, profile is returned with `todos: []`
+- TypeScript compilation passes with zero errors
+- No `console.log` or `console.error` statements added
+
+`depends_on: []`
+
+---
+
+### T2: Guard the fallback path in `scanRepo`
+
+**File:** `mcp-server/src/scan.ts`
+
+**What:** The catch block in `scanRepo` (line 86-90) calls `profileRepo` which — after T1 — should never throw. But defense-in-depth requires guarding this fallback too. If the fallback `profileRepo` somehow throws, `scanRepo` should return a minimal "empty" scan result rather than propagating an unrecoverable exception.
+
+**Exact changes:**
+
+Wrap the existing catch body in a nested try/catch:
 
 ```typescript
-interface BeadTemplate {
-  id: string;                           // kebab-case identifier
-  label: string;                        // human-readable label
-  summary: string;                      // one-line description
-  descriptionTemplate: string;          // mustache-style {{placeholder}} template
-  placeholders: BeadTemplatePlaceholder[]; // each: name, description, example, required
-  acceptanceCriteria: string[];         // array of criteria strings
-  filePatterns: string[];               // glob patterns for relevant files
-  dependencyHints?: string;            // optional guidance on inter-bead deps
-  examples: BeadTemplateExample[];     // each: { description: string }
+export async function scanRepo(
+  exec: ExecFn,
+  cwd: string,
+  signal?: AbortSignal
+): Promise<ScanResult> {
+  try {
+    return await cccScanProvider.scan(exec, cwd, signal);
+  } catch (error) {
+    try {
+      const profile = await profileRepo(exec, cwd, signal);
+      return createFallbackScanResult(profile, "ccc", toScanErrorInfo(error));
+    } catch (fallbackError) {
+      // Last resort: return an empty profile so the workflow can continue
+      const emptyProfile = createEmptyRepoProfile(cwd);
+      const result = createFallbackScanResult(emptyProfile, "ccc", toScanErrorInfo(error));
+      // Attach the fallback error to warnings
+      if (result.sourceMetadata) {
+        result.sourceMetadata.warnings = [
+          ...(result.sourceMetadata.warnings ?? []),
+          `Profiler also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+        ];
+      }
+      return result;
+    }
+  }
 }
 ```
 
-Key constraints from the type system:
-- `placeholders[].name` must match `{{name}}` tokens in `descriptionTemplate` (enforced by `expandTemplate()` at `bead-templates.ts:197-233`)
-- `placeholders[].required` controls validation -- required placeholders that are empty/missing cause `expandTemplate()` to return `{ success: false, error: ... }`
-- The `PLACEHOLDER_PATTERN` (`bead-templates.ts:159`) is `/{{\s*([a-zA-Z0-9_]+)\s*}}/g` -- placeholder names must be alphanumeric + underscores only
-- The `INVALID_VALUE_PATTERN` (`bead-templates.ts:160`) rejects values containing `\r` or `\0`
-- `examples[].description` must be a fully-expanded version of `descriptionTemplate` with all placeholders resolved -- this is what `prompts.ts` shows as the canonical expanded form
+**New helper function** in `profiler.ts` (exported):
 
-### 2.2 Consumption Points
-
-Templates are consumed in three ways:
-
-1. **`formatTemplatesForPrompt()`** (`bead-templates.ts:181-185`): Renders a one-line summary per template: `- {id}: {summary} Placeholders: {names}`. Used in `beadCreationPrompt()` and `planToBeadsPrompt()` in `prompts.ts`.
-
-2. **`expandTemplate()`** (`bead-templates.ts:197-233`): Takes a template ID + placeholder values, validates required fields, substitutes all `{{name}}` tokens, and checks for unresolved placeholders. Returns `{ success: true, description }` or `{ success: false, error }`.
-
-3. **`listBeadTemplates()` / `getTemplateById()`**: Return cloned template objects for programmatic access. Used for potential future tooling (not currently called from MCP tools, but part of the public API).
-
-### 2.3 Template Hygiene Validation
-
-`validateBeads()` (`beads.ts:371-525`) checks open beads for:
-- `raw-template-marker`: lines starting with `[use template:` (case-insensitive)
-- `template-shorthand`: lines like `see template` or `use the template`
-- `unresolved-placeholder`: `{{word}}` or `<UPPER_CASE_WORD>` patterns
-- `template-missing-structure`: template artifacts present but missing `### Files:` or < 2 acceptance criteria
-
-These checks mean every template we add must produce descriptions that **pass** these hygiene checks when fully expanded.
-
-### 2.4 Templates to Add
-
-Based on the `IdeaCategory` taxonomy, `Bead.type` conventions, and the patterns seen in `beadCreationPrompt()` / `planToBeadsPrompt()`, the following templates should be added:
-
-| Template ID | Maps to | Why Needed |
-|---|---|---|
-| `fix-bug` | bug fixes | Most common bead type. Agents need structure for: reproduction steps, root cause, fix description, regression test. |
-| `add-documentation` | docs changes | IdeaCategory "docs". Documentation beads need different structure: what to document, audience, location. |
-| `improve-performance` | performance work | IdeaCategory "performance". Needs: baseline metric, target, approach, measurement plan. |
-| `add-integration` | connecting subsystems | Common in multi-bead plans. Needs: systems being connected, interface contract, error handling at boundary. |
-| `update-configuration` | infra/config changes | DX/reliability work. Needs: what config, why, migration path, rollback plan. |
-
-Templates **NOT** recommended (correctness rationale):
-- **`add-feature`**: Too generic. The existing `add-api-endpoint` is a concrete feature template; other features are too varied to template without hallucinating structure. Custom bead descriptions serve better.
-- **`security-fix`**: Overlaps heavily with `fix-bug`. Security-specific templates risk giving agents false confidence about security completeness. Better handled as a `fix-bug` with security-specific acceptance criteria.
-- **`data-migration`**: Very project-specific. A template would either be too vague or impose assumptions about migration tooling.
-
-## 3. Implementation Steps
-
-### T1: Define `fix-bug` template
-
-**File:** `mcp-server/src/bead-templates.ts`
-**What:** Add a `fix-bug` entry to `BUILTIN_TEMPLATES` array (after the `add-tests` entry, before the closing `]`).
-
-**Template structure:**
-
+```typescript
+export function createEmptyRepoProfile(cwd: string): RepoProfile {
+  return {
+    name: cwd.split("/").pop() ?? "unknown",
+    languages: [],
+    frameworks: [],
+    structure: "",
+    entrypoints: [],
+    recentCommits: [],
+    hasTests: false,
+    testFramework: undefined,
+    hasDocs: false,
+    hasCI: false,
+    ciPlatform: undefined,
+    todos: [],
+    keyFiles: {},
+    readme: undefined,
+    packageManager: undefined,
+    bestPracticesGuides: [],
+  };
+}
 ```
-id: "fix-bug"
-label: "Fix bug"
-summary: "Diagnose and fix a bug with a regression test."
-```
-
-**Placeholders (all required):**
-- `bugSummary`: One-line description of the bug
-- `reproductionSteps`: How to reproduce the issue
-- `affectedArea`: Module or feature area where the bug manifests
-- `rootCause`: Known or suspected root cause
-- `implementationFile`: Primary source file to fix
-- `testFile`: Test file for the regression test
-
-**descriptionTemplate must include:**
-- Bug summary and reproduction steps (critical for agent context)
-- Root cause section (prevents agents from applying surface-level patches)
-- Acceptance criteria: fix the root cause, add regression test, verify no regressions
-- `### Files:` section
-
-**acceptanceCriteria:**
-- "Fix the root cause described above, not just the symptom."
-- "Add a regression test that fails before the fix and passes after."
-- "Verify no existing tests are broken by the change."
-
-**filePatterns:** `["src/**/*.ts", "src/**/*.test.ts"]`
-
-**dependencyHints:** "Bug fix beads are usually independent unless they touch shared modules. If a fix changes a shared interface, downstream beads should depend on this one."
-
-**examples:** One fully expanded example using concrete values (e.g., a null reference bug in a user lookup).
 
 **Correctness constraints:**
-- Every `{{placeholder}}` in the description template must have a matching entry in `placeholders[]`
-- The example `description` must contain zero `{{...}}` tokens
-- The example must include `### Files:` and at least 3 `- [ ]` acceptance criteria items (to pass template hygiene in `validateBeads`)
+- The `createEmptyRepoProfile` must satisfy every field of the `RepoProfile` interface. Cross-reference with `types.ts` — all fields must be present with correct types.
+- The nested catch must not re-throw. `scanRepo` must **always** return a `ScanResult`.
+- The original `error` from the ccc path is preserved in the fallback info — it's the primary error. The `fallbackError` is appended as a warning, not replacing the original.
 
-`depends_on: []`
+**What NOT to do:**
+- Do NOT merge the two catch blocks — the outer catch (ccc failure) is structurally different from the inner catch (profiler failure).
+- Do NOT return `null` or `undefined` — the return type is `Promise<ScanResult>`, not optional.
+
+**Acceptance criteria:**
+- `scanRepo` never throws under any circumstances
+- If both ccc and profiler fail, a valid `ScanResult` is returned with `fallback.used === true` and `sourceMetadata.warnings` containing both error messages
+- The `emptyProfile.name` is derived from `cwd` (not hardcoded "unknown")
+- TypeScript compilation passes with zero errors
+
+`depends_on: [T1]`
 
 ---
 
-### T2: Define `add-documentation` template
+### T3: Make `collectCccCodebaseAnalysis` resilient to individual query failures
 
-**File:** `mcp-server/src/bead-templates.ts`
+**File:** `mcp-server/src/scan.ts`
 
-**Template structure:**
+**What:** `collectCccCodebaseAnalysis` (line 178-237) uses `Promise.all` over `CCC_SCAN_QUERIES`. A single search query failure aborts all queries. Use `Promise.allSettled` so partial results are returned.
 
-```
-id: "add-documentation"
-label: "Add documentation"
-summary: "Write or update documentation for a feature or API."
-```
+**Exact changes:**
 
-**Placeholders (all required):**
-- `documentationSubject`: What is being documented
-- `targetAudience`: Who will read this (e.g., "developers integrating the API", "end users")
-- `documentationType`: Type of docs (e.g., "API reference", "getting started guide", "architecture overview")
-- `documentationFile`: Primary documentation file to create or update
-- `sourceFile`: Source code file being documented (for reference)
+1. Replace `Promise.all` at line 183 with `Promise.allSettled`:
+   ```typescript
+   const searchResults = await Promise.allSettled(
+     CCC_SCAN_QUERIES.map(async (entry) => {
+       const result = await exec(
+         "ccc",
+         ["search", "--limit", "3", ...entry.query.split(" ")],
+         { cwd, timeout: 30000 }
+       );
+       if (result.code !== 0) {
+         throw new Error(result.stderr.trim() || result.stdout.trim() || `ccc search failed for ${entry.id}`);
+       }
+       return {
+         ...entry,
+         results: parseCccSearchResults(result.stdout),
+       };
+     })
+   );
+   ```
 
-**descriptionTemplate must include:**
-- What to document and why
-- Target audience context (so the agent writes at the right level)
-- Acceptance criteria: accuracy, completeness, examples
-- `### Files:` section
+2. Filter to fulfilled results only:
+   ```typescript
+   const searches = searchResults
+     .filter((r): r is PromiseFulfilledResult<typeof r extends PromiseFulfilledResult<infer T> ? T : never> => r.status === "fulfilled")
+     .map(r => r.value);
+   ```
 
-**acceptanceCriteria:**
-- "Documentation accurately reflects the current implementation."
-- "Include at least one usage example or code snippet."
-- "Write for the specified target audience without assuming undocumented context."
+   More concretely, to keep TypeScript happy, extract the mapped type:
+   ```typescript
+   type CccSearchEntry = {
+     id: string;
+     title: string;
+     query: string;
+     results: Array<{ location: string; snippet: string }>;
+   };
 
-**filePatterns:** `["docs/**/*.md", "*.md", "src/**/*.ts"]`
+   const searches: CccSearchEntry[] = searchResults
+     .filter((r): r is PromiseFulfilledResult<CccSearchEntry> => r.status === "fulfilled")
+     .map(r => r.value);
+   ```
 
-**dependencyHints:** "Documentation beads usually depend on the implementation bead they document. Create the implementation first, then the documentation."
+3. If ALL searches fail, throw so the outer `scanRepo` catch triggers the builtin fallback:
+   ```typescript
+   if (searches.length === 0 && searchResults.length > 0) {
+     const firstError = searchResults.find(r => r.status === "rejected") as PromiseRejectedResult | undefined;
+     throw new Error(firstError?.reason?.message ?? "All ccc search queries failed");
+   }
+   ```
 
 **Correctness constraints:**
-- Same placeholder/expansion constraints as T1
-- The `filePatterns` must include both docs and source directories since documentation beads reference source files
+- If 2 of 3 queries succeed, the analysis contains 2 recommendations + insights — partial is better than nothing.
+- If ALL queries fail, we throw to trigger the builtin fallback — returning an empty analysis from ccc would mask a broken ccc installation.
+- The `summary` field must accurately reflect the actual number of successful searches, not `CCC_SCAN_QUERIES.length`.
+
+**Acceptance criteria:**
+- If 1 of 3 ccc search queries fails, `collectCccCodebaseAnalysis` returns results from the 2 successful queries
+- If all 3 queries fail, the function throws (triggering the builtin fallback in `scanRepo`)
+- The `summary` string uses `searches.length` (actual successes), not hardcoded 3
+- TypeScript compilation passes with zero errors
 
 `depends_on: []`
 
 ---
 
-### T3: Define `improve-performance` template
+### T4: Add `collectFileTree` error-code check
 
-**File:** `mcp-server/src/bead-templates.ts`
+**File:** `mcp-server/src/profiler.ts`
 
-**Template structure:**
+**What:** `collectFileTree` (line 56-77) does not check `result.code`. If `find` exits with a non-zero code (e.g., permission denied on some directories but partial output produced), it returns the partial stdout. This is actually correct behavior — partial file trees are useful. However, if `result.code !== 0` AND `result.stdout` is empty, the function should return `""` explicitly rather than returning potentially garbage stderr content (it already only reads stdout, so this is already correct).
+
+Actually, on closer inspection, `collectFileTree` returns `result.stdout.trim()` which is correct: partial stdout from `find` is valuable, and empty stdout on error is just `""`. The only risk is that `exec` itself throws (spawn failure, timeout), which T1 handles via `Promise.allSettled`.
+
+**Revised scope:** No changes needed to `collectFileTree`. Instead, ensure that `collectCommits` and `collectTodos` handle the case where `exec` itself throws (not just non-zero exit code).
+
+Both `collectCommits` (line 89: `if (result.code !== 0) return []`) and `collectTodos` (line 131: `if (result.code !== 0) return []`) only guard against non-zero exit codes. If `exec` throws an Error (timeout, spawn failure), the exception propagates. T1's `Promise.allSettled` in `profileRepo` handles this, so **no per-function try/catch is needed** — the `allSettled` at the caller level is the correct safety net.
+
+**Decision:** T4 is **eliminated** — no code changes needed. The analysis confirms T1 is sufficient.
+
+`depends_on: []` — N/A (no-op)
+
+---
+
+### T5: Create AGENTS.md
+
+**File:** `/Volumes/1tb/Projects/claude-orchestrator/AGENTS.md` (new file)
+
+**What:** Create the `AGENTS.md` file at the project root with sub-agent guidance.
+
+**Exact content:**
+
+```markdown
+# AGENTS.md
+
+Guidance for sub-agents working in this repository.
+
+## Build
+
+```bash
+cd mcp-server && npm run build
+```
+
+This compiles TypeScript sources from `mcp-server/src/` to `mcp-server/dist/`.
+
+## Tests
+
+No test suite configured yet. Verify changes by running the build command above.
+
+## Constraints
+
+- **TypeScript strict mode** — `tsconfig.json` enables `strict: true`. All code must satisfy strict type checking.
+- **Module system** — `module: "NodeNext"`, `moduleResolution: "NodeNext"`. Use `.js` extensions in all relative imports (e.g., `import { foo } from "./bar.js"`), even when the source file is `.ts`.
+- **ES2022 target** — top-level `await` is not available in module scope within the MCP server entry point. Use async functions.
+- **`dist/` is compiled output** — never edit files in `mcp-server/dist/` directly. Edit sources in `mcp-server/src/` and rebuild.
+- **MCP server communicates via stdio** — the server uses stdin/stdout for JSON-RPC. **Never use `console.log()` in MCP server code** as it corrupts the communication channel. Use `console.error()` for debug output if needed (it goes to stderr).
+- **Package type: ESM** — `"type": "module"` in `package.json`. No CommonJS `require()`.
+
+## Available CLI Tools
+
+- **`br`** — bead tracker CLI. Manages beads (implementation tasks): create, list, update status, approve.
+- **`bv`** — bead visualizer CLI. Renders bead status dashboards.
+- **`ccc`** — optional codebase indexing/search tool. Not required; the system falls back gracefully if unavailable.
+
+## Project Structure
 
 ```
-id: "improve-performance"
-label: "Improve performance"
-summary: "Optimize a slow path with measurable before/after evidence."
+├── commands/*.md          — Natural language orchestrator commands
+├── skills/                — Skills injected into agent system prompts
+├── hooks/hooks.json       — Session lifecycle hooks
+├── mcp-server/src/        — TypeScript MCP server source
+│   ├── server.ts          — MCP tool registration
+│   ├── state.ts           — OrchestratorState load/save
+│   ├── checkpoint.ts      — Atomic disk persistence
+│   ├── scan.ts            — Repository scanning (ccc + builtin)
+│   ├── profiler.ts        — Repository profiling (git, find, grep)
+│   ├── beads.ts           — br CLI wrapper
+│   └── tools/             — Individual MCP tool implementations
+├── mcp-server/dist/       — Compiled output (do not edit)
+└── .pi-orchestrator/      — Runtime state directory
 ```
 
-**Placeholders (all required):**
-- `targetArea`: Module or function being optimized
-- `currentBehavior`: What the current performance looks like (e.g., "list rendering takes 3s for 1000 items")
-- `performanceGoal`: Target improvement (e.g., "render in under 500ms")
-- `optimizationApproach`: Planned approach (e.g., "add pagination and virtual scrolling")
-- `implementationFile`: Primary source file to optimize
-- `testFile`: Test or benchmark file
+## Code Conventions
 
-**descriptionTemplate must include:**
-- Current baseline behavior (prevents agents from optimizing blindly)
-- Measurable goal (prevents vague "make it faster" beads)
-- Approach section
-- Acceptance criteria: measurable improvement, no regression, benchmark
-- `### Files:` section
+- No default exports. Use named exports.
+- Types are in `mcp-server/src/types.ts`. Import with `import type { ... }`.
+- The `ExecFn` type (`mcp-server/src/exec.ts`) wraps shell command execution. All CLI interactions go through `exec`.
+- Error handling: functions that call external tools should handle non-zero exit codes. Use `Promise.allSettled` for parallel operations where partial results are acceptable.
+```
 
-**acceptanceCriteria:**
-- "Achieve the stated performance goal with measurable evidence."
-- "Add a benchmark or performance test to prevent future regressions."
-- "Preserve all existing behavior and passing tests."
+**Correctness constraints:**
+- Every fact stated in AGENTS.md must be verifiable from the current codebase:
+  - `strict: true` — confirmed in `tsconfig.json` line 8
+  - `module: "NodeNext"` — confirmed in `tsconfig.json` line 4
+  - `"type": "module"` — confirmed in `package.json` line 6
+  - `dist/` output — confirmed in `tsconfig.json` line 5 (`outDir: "./dist"`)
+  - stdio communication — confirmed in README.md architecture section
+  - `.js` extensions in imports — confirmed in `scan.ts` lines 1-2 (`from "./exec.js"`, `from "./profiler.js"`)
+  - No test suite — confirmed: no test script in `package.json`, no test config files
+- Build command `cd mcp-server && npm run build` — confirmed in `package.json` line 8 (`"build": "tsc"`)
 
-**filePatterns:** `["src/**/*.ts", "src/**/*.test.ts", "src/**/*.bench.ts"]`
-
-**dependencyHints:** "Performance beads should depend on the implementation bead that creates the code being optimized. Avoid parallelizing with beads that modify the same hot path."
+**Acceptance criteria:**
+- AGENTS.md exists at project root
+- Contains correct build command
+- Documents the stdio/console.log constraint
+- Documents NodeNext import extension requirement
+- Documents that dist/ is generated
+- Documents available CLI tools (br, bv, ccc)
+- All stated facts match current codebase state
 
 `depends_on: []`
 
 ---
 
-### T4: Define `add-integration` template
-
-**File:** `mcp-server/src/bead-templates.ts`
-
-**Template structure:**
-
-```
-id: "add-integration"
-label: "Add integration"
-summary: "Connect two subsystems or services with error handling at the boundary."
-```
-
-**Placeholders (all required):**
-- `sourceSystem`: System or module initiating the integration
-- `targetSystem`: System or module being integrated with
-- `integrationPurpose`: Why these systems need to communicate
-- `interfaceContract`: Expected interface or data contract between systems
-- `implementationFile`: Primary integration file
-- `testFile`: Integration test file
-
-**descriptionTemplate must include:**
-- Both systems identified with their roles
-- Interface contract (prevents agents from inventing APIs)
-- Error handling at the boundary (integration points are where failures happen)
-- Acceptance criteria: connectivity, error handling, integration test
-- `### Files:` section
-
-**acceptanceCriteria:**
-- "Implement the integration following the specified interface contract."
-- "Handle errors at the integration boundary with clear error messages."
-- "Add an integration test covering the happy path and at least one failure mode."
-
-**filePatterns:** `["src/**/*.ts", "src/**/*.test.ts"]`
-
-**dependencyHints:** "Integration beads depend on the beads that implement both the source and target systems. They should be among the last beads to execute."
-
-`depends_on: []`
-
----
-
-### T5: Define `update-configuration` template
-
-**File:** `mcp-server/src/bead-templates.ts`
-
-**Template structure:**
-
-```
-id: "update-configuration"
-label: "Update configuration"
-summary: "Add or modify configuration with validation and migration notes."
-```
-
-**Placeholders (all required):**
-- `configArea`: What configuration is being changed (e.g., "database connection settings")
-- `changeReason`: Why the configuration needs to change
-- `migrationNotes`: How existing users/environments should adapt
-- `configFile`: Primary configuration file
-- `validationFile`: File where config validation lives
-
-**descriptionTemplate must include:**
-- What config is changing and why
-- Migration notes (critical for not breaking existing deployments)
-- Acceptance criteria: validation, backwards compatibility, documentation
-- `### Files:` section
-
-**acceptanceCriteria:**
-- "Add or update configuration with input validation for the new values."
-- "Document migration steps for existing environments."
-- "Ensure backwards compatibility or document breaking changes explicitly."
-
-**filePatterns:** `["*.config.*", "*.json", "*.yaml", "*.yml", "*.toml", "src/**/*.ts"]`
-
-**dependencyHints:** "Configuration beads are often prerequisites for feature beads that consume the new config. Other beads should depend on this one if they read the changed config."
-
-`depends_on: []`
-
----
-
-### T6: Verify all templates pass internal consistency checks
-
-**File:** N/A (verification step)
-**What:** After adding all 5 templates, verify:
-
-1. **Build succeeds**: `cd mcp-server && npm run build` -- TypeScript compilation must pass, proving all templates satisfy the `BeadTemplate` interface.
-2. **Placeholder consistency**: For each new template, manually verify that every `{{name}}` in `descriptionTemplate` has a matching entry in `placeholders[]` and vice versa.
-3. **Example expansion**: For each new template, verify the `examples[].description` string contains zero `{{...}}` tokens.
-4. **Hygiene pass**: Verify that expanded examples would pass the template hygiene checks in `validateBeads()`:
-   - No `[Use template: ...]` markers
-   - No `see template` or `use the template` lines
-   - No `{{word}}` or `<UPPER_CASE>` tokens
-   - Has `### Files:` section
-   - Has >= 2 `- [ ]` acceptance criteria lines
-5. **`formatTemplatesForPrompt()` output**: Verify the one-line summary for each template is useful for agent decision-making (includes meaningful placeholder names).
-
-`depends_on: [T1, T2, T3, T4, T5]`
-
----
-
-### T7: Build verification
+### T6: Build verification
 
 **File:** N/A
-**What:** Run `cd mcp-server && npm run build` and confirm zero errors.
 
-`depends_on: [T6]`
+**What:** Run `cd mcp-server && npm run build` and confirm zero TypeScript compilation errors after T1, T2, T3 changes.
 
-## 4. Correctness Risks
+**Acceptance criteria:**
+- `npm run build` exits with code 0
+- No new TypeScript errors introduced
 
-### Risk 1: Placeholder name mismatch between descriptionTemplate and placeholders array
+`depends_on: [T1, T2, T3, T5]`
 
-**Severity:** High (causes `expandTemplate()` to return unresolved placeholders or miss required validation)
+---
 
-**How it goes wrong:** A template has `{{implementationFile}}` in the description but lists the placeholder as `implFile` in the array, or vice versa.
+## 3. Dependency Graph
 
-**Mitigation:** 
-- Use a consistent naming convention across all templates: camelCase, descriptive, no abbreviations
-- T6 includes a manual cross-reference check
-- The `expandTemplate()` function already catches unresolved placeholders at runtime, but catching at implementation time is better
+```
+T1 (profileRepo allSettled)              depends_on: []
+T2 (scanRepo fallback guard)            depends_on: [T1]   # imports createEmptyRepoProfile from T1's file
+T3 (ccc query allSettled)               depends_on: []
+T5 (AGENTS.md)                          depends_on: []
+T6 (build verification)                 depends_on: [T1, T2, T3, T5]
+```
 
-### Risk 2: Example descriptions containing unresolved placeholders
+**Parallelization:** T1, T3, and T5 can execute in parallel. T2 must wait for T1 (it imports the new `createEmptyRepoProfile` function). T6 runs last.
 
-**Severity:** Medium (examples are shown in prompts; unresolved placeholders confuse agents)
+```
+         ┌──── T1 ────┐
+         │             ▼
+    ─────┤         ── T2 ──┐
+         │                 │
+         ├──── T3 ────────►├──── T6
+         │                 │
+         └──── T5 ────────►┘
+```
 
-**How it goes wrong:** Copy-pasting the template and forgetting to substitute one placeholder in the example.
+## 4. Risk Analysis
 
-**Mitigation:**
-- Write examples by hand from the expanded form, not by copy-pasting the template
-- T6 includes a regex check for `{{...}}` in example descriptions
+### Risk 1: `Promise.allSettled` changes observable behavior of `profileRepo` callers
 
-### Risk 3: Templates that fail hygiene validation when expanded
+**Severity:** Medium
 
-**Severity:** Medium (beads created from these templates would be flagged by `validateBeads()`)
+**How it goes wrong:** Callers that currently rely on `profileRepo` throwing (to trigger their own fallback logic) would silently receive partial profiles instead.
 
-**How it goes wrong:** A template produces a description that matches the `raw-template-marker`, `template-shorthand`, or `unresolved-placeholder` patterns in `beads.ts:474-509`.
+**Analysis:** There are exactly two callers of `profileRepo`:
+1. `builtinScanProvider.scan` (scan.ts:39) — calls `profileRepo` and wraps result in `createBuiltinScanResult`. Currently, if `profileRepo` throws, this provider's `scan` method throws, which is caught by `scanRepo`. After T1, `profileRepo` won't throw, so `builtinScanProvider.scan` always succeeds with a potentially partial profile. This is **better** behavior — a partial profile is more useful than no profile.
+2. `cccScanProvider.scan` (scan.ts:57) — calls `profileRepo` in `Promise.all` alongside `collectCccCodebaseAnalysis`. If `profileRepo` doesn't throw, the `Promise.all` only fails on ccc issues, which is the correct behavior.
 
-**Mitigation:**
-- Avoid any text in templates containing `[use template:`, `see template`, `use the template`
-- Ensure `### Files:` section uses the exact heading format expected by `extractArtifacts()` (`beads.ts:292-316`): `### Files:` on its own line, followed by `- path/to/file` bullet lines
-- Include >= 2 `- [ ]` acceptance criteria to avoid `template-missing-structure`
+**Verdict:** The behavioral change is strictly positive. No callers are harmed.
 
-### Risk 4: Acceptance criteria that are vague or untestable
-
-**Severity:** Medium (undermines the purpose of templates)
-
-**How it goes wrong:** Criteria like "Code is clean" or "Everything works" -- not actionable for a sub-agent.
-
-**Mitigation:**
-- Each criterion must reference a concrete, verifiable action (run tests, measure performance, check file exists)
-- Review each criterion against the question: "Could a CI check verify this?"
-
-### Risk 5: `filePatterns` that don't match the `extractArtifacts()` regex
-
-**Severity:** Low (filePatterns are informational, not used by extractArtifacts)
-
-**How it goes wrong:** `extractArtifacts()` (`beads.ts:292-316`) only detects paths starting with `src/`, `lib/`, `test/`, `tests/`, `dist/`, `docs/`. If a template's `### Files:` section lists files outside these prefixes, they won't be detected for file-overlap checks.
-
-**Mitigation:**
-- All template examples should use paths starting with recognized prefixes
-- Document in the template's `dependencyHints` if files outside standard prefixes are expected
-
-### Risk 6: Template IDs colliding with future br CLI conventions
+### Risk 2: Empty profile misleads downstream planning
 
 **Severity:** Low
 
-**Mitigation:** Use descriptive kebab-case IDs that clearly describe the bead shape. The current convention (`add-api-endpoint`, `refactor-module`, `add-tests`) uses verb-noun patterns. New templates follow the same pattern.
+**How it goes wrong:** If all profiler collectors fail and return defaults, the profile has `languages: []`, `frameworks: []`, etc. The discovery/planning phase might generate unhelpful recommendations for an "empty" repo.
 
-## 5. Acceptance Criteria
+**Mitigation:** The `ScanResult` carries `fallback.used === true` and `sourceMetadata.warnings` describing what failed. Downstream consumers can check these signals. The alternative (no scan result at all) is strictly worse.
 
-For the overall task:
+### Risk 3: TypeScript type narrowing with `Promise.allSettled`
 
-- [ ] `BUILTIN_TEMPLATES` array contains exactly 8 templates (3 existing + 5 new)
-- [ ] All 5 new templates conform to the `BeadTemplate` TypeScript interface
-- [ ] `npm run build` in `mcp-server/` succeeds with zero errors
-- [ ] Every `{{placeholder}}` in each template's `descriptionTemplate` has a corresponding entry in `placeholders[]` with `name`, `description`, `example`, and `required: true`
-- [ ] Every entry in `placeholders[]` is referenced at least once in `descriptionTemplate`
-- [ ] Each template has exactly one entry in `examples[]` with a fully-expanded `description` (zero `{{...}}` tokens)
-- [ ] Each template's example `description` includes a `### Files:` section with at least one file path
-- [ ] Each template's example `description` includes at least 3 `- [ ]` acceptance criteria lines
-- [ ] No template description or example contains text matching `validateBeads()` hygiene patterns: `[use template:`, `see template`, `use the template`, `{{word}}`
-- [ ] `formatTemplatesForPrompt()` produces a coherent one-line entry for each of the 8 templates
-- [ ] Each template's `acceptanceCriteria` array has at least 3 entries that are specific and verifiable
-- [ ] Each template's `dependencyHints` field is present and provides actionable guidance
+**Severity:** Low
 
-Per-template acceptance:
+**How it goes wrong:** `Promise.allSettled` returns `PromiseSettledResult<T>[]` which requires type narrowing via `.status === "fulfilled"` checks. TypeScript is strict about this, and incorrect narrowing causes compilation errors.
 
-| Template | Key correctness check |
-|---|---|
-| `fix-bug` | Description requires root cause and regression test, not just symptom description |
-| `add-documentation` | Description requires target audience and source file reference |
-| `improve-performance` | Description requires measurable baseline and goal |
-| `add-integration` | Description requires both systems and interface contract |
-| `update-configuration` | Description requires migration notes and validation |
+**Mitigation:** The plan specifies exact type guard patterns. The build verification step (T6) catches any type errors.
 
-## 6. Dependency Graph
+### Risk 4: AGENTS.md contains stale information
 
-```
-T1 (fix-bug)           depends_on: []
-T2 (add-documentation) depends_on: []
-T3 (improve-performance) depends_on: []
-T4 (add-integration)   depends_on: []
-T5 (update-configuration) depends_on: []
-T6 (consistency verification) depends_on: [T1, T2, T3, T4, T5]
-T7 (build verification) depends_on: [T6]
-```
+**Severity:** Low
 
-T1-T5 are fully parallel -- each template is an independent addition to the `BUILTIN_TEMPLATES` array. T6 verifies all templates together. T7 confirms the build.
+**How it goes wrong:** Project evolves but AGENTS.md is not updated.
 
-## Appendix: Template Field Inventory
+**Mitigation:** AGENTS.md states only structural facts (build commands, file conventions) that change infrequently. The "no test suite" note should be updated when tests are added.
 
-For reference, here is every field that must be present on each template, with the source constraint:
+### Risk 5: Nested try/catch in scanRepo reduces debuggability
 
-| Field | Source | Constraint |
+**Severity:** Low
+
+**How it goes wrong:** Two layers of error handling make it harder to trace which error caused the fallback.
+
+**Mitigation:** The original error is preserved in `fallback.error`, and the profiler error is appended to `sourceMetadata.warnings`. Both errors are fully visible in the `ScanResult` without any information loss.
+
+---
+
+## 5. Summary of All Changes
+
+| File | Change | Lines affected |
 |---|---|---|
-| `id` | `BeadTemplate.id` | Unique string, kebab-case, used as lookup key in `getTemplateById()` and `expandTemplate()` |
-| `label` | `BeadTemplate.label` | Human-readable, shown in UI |
-| `summary` | `BeadTemplate.summary` | One line, used by `formatTemplatesForPrompt()` |
-| `descriptionTemplate` | `BeadTemplate.descriptionTemplate` | Contains `{{placeholder}}` tokens matching `PLACEHOLDER_PATTERN` |
-| `placeholders` | `BeadTemplate.placeholders` | Array of `{ name, description, example, required }` |
-| `acceptanceCriteria` | `BeadTemplate.acceptanceCriteria` | `string[]`, >= 3 entries recommended |
-| `filePatterns` | `BeadTemplate.filePatterns` | Glob patterns, informational |
-| `dependencyHints` | `BeadTemplate.dependencyHints` | Optional string, but should be present |
-| `examples` | `BeadTemplate.examples` | Array of `{ description }`, >= 1 entry, fully expanded |
+| `mcp-server/src/profiler.ts` | `Promise.all` → `Promise.allSettled` + default extraction; wrap `collectBestPracticesGuides` in try/catch; add `createEmptyRepoProfile` export | Lines 8-52 (profileRepo body), new function at end |
+| `mcp-server/src/scan.ts` | Nested try/catch in `scanRepo` catch block; import `createEmptyRepoProfile` | Lines 80-91, line 2 |
+| `mcp-server/src/scan.ts` | `Promise.all` → `Promise.allSettled` in `collectCccCodebaseAnalysis`; filter fulfilled results; throw if all fail | Lines 178-237 |
+| `AGENTS.md` | New file | N/A |
+
+**Total scope:** ~80 lines changed across 2 existing files + 1 new file.
