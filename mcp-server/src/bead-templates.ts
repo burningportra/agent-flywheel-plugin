@@ -305,6 +305,57 @@ Acceptance criteria:
     ],
   }),
   defineTemplate({
+    id: "fix-bug",
+    label: "Fix bug",
+    summary: "Diagnose and fix a specific defect with a regression test.",
+    descriptionTemplate: `Fix the {{bugSummary}} bug in {{moduleName}}. Write a regression test first, then apply the minimal code change that resolves the defect without breaking existing behavior.
+
+Why this bead exists:
+- {{bugSymptom}}
+- The fix must include a regression test so this defect cannot silently return.
+
+Acceptance criteria:
+- [ ] Write a failing test that reproduces the {{bugSummary}} bug before changing implementation code.
+- [ ] Apply the minimal code change in {{implementationFile}} that makes the test pass without regressing other tests.
+- [ ] Leave a comment in {{testFile}} explaining what scenario the regression test covers.
+
+### Files:
+- {{implementationFile}}
+- {{testFile}}`,
+    placeholders: [
+      { name: "bugSummary", description: "Short name for the bug, used in commit messages and test names", example: "crash when user list is empty", required: true },
+      { name: "moduleName", description: "Module or function where the defect lives", example: "readyBeads filter logic", required: true },
+      { name: "bugSymptom", description: "Observable symptom: what the user or system experiences", example: "br ready crashes with TypeError on repos with no open beads", required: true },
+      { name: "implementationFile", description: "File containing the defect", example: "src/beads.ts", required: true },
+      { name: "testFile", description: "Test file for the regression test", example: "src/beads.test.ts", required: true },
+    ],
+    acceptanceCriteria: [
+      "Write a failing test that reproduces the bug before changing implementation code.",
+      "Apply the minimal code change that makes the test pass without regressing other tests.",
+      "Leave a comment in the test explaining what scenario it covers.",
+    ],
+    filePatterns: ["src/**/*.ts", "src/**/*.test.ts"],
+    dependencyHints: "fix-bug beads are usually independent. If the bug is in shared infrastructure, other beads that use that infrastructure should depend on this one.",
+    examples: [
+      {
+        description: `Fix the null reference in payment total calculation bug in payment gateway charge handler. Write a regression test first, then apply the minimal code change that resolves the defect without breaking existing behavior.
+
+Why this bead exists:
+- Charges with a zero-item cart throw a TypeError: Cannot read properties of null (reading 'reduce') because the line items array is null instead of empty when the cart is cleared before checkout completes.
+- The fix must include a regression test so this defect cannot silently return.
+
+Acceptance criteria:
+- [ ] Write a failing test that reproduces the null reference in payment total calculation bug before changing implementation code.
+- [ ] Apply the minimal code change in src/payments/charge-handler.ts that makes the test pass without regressing other tests.
+- [ ] Leave a comment in src/payments/charge-handler.test.ts explaining what scenario the regression test covers.
+
+### Files:
+- src/payments/charge-handler.ts
+- src/payments/charge-handler.test.ts`,
+      },
+    ],
+  }),
+  defineTemplate({
     id: "add-documentation",
     label: "Add documentation",
     summary: "Write or update documentation for a feature or API.",
