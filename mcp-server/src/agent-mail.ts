@@ -1,11 +1,4 @@
-/**
- * Minimal exec function signature — avoids depending on the full ExtensionAPI.
- */
-export type ExecFn = (
-  cmd: string,
-  args: string[],
-  opts?: { timeout?: number; cwd?: string }
-) => Promise<{ code: number; stdout: string; stderr: string }>;
+import type { ExecFn } from "./exec.js";
 
 export const AGENT_MAIL_URL = "http://127.0.0.1:8765";
 

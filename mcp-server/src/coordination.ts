@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs";
 import { join } from "path";
 import type { CoordinationMode } from "./types.js";
-import type { ExecFn } from "./agent-mail.js";
+import type { ExecFn } from "./exec.js";
 import { brExec, resilientExec } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
 
