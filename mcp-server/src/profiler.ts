@@ -173,6 +173,7 @@ async function collectKeyFiles(
 ): Promise<Record<string, string>> {
   const paths = [
     "README.md", "README",
+    "CLAUDE.md", "AGENTS.md",
     "package.json", "Cargo.toml", "pyproject.toml", "go.mod",
     "Gemfile", "Makefile", "Dockerfile", "docker-compose.yml",
     ".github/workflows/ci.yml", ".github/workflows/ci.yaml",
