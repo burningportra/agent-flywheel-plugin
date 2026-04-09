@@ -2,10 +2,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, Bead } from '../types.js';
 import { computeConvergenceScore, pickRefinementModel, slugifyGoal } from './shared.js';
+import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 
 interface ApproveArgs {
   cwd: string;
-  action: 'start' | 'polish' | 'reject' | 'advanced';
+  action: 'start' | 'polish' | 'reject' | 'advanced' | 'git-diff-review';
   advancedAction?: 'fresh-agent' | 'same-agent' | 'blunder-hunt' | 'dedup' | 'cross-model' | 'graph-fix';
 }
 
@@ -136,7 +137,13 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     ? `\nPolish history: ${state.polishChanges.map((n, i) => `R${i + 1}: ${n} change${n !== 1 ? 's' : ''}`).join(', ')}`
     : '';
   const convergenceInfo = convergenceScore !== undefined
-    ? `\nConvergence: ${(convergenceScore * 100).toFixed(0)}%${convergenceScore >= 0.90 ? ' (diminishing returns — ready to start)' : ''}`
+    ? `\n📈 Convergence: ${(convergenceScore * 100).toFixed(0)}%${
+        convergenceScore >= 0.75
+          ? ' ✅ — diminishing returns, ready to implement'
+          : convergenceScore >= 0.50
+          ? ' — still converging, another round recommended'
+          : ' — low convergence, more polishing needed'
+      }`
     : '';
   const roundHeader = round > 0
     ? `\nPolish round ${round}${changesInfo}${convergenceInfo}${state.polishConverged ? '\nSteady-state reached.' : ''}`
@@ -202,6 +209,21 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     };
   }
 
+  if (args.action === 'git-diff-review') {
+    state.phase = 'planning';
+    state.planRefinementRound = planRound + 1;
+    saveState(state);
+
+    const reviewPrompt = planGitDiffReviewPrompt(plan);
+    const integrationHint = `After collecting the reviewer's proposed revisions, call \`orch_approve_beads\` again — the tool will then prompt you to integrate them using \`planIntegrationPrompt\`.`;
+    return {
+      content: [{
+        type: 'text',
+        text: `**📝 Git-diff review pass (round ${planRound + 1})**\n\nSpawn a fresh reviewer agent with this prompt:\n\n---\n${reviewPrompt}\n---\n\nCollect the reviewer's proposed changes. Then spawn an integration agent with:\n\`\`\`\n${planIntegrationPrompt('<original plan from ' + planPath + '>', '<reviewer proposed revisions>')}\n\`\`\`\n\nHave the integration agent save the merged plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\n${sizeGate}\n\n${integrationHint}`,
+      }],
+    };
+  }
+
   if (args.action === 'polish') {
     state.phase = 'planning';
     state.planRefinementRound = planRound + 1;
@@ -211,7 +233,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     return {
       content: [{
         type: 'text',
-        text: `**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\n${sizeGate}`,
+        text: `**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\nAlternatively, use \`action: "git-diff-review"\` for a git-diff style review cycle that proposes targeted changes with rationale.\n\n${sizeGate}`,
       }],
     };
   }
@@ -311,7 +333,9 @@ async function handleStart(
   saveState(state);
 
   const convergenceNote = convergenceScore !== undefined
-    ? `\nConvergence: ${(convergenceScore * 100).toFixed(0)}%`
+    ? `\n📈 Convergence: ${(convergenceScore * 100).toFixed(0)}%${
+        convergenceScore >= 0.75 ? ' ✅' : convergenceScore >= 0.50 ? ' (converging)' : ' (low)'
+      }`
     : '';
 
   if (ready.length === 1) {

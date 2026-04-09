@@ -92,7 +92,7 @@ const TOOLS = [
   },
   {
     name: "orch_plan",
-    description: "Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. If planContent is provided, stores it and transitions to bead creation.",
+    description: "Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. Provide planFile (preferred) or planContent to register a completed plan and transition to bead creation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -103,9 +103,13 @@ const TOOLS = [
           default: "standard",
           description: "standard=single-model plan prompt, deep=multi-model agent configs",
         },
+        planFile: {
+          type: "string",
+          description: "Path (relative to cwd) of an already-written plan file on disk. Preferred over planContent for large plans — avoids passing large payloads over stdio.",
+        },
         planContent: {
           type: "string",
-          description: "Pre-synthesized plan content from parallel Plan agents. If provided, stored and used instead of generating a new plan.",
+          description: "Pre-synthesized plan content (inline). For large plans, write to disk first and use planFile instead to prevent stdio stalling.",
         },
       },
       required: ["cwd"],
@@ -120,8 +124,8 @@ const TOOLS = [
         cwd: { type: "string", description: "Project working directory" },
         action: {
           type: "string",
-          enum: ["start", "polish", "reject", "advanced"],
-          description: "start=approve and launch implementation, polish=refine beads, reject=stop, advanced=use advancedAction",
+          enum: ["start", "polish", "reject", "advanced", "git-diff-review"],
+          description: "start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle",
         },
         advancedAction: {
           type: "string",
