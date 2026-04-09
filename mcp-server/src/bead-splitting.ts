@@ -40,7 +40,9 @@ export interface SplitProposal {
 
 /** Escape characters that are dangerous inside double-quoted shell strings. */
 function shellEscape(s: string): string {
-  return s.replace(/[\\"$`!]/g, "\\$&");
+  return s
+    .replace(/[\n\r]/g, " ")          // newlines/carriage returns become spaces
+    .replace(/[\\"$`!]/g, "\\$&");    // escape shell metacharacters
 }
 
 // ─── Bottleneck Detection ───────────────────────────────────

@@ -230,14 +230,15 @@ export class SwarmTender {
 
           if (canNudge && nudgesThisCycle < (this.config.maxNudgesPerPoll ?? 3)) {
             const agentName = path.basename(agent.worktreePath);
+            nudgesThisCycle++; // increment synchronously before async call to enforce budget
             this.nudgeStuckAgent(agentName, agent.worktreePath)
               .then(() => {
                 agent.nudgesSent++;
                 agent.lastNudgedAt = now;
-                nudgesThisCycle++;
                 this.log.warn("Nudged stuck agent", { stepIndex: agent.stepIndex, nudgesSent: agent.nudgesSent });
               })
               .catch(err => {
+                nudgesThisCycle--; // rollback on failure
                 process.stderr.write(`[tender] Nudge delivery failed for step ${agent.stepIndex}: ${err instanceof Error ? err.message : String(err)}\n`);
               });
           } else if (shouldKill) {
