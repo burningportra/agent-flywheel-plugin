@@ -479,3 +479,16 @@ export interface HitMeResult {
   text: string;
   diff: string;
 }
+
+// ─── Agent Mail RPC Result ────────────────────────────────────
+
+export type AgentMailResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: AgentMailError };
+
+export interface AgentMailError {
+  kind: "network" | "timeout" | "parse" | "rpc_error" | "empty_response";
+  message: string;
+  code?: number;
+  stderr?: string;
+}
