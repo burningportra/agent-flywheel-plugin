@@ -183,7 +183,7 @@ async function getAgentMailProjectSlug(exec: ExecFn, cwd: string): Promise<strin
   return typeof slug === "string" && slug.length > 0 ? slug : null;
 }
 
-function matchesReservationPath(file: string, reservation: AgentMailReservation): boolean {
+export function matchesReservationPath(file: string, reservation: AgentMailReservation): boolean {
   const rawPattern = reservation.path_pattern ?? reservation.path;
   if (typeof rawPattern !== "string" || rawPattern.length === 0) return false;
   const normalized = rawPattern.replace(/^\.\//, "");
@@ -201,7 +201,7 @@ function matchesReservationPath(file: string, reservation: AgentMailReservation)
   return file === normalized;
 }
 
-function normalizeReservations(payload: any): AgentMailReservation[] {
+export function normalizeReservations(payload: any): AgentMailReservation[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.reservations)) return payload.reservations;
   if (Array.isArray(payload?.items)) return payload.items;
