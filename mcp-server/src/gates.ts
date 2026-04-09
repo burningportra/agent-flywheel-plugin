@@ -5,6 +5,7 @@ import { reflectMemory } from "./memory.js";
 import { readBeads, extractArtifacts as extractBeadArtifacts } from "./beads.js";
 import { agentMailTaskPreamble } from "./agent-mail.js";
 import { detectUbs } from "./coordination.js";
+import { resilientExec } from "./cli-exec.js";
 import { getDomainChecklist, formatDomainReviewItems } from "./domain-knowledge.js";
 
 export async function runGuidedGates(
@@ -121,7 +122,7 @@ export async function runGuidedGates(
       content: [
         {
           type: "text",
-          text: `## Fresh Self-Review - Round ${round}\n\nCarefully re-read ALL new and modified code with fresh eyes. For each file changed, work through these 4 questions:\n\n1. **Is it correct?** Does the implementation actually do what the bead description says it should?\n2. **Are edge cases handled?** Empty inputs, concurrent access, error paths, boundary conditions - what breaks under stress?\n3. **Are there similar issues elsewhere?** If you found a bug, search for the same pattern in other files. Bugs travel in packs.\n4. **Was the approach right?** Sometimes the implementation is correct but there's a simpler or more robust alternative. Consider it now, not after review.\n\nFix everything you find. If you find a bug, do the pattern search (#3) before moving on.\n\nFiles changed:\n${allArtifacts.map((a) => `- ${a}`).join("\n")}${callbackHint}${regressionHint}`,
+          text: `## Fresh Self-Review - Round ${round}\n\nCarefully re-read ALL new and modified code with fresh eyes. For each file changed, work through these 4 questions:\n\n1. **Is it correct?** Does the implementation actually do what the bead description says it should?\n2. **Are edge cases handled?** Empty inputs, concurrent access, error paths, boundary conditions - what breaks under stress?\n3. **Are there similar issues elsewhere?** If you found a bug, search for the same pattern in other files. Bugs travel in packs.\n4. **Was the approach right?** Sometimes the implementation is correct but there's a simpler or more robust alternative. Consider it now, not after review.\n\nFix everything you find. If you find a bug, do the pattern search (#3) before moving on.\n\nFiles changed:\n${allArtifacts.map((a) => `- ${a}`).join("\n")}\n\nUse ultrathink.${callbackHint}${regressionHint}`,
         },
       ],
       details: { iterating: true, round, selfReview: true },
@@ -138,7 +139,7 @@ export async function runGuidedGates(
     const peerAgents = [
       {
         name: `peer-bugs-r${round}`,
-        task: `${peerPreamble(`peer-bugs-r${round}`)}Peer reviewer (round ${round}). Review code written by your fellow agents. Check for issues, bugs, errors, inefficiencies, security problems, reliability issues. Diagnose root causes using first-principle analysis. Don't restrict to latest commits - cast a wider net and go super deep!\n\nGoal: ${goal}\nFiles: ${allArtifacts.join(", ")}${domainReviewExtras}\n\nFix issues directly using the edit tool. Your changes persist to disk.\n\ncd ${cwd}`,
+        task: `${peerPreamble(`peer-bugs-r${round}`)}Peer reviewer (round ${round}). Review code written by your fellow agents. Check for issues, bugs, errors, inefficiencies, security problems, reliability issues. Diagnose root causes using first-principle analysis. Don't restrict to latest commits - cast a wider net and go super deep!\n\nGoal: ${goal}\nFiles: ${allArtifacts.join(", ")}${domainReviewExtras}\n\nFix issues directly using the edit tool. Your changes persist to disk.\n\nUse ultrathink.\n\ncd ${cwd}`,
       },
       {
         name: `peer-polish-r${round}`,
@@ -189,12 +190,24 @@ export async function runGuidedGates(
         details: { iterating: true, round, ubsScan: true, skipped: true },
       };
     }
+    const ubsResult = await resilientExec(exec, "ubs", allArtifacts, {
+      cwd, timeout: 60_000, maxRetries: 0,
+    });
+    const ubsClean = ubsResult.ok;
+    const ubsOutput = ubsResult.ok
+      ? (ubsResult.value.stdout || ubsResult.value.stderr || "(no output)")
+      : ("error" in ubsResult && ubsResult.error
+          ? String((ubsResult.error as any).stdout || (ubsResult.error as any).stderr || ubsResult.error)
+          : "(no output)");
+    const ubsSection = ubsClean
+      ? `\n\n✅ **UBS scan passed** — no issues found.`
+      : `\n\n❌ **UBS found issues — fix before committing:**\n\`\`\`\n${ubsOutput}\n\`\`\`\n\nFix all issues, then call \`orch_review\` with beadId "__gates__" and verdict "fail" to re-run this gate.`;
     return {
       content: [{
         type: "text",
-        text: `## UBS Scan - Round ${round}\n\nRun UBS on ALL changed files before committing.\n\n\`\`\`bash\nubs ${allArtifacts.join(" ")}\n\`\`\`\n\nFix **every issue** UBS reports - security holes, supply chain vulnerabilities, runtime stability issues, and anti-patterns that linters miss.\n\nDo not proceed to commit until UBS reports clean.${callbackHint}${regressionHint}`,
+        text: `## UBS Scan - Round ${round}${ubsSection}${callbackHint}${regressionHint}`,
       }],
-      details: { iterating: true, round, ubsScan: true },
+      details: { iterating: true, round, ubsScan: true, ubsClean },
     };
   }
 
@@ -230,7 +243,7 @@ export async function runGuidedGates(
       content: [
         {
           type: "text",
-          text: `## Commit - Round ${round}\n\nBased on your knowledge of the project, commit all changed files now in a series of logically connected groupings with super detailed commit messages for each. Take your time to do it right.\n\nRules:\n- Group by logical change, NOT by file\n- Each commit should be independently understandable\n- Use conventional commit format: type(scope): description\n- First line <= 72 chars, then blank line, then detailed body\n- Body explains WHY, not just WHAT\n- Don't edit the code at all\n- Don't commit obviously ephemeral files\n- Push after committing${callbackHint}`,
+          text: `## Commit - Round ${round}\n\nBased on your knowledge of the project, commit all changed files now in a series of logically connected groupings with super detailed commit messages for each. Take your time to do it right.\n\nRules:\n- Group by logical change, NOT by file\n- Each commit should be independently understandable\n- Use conventional commit format: type(scope): description\n- First line <= 72 chars, then blank line, then detailed body\n- Body explains WHY, not just WHAT\n- Don't edit the code at all\n- Don't commit obviously ephemeral files\n- Push after committing\n\nUse ultrathink.${callbackHint}`,
         },
       ],
       details: { iterating: true, round, committing: true },
