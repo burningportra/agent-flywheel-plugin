@@ -262,7 +262,7 @@ describe('runApprove', () => {
   it('returns error for unknown advancedAction', async () => {
     const { ctx } = makeCtx();
 
-    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced', advancedAction: 'nope' });
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced', advancedAction: 'nope' as any });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Unknown advancedAction');
