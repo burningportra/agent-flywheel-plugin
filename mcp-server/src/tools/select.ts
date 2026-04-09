@@ -1,10 +1,5 @@
-import type { ToolContext, McpToolResult } from '../types.js';
+import type { ToolContext, McpToolResult, SelectArgs } from '../types.js';
 import { beadCreationPrompt, formatRepoProfile } from './shared.js';
-
-interface SelectArgs {
-  cwd: string;
-  goal: string;
-}
 
 /**
  * orch_select — Set the selected goal and transition to planning phase.

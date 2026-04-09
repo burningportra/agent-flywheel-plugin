@@ -1,10 +1,4 @@
-import type { ToolContext, McpToolResult, Bead, BeadResult } from '../types.js';
-
-interface ReviewArgs {
-  cwd: string;
-  beadId: string;
-  action: 'hit-me' | 'looks-good' | 'skip';
-}
+import type { ToolContext, McpToolResult, Bead, BeadResult, ReviewArgs } from '../types.js';
 
 /**
  * orch_review — Submit implementation work for review.

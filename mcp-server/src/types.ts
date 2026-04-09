@@ -473,6 +473,16 @@ export type McpToolResult = {
   isError?: boolean;
 };
 
+// ─── Tool Arg Interfaces ──────────────────────────────────────
+
+export interface ProfileArgs { cwd: string; goal?: string }
+export interface DiscoverArgs { cwd: string; ideas: CandidateIdea[] }
+export interface SelectArgs { cwd: string; goal: string }
+export interface PlanArgs { cwd: string; mode?: "standard" | "deep"; planContent?: string; planFile?: string }
+export interface ApproveArgs { cwd: string; action: "start" | "polish" | "reject" | "advanced" | "git-diff-review"; advancedAction?: string }
+export interface ReviewArgs { cwd: string; beadId: string; action: "hit-me" | "looks-good" | "skip" }
+export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store"; content?: string }
+
 // ─── Orchestrator Context (shared runtime for extracted modules) ──
 
 export interface HitMeResult {

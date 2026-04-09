@@ -1,10 +1,5 @@
-import type { ToolContext, McpToolResult, OrchestratorState, RepoProfile, ScanResult } from '../types.js';
+import type { ToolContext, McpToolResult, OrchestratorState, RepoProfile, ScanResult, ProfileArgs } from '../types.js';
 import { formatRepoProfile } from './shared.js';
-
-interface ProfileArgs {
-  cwd: string;
-  goal?: string;
-}
 
 /**
  * orch_profile — Scan the current repo and build a profile.

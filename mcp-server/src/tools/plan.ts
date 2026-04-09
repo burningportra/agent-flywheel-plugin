@@ -1,16 +1,9 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { ToolContext, McpToolResult } from '../types.js';
+import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
 import { slugifyGoal, pickRefinementModel, DEEP_PLAN_MODELS } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
-
-interface PlanArgs {
-  cwd: string;
-  mode?: 'standard' | 'deep';
-  planContent?: string;
-  planFile?: string; // Path to already-written plan file (avoids passing large content over stdio)
-}
 
 /**
  * orch_plan — Generate a plan document for the selected goal.
