@@ -275,13 +275,21 @@ Once all beads are reviewed and closed, perform a clean session wrap-up **before
 ### 1. Review bead commits
 Run `git log --oneline` to show the bead commits from this session. Propose logical groupings to the user — e.g. "3 beads touched the same subsystem; want me to squash them?" Only squash if the user confirms.
 
-### 2. Commit any stray tracked/untracked files
+### 2. Update documentation
+Before committing anything, update these files to reflect what shipped:
+
+- **`AGENTS.md`** — update the Hard Constraints, Testing, and any module-level guidance that changed (e.g. new logger convention, new test runner, new CLI tools). Sub-agents read this; stale guidance causes bugs.
+- **`README.md`** — update the architecture map (add/remove files), key design decisions (document new patterns), and the models table if routing changed.
+
+Only update sections that are actually affected by this session's changes. Do not rewrite unchanged sections.
+
+### 3. Commit any stray tracked/untracked files
 Check `git status` for uncommitted files (plan docs, skill updates, config changes). Commit them in logical groups:
 - Plan artifacts: `docs: add session plan artifact for <goal>`
 - Skills added/updated: `feat(skills): ...`
 - Config or gitignore changes: `chore: ...`
 
-### 3. Version bump
+### 4. Version bump
 Determine the correct semver bump based on what shipped:
 - **patch** (x.x.X): bug fixes, stale comment cleanup, doc-only changes
 - **minor** (x.X.0): new features or modules (new tool, new logger, new config fields)
@@ -289,16 +297,16 @@ Determine the correct semver bump based on what shipped:
 
 Ask the user to confirm the bump level if uncertain. Update `mcp-server/package.json` version field.
 
-### 4. Rebuild
+### 5. Rebuild
 Run `npm run build` in `mcp-server/` to compile the bumped version into `dist/`.
 
-### 5. Commit the version bump
+### 6. Commit the version bump
 ```
 git add mcp-server/package.json
 git commit -m "chore: bump version to X.Y.Z — <one-line summary of what shipped>"
 ```
 
-### 6. Show final log
+### 7. Show final log
 `git log --oneline -10` so the user can see the clean commit stack before moving on.
 
 ## Step 10: Store session learnings
