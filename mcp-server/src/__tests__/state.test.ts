@@ -18,32 +18,32 @@ describe('loadState', () => {
     expect(state).toEqual(createInitialState());
   });
 
-  it('returns initial state when checkpoint is in "idle" phase', () => {
+  it('returns initial state when checkpoint is in "idle" phase', async () => {
     const idle: OrchestratorState = { ...createInitialState(), phase: 'idle' };
-    saveState(testDir, idle);
+    await saveState(testDir, idle);
     expect(loadState(testDir)).toEqual(createInitialState());
   });
 
-  it('returns initial state when checkpoint is in "complete" phase', () => {
+  it('returns initial state when checkpoint is in "complete" phase', async () => {
     const complete: OrchestratorState = { ...createInitialState(), phase: 'complete' };
-    saveState(testDir, complete);
+    await saveState(testDir, complete);
     expect(loadState(testDir)).toEqual(createInitialState());
   });
 
-  it('restores state when checkpoint is in "profiling" phase', () => {
+  it('restores state when checkpoint is in "profiling" phase', async () => {
     const profiling: OrchestratorState = { ...createInitialState(), phase: 'profiling' };
-    saveState(testDir, profiling);
+    await saveState(testDir, profiling);
     const restored = loadState(testDir);
     expect(restored.phase).toBe('profiling');
   });
 
-  it('restores state when checkpoint is in "implementing" phase', () => {
+  it('restores state when checkpoint is in "implementing" phase', async () => {
     const implementing: OrchestratorState = {
       ...createInitialState(),
       phase: 'implementing',
       selectedGoal: 'build the thing',
     };
-    saveState(testDir, implementing);
+    await saveState(testDir, implementing);
     const restored = loadState(testDir);
     expect(restored.phase).toBe('implementing');
     expect(restored.selectedGoal).toBe('build the thing');
@@ -53,7 +53,7 @@ describe('loadState', () => {
 // ─── saveState + loadState round-trip ──────────────────────────
 
 describe('saveState + loadState round-trip', () => {
-  it('round-trips a state with selectedGoal', () => {
+  it('round-trips a state with selectedGoal', async () => {
     const state: OrchestratorState = {
       ...createInitialState(),
       phase: 'planning',
@@ -61,7 +61,7 @@ describe('saveState + loadState round-trip', () => {
       constraints: ['must be backward compatible'],
       iterationRound: 2,
     };
-    saveState(testDir, state);
+    await saveState(testDir, state);
     const restored = loadState(testDir);
     expect(restored.phase).toBe('planning');
     expect(restored.selectedGoal).toBe('add rate limiting');
@@ -69,7 +69,7 @@ describe('saveState + loadState round-trip', () => {
     expect(restored.iterationRound).toBe(2);
   });
 
-  it('round-trips bead-centric state fields', () => {
+  it('round-trips bead-centric state fields', async () => {
     const state: OrchestratorState = {
       ...createInitialState(),
       phase: 'reviewing',
@@ -79,7 +79,7 @@ describe('saveState + loadState round-trip', () => {
         'abc-123': { beadId: 'abc-123', status: 'success', summary: 'done' },
       },
     };
-    saveState(testDir, state);
+    await saveState(testDir, state);
     const restored = loadState(testDir);
     expect(restored.activeBeadIds).toEqual(['abc-123', 'def-456']);
     expect(restored.currentBeadId).toBe('abc-123');
@@ -90,9 +90,9 @@ describe('saveState + loadState round-trip', () => {
 // ─── clearState ────────────────────────────────────────────────
 
 describe('clearState', () => {
-  it('subsequent loadState returns initial state after clear', () => {
+  it('subsequent loadState returns initial state after clear', async () => {
     const state: OrchestratorState = { ...createInitialState(), phase: 'planning' };
-    saveState(testDir, state);
+    await saveState(testDir, state);
     expect(loadState(testDir).phase).toBe('planning');
 
     clearState(testDir);

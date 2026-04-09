@@ -9,6 +9,7 @@
 import { createHash } from "crypto";
 import { execSync } from "child_process";
 import { createLogger } from "./logger.js";
+import { VERSION } from "./version.js";
 
 const log = createLogger("checkpoint");
 import {
@@ -69,7 +70,7 @@ function getGitHead(cwd: string): string | undefined {
 // ─── Validation ───────────────────────────────────────────────
 
 export type ValidationResult =
-  | { valid: true }
+  | { valid: true; warnings?: string[] }
   | { valid: false; reason: string };
 
 /**
@@ -125,22 +126,44 @@ export function validateCheckpoint(envelope: unknown): ValidationResult {
     return { valid: false, reason: "state.phase is not a string" };
   }
 
-  return { valid: true };
+  // Collect non-fatal warnings
+  const warnings: string[] = [];
+
+  // Version mismatch warning — old checkpoints still load, but we warn
+  if (e.orchestratorVersion !== VERSION) {
+    warnings.push(
+      `Checkpoint was written by v${String(e.orchestratorVersion)}, current is v${VERSION}`
+    );
+  }
+
+  return warnings.length > 0 ? { valid: true, warnings } : { valid: true };
 }
 
 // ─── Write ────────────────────────────────────────────────────
 
+/** Per-cwd write serialization: maps cwd → tail of promise chain. */
+const writeLocks = new Map<string, Promise<void>>();
+
 /**
  * Atomically write a checkpoint to disk.
  * Uses write-to-tmp + rename for crash safety.
+ * Concurrent calls for the same cwd are serialized via an async queue.
  * Returns true if write succeeded, false otherwise.
  * Never throws.
  */
-export function writeCheckpoint(
+export async function writeCheckpoint(
   cwd: string,
   state: OrchestratorState,
   orchestratorVersion: string
-): boolean {
+): Promise<boolean> {
+  // Serialize writes to the same cwd
+  const prev = writeLocks.get(cwd) ?? Promise.resolve();
+  let resolve!: () => void;
+  const next = new Promise<void>((r) => { resolve = r; });
+  writeLocks.set(cwd, next);
+
+  await prev;
+
   try {
     const dir = checkpointDir(cwd);
     mkdirSync(dir, { recursive: true });
@@ -166,6 +189,12 @@ export function writeCheckpoint(
   } catch (err) {
     log.warn("checkpoint write failed", { err: err instanceof Error ? err.message : String(err) });
     return false;
+  } finally {
+    resolve();
+    // Clean up the lock entry if it's still pointing to this promise
+    if (writeLocks.get(cwd) === next) {
+      writeLocks.delete(cwd);
+    }
   }
 }
 
@@ -214,7 +243,8 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
     }
 
     const envelope = parsed as CheckpointEnvelope;
-    const warnings: string[] = [];
+    // Carry over any warnings from validation (e.g. version mismatch)
+    const warnings: string[] = validation.warnings ? [...validation.warnings] : [];
 
     // Check staleness
     const age = Date.now() - Date.parse(envelope.writtenAt);

@@ -1,9 +1,9 @@
 import { readCheckpoint, writeCheckpoint, clearCheckpoint } from './checkpoint.js';
 import { createInitialState, type OrchestratorState } from './types.js';
 import { createLogger } from './logger.js';
+import { VERSION } from './version.js';
 
 const log = createLogger("state");
-const VERSION = '2.0.0';
 
 export function loadState(cwd: string): OrchestratorState {
   const result = readCheckpoint(cwd);
@@ -14,8 +14,8 @@ export function loadState(cwd: string): OrchestratorState {
   return createInitialState();
 }
 
-export function saveState(cwd: string, state: OrchestratorState): void {
-  writeCheckpoint(cwd, state, VERSION);
+export function saveState(cwd: string, state: OrchestratorState): Promise<void> {
+  return writeCheckpoint(cwd, state, VERSION).then(() => undefined);
 }
 
 export function clearState(cwd: string): void {
