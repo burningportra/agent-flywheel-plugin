@@ -780,6 +780,10 @@ export async function registerOrchestratorAgent(exec: ExecFn, cwd: string, agent
  * Replaces bare ensureAgentMailProject() in orch_profile.
  */
 export async function agentMailStartSession(exec: ExecFn, cwd: string, agentName: string = 'Orchestrator'): Promise<any> {
+  const health = await checkAgentMailHealth();
+  if (!health.reachable) {
+    throw new Error(health.error ?? 'Agent Mail unreachable');
+  }
   return agentMailRPC(exec, 'macro_start_session', {
     human_key: cwd,
     program: 'claude-orchestrator',
