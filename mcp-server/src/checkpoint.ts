@@ -131,13 +131,16 @@ export function validateCheckpoint(envelope: unknown): ValidationResult {
 
 // ─── Write ────────────────────────────────────────────────────
 
+// Per-cwd write mutex — serializes concurrent writes via Promise chaining.
+const writeLocks = new Map<string, Promise<boolean>>();
+
 /**
  * Atomically write a checkpoint to disk.
  * Uses write-to-tmp + rename for crash safety.
  * Returns true if write succeeded, false otherwise.
  * Never throws.
  */
-export function writeCheckpoint(
+function writeCheckpointInner(
   cwd: string,
   state: OrchestratorState
 ): boolean {
@@ -167,6 +170,21 @@ export function writeCheckpoint(
     log.warn("checkpoint write failed", { err: err instanceof Error ? err.message : String(err) });
     return false;
   }
+}
+
+/**
+ * Serialize checkpoint writes per cwd via Promise chaining.
+ * Concurrent callers for the same cwd are queued; a failed write
+ * resolves to false without blocking subsequent writes.
+ */
+export async function writeCheckpoint(
+  cwd: string,
+  state: OrchestratorState
+): Promise<boolean> {
+  const prev = writeLocks.get(cwd) ?? Promise.resolve(true);
+  const next = prev.then(() => writeCheckpointInner(cwd, state)).catch(() => false);
+  writeLocks.set(cwd, next);
+  return next;
 }
 
 // ─── Read ─────────────────────────────────────────────────────

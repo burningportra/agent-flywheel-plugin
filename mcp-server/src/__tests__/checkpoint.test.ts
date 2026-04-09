@@ -116,33 +116,33 @@ describe('writeCheckpoint', () => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('writes file and returns true', () => {
+  it('writes file and returns true', async () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-write-'));
     const state = createInitialState();
-    const ok = writeCheckpoint(dir, state);
+    const ok = await writeCheckpoint(dir, state);
     expect(ok).toBe(true);
     expect(existsSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE))).toBe(true);
   });
 
-  it('creates the checkpoint directory if missing', () => {
+  it('creates the checkpoint directory if missing', async () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-mkdir-'));
-    writeCheckpoint(dir, createInitialState());
+    await writeCheckpoint(dir, createInitialState());
     expect(existsSync(join(dir, CHECKPOINT_DIR))).toBe(true);
   });
 
-  it('produces valid JSON with correct stateHash', () => {
+  it('produces valid JSON with correct stateHash', async () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-json-'));
     const state = createInitialState();
-    writeCheckpoint(dir, state);
+    await writeCheckpoint(dir, state);
     const raw = readFileSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE), 'utf8');
     const envelope = JSON.parse(raw) as CheckpointEnvelope;
     expect(envelope.stateHash).toBe(computeStateHash(state));
     expect(envelope.schemaVersion).toBe(1);
   });
 
-  it('does not leave .tmp file after successful write (atomic rename)', () => {
+  it('does not leave .tmp file after successful write (atomic rename)', async () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-atomic-'));
-    writeCheckpoint(dir, createInitialState());
+    await writeCheckpoint(dir, createInitialState());
     expect(existsSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_TMP))).toBe(false);
   });
 });
@@ -205,10 +205,10 @@ describe('readCheckpoint', () => {
     expect(result!.warnings[0]).toContain('stale');
   });
 
-  it('returns valid envelope on happy path', () => {
+  it('returns valid envelope on happy path', async () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-happy-'));
     const state = createInitialState();
-    writeCheckpoint(dir, state);
+    await writeCheckpoint(dir, state);
 
     const result = readCheckpoint(dir);
     expect(result).not.toBeNull();
@@ -227,9 +227,9 @@ describe('clearCheckpoint', () => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('removes the checkpoint file', () => {
+  it('removes the checkpoint file', async () => {
     dir = mkdtempSync(join(tmpdir(), 'ckpt-clear-'));
-    writeCheckpoint(dir, createInitialState());
+    await writeCheckpoint(dir, createInitialState());
     expect(existsSync(join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE))).toBe(true);
 
     clearCheckpoint(dir);

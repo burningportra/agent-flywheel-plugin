@@ -13,8 +13,8 @@ export function loadState(cwd: string): OrchestratorState {
   return createInitialState();
 }
 
-export function saveState(cwd: string, state: OrchestratorState): void {
-  writeCheckpoint(cwd, state);
+export async function saveState(cwd: string, state: OrchestratorState): Promise<void> {
+  await writeCheckpoint(cwd, state);
 }
 
 export function clearState(cwd: string): void {
