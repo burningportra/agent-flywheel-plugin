@@ -493,6 +493,48 @@ export async function healthCheck(exec: ExecFn): Promise<{ status: string } | nu
   return result?.status ? result : null;
 }
 
+export interface AgentMailHealthResult {
+  reachable: boolean;
+  transport?: string;
+  error?: string;
+}
+
+let cachedHealthResult: AgentMailHealthResult | null = null;
+
+/**
+ * Check agent-mail connectivity with a lightweight HTTP request.
+ * Uses Node.js fetch with a 3-second timeout. Result is cached for the session.
+ * Does not depend on ExecFn — safe to call before exec infrastructure is ready.
+ */
+export async function checkAgentMailHealth(): Promise<AgentMailHealthResult> {
+  if (cachedHealthResult !== null) return cachedHealthResult;
+
+  const endpoint = `${AGENT_MAIL_URL}/mcp`;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(endpoint, {
+      method: "HEAD",
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    cachedHealthResult = {
+      reachable: true,
+      transport: "http",
+    };
+  } catch (err: unknown) {
+    const msg =
+      err instanceof Error ? err.message : String(err);
+    cachedHealthResult = {
+      reachable: false,
+      error: `Agent Mail unreachable at ${endpoint}. Is the server running? Check: npx agent-mail-server (${msg})`,
+    };
+  }
+
+  return cachedHealthResult;
+}
+
 /**
  * Install the pre-commit guard via the MCP tool (preferred over manual scaffolding).
  */
