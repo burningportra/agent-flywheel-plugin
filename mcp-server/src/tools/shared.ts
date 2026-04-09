@@ -160,6 +160,90 @@ Create a set of implementation beads using the \`br\` CLI. Each bead represents 
 Call \`orch_approve_beads\` to review and approve the bead graph before implementation begins.`;
 }
 
+// ─── Bead Quality Score ──────────────────────────────────────
+
+export interface BeadQualityScore {
+  /** 0-1 composite score. */
+  score: number;
+  /** Human-readable label. */
+  label: string;
+  /** Per-bead issues found. */
+  weakBeads: string[];
+}
+
+const VERB_PREFIXES = [
+  'add', 'create', 'fix', 'update', 'remove', 'implement', 'refactor',
+  'migrate', 'extract', 'replace', 'guard', 'wrap', 'build', 'write',
+  'enable', 'disable', 'configure', 'integrate', 'expose', 'clean', 'port',
+  'set', 'register', 'drop', 'rename', 'move', 'split', 'merge', 'wire',
+];
+const FILE_PATTERN = /\.(ts|js|tsx|jsx|py|go|rs|json|md|yaml|yml|toml|sh|sql|css|scss|html)\b|\/src\/|\/lib\/|\/api\//i;
+const CRITERIA_PATTERN = /accept(ance)?[\s_-]crite|criteria:|acceptance:|✓|- \[|\*\*acceptance/i;
+const WHAT_WHY_HOW = /\b(what|why|how)\b/i;
+
+/**
+ * Heuristic bead quality score based on description richness, title quality,
+ * file specificity, and acceptance criteria presence.
+ * Returns a 0-1 score and a summary label — no LLM call required.
+ */
+export function computeBeadQualityScore(beads: import('../types.js').Bead[]): BeadQualityScore {
+  if (beads.length === 0) return { score: 0, label: '⛔ no beads', weakBeads: [] };
+
+  let totalScore = 0;
+  const weakBeads: string[] = [];
+
+  for (const bead of beads) {
+    let beadScore = 0;
+    const issues: string[] = [];
+
+    // Title quality (0-25 pts): should be a verb phrase
+    const firstWord = bead.title.toLowerCase().trim().split(/\s+/)[0] ?? '';
+    const titleScore = VERB_PREFIXES.some(v => firstWord.startsWith(v)) ? 25 : 10;
+    beadScore += titleScore;
+    if (titleScore < 20) issues.push('title not a verb phrase');
+
+    // Description completeness (0-35 pts): length + WHAT/WHY/HOW presence
+    const descLen = bead.description.trim().length;
+    let descScore = descLen >= 300 ? 35 : descLen >= 150 ? 25 : descLen >= 50 ? 15 : 5;
+    if (WHAT_WHY_HOW.test(bead.description)) descScore = Math.min(35, descScore + 5);
+    beadScore += descScore;
+    if (descLen < 50) issues.push('description too short');
+
+    // File specificity (0-25 pts): mentions file paths or extensions
+    const fileScore = FILE_PATTERN.test(bead.description) ? 25 : 8;
+    beadScore += fileScore;
+    if (fileScore < 20) issues.push('no file paths specified');
+
+    // Acceptance criteria (0-15 pts)
+    const criteriaScore = CRITERIA_PATTERN.test(bead.description) ? 15 : 5;
+    beadScore += criteriaScore;
+    if (criteriaScore < 10) issues.push('no acceptance criteria');
+
+    totalScore += beadScore;
+    if (issues.length > 0) weakBeads.push(`${bead.id} (${issues.join(', ')})`);
+  }
+
+  const score = Math.round((totalScore / (beads.length * 100)) * 100) / 100;
+  const label = score >= 0.85 ? '✅ high quality'
+    : score >= 0.70 ? '⚠️  acceptable'
+    : '⛔ needs polish';
+
+  return { score, label, weakBeads };
+}
+
+/**
+ * Format a BeadQualityScore for display.
+ */
+export function formatBeadQualityScore(q: BeadQualityScore): string {
+  const bar = Math.round(q.score * 10);
+  const filled = '█'.repeat(bar) + '░'.repeat(10 - bar);
+  const lines = [`📊 **Bead quality: ${(q.score * 100).toFixed(0)}/100** ${filled} ${q.label}`];
+  if (q.weakBeads.length > 0) {
+    lines.push(`   Weak beads: ${q.weakBeads.slice(0, 3).join(' | ')}`);
+  }
+  return lines.join('\n');
+}
+
 /**
  * Build implementer instructions for a single bead.
  */

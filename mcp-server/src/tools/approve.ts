@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, Bead } from '../types.js';
-import { computeConvergenceScore, pickRefinementModel, slugifyGoal } from './shared.js';
+import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, pickRefinementModel, slugifyGoal } from './shared.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 
 interface ApproveArgs {
@@ -338,13 +338,17 @@ async function handleStart(
       }`
     : '';
 
+  // Always compute and display bead quality score
+  const beadQuality = computeBeadQualityScore(beads);
+  const qualityNote = `\n${formatBeadQualityScore(beadQuality)}`;
+
   if (ready.length === 1) {
     // Sequential: single bead
     const bead = ready[0];
     return {
       content: [{
         type: 'text',
-        text: `**Beads approved!** ${beads.length} total.${convergenceNote}${roundHeader}
+        text: `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}
 
 **NEXT: Implement bead ${bead.id} (${bead.title}), then call \`orch_review\` when done.**
 
@@ -388,7 +392,7 @@ After completing, report your summary to the orchestrator.`,
   return {
     content: [{
       type: 'text',
-      text: `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${roundHeader}
+      text: `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}
 
 **NEXT: Spawn ${ready.length} parallel agents (one per ready bead), then call \`orch_review\` for each when done.**
 
