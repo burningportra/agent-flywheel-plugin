@@ -5,3 +5,4 @@ mcp-server/dist/
 *.log
 .DS_Store
 /.beads
+/.pi-orchestrator
