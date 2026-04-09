@@ -10,13 +10,18 @@ Refine a specific skill: $ARGUMENTS (skill name required)
 
 3. Search agent-mail for feedback about this skill: call `search_messages` via `agent-mail` MCP with `query: "<skill-name> feedback"`.
 
-4. Use Agent(general-purpose) to analyze:
+4. Use `Agent(subagent_type: "general-purpose", run_in_background: true, name: "skill-refine", team_name: "refine-skill-<name>")` to analyze:
    - Current skill effectiveness based on evidence
    - Specific improvements to make instructions clearer or more actionable
    - Any DON'Ts to add based on observed bad patterns
    - Any DOs to add based on observed good patterns
 
-5. Show the user a diff of the proposed changes:
+   Agent prompt must include Agent Mail bootstrap (`macro_start_session`) and instruction to write proposed changes to `docs/skill-refine-<name>-proposed.md`, then send the file path via `send_message`.
+
+   Save the task ID. Nudge if idle: `SendMessage(to: "skill-refine", message: "Please send your proposed changes.")`.
+   Shutdown when done: `SendMessage(to: "skill-refine", message: {"type": "shutdown_request", "reason": "Analysis complete."})`.
+
+5. Read the proposed changes file and show the user a diff:
    ```
    BEFORE: <current text>
    AFTER:  <proposed text>

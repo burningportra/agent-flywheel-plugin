@@ -16,6 +16,6 @@ Roll back a bead implementation. $ARGUMENTS (optional: bead ID)
    - `git revert <commit>` or `git revert <from>..<to>` via Bash (prefer revert over reset).
    - Update bead status: `br update <id> --status open` via Bash.
    - Update checkpoint to remove the bead from `beadResults`.
-   - Mark the todo as cancelled using TodoWrite.
+   - Use `TaskList` to find the task for this bead, then `TaskUpdate(taskId: "<id>", status: "deleted")` to cancel it.
 
 6. Confirm: "Rolled back bead `<id>`. It is now open and ready to re-implement."
