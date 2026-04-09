@@ -1,7 +1,157 @@
 import type { BeadTemplate, ExpandTemplateResult } from "./types.js";
 
+const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_]+)\s*}}/g;
+
+function defineTemplate(template: BeadTemplate): BeadTemplate {
+  const usedNames = new Set(
+    Array.from(template.descriptionTemplate.matchAll(PLACEHOLDER_PATTERN)).map(m => m[1])
+  );
+  const definedNames = new Set(template.placeholders.map(p => p.name));
+  const orphaned = [...usedNames].filter(n => !definedNames.has(n));
+  const unused = [...definedNames].filter(n => !usedNames.has(n));
+  if (orphaned.length > 0 || unused.length > 0) {
+    throw new Error(
+      `Template "${template.id}" has mismatched placeholders.\n` +
+      (orphaned.length > 0 ? `  Used but not defined: ${orphaned.join(', ')}\n` : '') +
+      (unused.length > 0 ? `  Defined but not used: ${unused.join(', ')}\n` : '')
+    );
+  }
+  return template;
+}
+
+function validateTemplateIntegrity(templates: BeadTemplate[]): string[] {
+  const warnings: string[] = [];
+  const ID_PATTERN = /^[a-z][a-z0-9-]*$/;
+  const seenIds = new Set<string>();
+
+  for (const template of templates) {
+    if (seenIds.has(template.id)) {
+      warnings.push(`Duplicate template ID: "${template.id}"`);
+    }
+    seenIds.add(template.id);
+
+    if (!ID_PATTERN.test(template.id)) {
+      warnings.push(`Invalid template ID format: "${template.id}" (must match /^[a-z][a-z0-9-]*$/)`);
+    }
+
+    if (template.descriptionTemplate.length < 50) {
+      warnings.push(`Template "${template.id}" has a short descriptionTemplate (${template.descriptionTemplate.length} chars, minimum recommended: 50)`);
+    }
+
+    if (!template.acceptanceCriteria || template.acceptanceCriteria.length === 0) {
+      warnings.push(`Template "${template.id}" has no acceptanceCriteria`);
+    }
+
+    const usedNames = new Set(
+      Array.from(template.descriptionTemplate.matchAll(PLACEHOLDER_PATTERN)).map(m => m[1])
+    );
+
+    for (const p of template.placeholders) {
+      if (p.required && !usedNames.has(p.name)) {
+        warnings.push(`Template "${template.id}": required placeholder "${p.name}" not used in descriptionTemplate`);
+      }
+    }
+
+    for (const p of template.placeholders) {
+      if (!p.required && usedNames.has(p.name)) {
+        warnings.push(`Template "${template.id}": non-required placeholder "${p.name}" is used in descriptionTemplate (omission would leave raw markers)`);
+      }
+    }
+  }
+
+  for (const warning of warnings) {
+    console.warn(warning);
+  }
+
+  return warnings;
+}
+
+/**
+ * Built-in bead templates for common, repeatable work units.
+ *
+ * ## The five-block `descriptionTemplate` pattern
+ *
+ * Every template description follows this structure:
+ *
+ * ```
+ * {{leadSentence — what is being done and where}}
+ *
+ * Why this bead exists:
+ * - {{rationale line 1}}
+ * - {{rationale line 2}}
+ *
+ * Acceptance criteria:
+ * - [ ] {{criterion 1}}
+ * - [ ] {{criterion 2}}
+ * - [ ] {{criterion 3}}
+ *
+ * ### Files:
+ * - {{primaryFile}}
+ * - {{secondaryFile}}
+ * ```
+ *
+ * **Why this pattern matters:**
+ * - `validateBeads()` scans for `### Files:` to verify file scope and for
+ *   `- [ ]` markers to count acceptance criteria; descriptions missing
+ *   either trigger template-hygiene warnings.
+ * - The lead sentence maps to the one-line `summary` shown when
+ *   `formatTemplatesForPrompt()` lists available templates.
+ * - The "Why this bead exists" block gives the executing agent rationale
+ *   so it can make better judgment calls at the edges.
+ *
+ * ## Placeholder naming conventions
+ *
+ * - Use **camelCase** names that describe the semantic role, not the format.
+ * - Good: `implementationFile`, `testFile`, `bugSummary`, `endpointPurpose`
+ * - Bad: `file`, `desc`, `impl`, `f1`
+ * - Placeholder `description` fields should explain the *role* the value
+ *   plays ("Primary source file to edit or create"), not the format
+ *   ("a string").
+ *
+ * ## `acceptanceCriteria` vs template `- [ ]` lines
+ *
+ * These serve different audiences and are not required to be identical:
+ *
+ * - **Template `- [ ]` lines** (inside `descriptionTemplate`) are
+ *   *bead-facing*: filled with placeholder values at expansion time and
+ *   read by the executing agent as concrete, contextual checkboxes.
+ * - **`acceptanceCriteria` array** (on the template object) is
+ *   *template-level metadata*: used by validation tooling, template
+ *   listings, and audit checks. These are generic descriptions of what
+ *   any bead from this template must achieve.
+ *
+ * Both must exist. The template-level criteria provide a stable contract;
+ * the expanded `- [ ]` lines provide the agent-specific, filled-in version.
+ *
+ * ## How to add a new bead template
+ *
+ * 1. Pick a `verb-noun` ID in kebab-case matching `/^[a-z][a-z0-9-]*$/`
+ *    (e.g., `fix-bug`, `add-migration`, `write-docs`).
+ * 2. Write `descriptionTemplate` following the five-block pattern above.
+ * 3. Define one placeholder per `{{marker}}` used in the template — all
+ *    placeholders that appear in the template text must have `required: true`.
+ * 4. Populate `acceptanceCriteria` with >= 3 specific, verifiable items.
+ * 5. Set `filePatterns` to the narrowest globs covering the typical file
+ *    scope (e.g., `["src/api/*.ts"]` not `["**/*.ts"]`).
+ * 6. Write `dependencyHints` naming what this bead typically unblocks
+ *    and what it depends on.
+ * 7. Add at least one `examples` entry using a different domain than the
+ *    placeholder examples to show the template in a realistic context.
+ * 8. Wrap the template object with `defineTemplate()` — it catches
+ *    placeholder mismatches (used-but-not-defined, defined-but-not-used)
+ *    at load time so errors surface immediately, not at expansion time.
+ * 9. Run `npm run build` — zero TypeScript errors required.
+ *
+ * ## When to create a template vs use custom descriptions
+ *
+ * - **Create a template** when the bead shape occurs 3+ times per typical
+ *   session — the repetition justifies the upfront cost of defining
+ *   placeholders and examples.
+ * - **Use custom descriptions** for rare, project-specific, or highly
+ *   variable work where a template would be too generic to add value.
+ */
 const BUILTIN_TEMPLATES: BeadTemplate[] = [
-  {
+  defineTemplate({
     id: "add-api-endpoint",
     label: "Add API endpoint",
     summary: "Create a new endpoint with validation, error handling, and tests.",
@@ -52,8 +202,8 @@ Acceptance criteria:
 - src/api/users.test.ts`,
       },
     ],
-  },
-  {
+  }),
+  defineTemplate({
     id: "refactor-module",
     label: "Refactor module",
     summary: "Restructure an existing module while preserving behavior and tests.",
@@ -103,8 +253,8 @@ Acceptance criteria:
 - src/scan.test.ts`,
       },
     ],
-  },
-  {
+  }),
+  defineTemplate({
     id: "add-tests",
     label: "Add tests",
     summary: "Add missing unit or integration coverage for existing behavior.",
@@ -153,10 +303,11 @@ Acceptance criteria:
 - src/flywheel.test.ts`,
       },
     ],
-  },
+  }),
 ];
 
-const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_]+)\s*}}/g;
+export const TEMPLATE_INTEGRITY_WARNINGS = validateTemplateIntegrity(BUILTIN_TEMPLATES);
+
 const INVALID_VALUE_PATTERN = /[\r\0]/;
 const MAX_PLACEHOLDER_VALUE_LENGTH = 2000;
 
