@@ -519,19 +519,29 @@ export function amRpcCmd(tool: string, args: Record<string, unknown>): string {
 }
 
 /**
+ * Safely quote a string for use in a POSIX shell single-quoted context.
+ * Single quotes provide the strongest shell quoting — no variable expansion,
+ * no command substitution, no backslash interpretation — so paths with
+ * backticks, $(…), double-quotes, spaces, or newlines are all inert.
+ * The only character that cannot appear inside single quotes is ' itself,
+ * which is handled by ending the quote, inserting an escaped quote, then
+ * re-opening single quotes.
+ */
+function shellSingleQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+/**
  * Build a bash helper script that wraps agent-mail calls.
  * Sub-agents source this to get am_send, am_inbox, am_release functions
  * with their agent name and project key baked in — no manual substitution needed.
  */
 function amHelperScript(cwd: string, threadId: string): string {
-  // Escape double-quotes to prevent shell injection (e.g. paths with spaces/quotes)
-  const safeCwd = cwd.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const safeThread = threadId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   return `
 # ── Agent Mail helper functions (source these) ──────────────
 AM_URL="${AGENT_MAIL_URL}"
-AM_PROJECT="${safeCwd}"
-AM_THREAD="${safeThread}"
+AM_PROJECT=${shellSingleQuote(cwd)}
+AM_THREAD=${shellSingleQuote(threadId)}
 
 am_rpc() {
   local tool="$1" args="$2"
