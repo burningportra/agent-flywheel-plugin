@@ -44,6 +44,7 @@ describe('createLogger — level filtering', () => {
     vi.resetModules();
     process.env.ORCH_LOG_LEVEL = 'debug';
     try {
+      // @ts-expect-error Vitest supports query-string imports for fresh module eval
       const { createLogger: freshCreateLogger } = await import('../logger.js?debug');
       const log = freshCreateLogger('test');
       const lines = captureStderr(() => {
@@ -64,6 +65,7 @@ describe('createLogger — level filtering', () => {
     vi.resetModules();
     process.env.ORCH_LOG_LEVEL = 'error';
     try {
+      // @ts-expect-error Vitest supports query-string imports for fresh module eval
       const { createLogger: freshCreateLogger } = await import('../logger.js?error');
       const log = freshCreateLogger('test');
       const lines = captureStderr(() => {
@@ -83,6 +85,7 @@ describe('createLogger — level filtering', () => {
     vi.resetModules();
     process.env.ORCH_LOG_LEVEL = 'verbose';
     try {
+      // @ts-expect-error Vitest supports query-string imports for fresh module eval
       const { createLogger: freshCreateLogger } = await import('../logger.js?verbose');
       const log = freshCreateLogger('test');
       const lines = captureStderr(() => {
@@ -116,6 +119,7 @@ describe('createLogger — output format', () => {
   beforeEach(async () => {
     vi.resetModules();
     process.env.ORCH_LOG_LEVEL = 'debug';
+    // @ts-expect-error Vitest supports query-string imports for fresh module eval
     const mod = await import('../logger.js?format');
     freshCreateLogger = mod.createLogger;
   });

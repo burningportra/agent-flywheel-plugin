@@ -1,0 +1,14 @@
+{
+  "name": "claude-orchestrator",
+  "description": "Multi-agent coding orchestrator for Claude Code",
+  "owner": {
+    "name": "burningportra"
+  },
+  "plugins": [
+    {
+      "name": "claude-orchestrator",
+      "source": "./",
+      "description": "Multi-agent coding orchestrator for Claude Code"
+    }
+  ]
+}
