@@ -9,6 +9,7 @@
 import { createHash } from "crypto";
 import { execSync } from "child_process";
 import { createLogger } from "./logger.js";
+import { VERSION } from "./version.js";
 
 const log = createLogger("checkpoint");
 import {
@@ -138,8 +139,7 @@ export function validateCheckpoint(envelope: unknown): ValidationResult {
  */
 export function writeCheckpoint(
   cwd: string,
-  state: OrchestratorState,
-  orchestratorVersion: string
+  state: OrchestratorState
 ): boolean {
   try {
     const dir = checkpointDir(cwd);
@@ -148,7 +148,7 @@ export function writeCheckpoint(
     const envelope: CheckpointEnvelope = {
       schemaVersion: 1,
       writtenAt: new Date().toISOString(),
-      orchestratorVersion,
+      orchestratorVersion: VERSION,
       gitHead: getGitHead(cwd),
       state,
       stateHash: computeStateHash(state),

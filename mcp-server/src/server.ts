@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { makeExec } from './exec.js';
 import { loadState, saveState, clearState } from './state.js';
+import { VERSION } from './version.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger("server");
@@ -15,7 +16,7 @@ import { runReview } from './tools/review.js';
 import { runMemory } from './tools/memory-tool.js';
 
 const server = new Server(
-  { name: "claude-orchestrator", version: "2.0.0" },
+  { name: "claude-orchestrator", version: VERSION },
   { capabilities: { tools: {} } }
 );
 
