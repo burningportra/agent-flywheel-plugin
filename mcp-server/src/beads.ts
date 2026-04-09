@@ -1,6 +1,9 @@
 import type { ExecFn } from "./exec.js";
 import type { Bead, BvInsights, BvNextPick } from "./types.js";
 import { resilientExec, brExec, brExecJson } from "./cli-exec.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("beads");
 
 /**
  * Check if a bead ID matches the expected br-NNN pattern.
@@ -148,7 +151,7 @@ export async function bvInsights(
   try {
     return JSON.parse(result.value.stdout) as BvInsights;
   } catch {
-    console.warn(`[beads] bv --robot-insights returned unparseable JSON`);
+    log.warn("bv --robot-insights returned unparseable JSON");
     return null;
   }
 }
@@ -177,7 +180,7 @@ export async function bvTriage(
     if (data && data.id) return [data as BvNextPick];
     return null;
   } catch {
-    console.warn(`[beads] bv --robot-triage returned unparseable JSON`);
+    log.warn("bv --robot-triage returned unparseable JSON");
     return null;
   }
 }
@@ -200,7 +203,7 @@ export async function bvNext(
     if (!data || !data.id) return null;
     return data as BvNextPick;
   } catch {
-    console.warn(`[beads] bv --robot-next returned unparseable JSON`);
+    log.warn("bv --robot-next returned unparseable JSON");
     return null;
   }
 }

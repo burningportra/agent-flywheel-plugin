@@ -8,6 +8,9 @@
 
 import { createHash } from "crypto";
 import { execSync } from "child_process";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("checkpoint");
 import {
   existsSync,
   mkdirSync,
@@ -161,9 +164,7 @@ export function writeCheckpoint(
 
     return true;
   } catch (err) {
-    console.warn(
-      `[claude-orchestrator] checkpoint write failed: ${err instanceof Error ? err.message : String(err)}`
-    );
+    log.warn("checkpoint write failed", { err: err instanceof Error ? err.message : String(err) });
     return false;
   }
 }
@@ -207,9 +208,7 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
 
     const validation = validateCheckpoint(parsed);
     if (!validation.valid) {
-      console.warn(
-        `[claude-orchestrator] checkpoint validation failed: ${validation.reason}`
-      );
+      log.warn("checkpoint validation failed", { reason: validation.reason });
       moveToCorrupt(cwd, mainFile);
       return null;
     }
@@ -228,9 +227,7 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
 
     return { envelope, warnings };
   } catch (err) {
-    console.warn(
-      `[claude-orchestrator] checkpoint read failed: ${err instanceof Error ? err.message : String(err)}`
-    );
+    log.warn("checkpoint read failed", { err: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -250,9 +247,7 @@ export function clearCheckpoint(cwd: string): void {
     // Also clean up any orphaned tmp
     cleanupOrphanedTmp(cwd);
   } catch (err) {
-    console.warn(
-      `[claude-orchestrator] checkpoint clear failed: ${err instanceof Error ? err.message : String(err)}`
-    );
+    log.warn("checkpoint clear failed", { err: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -262,9 +257,7 @@ function moveToCorrupt(cwd: string, filePath: string): void {
   try {
     const corruptPath = checkpointCorruptPath(cwd);
     renameSync(filePath, corruptPath);
-    console.warn(
-      `[claude-orchestrator] corrupt checkpoint moved to ${CHECKPOINT_CORRUPT}`
-    );
+    log.warn("corrupt checkpoint moved", { dest: CHECKPOINT_CORRUPT });
   } catch {
     // If we can't even rename, just try to delete
     try {

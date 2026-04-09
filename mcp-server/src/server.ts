@@ -3,6 +3,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { makeExec } from './exec.js';
 import { loadState, saveState, clearState } from './state.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger("server");
 import { runProfile } from './tools/profile.js';
 import { runDiscover } from './tools/discover.js';
 import { runSelect } from './tools/select.js';
@@ -228,7 +231,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
     }
   } catch (err: any) {
-    console.error(`[claude-orchestrator] Tool ${name} error:`, err);
+    log.error("Tool error", { tool: name, err: String(err) });
     return {
       content: [{ type: "text", text: `Error in ${name}: ${err?.message ?? String(err)}` }],
       isError: true,
@@ -240,4 +243,4 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("[claude-orchestrator] MCP server started");
+log.info("MCP server started");

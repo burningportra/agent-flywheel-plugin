@@ -5,6 +5,9 @@
  * and graceful degradation when a CLI tool is unavailable mid-session.
  */
 import type { ExecFn } from "./exec.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("cli-exec");
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -229,7 +232,7 @@ export async function resilientExec(
           continue;
         }
         // Permanent or exhausted retries
-        if (logWarnings) console.warn(buildWarning(lastError));
+        if (logWarnings) log.warn(buildWarning(lastError));
         return { ok: false, error: lastError };
       }
 
@@ -252,14 +255,14 @@ export async function resilientExec(
         if (retryDelayMs > 0) await sleep(retryDelayMs);
         continue;
       }
-      if (logWarnings) console.warn(buildWarning(lastError));
+      if (logWarnings) log.warn(buildWarning(lastError));
       return { ok: false, error: lastError };
     }
   }
 
   // Should not reach here, but safety net
   /* istanbul ignore next */
-  if (logWarnings && lastError) console.warn(buildWarning(lastError));
+  if (logWarnings && lastError) log.warn(buildWarning(lastError));
   return { ok: false, error: lastError! };
 }
 
@@ -308,10 +311,7 @@ export async function brExecJson<T>(
       lastError: parseErr,
     };
     if (opts?.logWarnings !== false) {
-      console.warn(
-        `[cli-exec] JSON parse failure for ${commandStr}: ` +
-        `stdout preview=${JSON.stringify(result.value.stdout.slice(0, 200))}`,
-      );
+      log.warn("JSON parse failure", { cmd: commandStr, stdoutPreview: result.value.stdout.slice(0, 200) });
     }
     return { ok: false, error };
   }

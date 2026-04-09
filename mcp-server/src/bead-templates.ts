@@ -1,5 +1,7 @@
 import type { BeadTemplate, ExpandTemplateResult } from "./types.js";
+import { createLogger } from "./logger.js";
 
+const log = createLogger("bead-templates");
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_]+)\s*}}/g;
 
 function defineTemplate(template: BeadTemplate): BeadTemplate {
@@ -60,7 +62,7 @@ function validateTemplateIntegrity(templates: BeadTemplate[]): string[] {
   }
 
   for (const warning of warnings) {
-    console.warn(warning);
+    log.warn(warning);
   }
 
   return warnings;

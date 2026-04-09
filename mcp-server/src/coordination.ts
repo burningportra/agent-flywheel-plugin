@@ -3,6 +3,9 @@ import { join } from "path";
 import type { CoordinationMode } from "./types.js";
 import type { ExecFn } from "./agent-mail.js";
 import { brExec, resilientExec } from "./cli-exec.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("coordination");
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -69,10 +72,7 @@ export async function detectCoordinationBackend(
     : false;
 
   if (agentMail && !preCommitGuardInstalled) {
-    console.warn(
-      "[claude-orchestrator] Agent Mail is available but the pre-commit guard is not installed. " +
-      "Run scaffoldPreCommitGuard() or set AGENT_NAME and install .git/hooks/pre-commit."
-    );
+    log.warn("Agent Mail is available but the pre-commit guard is not installed. Run scaffoldPreCommitGuard() or set AGENT_NAME and install .git/hooks/pre-commit.");
   }
 
   _cached = { beads, agentMail, sophia, preCommitGuardInstalled };

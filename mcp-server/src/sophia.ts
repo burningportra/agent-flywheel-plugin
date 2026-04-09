@@ -1,4 +1,7 @@
 import type { ExecFn } from './exec.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger("sophia");
 
 /** Local type — sophia owns its own step interface for CR creation. */
 interface PlanStep {
@@ -340,7 +343,7 @@ export async function createCRFromPlan(
     why: goal,
     scope: (() => {
       if (allArtifacts.length > 20) {
-        console.warn(`[sophia] CR scope truncated: ${allArtifacts.length} artifacts → 20 (sophia arg limit)`);
+        log.warn("CR scope truncated", { total: allArtifacts.length, limit: 20 });
         return allArtifacts.slice(0, 20);
       }
       return allArtifacts;
@@ -380,7 +383,7 @@ export async function createCRFromPlan(
     return { ok: false, error: `CR created but all ${steps.length} tasks failed: ${warnings.join("; ")}` };
   }
   if (warnings.length > 0) {
-    console.warn(`[sophia] CR #${cr.id} partial: ${warnings.join("; ")}`);
+    log.warn("CR partial", { crId: cr.id, warnings: warnings.join("; ") });
   }
 
   return { ok: true, data: { cr, taskIds } };
