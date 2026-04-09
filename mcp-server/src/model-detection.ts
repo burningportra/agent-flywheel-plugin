@@ -31,6 +31,8 @@ export interface DetectedModels {
   synthesisModel: string;
   /** Models for refinement rotation */
   refinementModels: string[];
+  /** Optional 4th planning perspective using Google/Gemini model; null if unavailable */
+  freshPerspectiveModel: string | null;
 }
 
 /**
@@ -172,12 +174,20 @@ export function detectAvailableModels(availableModelIds?: string[]): DetectedMod
   const robustnessModel = selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
     ?? "anthropic/claude-opus-4-6";
 
-  const ergonomicsModel = selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
+  // Ergonomics prefers openai-codex (Codex 5.4) for a different architectural lens
+  const ergonomicsModel = selectBestModel(providerMap, ["openai-codex", "opencode"], PROVIDER_BEST_MODELS)
+    ?? selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
     ?? "anthropic/claude-sonnet-4-6";
 
   const synthesisModel = selectBestModel(providerMap, ["openai-codex", "opencode", "openai"], PROVIDER_BEST_MODELS)
     ?? selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
     ?? "anthropic/claude-opus-4-6";
+
+  // Fresh perspective uses Google/Gemini when available; null otherwise (4th optional planner)
+  const googleBestModel = selectBestModel(providerMap, ["google-antigravity", "google"], PROVIDER_BEST_MODELS);
+  const freshPerspectiveModel: string | null = googleBestModel
+    ? `${providerMap.has("google-antigravity") ? "google-antigravity" : "google"}/${googleBestModel}`
+    : null;
 
   // Build refinement rotation from available providers
   const refinementModels = buildRefinementRotation(providerMap);
@@ -195,6 +205,7 @@ export function detectAvailableModels(availableModelIds?: string[]): DetectedMod
     ergonomicsModel,
     synthesisModel,
     refinementModels,
+    freshPerspectiveModel,
   };
 }
 
@@ -207,6 +218,7 @@ export function getDeepPlanModels(availableModelIds?: string[]): {
   robustness: string;
   ergonomics: string;
   synthesis: string;
+  freshPerspective: string | null;
 } {
   try {
     const detected = detectAvailableModels(availableModelIds);
@@ -215,6 +227,7 @@ export function getDeepPlanModels(availableModelIds?: string[]): {
       robustness: detected.robustnessModel,
       ergonomics: detected.ergonomicsModel,
       synthesis: detected.synthesisModel,
+      freshPerspective: detected.freshPerspectiveModel,
     };
   } catch {
     // Fallback to hardcoded defaults
@@ -223,6 +236,7 @@ export function getDeepPlanModels(availableModelIds?: string[]): {
       robustness: "anthropic/claude-opus-4-6",
       ergonomics: "anthropic/claude-sonnet-4-6",
       synthesis: "anthropic/claude-opus-4-6",
+      freshPerspective: null,
     };
   }
 }
@@ -275,6 +289,9 @@ export function formatDetectedModels(detected: DetectedModels): string {
   lines.push(`- **Robustness:** ${detected.robustnessModel}`);
   lines.push(`- **Ergonomics:** ${detected.ergonomicsModel}`);
   lines.push(`- **Synthesis:** ${detected.synthesisModel}`);
+  if (detected.freshPerspectiveModel) {
+    lines.push(`- **Fresh Perspective (Gemini):** ${detected.freshPerspectiveModel}`);
+  }
   lines.push("");
   lines.push("**Refinement Rotation:**");
   for (const model of detected.refinementModels) {

@@ -1,13 +1,15 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { ToolContext, McpToolResult } from '../types.js';
 import { slugifyGoal, pickRefinementModel, DEEP_PLAN_MODELS } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
+import { getDeepPlanModels } from '../model-detection.js';
 
 interface PlanArgs {
   cwd: string;
   mode?: 'standard' | 'deep';
   planContent?: string;
+  planFile?: string; // Path to already-written plan file (avoids passing large content over stdio)
 }
 
 /**
@@ -35,12 +37,42 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
     ? `\nConstraints: ${state.constraints.join(', ')}`
     : '';
 
-  // ── If planContent is provided, store it and proceed to bead creation ──
+  // ── If planFile path provided, read it from disk (avoids large stdio payloads) ──
+  if (args.planFile) {
+    const absPath = resolve(cwd, args.planFile);
+    if (!existsSync(absPath)) {
+      return {
+        content: [{ type: 'text', text: `Error: planFile not found: ${absPath}` }],
+        isError: true,
+      };
+    }
+    const content = readFileSync(absPath, 'utf8');
+    const relativePath = args.planFile.startsWith('docs/') ? args.planFile : `docs/plans/${args.planFile}`;
+    state.planDocument = args.planFile;
+    state.planRefinementRound = 0;
+    state.phase = 'awaiting_plan_approval';
+    saveState(state);
+
+    return {
+      content: [{
+        type: 'text',
+        text: `**Plan loaded from \`${args.planFile}\`.**
+
+**NEXT: Call \`orch_approve_beads\` to review the plan and proceed to bead creation.**
+
+Goal: "${goal}"${constraintsSummary}
+
+Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
+      }],
+    };
+  }
+
+  // ── If planContent is provided inline, write it to disk then register ──
   if (args.planContent && args.planContent.trim()) {
     const planDir = join(cwd, 'docs', 'plans');
     mkdirSync(planDir, { recursive: true });
-    const planFile = join(planDir, `${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`);
-    writeFileSync(planFile, args.planContent, 'utf8');
+    const planFilePath = join(planDir, `${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`);
+    writeFileSync(planFilePath, args.planContent, 'utf8');
 
     const relativePath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`;
     state.planDocument = relativePath;
@@ -129,9 +161,11 @@ Write a comprehensive implementation plan from your designated perspective. The 
 
 Focus deeply on your assigned perspective lens.`;
 
-  const planAgents = [
+  const dynamicModels = getDeepPlanModels();
+
+  const planAgents: Array<{ model?: string; subagent_type?: string; perspective: string; task: string }> = [
     {
-      model: DEEP_PLAN_MODELS.correctness,
+      model: dynamicModels.correctness,
       perspective: 'correctness',
       task: `${basePrompt}
 
@@ -149,7 +183,7 @@ Focus on: performance, scalability, retry logic, timeouts, graceful degradation,
 Ask: What happens under load? What are the operational concerns? How does it fail gracefully?`,
     },
     {
-      model: DEEP_PLAN_MODELS.ergonomics,
+      model: dynamicModels.ergonomics,
       perspective: 'ergonomics',
       task: `${basePrompt}
 
@@ -159,6 +193,21 @@ Ask: Is it easy to use correctly? Hard to misuse? Does it follow existing patter
     },
   ];
 
+  // Add optional 4th Gemini planner when Google model is available
+  if (dynamicModels.freshPerspective) {
+    planAgents.push({
+      model: dynamicModels.freshPerspective,
+      perspective: 'fresh-perspective',
+      task: `${basePrompt}
+
+## Your perspective: FRESH PERSPECTIVE
+You are a fresh pair of eyes who has not seen the other plans.
+Challenge shared assumptions. Propose the simplest alternative that satisfies the goal.
+Flag anything under-specified, contradictory, or likely to cause confusion during implementation.
+Question every architectural choice: is there a simpler way? A more standard approach? A hidden dependency?`,
+    });
+  }
+
   return {
     content: [{
       type: 'text',
@@ -167,7 +216,7 @@ Ask: Is it easy to use correctly? Hard to misuse? Does it follow existing patter
         goal,
         constraints: state.constraints,
         planAgents,
-        instructions: `Spawn these 3 planning agents in parallel. After all 3 complete, synthesize their outputs into one plan document and call \`orch_plan\` again with the synthesized content in the \`planContent\` parameter.`,
+        instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call orch_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
       }, null, 2),
     }],
   };

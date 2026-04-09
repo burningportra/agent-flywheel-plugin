@@ -684,6 +684,7 @@ ${files}
 ${prevContext}
 
 ### Marching Orders
+- Reread AGENTS.md so it's still fresh in your mind. Use ultrathink.
 - Read the relevant files first.
 - Use \`orch_memory\` if prior learnings would help.
 - Implement with focused changes only.
@@ -1044,13 +1045,13 @@ cd ${cwd}`;
 export function swarmMarchingOrders(cwd: string, beadId?: string): string {
   return `## Swarm Marching Orders
 
-Read AGENTS.md and README.md thoroughly. Then investigate the codebase to understand the technical architecture and project purpose.${beadId ? `\n\nYour assigned bead: ${beadId}` : ""}
+First read ALL of AGENTS.md and README.md super carefully and understand ALL of both! Then use code investigation to fully understand the code, technical architecture and purpose of the project. Then register with MCP Agent Mail and introduce yourself to the other agents.${beadId ? `\n\nYour assigned bead: ${beadId}` : ""}
 
-Be sure to check your agent mail and promptly respond to any messages. Then proceed meticulously with your assigned bead, working systematically and tracking progress via beads and agent mail messages.
+Be sure to check your agent mail and promptly respond if needed to any messages; then proceed meticulously with your assigned beads, working systematically and tracking progress via beads and agent mail messages.
 
-Don't stall on coordination. Start work promptly, but inform fellow agents via messages and mark beads appropriately.
+Don't get stuck in "communication purgatory" where nothing is getting done; be proactive about starting tasks that need to be done, but inform your fellow agents via messages when you do so and mark beads appropriately.
 
-When idle, use \`bv --robot-triage\` to find the highest-impact bead, claim it, and start coding. Acknowledge all communication from other agents. Use ultrathink.
+When you're not sure what to do next, use \`bv --robot-triage\` to find the highest-impact bead to work on next; pick the next one you can usefully work on and get started. Make sure to acknowledge all communication requests from other agents and that you are aware of all active agents and their names. Use ultrathink.
 
 cd ${cwd}`;
 }
@@ -1362,7 +1363,7 @@ Also ask the user if they'd like you to:
 
 // ─── Plan Document Generation ───────────────────────────────
 export function competingPlanAgentPrompt(
-  focus: "correctness" | "robustness" | "ergonomics",
+  focus: "correctness" | "robustness" | "ergonomics" | "fresh-perspective",
   goal: string,
   profile: RepoProfile,
   scanResult?: ScanResult,
@@ -1389,9 +1390,19 @@ export function competingPlanAgentPrompt(
       "Prefer simpler seams, better naming, and flows that reduce context-switching and ambiguity.",
       "Push for plans that are easy to execute, review, and modify without surprising coupling.",
     ],
+    "fresh-perspective": [
+      "You are a fresh pair of eyes who has not seen the other plans.",
+      "Challenge shared assumptions. Propose the simplest alternative that satisfies the goal.",
+      "Flag anything under-specified, contradictory, or likely to cause confusion during implementation.",
+      "Question every architectural choice: is there a simpler way? A more standard approach? A hidden dependency?",
+    ],
   } satisfies Record<string, string[]>;
 
   return `You are an expert software architect participating in a competing-plans exercise. Use ultrathink and produce ONE detailed markdown plan document.
+
+> **The Law of Rework Escalation** — mistakes caught in Plan Space cost 1× to fix. The same mistake in Bead Space costs 5×. In Code Space: 25×. Invest heavily here.
+>
+> **Three Reasoning Spaces:** Plan Space → Bead Space → Code Space. You are in Plan Space now. Think globally. Architectural decisions made here are cheap; the same decisions made during implementation are catastrophic.
 
 ## Goal
 ${goal}
@@ -1475,6 +1486,10 @@ export function planDocumentPrompt(goal: string, profile: RepoProfile, scanResul
 
   return `You are an expert software architect. Use ultrathink to produce a detailed implementation plan.
 
+> **The Law of Rework Escalation** — mistakes caught in Plan Space cost 1× to fix. The same mistake in Bead Space costs 5×. In Code Space: 25×. Invest heavily here.
+>
+> **Three Reasoning Spaces:** Plan Space → Bead Space → Code Space. You are in Plan Space now. Think globally. Architectural decisions made here are cheap; the same decisions made during implementation are catastrophic.
+
 ## Goal
 ${goal}
 
@@ -1519,6 +1534,30 @@ Produce a detailed markdown plan document covering ALL of the following sections
 ## Output
 Save the plan as a session artifact using write_artifact with a descriptive name like 'plans/<goal-slug>.md'.
 Ground every recommendation in the repository context above - do not hallucinate capabilities or files that don't exist.`;
+}
+
+/**
+ * Git-diff style plan review — asks a fresh model to propose specific changes with rationale.
+ * Used by the "📝 Git-diff review" plan refinement option in orch_approve_beads.
+ */
+export function planGitDiffReviewPrompt(planText: string): string {
+  return `Carefully review this entire plan for me and come up with your best revisions in terms of better architecture, new features, changed features, etc. to make it better, more robust/reliable, more performant, more compelling/useful, etc. For each proposed change, give me your detailed analysis and rationale/justification for why it would make the project better along with the git-diff style change versus the original plan shown below:
+
+${planText}`;
+}
+
+/**
+ * Plan integration prompt — asks a model to integrate proposed revisions in-place.
+ * Follows planGitDiffReviewPrompt in the two-step git-diff review cycle.
+ */
+export function planIntegrationPrompt(planText: string, revisions: string): string {
+  return `OK, now integrate these revisions to the markdown plan in-place; use ultrathink and be meticulous. At the end, you can tell me which changes you wholeheartedly agree with, which you somewhat agree with, and which you disagree with:
+
+## Original Plan
+${planText}
+
+## Proposed Revisions
+${revisions}`;
 }
 
 export function planRefinementPrompt(planPath: string, roundNumber: number): string {
