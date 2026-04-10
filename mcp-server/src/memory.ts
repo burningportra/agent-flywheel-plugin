@@ -247,7 +247,7 @@ export function mineSkillGaps(
   topic: string = "planning beads orchestration"
 ): string | null {
   if (!detectCass()) return null;
-  const output = runCm(["search", topic, "--json", "--limit", "20"], cwd);
+  const output = runCm(["similar", topic, "--json"], cwd);
   if (!output) return null;
   // cm search returns { results: [...] } or { sessions: [...] } wrapper
   const cmParsed = parseCmResult<{ results?: unknown[]; sessions?: unknown[] }>(output);

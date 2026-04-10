@@ -163,8 +163,9 @@ export interface Bead {
   description: string;
   status: "open" | "in_progress" | "closed" | "deferred";
   priority: number; // 0-4
-  type: string;     // "task" | "feature" | "bug" etc.
-  labels: string[];
+  type?: string;     // "task" | "feature" | "bug" etc. (optional: br v0.1.x uses issue_type)
+  issue_type?: string; // br v0.1.x field name for type
+  labels?: string[];
   estimate?: number; // minutes
   /** Parent bead ID (from --parent flag). */
   parent?: string;

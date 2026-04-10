@@ -46,8 +46,9 @@ export const BeadSchema = z
     description: z.string(),
     status: z.enum(["open", "in_progress", "closed", "deferred"]),
     priority: z.number(),
-    type: z.string(),
-    labels: z.array(z.string()),
+    type: z.string().optional().default("task"),
+    issue_type: z.string().optional(), // br v0.1.x uses issue_type instead of type
+    labels: z.array(z.string()).optional().default([]),
     estimate: z.number().optional(),
     parent: z.string().optional(),
     created_at: z.string().optional(),

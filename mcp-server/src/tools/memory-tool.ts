@@ -49,7 +49,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
   // ── search (default) ─────────────────────────────────────────
   if (!args.query || !args.query.trim()) {
     // No query — list recent entries
-    const listResult = await exec('cm', ['list', '--limit', '10'], { cwd, timeout: 10000 });
+    const listResult = await exec('cm', ['ls', '--limit', '10'], { cwd, timeout: 10000 });
     if (listResult.code !== 0) {
       return {
         content: [{ type: 'text', text: `Failed to list memory: ${listResult.stderr}` }],
@@ -70,7 +70,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
   }
 
   // Search with query
-  const searchResult = await exec('cm', ['search', args.query.trim()], { cwd, timeout: 10000 });
+  const searchResult = await exec('cm', ['similar', args.query.trim(), '--json'], { cwd, timeout: 10000 });
   if (searchResult.code !== 0) {
     return {
       content: [{ type: 'text', text: `Search failed: ${searchResult.stderr}` }],
