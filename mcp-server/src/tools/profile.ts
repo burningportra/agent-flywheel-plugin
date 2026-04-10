@@ -1,6 +1,10 @@
 import type { ToolContext, McpToolResult, OrchestratorState, RepoProfile, ScanResult, ProfileArgs } from '../types.js';
 import { formatRepoProfile } from './shared.js';
 import { profileRepo, loadCachedProfile, saveCachedProfile } from '../profiler.js';
+import { parseBrList } from '../parsers.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('profile');
 
 /**
  * orch_profile — Scan the current repo and build a profile.
@@ -70,17 +74,19 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   if (hasBeads) {
     const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
     if (brListResult.code === 0) {
-      try {
-        const beads: any[] = JSON.parse(brListResult.stdout);
-        const open = beads.filter((b: any) => b.status === 'open' || b.status === 'in_progress');
-        const deferred = beads.filter((b: any) => b.status === 'deferred');
+      const parsed = parseBrList(brListResult.stdout);
+      if (parsed.ok) {
+        const open = parsed.data.filter(b => b.status === 'open' || b.status === 'in_progress');
+        const deferred = parsed.data.filter(b => b.status === 'deferred');
         if (open.length > 0 || deferred.length > 0) {
           beadStatus = `\n\n### Existing Beads\n- ${open.length} open/in-progress\n- ${deferred.length} deferred`;
           if (open.length > 0) {
             beadStatus += `\n\nTo work on existing beads, call \`orch_approve_beads\` with action="start".`;
           }
         }
-      } catch { /* parse failure ok */ }
+      } else {
+        log.warn('Failed to parse br list output', { error: parsed.error });
+      }
     }
   }
 

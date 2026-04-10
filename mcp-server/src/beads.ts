@@ -2,6 +2,7 @@ import type { ExecFn } from "./exec.js";
 import type { Bead, BvInsights, BvNextPick } from "./types.js";
 import { resilientExec, brExec, brExecJson } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
+import { parseBvInsights, parseBvNextPicks, parseBvNextPick } from "./parsers.js";
 
 const log = createLogger("beads");
 
@@ -185,12 +186,12 @@ export async function bvInsights(
   if (!(await detectBv(exec))) return null;
   const result = await resilientExec(exec, "bv", ["--robot-insights"], { timeout: 15000, cwd, maxRetries: 1, retryDelayMs: 300 });
   if (!result.ok) return null;
-  try {
-    const parsed = JSON.parse(result.value.stdout) as BvInsights;
-    setCache("bvInsights", parsed);
-    return parsed;
-  } catch {
-    log.warn("bv --robot-insights returned unparseable JSON");
+  const parsed = parseBvInsights(result.value.stdout);
+  if (parsed.ok) {
+    setCache("bvInsights", parsed.data);
+    return parsed.data;
+  } else {
+    log.warn("bv --robot-insights parse failed", { error: parsed.error });
     return null;
   }
 }
@@ -214,16 +215,22 @@ export async function bvTriage(
   if (!result.ok) return null;
   const stdout = result.value.stdout.trim();
   if (!stdout) return null;
-  try {
-    const data = JSON.parse(stdout);
-    // --robot-triage may return an array or a single object
-    const parsed = Array.isArray(data) ? data as BvNextPick[] : (data && data.id) ? [data as BvNextPick] : null;
-    if (parsed) setCache("bvTriage", parsed);
-    return parsed;
-  } catch {
-    log.warn("bv --robot-triage returned unparseable JSON");
-    return null;
+
+  // --robot-triage may return an array or a single object; normalize to array
+  const arrayResult = parseBvNextPicks(stdout);
+  if (arrayResult.ok) {
+    setCache("bvTriage", arrayResult.data);
+    return arrayResult.data;
   }
+  // Fallback: try parsing as a single pick and wrap in array
+  const singleResult = parseBvNextPick(stdout);
+  if (singleResult.ok && singleResult.data) {
+    const picks = [singleResult.data];
+    setCache("bvTriage", picks);
+    return picks;
+  }
+  log.warn("bv --robot-triage parse failed", { error: arrayResult.error });
+  return null;
 }
 
 /**
@@ -239,12 +246,11 @@ export async function bvNext(
   if (!result.ok) return null;
   const stdout = result.value.stdout.trim();
   if (!stdout) return null;
-  try {
-    const data = JSON.parse(stdout);
-    if (!data || !data.id) return null;
-    return data as BvNextPick;
-  } catch {
-    log.warn("bv --robot-next returned unparseable JSON");
+  const parsed = parseBvNextPick(stdout);
+  if (parsed.ok) {
+    return parsed.data;
+  } else {
+    log.warn("bv --robot-next parse failed", { error: parsed.error });
     return null;
   }
 }
