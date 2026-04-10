@@ -19,13 +19,14 @@ Read it and extract the version. Also read the project name from `package.json` 
 
 ### 0b. Detect state
 
-Gather context silently (do NOT display raw output yet):
+Gather context silently (do NOT display raw output yet). Run checks 1-5 in parallel where possible:
 
 1. **MCP tools**: Use `ToolSearch` with query `"select:orch_profile"`. Note if available.
 2. **Existing session**: Read `.pi-orchestrator/checkpoint.json` if it exists. Note phase and goal.
 3. **Existing beads**: Run `br list --json 2>/dev/null` and count open/in-progress/closed beads.
 4. **Git status**: Run `git log --oneline -1` to get latest commit.
 5. **CASS memory**: Call `orch_memory` with `operation: "search"` and `query: "session learnings orchestration"` to load prior session context. If CASS is unavailable, skip silently.
+6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/orchestrate-setup` — single-agent workflows work fine without it.
 
 ### 0c. Display the welcome banner
 
@@ -137,9 +138,9 @@ The user pastes the GitHub URL in the "Other" text field, or selects a mode firs
 - **"Research only"** → invoke `/orchestrate-research <url>`
 - **"Research + integrate"** → invoke `/orchestrate-research <url>` with the Major Feature Integration mode (Phases 8-12)
 
-### 0f. MCP degraded mode
+### 0f. Degraded modes
 
-If MCP tools were NOT found in step 0b:
+**MCP tools missing** (orch_profile not found in step 0b):
 
 - Display in the banner: `MCP: not configured — run /orchestrate-setup`
 - Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
@@ -150,6 +151,15 @@ If MCP tools were NOT found in step 0b:
   - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
   - **Step 8:** Offer "Looks good" and "Self review" only (skip `orch_review`).
   - **Step 10:** Skip `orch_memory` — remind user that session learnings were not auto-persisted.
+
+**Agent Mail offline** (`AGENT_MAIL_DOWN = true` from step 0b check 6):
+
+- Display in the banner: `Agent Mail: offline — parallel agents will skip file reservations`
+- Do NOT block or require `/orchestrate-setup`. All orchestration still works.
+- Overrides for affected steps only:
+  - **Step 7 (impl agents):** Skip STEP 0 (Agent Mail bootstrap) in agent prompts. Agents work without file reservations or messaging — the coordinator monitors via TaskOutput instead of inbox.
+  - **Step 5 (deep plan):** Skip Agent Mail bootstrap for plan agents. Agents write plan files to disk; coordinator reads them directly.
+- If Agent Mail comes up mid-session, detect it on next parallel spawn and resume normal bootstrapping.
 
 ## Step 2: Scan and profile the repository
 
@@ -504,6 +514,15 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        ## STEP 2 — VALIDATE
        Run tests and linting relevant to your changes. Fix any failures.
 
+       ## STEP 2.5 — STORE LEARNINGS
+       If you encountered anything non-obvious during implementation — unexpected API behavior,
+       tricky edge cases, workarounds for tooling issues, rebase gotchas, or decisions that
+       future agents would benefit from knowing — store each as a CASS memory:
+       Call orch_memory with operation='store' and content describing the learning.
+       Prefix with the bead ID for traceability, e.g.:
+       "Bead <id>: <concise learning with enough context to be useful standalone>"
+       Skip this step if the implementation was straightforward with no surprises.
+
        ## STEP 3 — COMMIT & CLOSE BEAD
        Create a commit with a descriptive message referencing bead <id>.
        Then mark the bead closed: `br update <bead-id> --status closed`
@@ -531,7 +550,13 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")
    ```
 
-5. When the agent completes, mark task as `completed`. Send shutdown:
+5. **Store cross-cutting learnings**: When an agent's completion report mentions something non-obvious (unexpected file renames, rebase conflicts, API quirks, tooling workarounds), store it in CASS:
+   ```
+   orch_memory(operation: "store", content: "Bead <id> (<title>): <learning from agent report>")
+   ```
+   Don't store routine completions — only surprises or gotchas that would help future sessions.
+
+6. When the agent completes, mark task as `completed`. Send shutdown:
    ```
    SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
    ```

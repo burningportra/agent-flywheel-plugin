@@ -3,12 +3,6 @@
     "agent-mail": {
       "type": "http",
       "url": "http://127.0.0.1:8765/mcp"
-    },
-    "orchestrator": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["/Users/kevtrinh/Documents/GitHub/claude-orchestrator/mcp-server/dist/server.js"],
-      "env": {}
     }
   }
 }

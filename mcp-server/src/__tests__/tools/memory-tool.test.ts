@@ -44,14 +44,14 @@ describe('runMemory', () => {
     expect(result.content[0].text).toContain('npm install');
   });
 
-  // ── search operation (default) ───────────────────────────────
+  // ── search operation (default, no query → cm ls) ─────────────
 
   it('lists recent entries when no query given', async () => {
     const { ctx } = makeCtx([
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['list', '--limit', '10'],
+        args: ['ls', '--limit', '10'],
         result: { code: 0, stdout: 'entry 1\nentry 2\n', stderr: '' },
       },
     ]);
@@ -67,7 +67,7 @@ describe('runMemory', () => {
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['list', '--limit', '10'],
+        args: ['ls', '--limit', '10'],
         result: { code: 0, stdout: '', stderr: '' },
       },
     ]);
@@ -82,7 +82,7 @@ describe('runMemory', () => {
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['list', '--limit', '10'],
+        args: ['ls', '--limit', '10'],
         result: { code: 1, stdout: '', stderr: 'db error' },
       },
     ]);
@@ -93,20 +93,35 @@ describe('runMemory', () => {
     expect(result.content[0].text).toContain('Failed to list memory');
   });
 
-  it('searches with query', async () => {
+  // ── search with query (cm context) ──────────────────────────
+
+  it('searches with query using cm context', async () => {
+    const contextResponse = JSON.stringify({
+      success: true,
+      command: 'context',
+      data: {
+        task: 'auth middleware',
+        relevantBullets: [
+          { id: 'b-123', category: 'architecture', content: 'Auth middleware refactor note', finalScore: 2.5 },
+        ],
+        antiPatterns: [],
+        historySnippets: [],
+      },
+    });
     const { ctx } = makeCtx([
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['search', 'auth middleware'],
-        result: { code: 0, stdout: 'Found: auth middleware refactor note', stderr: '' },
+        args: ['context', 'auth middleware', '--json'],
+        result: { code: 0, stdout: contextResponse, stderr: '' },
       },
     ]);
 
     const result = await runMemory(ctx, { cwd: '/fake/cwd', query: 'auth middleware' });
 
     expect(result.content[0].text).toContain('auth middleware');
-    expect(result.content[0].text).toContain('Found:');
+    expect(result.content[0].text).toContain('b-123');
+    expect(result.content[0].text).toContain('Auth middleware refactor note');
   });
 
   it('returns message when search finds no matches', async () => {
@@ -114,7 +129,7 @@ describe('runMemory', () => {
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['search', 'nonexistent'],
+        args: ['context', 'nonexistent', '--json'],
         result: { code: 0, stdout: '', stderr: '' },
       },
     ]);
@@ -129,7 +144,7 @@ describe('runMemory', () => {
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['search', 'test'],
+        args: ['context', 'test', '--json'],
         result: { code: 1, stdout: '', stderr: 'search error' },
       },
     ]);
@@ -141,18 +156,66 @@ describe('runMemory', () => {
   });
 
   it('trims whitespace from query', async () => {
+    const contextResponse = JSON.stringify({
+      success: true,
+      data: {
+        relevantBullets: [{ id: 'b-1', content: 'result', finalScore: 1.0 }],
+      },
+    });
     const { ctx } = makeCtx([
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['search', 'trimmed query'],
-        result: { code: 0, stdout: 'result', stderr: '' },
+        args: ['context', 'trimmed query', '--json'],
+        result: { code: 0, stdout: contextResponse, stderr: '' },
       },
     ]);
 
     const result = await runMemory(ctx, { cwd: '/fake/cwd', query: '  trimmed query  ' });
 
     expect(result.content[0].text).toContain('result');
+  });
+
+  it('formats anti-patterns and history snippets', async () => {
+    const contextResponse = JSON.stringify({
+      success: true,
+      data: {
+        relevantBullets: [{ id: 'b-1', category: 'testing', content: 'Always test edge cases', finalScore: 3.0 }],
+        antiPatterns: [{ id: 'b-2', content: 'Never mock the database in integration tests' }],
+        historySnippets: [{ snippet: 'Previous session used real DB successfully' }],
+      },
+    });
+    const { ctx } = makeCtx([
+      cmVersionCall(true),
+      {
+        cmd: 'cm',
+        args: ['context', 'testing', '--json'],
+        result: { code: 0, stdout: contextResponse, stderr: '' },
+      },
+    ]);
+
+    const result = await runMemory(ctx, { cwd: '/fake/cwd', query: 'testing' });
+
+    expect(result.content[0].text).toContain('Relevant Rules');
+    expect(result.content[0].text).toContain('Anti-Patterns');
+    expect(result.content[0].text).toContain('History');
+    expect(result.content[0].text).toContain('Never mock the database');
+  });
+
+  it('handles raw output when JSON parse fails', async () => {
+    const { ctx } = makeCtx([
+      cmVersionCall(true),
+      {
+        cmd: 'cm',
+        args: ['context', 'broken', '--json'],
+        result: { code: 0, stdout: 'not valid json but has results', stderr: '' },
+      },
+    ]);
+
+    const result = await runMemory(ctx, { cwd: '/fake/cwd', query: 'broken' });
+
+    // Falls back to raw output
+    expect(result.content[0].text).toContain('not valid json but has results');
   });
 
   // ── store operation ──────────────────────────────────────────
@@ -242,12 +305,12 @@ describe('runMemory', () => {
       cmVersionCall(true),
       {
         cmd: 'cm',
-        args: ['list', '--limit', '10'],
+        args: ['ls', '--limit', '10'],
         result: { code: 0, stdout: 'entry', stderr: '' },
       },
     ]);
 
-    // No operation specified — should default to search
+    // No operation specified — should default to search (list mode)
     const result = await runMemory(ctx, { cwd: '/fake/cwd' });
 
     expect(result.content[0].text).toContain('Recent CASS memory');

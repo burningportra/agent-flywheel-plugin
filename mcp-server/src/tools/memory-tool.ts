@@ -69,8 +69,9 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
     };
   }
 
-  // Search with query
-  const searchResult = await exec('cm', ['similar', args.query.trim(), '--json'], { cwd, timeout: 10000 });
+  // Search with query — use `cm context` for task-aware semantic matching.
+  // `cm similar` uses keyword mode and returns empty for most queries.
+  const searchResult = await exec('cm', ['context', args.query.trim(), '--json'], { cwd, timeout: 10000 });
   if (searchResult.code !== 0) {
     return {
       content: [{ type: 'text', text: `Search failed: ${searchResult.stderr}` }],
@@ -85,7 +86,42 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
     };
   }
 
+  // Parse cm context JSON to produce a readable summary
+  let formatted = output;
+  try {
+    const parsed = JSON.parse(output);
+    const data = parsed?.data ?? parsed;
+    const parts: string[] = [];
+
+    if (data.relevantBullets?.length > 0) {
+      parts.push('### Relevant Rules');
+      for (const b of data.relevantBullets) {
+        const score = b.finalScore != null ? ` (score: ${b.finalScore.toFixed(1)})` : '';
+        const cat = b.category ? ` [${b.category}]` : '';
+        parts.push(`- **${b.id}**${cat}${score}: ${b.content ?? b.text ?? ''}`);
+      }
+    }
+    if (data.antiPatterns?.length > 0) {
+      parts.push('\n### Anti-Patterns');
+      for (const ap of data.antiPatterns) {
+        parts.push(`- **${ap.id}**: ${ap.content ?? ap.text ?? ''}`);
+      }
+    }
+    if (data.historySnippets?.length > 0) {
+      parts.push('\n### History');
+      for (const h of data.historySnippets) {
+        parts.push(`- ${h.snippet ?? h.text ?? ''}`);
+      }
+    }
+
+    if (parts.length > 0) {
+      formatted = parts.join('\n');
+    }
+  } catch {
+    // If JSON parse fails, return raw output
+  }
+
   return {
-    content: [{ type: 'text', text: `## CASS memory: "${args.query}"\n\n${output}` }],
+    content: [{ type: 'text', text: `## CASS memory: "${args.query}"\n\n${formatted}` }],
   };
 }

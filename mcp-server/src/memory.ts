@@ -174,19 +174,22 @@ export function listMemoryEntries(cwd?: string): MemoryEntry[] {
 }
 
 /**
- * Search memory entries by query using CASS similar command.
+ * Search memory entries by query using CASS context command.
+ * Uses `cm context` (task-aware semantic matching) instead of `cm similar`
+ * (keyword mode) which returns empty for most queries.
  */
 export function searchMemory(cwd: string, query: string): MemoryEntry[] {
   if (!detectCass()) return [];
-  const output = runCm(["similar", query, "--json"], cwd);
-  interface CmResult { id?: string; text: string; score?: number; category?: string }
-  const data = parseCmJson<{ results: CmResult[] }>(output);
-  if (!data?.results) return [];
-  return data.results.map((r, i) => ({
+  const output = runCm(["context", query, "--json"], cwd);
+  interface CmBullet { id: string; content?: string; text?: string; category?: string; finalScore?: number }
+  interface CmContextData { relevantBullets?: CmBullet[] }
+  const data = parseCmJson<CmContextData>(output);
+  if (!data?.relevantBullets) return [];
+  return data.relevantBullets.map((b, i) => ({
     index: i + 1,
-    id: r.id ?? `r-${i}`,
-    category: r.category ?? "general",
-    content: r.text,
+    id: b.id,
+    category: b.category ?? "general",
+    content: b.content ?? b.text ?? "",
   }));
 }
 
@@ -247,22 +250,30 @@ export function mineSkillGaps(
   topic: string = "planning beads orchestration"
 ): string | null {
   if (!detectCass()) return null;
-  const output = runCm(["similar", topic, "--json"], cwd);
+  const output = runCm(["context", topic, "--json"], cwd);
   if (!output) return null;
-  // cm search returns { results: [...] } or { sessions: [...] } wrapper
-  const cmParsed = parseCmResult<{ results?: unknown[]; sessions?: unknown[] }>(output);
+  // cm context returns { relevantBullets: [...], historySnippets: [...] }
+  const cmParsed = parseCmResult<{
+    relevantBullets?: Array<{ id?: string; content?: string; text?: string }>;
+    historySnippets?: Array<{ snippet?: string; text?: string }>;
+  }>(output);
   if (!cmParsed.ok) {
-    log.warn("cm search parse failed", { error: cmParsed.error });
+    log.warn("cm context parse failed", { error: cmParsed.error });
     return null;
   }
-  const rawSessions = cmParsed.data?.results ?? cmParsed.data?.sessions ?? [];
-  const sessions = rawSessions as Array<{ text?: string; content?: string; score?: number }>;
-  if (sessions.length === 0) return null;
-  const snippets = sessions
-    .slice(0, 10)
-    .map((s, i) => `Session ${i + 1}:\n${(s.text ?? s.content ?? "").slice(0, 500)}`)
-    .join("\n\n---\n\n");
-  return snippets;
+  const bullets = cmParsed.data?.relevantBullets ?? [];
+  const history = cmParsed.data?.historySnippets ?? [];
+  if (bullets.length === 0 && history.length === 0) return null;
+  const parts: string[] = [];
+  for (const b of bullets.slice(0, 10)) {
+    const text = (b.content ?? b.text ?? "").slice(0, 500);
+    parts.push(`Rule [${b.id ?? "?"}]:\n${text}`);
+  }
+  for (const h of history.slice(0, 5)) {
+    const text = (h.snippet ?? h.text ?? "").slice(0, 500);
+    parts.push(`History:\n${text}`);
+  }
+  return parts.join("\n\n---\n\n");
 }
 
 /**
