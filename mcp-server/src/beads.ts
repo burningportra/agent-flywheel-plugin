@@ -5,6 +5,41 @@ import { createLogger } from "./logger.js";
 
 const log = createLogger("beads");
 
+// ─── Session Cache ─────────────────────────────────────────────
+// Caches expensive CLI results within a session to avoid redundant calls.
+// TTL-based: entries expire after CACHE_TTL_MS.
+
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+const _sessionCache = new Map<string, CacheEntry<unknown>>();
+
+function getCached<T>(key: string): T | null {
+  const entry = _sessionCache.get(key);
+  if (!entry || Date.now() > entry.expiresAt) {
+    _sessionCache.delete(key);
+    return null;
+  }
+  return entry.value as T;
+}
+
+function setCache<T>(key: string, value: T, ttlMs: number = CACHE_TTL_MS): void {
+  _sessionCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
+/** Clear all session caches. Call after bead mutations (create/update/close). */
+export function invalidateBeadCache(): void {
+  _sessionCache.delete("readBeads");
+  _sessionCache.delete("readyBeads");
+  _sessionCache.delete("bvTriage");
+  _sessionCache.delete("bvInsights");
+  _sessionCache.delete("bvNext");
+}
+
 /**
  * Check if a bead ID matches the expected br-NNN pattern.
  * The br CLI generates IDs like "br-1", "br-42", "br-123".
@@ -145,11 +180,15 @@ export async function bvInsights(
   exec: ExecFn,
   cwd: string
 ): Promise<BvInsights | null> {
+  const cached = getCached<BvInsights | null>("bvInsights");
+  if (cached !== null) return cached;
   if (!(await detectBv(exec))) return null;
   const result = await resilientExec(exec, "bv", ["--robot-insights"], { timeout: 15000, cwd, maxRetries: 1, retryDelayMs: 300 });
   if (!result.ok) return null;
   try {
-    return JSON.parse(result.value.stdout) as BvInsights;
+    const parsed = JSON.parse(result.value.stdout) as BvInsights;
+    setCache("bvInsights", parsed);
+    return parsed;
   } catch {
     log.warn("bv --robot-insights returned unparseable JSON");
     return null;
@@ -168,6 +207,8 @@ export async function bvTriage(
   exec: ExecFn,
   cwd: string
 ): Promise<BvNextPick[] | null> {
+  const cached = getCached<BvNextPick[] | null>("bvTriage");
+  if (cached !== null) return cached;
   if (!(await detectBv(exec))) return null;
   const result = await resilientExec(exec, "bv", ["--robot-triage", "--json"], { timeout: 15000, cwd, maxRetries: 1, retryDelayMs: 300 });
   if (!result.ok) return null;
@@ -176,9 +217,9 @@ export async function bvTriage(
   try {
     const data = JSON.parse(stdout);
     // --robot-triage may return an array or a single object
-    if (Array.isArray(data)) return data as BvNextPick[];
-    if (data && data.id) return [data as BvNextPick];
-    return null;
+    const parsed = Array.isArray(data) ? data as BvNextPick[] : (data && data.id) ? [data as BvNextPick] : null;
+    if (parsed) setCache("bvTriage", parsed);
+    return parsed;
   } catch {
     log.warn("bv --robot-triage returned unparseable JSON");
     return null;
@@ -258,6 +299,8 @@ export async function readBeads(
   exec: ExecFn,
   cwd: string
 ): Promise<Bead[]> {
+  const cached = getCached<Bead[]>("readBeads");
+  if (cached) return cached;
   const result = await brExecJson<Bead[] | { issues: Bead[] }>(exec, [
     "list",
     "--json",
@@ -267,7 +310,9 @@ export async function readBeads(
   if (!result.ok) return [];
   const data = result.value;
   const raw: unknown[] = Array.isArray(data) ? data : (data as any)?.issues ?? [];
-  return raw.map(parseBead).filter((b): b is Bead => b !== null);
+  const beads = raw.map(parseBead).filter((b): b is Bead => b !== null);
+  setCache("readBeads", beads);
+  return beads;
 }
 
 /**

@@ -205,11 +205,24 @@ export interface AgentsMdHealth {
   missing: string[];
 }
 
+// Session-level memoization for scoreAgentsMd
+let _scoreCacheKey: string | null = null;
+let _scoreCacheValue: AgentsMdHealth | null = null;
+
+/** Clear the scoreAgentsMd cache (call after modifying AGENTS.md). */
+export function resetAgentsMdScoreCache(): void {
+  _scoreCacheKey = null;
+  _scoreCacheValue = null;
+}
+
 /**
  * Score an AGENTS.md file on completeness.
  * Returns a health assessment with 0-100 score and list of missing sections.
+ * Results are memoized per cwd for the session.
  */
 export function scoreAgentsMd(cwd: string): AgentsMdHealth {
+  if (_scoreCacheKey === cwd && _scoreCacheValue) return _scoreCacheValue;
+
   const agentsMdPath = join(cwd, "AGENTS.md");
 
   if (!existsSync(agentsMdPath)) {
@@ -260,7 +273,10 @@ export function scoreAgentsMd(cwd: string): AgentsMdHealth {
     (hasBv ? 10 : 0)
   );
 
-  return { score, hasCoreRules, coreRuleCount, hasCoordination, hasMemory, hasBr, hasBv, missing };
+  const result = { score, hasCoreRules, coreRuleCount, hasCoordination, hasMemory, hasBr, hasBv, missing };
+  _scoreCacheKey = cwd;
+  _scoreCacheValue = result;
+  return result;
 }
 
 /**

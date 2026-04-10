@@ -27,11 +27,12 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
       fromCache = true;
     } else {
       profile = await profileRepo(exec, cwd);
-      await saveCachedProfile(exec, cwd, profile);
+      // Fire-and-forget: don't block return on cache write
+      saveCachedProfile(exec, cwd, profile).catch(() => {});
     }
   } else {
     profile = await profileRepo(exec, cwd);
-    await saveCachedProfile(exec, cwd, profile);
+    saveCachedProfile(exec, cwd, profile).catch(() => {});
   }
 
   // ── Detect coordination backends ──────────────────────────────

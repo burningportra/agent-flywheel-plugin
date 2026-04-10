@@ -48,22 +48,30 @@ export async function loadCachedProfile(exec: ExecFn, cwd: string): Promise<Repo
 /**
  * Save a RepoProfile to the cache file with the current git HEAD.
  */
-export async function saveCachedProfile(exec: ExecFn, cwd: string, profile: RepoProfile): Promise<void> {
+/**
+ * Save profile to cache. Accepts optional gitHead to avoid redundant git call.
+ * Designed to be called fire-and-forget (don't await if you don't need to).
+ */
+export async function saveCachedProfile(exec: ExecFn, cwd: string, profile: RepoProfile, gitHead?: string): Promise<void> {
   try {
-    const headResult = await exec("git", ["rev-parse", "HEAD"], { cwd, timeout: 5000 });
-    if (headResult.code !== 0) return;
+    let head = gitHead;
+    if (!head) {
+      const headResult = await exec("git", ["rev-parse", "HEAD"], { cwd, timeout: 5000 });
+      if (headResult.code !== 0) return;
+      head = headResult.stdout.trim();
+    }
 
     const cacheDir = join(cwd, CACHE_DIR);
     mkdirSync(cacheDir, { recursive: true });
 
     const cache: ProfileCache = {
-      gitHead: headResult.stdout.trim(),
+      gitHead: head,
       cachedAt: new Date().toISOString(),
       profile,
     };
 
     writeFileSync(join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2), "utf8");
-    log.info("Profile cached", { head: cache.gitHead.slice(0, 8) });
+    log.info("Profile cached", { head: head.slice(0, 8) });
   } catch (err) {
     log.warn("Failed to write profile cache", { error: err instanceof Error ? err.message : String(err) });
   }

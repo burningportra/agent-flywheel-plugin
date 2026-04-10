@@ -102,7 +102,7 @@ async function isAgentMailReachable(exec: ExecFn): Promise<boolean> {
   const result = await resilientExec(exec, "curl", [
     "-s", "--max-time", "2",
     "http://127.0.0.1:8765/health/liveness",
-  ], { timeout: 5000, maxRetries: 1 });
+  ], { timeout: 3000, maxRetries: 0 });
   if (!result.ok) return false;
   try {
     const parsed = JSON.parse(result.value.stdout.trim());
@@ -130,9 +130,10 @@ async function detectAgentMail(exec: ExecFn): Promise<boolean> {
 
   if (!startResult.ok) return false;
 
-  // Wait up to 5 seconds for it to become reachable
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 500));
+  // Wait up to ~5 seconds with exponential backoff (50ms → 100ms → 200ms → 400ms → 800ms → 1600ms)
+  // Breaks immediately on success instead of polling full window
+  for (const delayMs of [50, 100, 200, 400, 800, 1600]) {
+    await new Promise((r) => setTimeout(r, delayMs));
     if (await isAgentMailReachable(exec)) return true;
   }
 
@@ -202,7 +203,7 @@ let _ubsAvailable: boolean | null = null;
  */
 export async function detectUbs(exec: ExecFn, cwd: string): Promise<boolean> {
   if (_ubsAvailable !== null) return _ubsAvailable;
-  const result = await resilientExec(exec, "ubs", ["--help"], { timeout: 3000, cwd, maxRetries: 0 });
+  const result = await resilientExec(exec, "ubs", ["--help"], { timeout: 5000, cwd, maxRetries: 1, retryDelayMs: 500 });
   _ubsAvailable = result.ok && result.value.code === 0;
   return _ubsAvailable;
 }
