@@ -25,6 +25,7 @@ Gather context silently (do NOT display raw output yet):
 2. **Existing session**: Read `.pi-orchestrator/checkpoint.json` if it exists. Note phase and goal.
 3. **Existing beads**: Run `br list --json 2>/dev/null` and count open/in-progress/closed beads.
 4. **Git status**: Run `git log --oneline -1` to get latest commit.
+5. **CASS memory**: Call `orch_memory` with `operation: "search"` and `query: "session learnings orchestration"` to load prior session context. If CASS is unavailable, skip silently.
 
 ### 0c. Display the welcome banner
 
@@ -44,6 +45,13 @@ Display a single cohesive welcome message. Example:
 ```
 
 If beads is zero, show `Beads: none yet`. If MCP tools are unavailable, show `MCP: not configured` in the banner.
+
+If CASS returned learnings from prior sessions, display them below the banner:
+
+> **From prior sessions:**
+> - <top 3-5 most relevant learnings, anti-patterns, or gotchas>
+
+This gives the user (and the orchestrator) context from past runs before making any decisions.
 
 ### 0d. Present the main menu
 
@@ -155,6 +163,11 @@ AskUserQuestion(questions: [{
 
 ## Step 3: Discover improvement ideas
 
+Before discovering ideas, query CASS for past goal history: call `orch_memory` with `operation: "search"` and `query: "past goals success failure anti-pattern"`. If results are returned, use them to:
+- Deprioritize ideas that failed before (unless circumstances changed)
+- Boost ideas similar to past successes
+- Surface anti-patterns to avoid
+
 If `MCP_DEGRADED` is false, call `orch_discover` with `cwd`.
 
 If `MCP_DEGRADED` is true (or `orch_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
@@ -252,6 +265,7 @@ AskUserQuestion(questions: [{
    - Instructions to call `macro_start_session` first (same `human_key`, their model, their task)
    - Their focused planning perspective (correctness / ergonomics / robustness)
    - Full repo context (path, stack, goal, recent commits, known bugs)
+   - **CASS context**: Query `orch_memory` with `query: "architecture planning decisions <goal>"` and include the top learnings in the agent prompt as a "Prior Session Context" section. This prevents agents from repeating past mistakes or reinventing prior decisions.
    - Instruction to **write their plan to disk**: `docs/plans/<date>-<perspective>.md` (use the Write tool — do NOT send large plan text through Agent Mail message body)
    - Instruction to send YOU just the file path via `send_message` with subject `"[deep-plan] <perspective> plan"` once written
    - Instruction to message their team lead when done
@@ -459,6 +473,10 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
        Only after 0a, 0b, 0c are ALL complete may you proceed to Step 1.
 
+       ## STEP 0.5 — LOAD MEMORY (if CASS available)
+       Call orch_memory with operation='search' and query='implementation gotchas <bead-title>'.
+       If results returned, review them before starting — they contain lessons from past sessions.
+
        ## STEP 1 — IMPLEMENT
        <bead title>
        <bead description>
@@ -483,12 +501,18 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    )
    ```
 
-3. Mark the bead's task as `in_progress`. If the agent goes idle before reporting back, nudge it:
+3. **Auto-capture failures**: If an agent reports a blocker or failure via Agent Mail, automatically store it in CASS:
+   ```
+   orch_memory(operation: "store", content: "Bead <id> (<title>) hit blocker: <failure description>. Resolution: <what fixed it or 'unresolved'>")
+   ```
+   This ensures future sessions can recall what went wrong and avoid the same pitfall.
+
+4. Mark the bead's task as `in_progress`. If the agent goes idle before reporting back, nudge it:
    ```
    SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")
    ```
 
-4. When the agent completes, mark task as `completed`. Send shutdown:
+5. When the agent completes, mark task as `completed`. Send shutdown:
    ```
    SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
    ```

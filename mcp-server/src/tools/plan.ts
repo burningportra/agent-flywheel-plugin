@@ -4,6 +4,7 @@ import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
 import { slugifyGoal, pickRefinementModel, DEEP_PLAN_MODELS } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
+import { readMemory } from '../memory.js';
 
 /**
  * orch_plan — Generate a plan document for the selected goal.
@@ -135,16 +136,23 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
     ? `Repository: ${profile.name} | Languages: ${profile.languages.join(', ')} | Frameworks: ${profile.frameworks.join(', ')}`
     : 'Repository: (profile not loaded — call orch_profile first for best results)';
 
+  // Load CASS memory for planning context (best-effort)
+  let memorySection = "";
+  try {
+    const mem = readMemory(cwd, `planning architecture ${goal}`);
+    if (mem) memorySection = `\n## Prior Session Context\n${mem}\n`;
+  } catch { /* CASS unavailable — proceed without */ }
+
   const basePrompt = `You are a planning agent for an agentic coding workflow.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
-
+${memorySection}
 Write a comprehensive implementation plan from your designated perspective. The plan will be synthesized with plans from other agents with different perspectives.
 
 ## Plan requirements
 - Executive summary
-- Architecture overview  
+- Architecture overview
 - Ordered implementation phases with dependencies
 - File-level changes (specific files to create/modify per phase)
 - Testing strategy

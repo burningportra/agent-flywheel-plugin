@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { ToolContext, McpToolResult, Bead, ApproveArgs } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, pickRefinementModel, slugifyGoal } from './shared.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
+import { withCassContext } from '../feedback.js';
 
 // Module-level bead snapshot for change tracking
 type BeadSnapshot = Map<string, { title: string; descFingerprint: string }>;
@@ -364,10 +365,8 @@ ${beadList}`,
   }
 
   // Parallel: multiple ready beads — return agent configs for CC to spawn
-  const agentConfigs = ready.map((bead) => ({
-    name: `bead-${bead.id}`,
-    cwd,
-    task: `You are implementing bead ${bead.id} as part of the orchestration workflow.
+  const agentConfigs = ready.map((bead) => {
+    const baseTask = `You are implementing bead ${bead.id} as part of the orchestration workflow.
 
 ## ${bead.title}
 
@@ -380,8 +379,14 @@ ${bead.description}
 4. Do a fresh-eyes self-review
 5. Commit: \`git add <files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
 
-After completing, report your summary to the orchestrator.`,
-  }));
+After completing, report your summary to the orchestrator.`;
+
+    return {
+      name: `bead-${bead.id}`,
+      cwd,
+      task: withCassContext(baseTask, cwd, `implementing: ${bead.title}`),
+    };
+  });
 
   return {
     content: [{

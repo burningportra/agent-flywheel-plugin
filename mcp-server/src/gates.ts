@@ -1,7 +1,7 @@
 import type { ExecFn } from "./exec.js";
 import type { OrchestratorState } from "./types.js";
 import { polishInstructions, summaryInstructions, realityCheckInstructions, deSlopifyInstructions, landingChecklistInstructions, learningsExtractionPrompt } from "./prompts.js";
-import { reflectMemory } from "./memory.js";
+import { reflectMemory, readMemory } from "./memory.js";
 import { readBeads, extractArtifacts as extractBeadArtifacts } from "./beads.js";
 import { agentMailTaskPreamble } from "./agent-mail.js";
 import { detectUbs } from "./coordination.js";
@@ -24,6 +24,13 @@ export async function runGuidedGates(
   const beadResults = Object.values(st.beadResults ?? {});
   const polish = polishInstructions(goal, allArtifacts);
   const summaryText = summaryInstructions(goal, activeBeads, beadResults);
+
+  // Load CASS memory context for review gates (best-effort)
+  let memoryContext = "";
+  try {
+    const mem = readMemory(cwd, `review patterns ${goal}`);
+    if (mem) memoryContext = `\n\n## Prior Session Learnings\n${mem}\n`;
+  } catch { /* CASS unavailable — proceed without */ }
 
   // Domain-specific review items based on tech stack
   const domainChecklist = st.repoProfile ? getDomainChecklist(st.repoProfile) : null;
@@ -123,7 +130,7 @@ export async function runGuidedGates(
       content: [
         {
           type: "text",
-          text: `## Fresh Self-Review - Round ${round}\n\nCarefully re-read ALL new and modified code with fresh eyes. For each file changed, work through these 4 questions:\n\n1. **Is it correct?** Does the implementation actually do what the bead description says it should?\n2. **Are edge cases handled?** Empty inputs, concurrent access, error paths, boundary conditions - what breaks under stress?\n3. **Are there similar issues elsewhere?** If you found a bug, search for the same pattern in other files. Bugs travel in packs.\n4. **Was the approach right?** Sometimes the implementation is correct but there's a simpler or more robust alternative. Consider it now, not after review.\n\nFix everything you find. If you find a bug, do the pattern search (#3) before moving on.\n\nFiles changed:\n${allArtifacts.map((a) => `- ${a}`).join("\n")}\n\nUse ultrathink.${callbackHint}${regressionHint}`,
+          text: `## Fresh Self-Review - Round ${round}${memoryContext}\n\nCarefully re-read ALL new and modified code with fresh eyes. For each file changed, work through these 4 questions:\n\n1. **Is it correct?** Does the implementation actually do what the bead description says it should?\n2. **Are edge cases handled?** Empty inputs, concurrent access, error paths, boundary conditions - what breaks under stress?\n3. **Are there similar issues elsewhere?** If you found a bug, search for the same pattern in other files. Bugs travel in packs.\n4. **Was the approach right?** Sometimes the implementation is correct but there's a simpler or more robust alternative. Consider it now, not after review.\n\nFix everything you find. If you find a bug, do the pattern search (#3) before moving on.\n\nFiles changed:\n${allArtifacts.map((a) => `- ${a}`).join("\n")}\n\nUse ultrathink.${callbackHint}${regressionHint}`,
         },
       ],
       details: { iterating: true, round, selfReview: true },
@@ -140,7 +147,7 @@ export async function runGuidedGates(
     const peerAgents = [
       {
         name: `peer-bugs-r${round}`,
-        task: `${peerPreamble(`peer-bugs-r${round}`)}Peer reviewer (round ${round}). Review code written by your fellow agents. Check for issues, bugs, errors, inefficiencies, security problems, reliability issues. Diagnose root causes using first-principle analysis. Don't restrict to latest commits - cast a wider net and go super deep!\n\nGoal: ${goal}\nFiles: ${allArtifacts.join(", ")}${domainReviewExtras}\n\nFix issues directly using the edit tool. Your changes persist to disk.\n\nUse ultrathink.\n\ncd ${cwd}`,
+        task: `${peerPreamble(`peer-bugs-r${round}`)}Peer reviewer (round ${round}). Review code written by your fellow agents. Check for issues, bugs, errors, inefficiencies, security problems, reliability issues. Diagnose root causes using first-principle analysis. Don't restrict to latest commits - cast a wider net and go super deep!${memoryContext}\n\nGoal: ${goal}\nFiles: ${allArtifacts.join(", ")}${domainReviewExtras}\n\nFix issues directly using the edit tool. Your changes persist to disk.\n\nUse ultrathink.\n\ncd ${cwd}`,
       },
       {
         name: `peer-polish-r${round}`,
