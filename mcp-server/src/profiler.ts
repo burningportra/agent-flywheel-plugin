@@ -1,8 +1,73 @@
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { ExecFn } from "./exec.js";
 import type { RepoProfile, TodoItem, CommitSummary } from "./types.js";
 import { createLogger } from './logger.js';
 
 const log = createLogger('profiler');
+
+const CACHE_DIR = ".pi-orchestrator";
+const CACHE_FILE = "profile-cache.json";
+
+interface ProfileCache {
+  gitHead: string;
+  cachedAt: string;
+  profile: RepoProfile;
+}
+
+/**
+ * Load cached profile if the git HEAD matches.
+ * Returns the cached RepoProfile or null if stale/missing.
+ */
+export async function loadCachedProfile(exec: ExecFn, cwd: string): Promise<RepoProfile | null> {
+  const cachePath = join(cwd, CACHE_DIR, CACHE_FILE);
+  if (!existsSync(cachePath)) return null;
+
+  try {
+    const raw = readFileSync(cachePath, "utf8");
+    const cache: ProfileCache = JSON.parse(raw);
+
+    // Check if HEAD matches
+    const headResult = await exec("git", ["rev-parse", "HEAD"], { cwd, timeout: 5000 });
+    if (headResult.code !== 0) return null;
+
+    const currentHead = headResult.stdout.trim();
+    if (cache.gitHead !== currentHead) {
+      log.info("Profile cache stale", { cached: cache.gitHead.slice(0, 8), current: currentHead.slice(0, 8) });
+      return null;
+    }
+
+    log.info("Profile cache hit", { head: currentHead.slice(0, 8), cachedAt: cache.cachedAt });
+    return cache.profile;
+  } catch (err) {
+    log.warn("Failed to read profile cache", { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+/**
+ * Save a RepoProfile to the cache file with the current git HEAD.
+ */
+export async function saveCachedProfile(exec: ExecFn, cwd: string, profile: RepoProfile): Promise<void> {
+  try {
+    const headResult = await exec("git", ["rev-parse", "HEAD"], { cwd, timeout: 5000 });
+    if (headResult.code !== 0) return;
+
+    const cacheDir = join(cwd, CACHE_DIR);
+    mkdirSync(cacheDir, { recursive: true });
+
+    const cache: ProfileCache = {
+      gitHead: headResult.stdout.trim(),
+      cachedAt: new Date().toISOString(),
+      profile,
+    };
+
+    writeFileSync(join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2), "utf8");
+    log.info("Profile cached", { head: cache.gitHead.slice(0, 8) });
+  } catch (err) {
+    log.warn("Failed to write profile cache", { error: err instanceof Error ? err.message : String(err) });
+  }
+}
 
 /**
  * Collect raw repo signals using exec for shell commands.

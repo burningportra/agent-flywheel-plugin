@@ -1,6 +1,6 @@
 import type { ToolContext, McpToolResult, OrchestratorState, RepoProfile, ScanResult, ProfileArgs } from '../types.js';
 import { formatRepoProfile } from './shared.js';
-import { profileRepo } from '../profiler.js';
+import { profileRepo, loadCachedProfile, saveCachedProfile } from '../profiler.js';
 
 /**
  * orch_profile — Scan the current repo and build a profile.
@@ -8,14 +8,31 @@ import { profileRepo } from '../profiler.js';
  * Runs git log, finds key files, detects language/framework/CI/test tooling.
  * Detects the br CLI (beads) for coordination backend.
  * Returns a structured profile and discovery instructions.
+ *
+ * Uses a git-HEAD-keyed cache to skip redundant scans. Pass force=true to bypass.
  */
 export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<McpToolResult> {
   const { exec, cwd, state, saveState } = ctx;
 
   state.phase = 'profiling';
 
-  // ── Collect repo signals ──────────────────────────────────────
-  const profile = await profileRepo(exec, cwd);
+  // ── Try cache first (unless forced) ──────────────────────────
+  let profile: RepoProfile;
+  let fromCache = false;
+
+  if (!args.force) {
+    const cached = await loadCachedProfile(exec, cwd);
+    if (cached) {
+      profile = cached;
+      fromCache = true;
+    } else {
+      profile = await profileRepo(exec, cwd);
+      await saveCachedProfile(exec, cwd, profile);
+    }
+  } else {
+    profile = await profileRepo(exec, cwd);
+    await saveCachedProfile(exec, cwd, profile);
+  }
 
   // ── Detect coordination backends ──────────────────────────────
   const brResult = await exec('br', ['--version'], { cwd, timeout: 5000 });
@@ -78,7 +95,11 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
 
   const formatted = formatRepoProfile(profile);
 
-  const text = `${roadmap}\n\n${coordLine}${foundationWarning}${beadStatus}${goalSection}\n\n---\n\n${formatted}`;
+  const cacheNote = fromCache
+    ? `\n\n> Profile loaded from cache (git HEAD unchanged). Pass \`force: true\` to re-scan.`
+    : '';
+
+  const text = `${roadmap}\n\n${coordLine}${cacheNote}${foundationWarning}${beadStatus}${goalSection}\n\n---\n\n${formatted}`;
 
   return { content: [{ type: 'text', text }] };
 }

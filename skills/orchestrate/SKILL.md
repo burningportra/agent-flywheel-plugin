@@ -67,9 +67,13 @@ If the user chooses "Start fresh", delete the checkpoint file.
 
 ## Step 2: Scan and profile the repository
 
-Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits.
+Call `orch_profile` with `cwd`. The tool uses a git-HEAD-keyed cache — if the repo hasn't changed since the last scan, it returns instantly from cache.
 
-If `MCP_DEGRADED` is false, call `orch_profile` with `cwd`. If the call fails, set `MCP_DEGRADED = true` and inform the user: "orch_profile failed — continuing with manual profiling only." Proceed with the Explore results regardless.
+- **Cache hit** (output says "Profile loaded from cache"): Skip the Explore agent — the profile is fresh. Proceed directly to Step 3.
+- **Cache miss** (fresh scan): Optionally spawn an Explore agent for deeper analysis if the profile reveals a complex or unfamiliar codebase. For known repos, skip it.
+- **Force re-scan**: Pass `force: true` to `orch_profile` to bypass the cache (e.g. after major restructuring).
+
+If `MCP_DEGRADED` is true or `orch_profile` fails, fall back to an Explore agent for manual profiling.
 
 ## Step 3: Discover improvement ideas
 

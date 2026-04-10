@@ -475,7 +475,7 @@ export type McpToolResult = {
 
 // ─── Tool Arg Interfaces ──────────────────────────────────────
 
-export interface ProfileArgs { cwd: string; goal?: string }
+export interface ProfileArgs { cwd: string; goal?: string; force?: boolean }
 export interface DiscoverArgs { cwd: string; ideas: CandidateIdea[] }
 export interface SelectArgs { cwd: string; goal: string }
 export interface PlanArgs { cwd: string; mode?: "standard" | "deep"; planContent?: string; planFile?: string }

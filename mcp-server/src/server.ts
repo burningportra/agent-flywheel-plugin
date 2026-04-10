@@ -32,6 +32,7 @@ const TOOLS = [
       properties: {
         cwd: { type: "string", description: "Project working directory (absolute path)" },
         goal: { type: "string", description: "Optional initial goal to target discovery" },
+        force: { type: "boolean", description: "Force a fresh scan, bypassing the profile cache" },
       },
       required: ["cwd"],
     },
