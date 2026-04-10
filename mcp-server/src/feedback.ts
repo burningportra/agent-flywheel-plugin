@@ -8,6 +8,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync } from "fs";
 import { join } from "path";
+import { parseFeedbackFile } from "./parsers.js";
 
 // ─── A. Post-Orchestration Feedback ─────────────────────────
 
@@ -84,7 +85,9 @@ export function loadAllFeedback(cwd: string): OrchestrationFeedback[] {
       .sort() // chronological order
       .map((f) => {
         try {
-          return JSON.parse(readFileSync(join(dir, f), "utf8")) as OrchestrationFeedback;
+          const raw = readFileSync(join(dir, f), "utf8");
+          const parsed = parseFeedbackFile(raw);
+          return parsed.ok ? parsed.data : null;
         } catch {
           return null;
         }

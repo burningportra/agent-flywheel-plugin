@@ -1,6 +1,7 @@
 import type { ExecFn } from "./exec.js";
 import type { AgentMailResult } from "./types.js";
 import { createLogger } from "./logger.js";
+import { parseAgentMailResponse } from "./parsers.js";
 
 const log = createLogger("agent-mail");
 
@@ -87,35 +88,29 @@ export async function agentMailRPC<T = any>(
     };
   }
 
-  // Parse JSON response
-  let parsed: any;
-  try {
-    parsed = JSON.parse(result.stdout);
-  } catch {
+  // Parse and validate JSON-RPC response
+  const parsed = parseAgentMailResponse<any>(result.stdout);
+  if (!parsed.ok) {
+    // Determine error kind from the parser error message
+    const isRpcError = parsed.error.startsWith("RPC error:");
     return {
       ok: false,
       error: {
-        kind: "parse",
-        message: "Invalid JSON in agent-mail response",
-        stderr: result.stdout.slice(0, 200) || undefined,
+        kind: isRpcError ? "rpc_error" : "parse",
+        message: parsed.error,
+        stderr: isRpcError ? undefined : result.stdout.slice(0, 200) || undefined,
       },
     };
   }
 
-  // JSON-RPC error object
-  if (parsed?.error) {
-    return {
-      ok: false,
-      error: {
-        kind: "rpc_error",
-        message: parsed.error.message ?? JSON.stringify(parsed.error),
-        code: parsed.error.code,
-      },
-    };
-  }
+  // Extract data — agent-mail wraps actual payload in structuredContent
+  const rpcResult = parsed.data as Record<string, unknown> | null;
+  const data = (
+    rpcResult != null && typeof rpcResult === "object" && "structuredContent" in rpcResult
+      ? rpcResult.structuredContent
+      : rpcResult
+  ) as T | null;
 
-  // Extract data
-  const data = (parsed?.result?.structuredContent ?? parsed?.result ?? null) as T | null;
   if (data == null) {
     return {
       ok: false,
@@ -158,13 +153,25 @@ export async function agentMailReadResource(exec: ExecFn, uri: string): Promise<
     "--max-time", "5",
   ], { timeout: 8000 });
 
+  // Parse outer JSON-RPC envelope
+  const outer = parseAgentMailResponse<any>(result.stdout);
+  if (!outer.ok) {
+    log.warn("agent-mail resource read parse failed", { error: outer.error });
+    return null;
+  }
+
   try {
-    const parsed = JSON.parse(result.stdout);
-    const content = parsed?.result?.contents?.[0]?.text;
+    const rpcResult = outer.data;
+    const content = rpcResult?.contents?.[0]?.text;
     if (typeof content === "string") {
-      return JSON.parse(content);
+      // Inner content may be a JSON string — attempt to parse it
+      try {
+        return JSON.parse(content);
+      } catch {
+        return content;
+      }
     }
-    return parsed?.result?.contents ?? parsed?.result ?? null;
+    return rpcResult?.contents ?? rpcResult ?? null;
   } catch {
     return null;
   }
