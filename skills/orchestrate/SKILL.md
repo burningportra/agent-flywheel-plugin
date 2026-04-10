@@ -7,63 +7,122 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
 
 Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
 
-## Step 0: Show version
+## Step 0: Opening Ceremony
+
+### 0a. Detect version
 
 Attempt to find `mcp-server/package.json` by searching the Claude plugins directory:
 ```bash
 find ~/.claude/plugins -path "*/claude-orchestrator/mcp-server/package.json" 2>/dev/null | head -1
 ```
-If found, read it and display the version:
+Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name).
 
-> **claude-orchestrator v`<version>`**
+### 0b. Detect state
 
-If not found, display and continue — do NOT block:
+Gather context silently (do NOT display raw output yet):
 
-> **claude-orchestrator (version unknown — MCP server not installed)**
+1. **MCP tools**: Use `ToolSearch` with query `"select:orch_profile"`. Note if available.
+2. **Existing session**: Read `.pi-orchestrator/checkpoint.json` if it exists. Note phase and goal.
+3. **Existing beads**: Run `br list --json 2>/dev/null` and count open/in-progress/closed beads.
+4. **Git status**: Run `git log --oneline -1` to get latest commit.
 
-## Step 0.5: Verify MCP tools are available
+### 0c. Display the welcome banner
 
-Before proceeding, check that the orchestrator MCP tools are registered:
+Display a single cohesive welcome message. Example:
 
-1. Use `ToolSearch` with query `"select:orch_profile"`.
-2. If the tool schema is returned: proceed to Step 1.
-3. If NOT found, display:
+```
+ ╔══════════════════════════════════════════════════╗
+ ║                                                  ║
+ ║   claude-orchestrator v2.6.0                     ║
+ ║   The Agentic Coding Flywheel                    ║
+ ║                                                  ║
+ ║   Project: <project-name>                        ║
+ ║   Branch:  <current-branch> @ <short-sha>        ║
+ ║   Beads:   <N open> | <M in-progress> | <K done> ║
+ ║                                                  ║
+ ╚══════════════════════════════════════════════════╝
+```
 
-> **Orchestrator MCP server is not configured.**
-> The `orch_*` tools (`orch_profile`, `orch_discover`, `orch_plan`, etc.) are not available.
->
-> **To install:** Run `/orchestrate-setup` to configure the MCP server.
->
-> **To continue without it:** The structured flywheel (planning quality scores, bead management, session memory) will not be available. Type "continue anyway" to proceed in degraded mode.
+If beads is zero, show `Beads: none yet`. If MCP tools are unavailable, show `MCP: not configured` in the banner.
 
-4. If the user chooses to continue in degraded mode, set an internal flag `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
-   - **Step 2:** Use Explore subagent only (skip `orch_profile`).
-   - **Step 3:** Use Explore-derived ideas (skip `orch_discover`).
-   - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `orch_plan`).
-   - **Step 5.5:** Create beads with `br create` as normal.
-   - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
-   - **Step 8:** Offer "Looks good" and "Self review" only (skip `orch_review`).
-   - **Step 10:** Skip `orch_memory` — remind user that session learnings were not auto-persisted.
+### 0d. Present the main menu
 
-5. If the user declines, stop gracefully.
+Build the menu options dynamically based on detected state:
 
-## Step 1: Check for existing session
-
-Read `.pi-orchestrator/checkpoint.json` if it exists. If a non-idle/non-complete session is found, use `AskUserQuestion`:
+**If a previous session exists** (checkpoint found with non-idle phase):
 
 ```
 AskUserQuestion(questions: [{
-  question: "Found a previous session (phase: <phase>, goal: <goal>). What would you like to do?",
-  header: "Session",
+  question: "What would you like to do?",
+  header: "Start",
   options: [
-    { label: "Resume", description: "Continue from where we left off" },
-    { label: "Start fresh", description: "Discard previous state and begin a new session" }
+    { label: "Resume session", description: "Continue '<goal>' from <phase> phase" },
+    { label: "Work on beads", description: "<N> open beads ready — jump straight to implementation" },
+    { label: "New goal", description: "Start fresh with a new goal (discards previous session)" },
+    { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
   ],
   multiSelect: false
 }])
 ```
 
-If the user chooses "Start fresh", delete the checkpoint file.
+**If open/in-progress beads exist** but no active session:
+
+```
+AskUserQuestion(questions: [{
+  question: "What would you like to do?",
+  header: "Start",
+  options: [
+    { label: "Work on beads", description: "<N> open beads ready — pick up where you left off" },
+    { label: "New goal", description: "Scan the repo and discover improvement ideas" },
+    { label: "Audit", description: "Run /orchestrate-audit to check for bugs and test gaps" },
+    { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
+  ],
+  multiSelect: false
+}])
+```
+
+**If no beads and no session** (fresh start):
+
+```
+AskUserQuestion(questions: [{
+  question: "What would you like to do?",
+  header: "Start",
+  options: [
+    { label: "Scan & discover", description: "Profile the repo and find improvement opportunities" },
+    { label: "Set a goal", description: "I already know what I want to build" },
+    { label: "Audit", description: "Run /orchestrate-audit to check for bugs and test gaps" },
+    { label: "Setup", description: "Run /orchestrate-setup to configure prerequisites" }
+  ],
+  multiSelect: false
+}])
+```
+
+### 0e. Route the user's choice
+
+| Choice | Action |
+|--------|--------|
+| **Resume session** | Load checkpoint, jump to the saved phase |
+| **Work on beads** | Call `orch_approve_beads` with `action: "start"` to launch implementation |
+| **New goal** | Delete checkpoint if exists, proceed to Step 2 |
+| **Scan & discover** | Proceed to Step 2 |
+| **Set a goal** | Run `/brainstorming` to refine the goal, then proceed to Step 4 |
+| **Quick fix** | Invoke `/orchestrate-fix` |
+| **Audit** | Invoke `/orchestrate-audit` |
+| **Setup** | Invoke `/orchestrate-setup` |
+
+### 0f. MCP degraded mode
+
+If MCP tools were NOT found in step 0b:
+
+- Display in the banner: `MCP: not configured — run /orchestrate-setup`
+- Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
+  - **Step 2:** Use Explore subagent only (skip `orch_profile`).
+  - **Step 3:** Use Explore-derived ideas (skip `orch_discover`).
+  - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `orch_plan`).
+  - **Step 5.5:** Create beads with `br create` as normal.
+  - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
+  - **Step 8:** Offer "Looks good" and "Self review" only (skip `orch_review`).
+  - **Step 10:** Skip `orch_memory` — remind user that session learnings were not auto-persisted.
 
 ## Step 2: Scan and profile the repository
 
