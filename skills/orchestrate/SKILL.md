@@ -49,13 +49,21 @@ Before proceeding, check that the orchestrator MCP tools are registered:
 
 ## Step 1: Check for existing session
 
-Read `.pi-orchestrator/checkpoint.json` if it exists. If a non-idle/non-complete session is found, ask the user:
+Read `.pi-orchestrator/checkpoint.json` if it exists. If a non-idle/non-complete session is found, use `AskUserQuestion`:
 
-> "I found a previous session (phase: `<phase>`, goal: `<goal>`). What would you like to do?
-> 1. Resume from where we left off
-> 2. Start fresh (discards previous state)"
+```
+AskUserQuestion(questions: [{
+  question: "Found a previous session (phase: <phase>, goal: <goal>). What would you like to do?",
+  header: "Session",
+  options: [
+    { label: "Resume", description: "Continue from where we left off" },
+    { label: "Start fresh", description: "Discard previous state and begin a new session" }
+  ],
+  multiSelect: false
+}])
+```
 
-If the user chooses to start fresh, delete the checkpoint file.
+If the user chooses "Start fresh", delete the checkpoint file.
 
 ## Step 2: Scan and profile the repository
 
@@ -69,9 +77,45 @@ If `MCP_DEGRADED` is false, call `orch_discover` with `cwd`.
 
 If `MCP_DEGRADED` is true (or `orch_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
 
-Present the top ideas to the user clearly. Ask:
+Present the top ideas to the user using `AskUserQuestion`. Include up to 4 top-ranked ideas as options (the "Other" option is automatically provided for custom goals):
 
-> "Which of these goals would you like to pursue? You can pick one from the list or describe your own goal."
+```
+AskUserQuestion(questions: [{
+  question: "Which goal would you like to pursue?",
+  header: "Goal",
+  options: [
+    { label: "<idea 1 short title>", description: "<one-line summary>" },
+    { label: "<idea 2 short title>", description: "<one-line summary>" },
+    { label: "<idea 3 short title>", description: "<one-line summary>" },
+    { label: "<idea 4 short title>", description: "<one-line summary>" }
+  ],
+  multiSelect: false
+}])
+```
+
+If the user selects "Other" and enters a custom goal, run the `/brainstorming` skill first to explore intent, constraints, and edge cases before committing to scope. The brainstorming skill will use `AskUserQuestion` to ask clarifying questions about:
+- What problem the user is trying to solve and why
+- Known constraints or non-goals
+- Desired outcome and acceptance criteria
+
+After brainstorming completes and the goal is refined, use `AskUserQuestion` to confirm scope:
+
+```
+AskUserQuestion(questions: [{
+  question: "Goal refined: '<refined goal from brainstorming>'. How should I scope this?",
+  header: "Scope",
+  options: [
+    { label: "Full flywheel", description: "Deep scan, plan, implement with agents, review" },
+    { label: "Plan only", description: "Generate and review a plan, stop before implementation" },
+    { label: "Quick fix", description: "Skip planning — use /orchestrate-fix for a targeted change" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Full flywheel"** → proceed to Step 4 with the refined goal
+- **"Plan only"** → proceed through Step 5, then stop after bead creation
+- **"Quick fix"** → invoke `/orchestrate-fix` with the refined goal instead
 
 ## Step 4: Select goal
 
@@ -79,11 +123,19 @@ Once the user chooses, call `orch_select` with `cwd` and `goal` set to their cho
 
 ## Step 5: Choose planning mode
 
-Ask the user:
+Use `AskUserQuestion`:
 
-> "How would you like to plan?
-> 1. **Standard plan** — single planning pass (faster)
-> 2. **Deep plan** — 3 AI models give competing perspectives, then synthesize (higher quality, takes longer)"
+```
+AskUserQuestion(questions: [{
+  question: "How would you like to plan?",
+  header: "Plan mode",
+  options: [
+    { label: "Standard plan", description: "Single planning pass — faster" },
+    { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality, takes longer" }
+  ],
+  multiSelect: false
+}])
+```
 
 **Standard plan**: Call `orch_plan` with `cwd` and `mode: "standard"`.
 
@@ -170,12 +222,20 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
 
 ## Step 6: Review and approve beads
 
-Use `br list` to display the current beads. Ask:
+Use `br list` to display the current beads. Then use `AskUserQuestion`:
 
-> "Here are the implementation beads. What would you like to do?
-> 1. **Start implementing** — launch the implementation loop
-> 2. **Polish further** — refine the beads more
-> 3. **Reject** — start over with a different goal"
+```
+AskUserQuestion(questions: [{
+  question: "Here are the implementation beads. What would you like to do?",
+  header: "Beads",
+  options: [
+    { label: "Start implementing", description: "Launch the implementation loop with agents" },
+    { label: "Polish further", description: "Refine the beads before implementing" },
+    { label: "Reject", description: "Discard these beads and start over with a different goal" }
+  ],
+  multiSelect: false
+}])
+```
 
 - "Start" → call `orch_approve_beads` with `action: "start"`
   > **Note:** If the plan was just registered via `orch_plan`, the first `orch_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `orch_approve_beads` with `action: "start"` a second time to get the quality score and launch.
@@ -277,21 +337,37 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
 When one or more beads complete, present a consolidated review prompt. Never ask per-bead if multiple are ready.
 
-If a **single bead** finishes:
+If a **single bead** finishes, use `AskUserQuestion`:
 
-> "Bead `<id>` is done. How would you like to review?
-> 1. **Looks good** — accept and move on
-> 2. **Self review** — send the impl agent back to audit its own diff
-> 3. **Fresh-eyes** — 5 parallel review agents give independent feedback"
+```
+AskUserQuestion(questions: [{
+  question: "Bead <id> is done. How would you like to review?",
+  header: "Review",
+  options: [
+    { label: "Looks good", description: "Accept and move on" },
+    { label: "Self review", description: "Send the impl agent back to audit its own diff" },
+    { label: "Fresh-eyes", description: "5 parallel review agents give independent feedback" }
+  ],
+  multiSelect: false
+}])
+```
 
-If **multiple beads** finish together:
+If **multiple beads** finish together, use `AskUserQuestion`:
 
-> "Beads `<id1>`, `<id2>`, `<id3>` are done. How would you like to review?
-> 1. **Looks good all** — accept all and move on
-> 2. **Self review `<id>`** — send that bead's impl agent back to audit its own diff
-> 3. **Fresh-eyes `<id>`** — 5 parallel review agents give independent feedback on that bead
->
-> You can combine: e.g. 'Looks good all except fresh-eyes `<id2>`'"
+```
+AskUserQuestion(questions: [{
+  question: "Beads <id1>, <id2>, <id3> are done. How would you like to review?",
+  header: "Review",
+  options: [
+    { label: "Looks good all", description: "Accept all and move on" },
+    { label: "Self review", description: "Pick a specific bead for self-review (enter bead ID in Other)" },
+    { label: "Fresh-eyes", description: "Pick a specific bead for 5-agent review (enter bead ID in Other)" }
+  ],
+  multiSelect: false
+}])
+```
+
+Users can also type a custom combination via "Other" (e.g. "Looks good all except fresh-eyes `<id2>`").
 
 Actions:
 
@@ -381,3 +457,27 @@ Present the stored learnings to the user for confirmation.
 ## Step 11: Refine this skill
 
 Run `/orchestrate-refine-skill orchestrate` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
+
+## Step 12: Post-orchestration menu
+
+After all steps complete, present a follow-up menu using `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "Orchestration complete. What would you like to do next?",
+  header: "Next action",
+  options: [
+    { label: "Run another cycle", description: "Start a new orchestrate session with a fresh goal" },
+    { label: "Audit the codebase", description: "Run /orchestrate-audit to scan for bugs, security issues, and test gaps" },
+    { label: "Check drift", description: "Run /orchestrate-drift-check to verify code matches the plan" },
+    { label: "Done for now", description: "End the session — no further action needed" }
+  ],
+  multiSelect: false
+}])
+```
+
+Actions:
+- **"Run another cycle"** → return to Step 2 (clear checkpoint first)
+- **"Audit the codebase"** → invoke `/orchestrate-audit`
+- **"Check drift"** → invoke `/orchestrate-drift-check`
+- **"Done for now"** → end gracefully with a summary of what shipped
