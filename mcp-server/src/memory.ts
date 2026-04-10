@@ -1,4 +1,8 @@
 import { execFileSync } from "child_process";
+import { parseCmResult } from "./parsers.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("memory");
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -88,12 +92,12 @@ function runCm(args: string[], cwd?: string): string | null {
 
 function parseCmJson<T>(output: string | null): T | null {
   if (!output) return null;
-  try {
-    const parsed = JSON.parse(output);
-    return parsed?.success ? (parsed.data as T) : null;
-  } catch {
+  const result = parseCmResult<T>(output);
+  if (!result.ok) {
+    log.warn("cm JSON parse failed", { error: result.error });
     return null;
   }
+  return result.data;
 }
 
 // ─── Core API ───────────────────────────────────────────────
@@ -207,10 +211,12 @@ export function onboardMemory(cwd?: string): boolean {
   const status = runCm(["onboard", "status", "--json"], cwd);
   let data: { needsOnboarding?: boolean } | null = null;
   if (status) {
-    try {
-      const raw = JSON.parse(status);
-      data = raw?.success ? (raw.data ?? null) : raw;
-    } catch { /* fall through */ }
+    const parsed = parseCmResult<{ needsOnboarding?: boolean }>(status);
+    if (parsed.ok) {
+      data = parsed.data;
+    } else {
+      log.warn("cm onboard status parse failed", { error: parsed.error });
+    }
   }
   if (data?.needsOnboarding === false) return true; // already onboarded
   // Run non-interactive onboard
@@ -243,18 +249,20 @@ export function mineSkillGaps(
   if (!detectCass()) return null;
   const output = runCm(["search", topic, "--json", "--limit", "20"], cwd);
   if (!output) return null;
-  try {
-    const data = JSON.parse(output);
-    const sessions = (data?.results ?? data?.sessions ?? []) as Array<{ text?: string; content?: string; score?: number }>;
-    if (sessions.length === 0) return null;
-    const snippets = sessions
-      .slice(0, 10)
-      .map((s, i) => `Session ${i + 1}:\n${(s.text ?? s.content ?? "").slice(0, 500)}`)
-      .join("\n\n---\n\n");
-    return snippets;
-  } catch {
+  // cm search returns { results: [...] } or { sessions: [...] } wrapper
+  const cmParsed = parseCmResult<{ results?: unknown[]; sessions?: unknown[] }>(output);
+  if (!cmParsed.ok) {
+    log.warn("cm search parse failed", { error: cmParsed.error });
     return null;
   }
+  const rawSessions = cmParsed.data?.results ?? cmParsed.data?.sessions ?? [];
+  const sessions = rawSessions as Array<{ text?: string; content?: string; score?: number }>;
+  if (sessions.length === 0) return null;
+  const snippets = sessions
+    .slice(0, 10)
+    .map((s, i) => `Session ${i + 1}:\n${(s.text ?? s.content ?? "").slice(0, 500)}`)
+    .join("\n\n---\n\n");
+  return snippets;
 }
 
 /**

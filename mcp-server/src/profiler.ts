@@ -25,7 +25,18 @@ export async function loadCachedProfile(exec: ExecFn, cwd: string): Promise<Repo
 
   try {
     const raw = readFileSync(cachePath, "utf8");
-    const cache: ProfileCache = JSON.parse(raw);
+    let cache: ProfileCache;
+    try {
+      cache = JSON.parse(raw);
+    } catch {
+      log.warn("Profile cache contains invalid JSON");
+      return null;
+    }
+
+    if (!cache || typeof cache !== "object" || typeof cache.gitHead !== "string") {
+      log.warn("Profile cache has unexpected shape");
+      return null;
+    }
 
     // Check if HEAD matches
     const headResult = await exec("git", ["rev-parse", "HEAD"], { cwd, timeout: 5000 });

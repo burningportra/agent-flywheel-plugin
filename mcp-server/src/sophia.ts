@@ -1,5 +1,6 @@
 import type { ExecFn } from './exec.js';
 import { createLogger } from './logger.js';
+import { parseSophiaResult } from './parsers.js';
 
 const log = createLogger("sophia");
 
@@ -75,8 +76,8 @@ export async function isSophiaInitialized(
       timeout: 3000,
       cwd,
     });
-    const parsed = JSON.parse(result.stdout);
-    return parsed.ok === true;
+    const parsed = parseSophiaResult(result.stdout);
+    return parsed.ok;
   } catch {
     return false;
   }
@@ -94,14 +95,11 @@ async function runSophia<T = unknown>(
       timeout: 10000,
       cwd,
     });
-    const parsed = JSON.parse(result.stdout);
+    const parsed = parseSophiaResult<T>(result.stdout);
     if (parsed.ok) {
-      return { ok: true, data: parsed.data as T };
+      return { ok: true, data: parsed.data };
     }
-    return {
-      ok: false,
-      error: parsed.error?.message ?? "Unknown sophia error",
-    };
+    return { ok: false, error: parsed.error };
   } catch (err) {
     return {
       ok: false,
