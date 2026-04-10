@@ -32,9 +32,9 @@ export interface CmSearchResult {
 }
 
 export interface ProfileCache {
-  head: string;
+  gitHead: string;
+  cachedAt: string;
   profile: unknown;
-  timestamp: number;
 }
 
 // ─── Zod Schemas ────────────────────────────────────────────
@@ -141,9 +141,9 @@ export const SophiaResultSchema = z
 
 export const ProfileCacheSchema = z
   .object({
-    head: z.string(),
+    gitHead: z.string(),
+    cachedAt: z.string(),
     profile: z.unknown(),
-    timestamp: z.number(),
   })
   .passthrough();
 
@@ -218,7 +218,7 @@ export function parseBvNextPick(
     return { ok: true, data: null };
   }
 
-  const json = tryParseJson(raw);
+  const json = tryParseJson(trimmed);
   if (!json.ok) return json;
 
   if (json.data === null) return { ok: true, data: null };
@@ -293,8 +293,8 @@ export function parseSophiaResult<T>(raw: string): ParseResult<T> {
     return { ok: false, error: formatZodError(result.error) };
 
   const envelope = result.data;
-  if (envelope.ok === false && envelope.error) {
-    const errMsg = envelope.error.message ?? "Unknown sophia error";
+  if (envelope.ok === false) {
+    const errMsg = envelope.error?.message ?? "Unknown sophia error";
     return { ok: false, error: `sophia error: ${errMsg}` };
   }
 

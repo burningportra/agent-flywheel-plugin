@@ -401,6 +401,13 @@ describe('parseSophiaResult', () => {
     if (result.ok) expect(result.data).toBeUndefined();
   });
 
+  it('returns error when ok:false with no error field', () => {
+    const raw = JSON.stringify({ ok: false });
+    const result = parseSophiaResult(raw);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('Unknown sophia error');
+  });
+
   it('fails on invalid JSON', () => {
     const result = parseSophiaResult('???');
     expect(result.ok).toBe(false);
@@ -411,23 +418,23 @@ describe('parseSophiaResult', () => {
 
 describe('parseProfileCache', () => {
   it('parses valid profile cache', () => {
-    const raw = JSON.stringify({ head: 'abc123', profile: { name: 'test' }, timestamp: 1700000000 });
+    const raw = JSON.stringify({ gitHead: 'abc123', profile: { name: 'test' }, cachedAt: '2024-01-01T00:00:00Z' });
     const result = parseProfileCache(raw);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.head).toBe('abc123');
-      expect(result.data.timestamp).toBe(1700000000);
+      expect(result.data.gitHead).toBe('abc123');
+      expect(result.data.cachedAt).toBe('2024-01-01T00:00:00Z');
     }
   });
 
-  it('fails when head is missing', () => {
-    const raw = JSON.stringify({ profile: {}, timestamp: 123 });
+  it('fails when gitHead is missing', () => {
+    const raw = JSON.stringify({ profile: {}, cachedAt: '2024-01-01' });
     const result = parseProfileCache(raw);
     expect(result.ok).toBe(false);
   });
 
-  it('fails when timestamp is missing', () => {
-    const raw = JSON.stringify({ head: 'abc', profile: {} });
+  it('fails when cachedAt is missing', () => {
+    const raw = JSON.stringify({ gitHead: 'abc', profile: {} });
     const result = parseProfileCache(raw);
     expect(result.ok).toBe(false);
   });
