@@ -6,6 +6,8 @@
  */
 import type { ExecFn } from "./exec.js";
 import { createLogger } from "./logger.js";
+import { BrStructuredErrorSchema } from "./parsers.js";
+import type { ParseResult } from "./parsers.js";
 
 const log = createLogger("cli-exec");
 
@@ -104,11 +106,14 @@ function parseBrStructuredError(stderr: string): BrStructuredError | undefined {
   if (!candidate) return undefined;
 
   try {
-    const parsed = JSON.parse(candidate) as { error?: BrStructuredError };
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
     if (!parsed || typeof parsed !== "object" || !parsed.error || typeof parsed.error !== "object") {
       return undefined;
     }
-    return parsed.error;
+    // Validate the inner error object with the Zod schema
+    const validated = BrStructuredErrorSchema.safeParse(parsed.error);
+    if (!validated.success) return undefined;
+    return validated.data as BrStructuredError;
   } catch {
     return undefined;
   }
@@ -286,20 +291,42 @@ export async function brExec(
 /**
  * Like `brExec` but parses stdout as JSON.
  * Returns a structured permanent error if JSON parsing fails.
+ *
+ * When `validator` is provided, stdout is validated through the given
+ * `ParseResult`-returning function instead of a bare `JSON.parse`.
  */
 export async function brExecJson<T>(
   exec: ExecFn,
   args: string[],
-  opts?: ResilientExecOptions,
+  opts?: ResilientExecOptions & { validator?: (raw: string) => ParseResult<T> },
 ): Promise<ExecResult<T>> {
   const result = await brExec(exec, args, opts);
   if (!result.ok) return result;
+
+  const commandStr = formatCommand("br", args);
+
+  if (opts?.validator) {
+    const validated = opts.validator(result.value.stdout);
+    if (validated.ok) return { ok: true, value: validated.data };
+    const error: CliExecError = {
+      command: commandStr,
+      args,
+      exitCode: 0,
+      stdout: result.value.stdout,
+      stderr: `Validation error: ${validated.error}`,
+      isTransient: false,
+      attempts: 1,
+    };
+    if (opts?.logWarnings !== false) {
+      log.warn("Validation failure", { cmd: commandStr, error: validated.error });
+    }
+    return { ok: false, error };
+  }
 
   try {
     const parsed = JSON.parse(result.value.stdout) as T;
     return { ok: true, value: parsed };
   } catch (parseErr: unknown) {
-    const commandStr = formatCommand("br", args);
     const error: CliExecError = {
       command: commandStr,
       args,

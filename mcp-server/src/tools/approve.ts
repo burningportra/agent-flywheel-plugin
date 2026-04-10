@@ -4,6 +4,10 @@ import type { ToolContext, McpToolResult, Bead, ApproveArgs } from '../types.js'
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, pickRefinementModel, slugifyGoal } from './shared.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
+import { parseBrList } from '../parsers.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('approve');
 
 // Module-level bead snapshot for change tracking
 type BeadSnapshot = Map<string, { title: string; descFingerprint: string }>;
@@ -72,11 +76,13 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   }
 
   let allBeads: Bead[] = [];
-  try {
-    allBeads = JSON.parse(brListResult.stdout);
-  } catch {
+  const parsed = parseBrList(brListResult.stdout);
+  if (parsed.ok) {
+    allBeads = parsed.data;
+  } else {
+    log.warn('Failed to parse br list output', { error: parsed.error });
     return {
-      content: [{ type: 'text', text: 'Error: Could not parse br list output as JSON.' }],
+      content: [{ type: 'text', text: `Error: Could not parse br list output: ${parsed.error}` }],
       isError: true,
     };
   }
@@ -300,9 +306,12 @@ async function handleStart(
   let ready: Bead[] = [];
 
   if (brReadyResult.code === 0) {
-    try {
-      ready = JSON.parse(brReadyResult.stdout);
-    } catch { ready = []; }
+    const readyParsed = parseBrList(brReadyResult.stdout);
+    if (readyParsed.ok) {
+      ready = readyParsed.data;
+    } else {
+      log.warn('Failed to parse br ready output', { error: readyParsed.error });
+    }
   }
 
   // Fallback: if br ready fails, find beads with no open dependencies

@@ -125,7 +125,7 @@ function baseExecCalls() {
     makeHeadArgs('docs/architecture.md', ''),
     // br CLI
     { cmd: 'br', args: ['--version'], result: { code: 0, stdout: 'br 0.5.0', stderr: '' } },
-    { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify([{ status: 'open', id: 'b1', title: 'open bead' }]), stderr: '' } },
+    { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify([{ status: 'open', id: 'b1', title: 'open bead', description: 'Test bead', priority: 2, type: 'task', labels: [] }]), stderr: '' } },
   ];
 }
 
