@@ -134,6 +134,25 @@ Call `orch_profile` with `cwd`. The tool uses a git-HEAD-keyed cache — if the 
 
 If `MCP_DEGRADED` is true or `orch_profile` fails, fall back to an Explore agent for manual profiling.
 
+After profiling completes, briefly display the key findings (languages, frameworks, test setup) then use `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "Repository profiled. What next?",
+  header: "Profile",
+  options: [
+    { label: "Discover ideas", description: "Find improvement opportunities based on the profile (Recommended)" },
+    { label: "Set a goal", description: "I already know what I want to work on" },
+    { label: "Re-scan", description: "Force a fresh profile scan (force: true)" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Discover ideas"** → proceed to Step 3
+- **"Set a goal"** → run `/brainstorming`, then proceed to Step 4
+- **"Re-scan"** → call `orch_profile` with `force: true`, then return to this menu
+
 ## Step 3: Discover improvement ideas
 
 If `MCP_DEGRADED` is false, call `orch_discover` with `cwd`.
@@ -383,7 +402,24 @@ After calling `orch_approve_beads` with `action: "start"`, display **both** the 
 
 Populate **Wave** from the bead's dependency wave assignment, **Effort** from the plan's effort estimate, and **Risk Flags** from any warnings or risk notes in the plan output. This gives the user visibility into what is about to be implemented and in what order.
 
-Wait for user confirmation before proceeding to Step 7 — the quality score may prompt them to polish further.
+Then use `AskUserQuestion` to confirm launch:
+
+```
+AskUserQuestion(questions: [{
+  question: "Quality score: <X.XX>/1.00. Ready to launch implementation?",
+  header: "Launch",
+  options: [
+    { label: "Launch", description: "Start implementing <N> beads with agents (Recommended)" },
+    { label: "Polish more", description: "Run another refinement round on the beads" },
+    { label: "Back to plan", description: "Return to plan refinement before implementing" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Launch"** → proceed to Step 7
+- **"Polish more"** → call `orch_approve_beads` with `action: "polish"`, then return to Step 6
+- **"Back to plan"** → return to Step 5 plan menu
 
 ## Step 7: Implement each bead
 
@@ -558,7 +594,24 @@ When ALL beads are complete, display a completion message and proceed directly t
 
 ## Step 9.5: Wrap-up — commit, version bump, rebuild
 
-Once all beads are reviewed and closed, perform a clean session wrap-up **before** storing learnings:
+Once all beads are reviewed and closed, use `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "All beads done. How should I wrap up?",
+  header: "Wrap-up",
+  options: [
+    { label: "Full wrap-up", description: "Review commits, update docs, version bump, rebuild (Recommended)" },
+    { label: "Commit only", description: "Just commit and push — skip docs and version bump" },
+    { label: "Skip wrap-up", description: "Leave everything as-is — I'll handle it manually" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Full wrap-up"** → run all sub-steps below
+- **"Commit only"** → run sub-steps 1, 3, 7 only (review commits, commit strays, show log), then skip to Step 10
+- **"Skip wrap-up"** → skip to Step 10
 
 ### 1. Review bead commits
 Run `git log --oneline` to show the bead commits from this session. Propose logical groupings to the user — e.g. "3 beads touched the same subsystem; want me to squash them?" Only squash if the user confirms.
@@ -616,7 +669,22 @@ Call `orch_memory` with `operation: "store"` and `cwd` to distill and persist se
 - Key decisions made during this session and their outcomes
 - Any patterns worth replicating or avoiding in future sessions
 
-Present the stored learnings to the user for confirmation.
+Present the stored learnings to the user, then use `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "Session learnings saved. One more step?",
+  header: "Improve",
+  options: [
+    { label: "Refine skills", description: "Improve the orchestrate skill based on this session's evidence" },
+    { label: "Skip to finish", description: "Done — go straight to the final menu" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Refine skills"** → proceed to Step 11
+- **"Skip to finish"** → skip to Step 12
 
 ## Step 11: Refine this skill
 
