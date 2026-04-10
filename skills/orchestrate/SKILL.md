@@ -123,6 +123,15 @@ Once the user chooses, call `orch_select` with `cwd` and `goal` set to their cho
 
 ## Step 5: Choose planning mode
 
+Before presenting the choice, briefly frame the Three Reasoning Spaces to help the user understand why planning investment matters:
+
+> **The Flywheel operates across three reasoning spaces:**
+> - **Plan Space** (where we are now) — architecture, features, tradeoffs. Fixing errors here costs **1x**.
+> - **Bead Space** (next) — self-contained work units with dependencies. Fixing errors here costs **5x**.
+> - **Code Space** (implementation) — source files and tests. Fixing errors here costs **25x**.
+>
+> Deep planning front-loads effort where corrections are cheapest.
+
 Use `AskUserQuestion`:
 
 ```
@@ -181,15 +190,29 @@ AskUserQuestion(questions: [{
    SendMessage(to: "robustness-planner",  message: {"type": "shutdown_request", "reason": "Planning complete."})
    ```
 
-7. **Synthesize** — spawn one synthesis agent with `run_in_background: true`:
+7. **Synthesize (Best-of-All-Worlds)** — spawn one synthesis agent with `run_in_background: true`:
    ```
    Agent(model: "opus", name: "plan-synthesizer", team_name: "<team>", run_in_background: true,
      prompt: "
-       Read the 3 plan files written by the planning agents:
+       Read the plan files written by the planning agents:
          docs/plans/<date>-correctness.md
          docs/plans/<date>-ergonomics.md
          docs/plans/<date>-robustness.md
-       Synthesize them into one optimal plan preserving the best insights from each perspective.
+         (and docs/plans/<date>-fresh-perspective.md if it exists)
+
+       ## Best-of-All-Worlds Synthesis
+
+       For EACH plan, BEFORE proposing any changes:
+       1. Honestly acknowledge what that plan does better than the others.
+       2. Identify the unique insight each plan contributes that the others miss.
+
+       Then synthesize:
+       3. Blend the strongest ideas from all plans into a single superior document.
+       4. For each major decision, state which plan's approach you adopted and why.
+       5. Flag unresolved tensions where plans fundamentally disagree.
+
+       The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average.
+
        Write the result to: docs/plans/<date>-<goal-slug>-synthesized.md
        Send the file path to <your-coordinator-name> via Agent Mail when done.
      "

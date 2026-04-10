@@ -210,6 +210,21 @@ Question every architectural choice: is there a simpler way? A more standard app
         constraints: state.constraints,
         planAgents,
         instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call orch_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+        synthesisPrompt: `## Best-of-All-Worlds Synthesis
+
+Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
+
+1. **Honestly acknowledge** what that plan does better than the others — name the specific strengths, not generic praise.
+2. **Identify the unique insight** each plan contributes that the others miss.
+
+Then synthesize:
+
+3. **Blend the strongest ideas** from all plans into a single superior document.
+4. **For each major decision**, state which plan's approach you adopted and why.
+5. **Provide git-diff style changes** showing what was merged vs what was cut.
+6. **Flag unresolved tensions** — where plans fundamentally disagree and a judgment call was made.
+
+The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.`,
       }, null, 2),
     }],
   };

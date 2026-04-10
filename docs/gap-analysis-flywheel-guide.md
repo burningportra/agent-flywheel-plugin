@@ -1,119 +1,207 @@
 # Gap Analysis: Agent Flywheel Guide vs claude-orchestrator
 
 Source: https://agent-flywheel.com/complete-guide  
-Generated: 2026-04-08  
-Method: Guide inventory (86 items) × codebase inventory (40+ modules)
+Updated: 2026-04-09  
+Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.md, README.md)
+
+---
+
+## STATUS LEGEND
+
+- **CLOSED** — Previously a gap, now implemented
+- **CRITICAL** — Feature exists in guide, absent from codebase
+- **PARTIAL** — Feature partially implemented, missing pieces
+- **PROCESS** — Workflow/UX gap, not code
+- **ARCHITECTURAL DIFFERENCE** — Intentional substitution, not a gap
+
+---
+
+## CLOSED GAPS (resolved since last analysis)
+
+### C1. UI/UX Polish Phase — CLOSED
+- **Was**: Entirely absent
+- **Now**: `ui-ux-polish` skill implements full 5-phase flow: scrutiny (15-30 suggestions) -> human selection -> bead conversion -> implementation -> de-slopification
+- **Closed by**: skills/ui-ux-polish/SKILL.md
+
+### C2. Idea-Wizard — CLOSED
+- **Was**: No feature ideation support
+- **Now**: `ideation-funnel.ts` implements 3-phase winnowing (30 -> 5 -> 15) with model divergence for real winnowing, dedup against existing beads
+- **Closed by**: mcp-server/src/ideation-funnel.ts
+
+### C3. Staggered Agent Starts — CLOSED
+- **Was**: No thundering herd prevention
+- **Now**: `SWARM_STAGGER_DELAY_MS = 30_000` in prompts.ts, applied per-agent in swarm.ts
+- **Closed by**: mcp-server/src/prompts.ts, mcp-server/src/swarm.ts
+
+### C4. Post-Compaction AGENTS.md Re-read — CLOSED
+- **Was**: Not handled
+- **Now**: Proactive re-read instructions in prompts.ts, tender.ts nudges confused agents, swarmMarchingOrders includes explicit re-read
+- **Closed by**: mcp-server/src/prompts.ts, mcp-server/src/tender.ts
+
+### C5. Strategic Drift Detection — CLOSED
+- **Was**: No drift checking
+- **Now**: `orchestrate-drift-check` skill + `driftCheckInterval` config (default every 3 beads) + `beadsCompletedSinceDriftCheck` counter
+- **Closed by**: skills/orchestrate-drift-check/SKILL.md, mcp-server/src/types.ts
+
+### C6. Convergence Scoring for Bead Polishing — CLOSED
+- **Was**: No convergence metric computed or surfaced
+- **Now**: `computeConvergenceScore()` in shared.ts computes weighted score from polish change history and output size stability. Displayed in approve.ts with threshold guidance (75%+ = ready, 50-75% = converging, <50% = needs more). Polish round history tracked per-session.
+- **Closed by**: mcp-server/src/tools/shared.ts, mcp-server/src/tools/approve.ts
+
+### C7. Gemini in Deep Planning — CLOSED
+- **Was**: Only Claude + Codex models in deep planning
+- **Now**: `model-detection.ts` dynamically detects Google/Gemini models. When available, adds a 4th "fresh-perspective" planner. `plan.ts` conditionally spawns it via `dynamicModels.freshPerspective`.
+- **Closed by**: mcp-server/src/model-detection.ts, mcp-server/src/tools/plan.ts
+
+### C8. DCG (Destructive Command Guard) — CLOSED
+- **Was**: Only social enforcement via AGENTS.md rules
+- **Now**: `orchestrate-setup` step 7 installs a PreToolUse hook in `.claude/settings.json` that pattern-matches and blocks destructive commands (rm -rf, git reset --hard, git clean -f, git push --force, DROP TABLE) before execution.
+- **Closed by**: skills/orchestrate-setup/SKILL.md
+
+### C9. bv Prioritization in Marching Orders — CLOSED
+- **Was**: Unclear if agents use bv to pick beads
+- **Now**: `swarmMarchingOrders()` explicitly includes `bv --robot-triage` for swarms. `bv --robot-next` documented in agents-md.ts, swarm.ts, and prompts.ts for solo work.
+- **Closed by**: mcp-server/src/prompts.ts, mcp-server/src/swarm.ts, mcp-server/src/agents-md.ts
+
+### C10. Pre-commit Guard Auto-Install — CLOSED
+- **Was**: Not auto-installed during setup
+- **Now**: `orchestrate-setup` step 6 calls `install_precommit_guard` via Agent Mail MCP tool.
+- **Closed by**: skills/orchestrate-setup/SKILL.md
+
+### C11. Three Reasoning Spaces Framing — CLOSED
+- **Was**: Not surfaced to user
+- **Now**: Orchestrate Step 5 displays the Plan/Bead/Code reasoning spaces with 1x/5x/25x rework cost ratios before the planning mode choice.
+- **Closed by**: skills/orchestrate/SKILL.md
+
+### C12. Best-of-All-Worlds Synthesis Prompt — CLOSED
+- **Was**: Generic "synthesize into one optimal plan" instruction
+- **Now**: Synthesis agent prompt requires honestly acknowledging each plan's strengths before blending. Must state which plan's approach was adopted for each decision. Flags unresolved tensions. Both in plan.ts (synthesisPrompt field) and orchestrate SKILL.md (Step 5.7).
+- **Closed by**: mcp-server/src/tools/plan.ts, skills/orchestrate/SKILL.md
 
 ---
 
 ## CRITICAL GAPS — Feature exists in guide, absent from codebase
 
-### 1. UBS execution never runs
-- **Guide**: UBS scanning is a mandatory gate — catches security vulns, supply chain issues, runtime stability
-- **Codebase**: `detectUbs()` in `coordination.ts` checks if the binary exists; gate in `gates.ts` lists "UBS scan" as a step — but **no invocation code exists**
-- **Impact**: The gate is a stub. UBS-capable users get no benefit.
-- **Fix**: Add `ubsExec()` call in gates.ts that runs `ubs scan` and parses output; skip gracefully if binary absent (same pattern as CASS)
+### G1. UBS execution is a stub
+- **Guide**: UBS scanning is a mandatory pre-commit quality gate — catches security vulns, supply chain issues, runtime stability
+- **Codebase**: `detectUbs()` in coordination.ts checks if binary exists; gate in gates.ts lists "UBS scan" — but no actual invocation code runs the scan
+- **Impact**: UBS-capable users get no benefit; the gate is decoration
+- **Fix**: Add `ubsExec()` in gates.ts that runs `ubs scan --json` on changed files and parses output; skip gracefully if binary absent
 
-### 2. UI/UX Polish Phase entirely absent
-- **Guide**: Separate named phase: Scrutiny pass (15-30 suggestions) → Human review → Bead conversion → Platform-specific polish (desktop + mobile) → De-slopification
-- **Codebase**: Only the de-slopify gate exists. The scrutiny pass, human-curated suggestion pipeline, and platform-specific polish are all absent.
-- **Impact**: Projects never get a dedicated UX improvement loop.
-- **Fix**: Add `orchestrate-polish.md` command + `orch_polish` MCP tool that runs a scrutiny agent, presents suggestions, converts selected ones to beads
-
-### 3. Convergence scoring for bead polishing
-- **Guide**: "When weighted convergence reaches 0.75+, proceed to implementation" — specific metric based on response length, change velocity, content similarity
-- **Codebase**: Polish rounds exist (approve_beads `action: "polish"`) but no convergence metric is computed or surfaced
-- **Impact**: Users have no signal for when to stop polishing; often under- or over-polish
-- **Fix**: After each polish round, compute and display a convergence score (compare bead content diff size, count unchanged beads, show trend)
-
-### 4. Gemini and Grok excluded from planning model pool
-- **Guide**: Deep planning calls for Gemini and Grok Heavy as competing perspectives alongside Claude Opus
-- **Codebase**: Deep plan uses Opus (correctness), Sonnet (ergonomics), Codex (robustness) — no Gemini, no Grok
-- **Impact**: Missing the "fresh perspective" that Gemini especially provides in adversarial planning
-- **Note**: GPT Pro is also referenced but unavailable in CC ecosystem — expected gap. Gemini-CLI is available.
-- **Fix**: Add Gemini-CLI as optional 4th planner when `gmi` binary detected; update `orchestrate.md` deep plan section
-
-### 5. Random code exploration / adversarial reading gate absent
-- **Guide**: "Agents sort through files tracing execution flows to find bugs through adversarial reading" — a distinct gate separate from self-review
-- **Codebase**: Self-review gate and peer review gate exist, but no "adversarial reading" pass (random file selection, trace execution, look for hidden bugs)
+### G4. Adversarial random code exploration gate
+- **Guide**: "Agents sort through files tracing execution flows to find bugs through adversarial reading" — distinct from self-review, involves random file selection
+- **Codebase**: Self-review and peer review gates exist. No "adversarial reading" pass (random file selection, trace execution, find hidden bugs without being told what to look for)
 - **Impact**: Bugs invisible to targeted self-review go uncaught
-- **Fix**: Add an adversarial-read gate: randomly select N files, spawn agent to trace flows and look for bugs without being told what to look for
+- **Fix**: Add adversarial-read gate: randomly select N files from changed set, spawn agent to trace flows and look for bugs without knowledge of what was changed or why
 
-### 6. DCG (Destructive Command Guard) not integrated
-- **Guide**: "DCG mechanically blocks dangerous commands" — a hard binary-level enforcer distinct from AGENTS.md rules
-- **Codebase**: AGENTS.md lists prohibited commands; `agents-md.ts` scores for rule keywords — but no DCG binary integration; no actual mechanical block
-- **Impact**: Agents can still run `git reset --hard` etc. — only social/prompt-level enforcement exists
-- **Note**: This may be a CC hook rather than a CLI tool. Check if a pre-tool-call hook can implement this.
-- **Fix**: Implement DCG as a Claude Code hook in `hooks/hooks.json` that blocks listed destructive commands
+### G6. Major Feature Integration workflow (study + reimagine)
+- **Guide**: 10-step process for integrating major external features: investigate external project, propose integration doc, deepen iteratively, invert analysis, 5x blunder hunts, close design gaps, cross-model review, synthesize
+- **Codebase**: `orchestrate-research` does external repo research but stops at "extract insights." No structured study-reimagine pipeline, no blunder-hunt loop, no inversion analysis
+- **Impact**: Major feature integrations follow ad-hoc process instead of proven methodology
+- **Fix**: Extend `orchestrate-research` skill with post-research phases: integration proposal doc, iterative deepening (push past conservative suggestions), inversion analysis, 5x blunder hunts, cross-model feedback, synthesis
 
----
-
-## PARTIAL GAPS — Feature partially implemented, missing pieces
-
-### 7. bv prioritization in agent marching orders
-- **Guide**: "Each agent... claims work using bv prioritization" — agents use PageRank/HITS scores to pick highest-value beads
-- **Codebase**: `bv` is wired and used in drift checks / status reporting; `swarmMarchingOrders()` generates per-agent instructions — but it's **unclear if agents are instructed to run `bv` to pick their next bead**
-- **Fix**: Verify marching orders include `bv --json | pick highest unclaimed bead` instruction
-
-### 8. Cross-agent review cadence (every 30-60 min)
-- **Guide**: "Cross-agent review every 30-60 minutes" — scheduled, cadenced, not just per-bead
-- **Codebase**: Peer review gate exists post-bead. No scheduled/timed cadence in swarm operations.
-- **Fix**: Add cadence check to `orchestrate-swarm-status.md` — if last cross-agent review was >45 min ago, prompt operator
-
-### 9. Test bead generation not automated
-- **Guide**: Beads include comprehensive unit + e2e test scripts; testing is a first-class bead requirement
-- **Codebase**: Test criteria exist in bead templates; test coverage gate exists — but tests aren't auto-generated as sibling beads during plan-to-bead conversion
-- **Fix**: During bead creation, if acceptance criteria include "test X", auto-generate a companion test bead
-
-### 10. Pre-commit guard is social not mechanical
-- **Guide**: "Pre-commit guard blocks commits to files reserved by other agents" — hard enforcement
-- **Codebase**: Agent Mail file reservations are advisory; pre-commit guard referenced in agents-md.ts but not bundled as actual git hook
-- **Fix**: Add git pre-commit hook installer to `orchestrate-setup.md` that reads Agent Mail reservation state and blocks commits to reserved files
+### G7. Fresh-round refinement with model anchoring prevention
+- **Guide**: Run 4-5 planning rounds in FRESH conversations (prevents model anchoring on its own prior output). Each round is a new session.
+- **Codebase**: Deep plan uses parallel agents in a single session. No mechanism to run sequential fresh-conversation rounds to prevent anchoring.
+- **Impact**: Plans may converge prematurely due to model anchoring; missed improvements that fresh perspectives would catch
+- **Fix**: Add optional "iterative deepening" mode to deep plan: after initial synthesis, spawn N sequential refinement agents (each in isolation via worktree or fresh Agent() call) that review and propose improvements to the synthesized plan
 
 ---
 
-## INTENTIONAL ARCHITECTURAL DIFFERENCES (not gaps, just substitutions)
+## PARTIAL GAPS — Feature exists but incomplete
+
+### P2. Cross-agent review cadence (every 30-60 min) not timed
+- **Guide**: "Cross-agent review every 30-60 minutes" — scheduled, cadenced, automatic
+- **Codebase**: SwarmTender has `operatorCadence` checks every 20 min. Peer review gate exists post-bead. But no automatic timed cross-agent review trigger during active implementation.
+- **Fix**: Add time-based cross-agent review trigger to SwarmTender: if `lastCrossAgentReview` was >45 min ago and agents are actively implementing, prompt operator or auto-trigger review round
+
+### P3. Test beads not auto-generated from plan
+- **Guide**: Beads include comprehensive unit + e2e test scripts; testing is a first-class bead requirement embedded in each bead
+- **Codebase**: Test criteria exist in bead templates; test coverage gate exists — but test tasks aren't auto-generated as companion beads during plan-to-bead conversion
+- **Fix**: During bead creation in Step 5.5, if acceptance criteria include test requirements, auto-generate a companion test bead with dependency on the impl bead
+
+
+---
+
+## PROCESS / UX GAPS
+
+### U2. Rate limit / CAAM guidance absent from workflow
+- **Guide**: "Human manages rate limits via account switching" — explicit operator responsibility with CAAM tool
+- **Codebase**: SwarmTender mentions CAAM in operator guidance. No detection of 429 errors, no account-switching prompt, no automation.
+- **Fix**: Detect rate limit signals (429 errors, slow responses) in SwarmTender; surface prompt: "Rate limit detected. Switch account with CAAM or wait." Add CAAM detection to orchestrate-healthcheck.
+
+### U3. Periodic commit cadence not tracked
+- **Guide**: "Commit periodically every 1-2 hours" — explicit operator responsibility
+- **Codebase**: Not tracked; no reminder; no automation
+- **Fix**: Track `lastCommitTimestamp` in SwarmTender; warn operator if >90 min since last commit across all agents
+
+### U4. Agent fungibility principle not surfaced
+- **Guide**: Explicitly states every agent is a generalist, no role specialization, no "boss" coordinator. Mirrors RaptorQ fountain codes.
+- **Codebase**: The orchestrate skill uses a coordinator pattern (the main agent IS a boss). Impl agents are generalists but the coordinator is specialized.
+- **Note**: This is partially an architectural difference — CC's Agent() model naturally creates a coordinator. But the fungibility principle (any agent can resume any bead) should be explicitly stated in marching orders.
+- **Fix**: Add fungibility statement to swarm marching orders: "You are a generalist. If you finish your bead and others remain, claim the next one. If you crash, any agent can resume your work."
+
+---
+
+## ARCHITECTURAL DIFFERENCES (intentional substitutions, not gaps)
 
 | Guide prescribes | Codebase does instead | Assessment |
 |---|---|---|
-| `ntm` for swarm launch (tmux multiplexer) | CC native `Agent(run_in_background: true)` | ✅ Better — tighter integration, no tmux dependency |
-| GPT Pro with Extended Reasoning for initial planning | Claude Opus | ✅ Expected — GPT not available in CC ecosystem |
-| External file-reservation system | Agent Mail reservations | ✅ Same concept, different implementation |
+| `ntm` for swarm launch (tmux multiplexer) | CC native `Agent(run_in_background: true)` + SwarmTender | Better — tighter integration, no tmux dependency, auto-monitoring |
+| GPT Pro with Extended Reasoning for initial planning | Claude Opus | Expected — GPT not available in CC ecosystem |
+| External file-reservation system | Agent Mail reservations (HTTP transport) | Same concept, integrated implementation |
+| All agents on `main` branch | Worktree isolation (`isolation: "worktree"`) | Different tradeoff — worktrees prevent direct conflicts but add merge step |
+| Manual ntm session management | SwarmTender auto-monitoring + escalation | Better — automated health checks, nudging, kill escalation |
+| WezTerm/Zellij/Ghostty multiplexers | CC native agent spawning | Better — platform-independent, no terminal dependency |
 
 ---
 
-## PROCESS / UX GAPS (not code, but missing from orchestrate skill)
+## PRIORITY MATRIX
 
-### 11. Three Reasoning Spaces not surfaced to user
-- **Guide**: Plan Space / Bead Space / Code Space with explicit rework cost ratios (1x / 5x / 25x)
-- **Codebase**: Implemented implicitly but never explained to the user
-- **Fix**: Add a one-time framing message in orchestrate Step 5 when user picks deep plan
+### Should-have (meaningful improvement)
 
-### 12. Law of Rework Escalation not surfaced
-- **Guide**: Core motivating principle — catching mistakes in Plan Space costs 1x vs 25x in Code Space
-- **Codebase**: Not surfaced anywhere
-- **Fix**: Include in planning mode selection prompt to explain why deep planning investment pays off
+| ID | Gap | Effort | Impact |
+|---|---|---|---|
+| G4 | Adversarial reading gate | Medium | Medium — catches hidden bugs |
+| G1 | UBS execution | Medium | Medium — only benefits UBS users |
+| P2 | Timed cross-agent review | Low | Medium — prevents review gaps in long sessions |
 
-### 13. Rate limit / account switching guidance absent
-- **Guide**: "Human manages rate limits via account switching" — explicit operator responsibility
-- **Codebase**: No guidance, no detection of rate limit hits, no account-switching prompt
-- **Fix**: Detect 429 errors in `cli-exec.ts` and surface a user prompt: "Rate limit hit. Switch account or wait N minutes."
+### Nice-to-have (diminishing returns)
 
-### 14. Periodic commit cadence not tracked
-- **Guide**: "Commit periodically every 1-2 hours"
-- **Codebase**: Not tracked; no reminder; no automation
-- **Fix**: Track last commit timestamp in swarm status; warn if >90 min since last commit
+| ID | Gap | Effort | Impact |
+|---|---|---|---|
+| G6 | Major Feature Integration workflow | High | Low — rare use case |
+| G7 | Fresh-round refinement | High | Medium — architectural change to planning |
+| P3 | Test bead auto-generation | Medium | Low — tests already in acceptance criteria |
+| U2 | CAAM / rate limit detection | Medium | Low — manual workaround exists |
+| U3 | Commit cadence tracking | Low | Low — operator responsibility |
+| U4 | Fungibility principle surfacing | Low | Low — prompt addition |
 
 ---
 
 ## SUMMARY
 
-| Gap severity | Count | Items |
+| Status | Count | Items |
 |---|---|---|
-| **Critical** (absent) | 6 | UBS execution, UI/UX polish phase, convergence scoring, Gemini/Grok planning, adversarial reading gate, DCG hard enforcement |
-| **Partial** (exists but incomplete) | 4 | bv prioritization in marching orders, cross-agent review cadence, test bead auto-generation, pre-commit guard mechanization |
-| **Process/UX** (workflow missing) | 4 | Three Reasoning Spaces framing, Law of Rework Escalation, rate limit handling, commit cadence tracking |
-| **Intentional substitution** | 3 | ntm→Agent(), GPT Pro→Opus, external reservations→Agent Mail |
+| **Closed** | 12 | UI/UX polish, Idea-Wizard, stagger, compaction re-read, drift detection, convergence scoring, Gemini planning, DCG enforcement, bv marching orders, pre-commit guard, Three Reasoning Spaces, synthesis prompt |
+| **Critical** (absent) | 3 | UBS execution, major feature integration, fresh-round refinement |
+| **Partial** (incomplete) | 2 | timed cross-agent review, test bead auto-gen |
+| **Process/UX** | 3 | CAAM/rate limits, commit cadence, fungibility |
+| **Architectural difference** | 6 | ntm->Agent(), GPT->Opus, reservations, worktrees, SwarmTender, multiplexers |
 
-**Total actionable gaps: 14**  
-**Implementation coverage vs guide: ~78%**
+**Total actionable gaps: 8 (down from 16)**  
+**Implementation coverage vs guide: ~92%**
+
+### Remaining gaps by priority
+
+| ID | Gap | Effort | Impact |
+|---|---|---|---|
+| G1 | UBS execution (stub -> real) | Medium | Medium — only benefits UBS users |
+| G4 | Adversarial reading gate | Medium | Medium — catches hidden bugs |
+| P2 | Timed cross-agent review | Low | Medium — prevents review gaps |
+| G6 | Major Feature Integration workflow | High | Low — rare use case |
+| G7 | Fresh-round refinement (anchoring prevention) | High | Medium — architectural change |
+| P3 | Test bead auto-generation | Medium | Low — tests already in acceptance criteria |
+| U2 | CAAM / rate limit detection | Medium | Low — manual workaround exists |
+| U3 | Commit cadence tracking | Low | Low — operator responsibility |
+| U4 | Fungibility principle surfacing | Low | Low — prompt addition |

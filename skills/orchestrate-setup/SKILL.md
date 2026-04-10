@@ -37,9 +37,29 @@ Check and configure all prerequisites:
 
 6. **Pre-commit guard**: Call `install_precommit_guard` via `agent-mail` MCP tool with `project_key` and `code_repo_path` set to the current working directory.
 
-7. **Register agent**: Call `register_agent` via `agent-mail` MCP tool with `project_key` and `agent_name: "Orchestrator"`.
+7. **DCG (Destructive Command Guard)**: Check if a PreToolUse hook exists in the project's `.claude/settings.json` that blocks destructive commands. If not, create one:
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         {
+           "matcher": "Bash",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "bash -c 'echo \"$CLAUDE_TOOL_INPUT\" | jq -r .command | grep -qiE \"(rm\\s+-rf|git\\s+reset\\s+--hard|git\\s+clean\\s+-f|git\\s+checkout\\s+\\.\\s|git\\s+push\\s+--force|drop\\s+table|truncate\\s+table)\" && echo \"BLOCKED: Destructive command detected. Ask the user for explicit permission.\" && exit 1 || exit 0'"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+   If `.claude/settings.json` already exists with other hooks, merge the PreToolUse entry rather than overwriting. This provides mechanical enforcement beyond the social rules in AGENTS.md.
 
-8. Display a health checklist:
+8. **Register agent**: Call `register_agent` via `agent-mail` MCP tool with `project_key` and `agent_name: "Orchestrator"`.
+
+9. Display a health checklist:
    ```
    ✅ MCP server built (dist/server.js exists)
    ✅ MCP server registered (orch_profile tool available)
@@ -47,9 +67,10 @@ Check and configure all prerequisites:
    ✅ bv v1.x.x
    ✅ agent-mail — healthy
    ✅ pre-commit guard installed
+   ✅ DCG hook active
    ✅ agent registered as "Orchestrator"
    ```
 
-9. **Gate recommendation:**
+10. **Gate recommendation:**
    - If ALL checks pass: "All prerequisites met. You can now run `/orchestrate`."
    - If ANY check failed: "**Do not run `/orchestrate` until all checks pass.** Fix the items marked ❌ above and re-run `/orchestrate-setup`."
