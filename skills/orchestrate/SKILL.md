@@ -224,6 +224,21 @@ AskUserQuestion(questions: [{
 8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
+9. **Optional: Iterative deepening** — to prevent model anchoring, run 2-3 fresh refinement rounds on the synthesized plan. Each round spawns a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
+   ```
+   Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_background: true,
+     prompt: "
+       Read the synthesized plan at docs/plans/<date>-<goal-slug>-synthesized.md.
+       You have NOT seen any prior plans or revisions — this is your first and only look.
+       Carefully review the entire plan. Come up with the best revisions you can.
+       For each change, give detailed analysis and rationale.
+       Provide changes in git-diff format. Use ultrathink.
+       Write your revised plan to the same file path when done.
+     "
+   )
+   ```
+   Stop when a round produces only minor wording changes — this signals the plan has converged. Fresh conversations prevent anchoring on prior output.
+
 ## Step 5.5: Create beads from the plan
 
 Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them manually from the plan output:
@@ -233,13 +248,19 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
    br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority 2 --type task
    ```
 
-2. After all beads are created, add dependency edges:
+2. **Auto-generate test beads:** If a bead's acceptance criteria include testing requirements (unit tests, e2e tests, integration tests), create a companion test bead that depends on the implementation bead:
+   ```
+   br create --title "Test: <impl bead title>" --description "Write tests for <bead-id>: <specific test requirements from acceptance criteria>" --priority 2 --type task
+   br dep add <test-bead-id> <impl-bead-id>
+   ```
+
+3. After all beads are created, add dependency edges:
    ```
    br dep add <downstream-bead-id> <upstream-bead-id>
    ```
    > **Syntax note:** Arguments are positional — `<downstream>` depends on `<upstream>`. The `--depends-on` flag does NOT exist. If the command fails, verify you are passing two positional IDs with no flags.
 
-3. Verify with `br list` — confirm all beads and dependencies look correct.
+4. Verify with `br list` — confirm all beads and dependencies look correct.
 
 > **WARNING:** Use `br list` for all read-only bead inspection. Never call `orch_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
 

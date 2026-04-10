@@ -1051,6 +1051,8 @@ Be sure to check your agent mail and promptly respond if needed to any messages;
 
 Don't get stuck in "communication purgatory" where nothing is getting done; be proactive about starting tasks that need to be done, but inform your fellow agents via messages when you do so and mark beads appropriately.
 
+**Fungibility:** You are a generalist — any agent can work on any bead. If you finish your assigned bead and others remain, claim the next one via \`bv --robot-next\`. If you crash or get stuck, any other agent can resume your work from the bead description alone. There is no role specialization and no single point of failure.
+
 When you're not sure what to do next, use \`bv --robot-triage\` to find the highest-impact bead to work on next; pick the next one you can usefully work on and get started. Make sure to acknowledge all communication requests from other agents and that you are aware of all active agents and their names. Use ultrathink.
 
 cd ${cwd}`;

@@ -41,6 +41,7 @@ export async function runGuidedGates(
     { emoji: "peers", label: "Peer review", desc: "parallel agents review each other's work", auto: false },
     { emoji: "tests", label: "Test coverage", desc: "check unit tests + e2e, create tasks for gaps", auto: true },
     { emoji: "slop", label: "De-slopify", desc: "remove AI writing patterns from docs", auto: true },
+    { emoji: "adversarial", label: "Adversarial reading", desc: "trace random execution flows to find hidden bugs", auto: true },
     { emoji: "ubs", label: "UBS scan", desc: "run ubs on changed files, fix all issues", auto: true },
     { emoji: "commit", label: "Commit", desc: "logical groupings with detailed messages", auto: false },
     { emoji: "ship", label: "Ship it", desc: "commit, tag, release, deploy, monitor CI", auto: false },
@@ -179,6 +180,38 @@ export async function runGuidedGates(
         },
       ],
       details: { iterating: true, round, testCoverage: true },
+    };
+  }
+
+  if (chosen.startsWith("adversarial")) {
+    // Adversarial reading: randomly select files and trace execution flows
+    // to find bugs invisible to targeted self-review
+    const shuffled = [...allArtifacts].sort(() => Math.random() - 0.5);
+    const sampleSize = Math.min(shuffled.length, 5);
+    const randomFiles = shuffled.slice(0, sampleSize);
+    return {
+      content: [{
+        type: "text",
+        text: `## Adversarial Code Exploration - Round ${round}
+
+You are an adversarial reader. You do NOT know what was changed or why. Your job is to find bugs by tracing execution flows through randomly selected files.
+
+**Randomly selected files to start from:**
+${randomFiles.map(f => `- \`${f}\``).join("\n")}
+
+**Instructions:**
+1. For each file, pick a public function or entry point
+2. Trace its execution path through the codebase — follow every call, check every branch
+3. At each step, ask: "What happens if this input is null? Empty? Huge? Concurrent?"
+4. Look for: missing error handling, race conditions, resource leaks, type mismatches, logic errors
+5. Do NOT limit yourself to these files — follow the execution wherever it leads
+6. Fix any bugs you find directly
+
+**Key principle:** You are NOT reviewing changes. You are hunting bugs by reading code as an adversary who wants to break it. Cast a wide net.
+
+Use ultrathink.${callbackHint}${regressionHint}`,
+      }],
+      details: { iterating: true, round, adversarialReading: true },
     };
   }
 

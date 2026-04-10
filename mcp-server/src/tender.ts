@@ -32,6 +32,10 @@ export interface TenderConfig {
   idleThreshold: number;
   /** Cadence check interval in ms (default 20 * 60 * 1000 = 20 min) */
   cadenceIntervalMs: number;
+  /** Cross-agent review interval in ms (default 45 * 60 * 1000 = 45 min) */
+  crossReviewIntervalMs: number;
+  /** Commit cadence warning threshold in ms (default 90 * 60 * 1000 = 90 min) */
+  commitCadenceMs: number;
   /** Delay after stuck detection before first nudge fires (default 0 = immediate). */
   nudgeDelayMs: number;
   /** How many nudges to send before killing (default 2). */
@@ -61,6 +65,8 @@ const DEFAULT_CONFIG: TenderConfig = {
   stuckThreshold: 300_000,
   idleThreshold: 120_000,
   cadenceIntervalMs: 20 * 60 * 1000,
+  crossReviewIntervalMs: 45 * 60 * 1000,
+  commitCadenceMs: 90 * 60 * 1000,
   nudgeDelayMs: 0,
   maxNudges: 2,
   killWaitMs: 120_000,
@@ -71,8 +77,8 @@ const CADENCE_CHECKLIST = `## Operator Cadence Check (every ~20 min (configurabl
 1. Check bead progress — run \`br list --status in_progress --json\` or \`bv --robot-triage\`. Are agents making steady progress? Any beads stuck >15 min?
 2. Handle compactions — if any agent looks confused or is repeating itself, send: "Reread AGENTS.md so it's still fresh in your mind."
 3. Run a review round — pick one agent and send the fresh-eyes review prompt. Catches bugs before they compound.
-4. Manage rate limits — if an agent hit rate limits, switch account with CAAM or start a fresh agent.
-5. Periodic commit — designate one agent to do an organized commit every 1-2 hours.
+4. Manage rate limits — if an agent is producing slow or degraded output, it may be rate-limited. Options: switch account with \`caam switch\`, start a fresh agent on a different account, or pause the stuck agent for 5 minutes.
+5. Periodic commit — designate one agent to do an organized commit every 1-2 hours. (SwarmTender warns after 90 min without commits.)
 6. Handle surprises — create new beads for unanticipated issues discovered during implementation.`;
 
 // ─── SwarmTender ───────────────────────────────────────────────
@@ -84,6 +90,10 @@ export interface SwarmTenderOptions {
   onTick?: (statuses: AgentStatus[]) => void;
   /** Called every cadenceIntervalMs with the operator cadence checklist. */
   onCadenceCheck?: (checklist: string) => void;
+  /** Called when cross-agent review interval is exceeded. */
+  onCrossReviewDue?: (minutesSinceLastReview: number) => void;
+  /** Called when commit cadence threshold is exceeded. */
+  onCommitOverdue?: (minutesSinceLastCommit: number) => void;
   /** Agent Mail orchestrator identity (for sending stuck-agent messages). */
   orchestratorAgentName?: string;
   onKill?: (agent: AgentStatus) => void;
@@ -101,6 +111,10 @@ export class SwarmTender {
   private onTick?: (statuses: AgentStatus[]) => void;
   private onCadenceCheck?: (checklist: string) => void;
   private lastCadencePromptAt: number = Date.now();
+  private lastCrossReviewAt: number = Date.now();
+  private lastCommitCheckAt: number = Date.now();
+  private onCrossReviewDue?: (minutesSinceLastReview: number) => void;
+  private onCommitOverdue?: (minutesSinceLastCommit: number) => void;
   private orchestratorAgentName?: string;
   private onKill?: (agent: AgentStatus) => void;
   private onSwarmComplete?: (summary: SwarmCompletionSummary) => void;
@@ -126,6 +140,8 @@ export class SwarmTender {
     this.onConflict = options?.onConflict;
     this.onTick = options?.onTick;
     this.onCadenceCheck = options?.onCadenceCheck;
+    this.onCrossReviewDue = options?.onCrossReviewDue;
+    this.onCommitOverdue = options?.onCommitOverdue;
     this.orchestratorAgentName = options?.orchestratorAgentName;
     this.onKill = options?.onKill;
     this.onSwarmComplete = options?.onSwarmComplete;
@@ -280,6 +296,30 @@ export class SwarmTender {
       this.lastCadencePromptAt = now;
       this.onCadenceCheck?.(CADENCE_CHECKLIST);
     }
+
+    // Cross-agent review cadence: prompt if interval exceeded
+    if (this.onCrossReviewDue && now - this.lastCrossReviewAt >= this.config.crossReviewIntervalMs) {
+      const minSince = Math.floor((now - this.lastCrossReviewAt) / 60_000);
+      this.onCrossReviewDue(minSince);
+      this.lastCrossReviewAt = now; // reset after firing
+    }
+
+    // Commit cadence: warn if no commits in threshold period
+    if (this.onCommitOverdue && now - this.lastCommitCheckAt >= this.config.commitCadenceMs) {
+      const minSince = Math.floor((now - this.lastCommitCheckAt) / 60_000);
+      this.onCommitOverdue(minSince);
+      // Don't reset — keep firing until recordCommit() is called
+    }
+  }
+
+  /** Record that a cross-agent review just happened, resetting the timer. */
+  recordCrossReview(): void {
+    this.lastCrossReviewAt = Date.now();
+  }
+
+  /** Record that a commit just happened, resetting the commit cadence timer. */
+  recordCommit(): void {
+    this.lastCommitCheckAt = Date.now();
   }
 
   /** Remove an agent from monitoring (e.g., step completed). */
