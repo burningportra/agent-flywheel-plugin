@@ -8,14 +8,15 @@ Set up the orchestrator for this project. $ARGUMENTS
 Check and configure all prerequisites:
 
 1. **MCP server (build)**: Locate and verify the orchestrator MCP server is built.
-   - Find the plugin directory via Bash:
+   - The plugin's `skills/` directory is typically a symlink to the repo root's `skills/` folder. Resolve it to find `mcp-server/` as a sibling:
      ```bash
-     find ~/.claude/plugins -name "mcp-server" -type d 2>/dev/null | head -1
+     SKILLS_REAL=$(readlink ~/.claude/plugins/marketplaces/local-desktop-app-uploads/claude-orchestrator/skills 2>/dev/null)
+     MCSRV="${SKILLS_REAL%/skills}/mcp-server"
+     test -f "$MCSRV/dist/server.js" && echo "OK: $MCSRV" || echo "MISSING: $MCSRV"
      ```
-   - Check that `<plugin-dir>/mcp-server/dist/server.js` exists.
    - If MISSING: **STOP.** Instruct:
      ```
-     cd <plugin-dir>/mcp-server && npm install && npm run build
+     cd <resolved-mcp-server-path> && npm install && npm run build
      ```
    - Do not proceed to other checks until this passes.
 
