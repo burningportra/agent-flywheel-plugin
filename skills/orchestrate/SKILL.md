@@ -287,7 +287,28 @@ AskUserQuestion(questions: [{
 8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
-9. **Optional: Iterative deepening** — to prevent model anchoring, run 2-3 fresh refinement rounds on the synthesized plan. Each round spawns a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
+9. **Plan complete — present next action.** Display a brief summary of the plan (line count, key phases), then use `AskUserQuestion`:
+
+   ```
+   AskUserQuestion(questions: [{
+     question: "Plan created (<N> lines). What next?",
+     header: "Plan ready",
+     options: [
+       { label: "Create beads", description: "Convert the plan into implementation beads (Recommended)" },
+       { label: "Refine plan", description: "Run a fresh refinement round to deepen the plan" },
+       { label: "Review plan", description: "Open the plan file for manual review before proceeding" },
+       { label: "Start over", description: "Discard this plan and pick a different goal" }
+     ],
+     multiSelect: false
+   }])
+   ```
+
+   - **"Create beads"** → proceed to Step 5.5
+   - **"Refine plan"** → run iterative deepening (spawn a fresh agent to review and revise the plan, then return to this menu)
+   - **"Review plan"** → display the plan file path and wait for user input, then return to this menu
+   - **"Start over"** → delete plan, return to Step 3
+
+   **Iterative deepening** (when "Refine plan" is chosen): spawn a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
    ```
    Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_background: true,
      prompt: "
@@ -300,7 +321,7 @@ AskUserQuestion(questions: [{
      "
    )
    ```
-   Stop when a round produces only minor wording changes — this signals the plan has converged. Fresh conversations prevent anchoring on prior output.
+   After the refinement agent completes, return to the "Plan ready" menu above. Stop offering "Refine plan" when a round produces only minor wording changes — this signals convergence.
 
 ## Step 5.5: Create beads from the plan
 
@@ -326,6 +347,8 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
 4. Verify with `br list` — confirm all beads and dependencies look correct.
 
 > **WARNING:** Use `br list` for all read-only bead inspection. Never call `orch_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
+
+5. **Beads created — present summary and next action.** Display the bead count and dependency structure, then proceed directly to Step 6.
 
 ## Step 6: Review and approve beads
 
@@ -508,7 +531,30 @@ Actions:
 
 ## Step 9: Loop until complete
 
-Continue implementing and reviewing beads until all are done. Show a final summary of what was accomplished.
+After each bead review cycle, check remaining beads with `br list`. If beads remain, use `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "<N> beads complete, <M> remaining. What next?",
+  header: "Progress",
+  options: [
+    { label: "Continue", description: "Implement the next batch of ready beads (Recommended)" },
+    { label: "Check status", description: "Show detailed bead status, dependency graph, and drift check" },
+    { label: "Pause", description: "Stop here — resume later with /orchestrate" },
+    { label: "Wrap up early", description: "Skip remaining beads and wrap up what's done" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Continue"** → return to Step 7 for the next wave of ready beads
+- **"Check status"** → run `br list` + `bv --robot-triage`, display, then return to this menu
+- **"Pause"** → save checkpoint, end gracefully with a summary of progress so far
+- **"Wrap up early"** → skip to Step 9.5 with only the completed beads
+
+When ALL beads are complete, display a completion message and proceed directly to Step 9.5:
+
+> All <N> beads complete. Proceeding to wrap-up.
 
 ## Step 9.5: Wrap-up — commit, version bump, rebuild
 
@@ -532,12 +578,23 @@ Check `git status` for uncommitted files (plan docs, skill updates, config chang
 - Config or gitignore changes: `chore: ...`
 
 ### 4. Version bump
-Determine the correct semver bump based on what shipped:
-- **patch** (x.x.X): bug fixes, stale comment cleanup, doc-only changes
-- **minor** (x.X.0): new features or modules (new tool, new logger, new config fields)
-- **major** (X.0.0): breaking API or schema changes
+Determine the correct semver bump based on what shipped and use `AskUserQuestion`:
 
-Ask the user to confirm the bump level if uncertain. Update `mcp-server/package.json` version field.
+```
+AskUserQuestion(questions: [{
+  question: "What version bump for this release?",
+  header: "Version",
+  options: [
+    { label: "Patch (x.x.X)", description: "Bug fixes, doc-only changes, stale comment cleanup" },
+    { label: "Minor (x.X.0)", description: "New features or modules" },
+    { label: "Major (X.0.0)", description: "Breaking API or schema changes" },
+    { label: "Skip", description: "No version bump needed" }
+  ],
+  multiSelect: false
+}])
+```
+
+Update `mcp-server/package.json` version field unless "Skip" was chosen.
 
 ### 5. Rebuild
 Run `npm run build` in `mcp-server/` to compile the bumped version into `dist/`.
