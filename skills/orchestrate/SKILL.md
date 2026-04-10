@@ -67,7 +67,7 @@ AskUserQuestion(questions: [{
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase" },
     { label: "Work on beads", description: "<N> open beads ready — jump straight to implementation" },
     { label: "New goal", description: "Start fresh with a new goal (discards previous session)" },
-    { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
+    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" }
   ],
   multiSelect: false
 }])
@@ -82,7 +82,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Work on beads", description: "<N> open beads ready — pick up where you left off" },
     { label: "New goal", description: "Scan the repo and discover improvement ideas" },
-    { label: "Audit", description: "Run /orchestrate-audit to check for bugs and test gaps" },
+    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
     { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
   ],
   multiSelect: false
@@ -98,7 +98,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities" },
     { label: "Set a goal", description: "I already know what I want to build" },
-    { label: "Audit", description: "Run /orchestrate-audit to check for bugs and test gaps" },
+    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
     { label: "Setup", description: "Run /orchestrate-setup to configure prerequisites" }
   ],
   multiSelect: false
@@ -114,9 +114,28 @@ AskUserQuestion(questions: [{
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
 | **Set a goal** | Run `/brainstorming` to refine the goal, then proceed to Step 4 |
+| **Research repo** | Prompt for GitHub URL, then invoke `/orchestrate-research <url>` |
 | **Quick fix** | Invoke `/orchestrate-fix` |
 | **Audit** | Invoke `/orchestrate-audit` |
 | **Setup** | Invoke `/orchestrate-setup` |
+
+When the user selects **"Research repo"**, use `AskUserQuestion` to collect the URL:
+
+```
+AskUserQuestion(questions: [{
+  question: "Paste the GitHub URL you want to research:",
+  header: "Research",
+  options: [
+    { label: "Research only", description: "Extract insights and patterns — no code changes" },
+    { label: "Research + integrate", description: "Study the repo, then create an integration plan with beads" }
+  ],
+  multiSelect: false
+}])
+```
+
+The user pastes the GitHub URL in the "Other" text field, or selects a mode first and provides the URL when prompted. Then:
+- **"Research only"** → invoke `/orchestrate-research <url>`
+- **"Research + integrate"** → invoke `/orchestrate-research <url>` with the Major Feature Integration mode (Phases 8-12)
 
 ### 0f. MCP degraded mode
 
