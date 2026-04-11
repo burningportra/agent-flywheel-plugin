@@ -164,4 +164,55 @@ describe('runDiscover', () => {
     expect(state.phase).toBe(originalPhase);
     expect(state.candidateIdeas).toBeUndefined();
   });
+
+  it('returns structuredContent for successful idea registration', async () => {
+    const { ctx } = makeCtx();
+    const ideas = [
+      makeIdea({ id: 'idea-1', tier: 'top' }),
+      makeIdea({ id: 'idea-2', title: 'Better logging', tier: 'honorable' }),
+    ];
+
+    const result = await runDiscover(ctx, { cwd: '/fake/cwd', ideas });
+
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_discover',
+      version: 1,
+      status: 'ok',
+      phase: 'awaiting_selection',
+      nextStep: {
+        type: 'call_tool',
+        message: 'Present the ideas to the user, then call orch_select with the chosen goal.',
+        tool: 'orch_select',
+        argsSchemaHint: { goal: 'string' },
+      },
+      data: {
+        kind: 'ideas_registered',
+        totalIdeas: 2,
+        topIdeas: 1,
+        honorableIdeas: 1,
+        ideaIds: ['idea-1', 'idea-2'],
+      },
+    });
+  });
+
+  it('returns structuredContent for discover prerequisite errors', async () => {
+    const { ctx } = makeCtx({ repoProfile: undefined } as any);
+    ctx.state.repoProfile = undefined;
+
+    const result = await runDiscover(ctx, { cwd: '/fake/cwd', ideas: [makeIdea()] });
+
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_discover',
+      version: 1,
+      status: 'error',
+      phase: 'idle',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'missing_prerequisite',
+          message: 'Error: No repo profile found. Call orch_profile first.',
+        },
+      },
+    });
+  });
 });

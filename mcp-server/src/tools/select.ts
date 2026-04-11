@@ -1,5 +1,5 @@
 import type { ToolContext, McpToolResult, SelectArgs } from '../types.js';
-import { beadCreationPrompt, formatRepoProfile } from './shared.js';
+import { beadCreationPrompt, formatRepoProfile, makeChoiceOption, makeNextToolStep, makeToolError, makeToolResult } from './shared.js';
 
 /**
  * orch_select — Set the selected goal and transition to planning phase.
@@ -13,10 +13,7 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
   const { state, saveState, cwd } = ctx;
 
   if (!args.goal || !args.goal.trim()) {
-    return {
-      content: [{ type: 'text', text: 'Error: goal parameter is required and must be non-empty.' }],
-      isError: true,
-    };
+    return makeToolError('orch_select', state.phase, 'invalid_input', 'Error: goal parameter is required and must be non-empty.');
   }
 
   state.selectedGoal = args.goal.trim();
@@ -49,5 +46,37 @@ Skip planning — create beads directly using \`br create\` and \`br dep add\`, 
 ### Bead creation instructions (for Option C)
 ${beadCreationPrompt(state.selectedGoal, repoContext, state.constraints)}`;
 
-  return { content: [{ type: 'text', text }] };
+  return makeToolResult(text, {
+    tool: 'orch_select',
+    version: 1 as const,
+    status: 'ok' as const,
+    phase: state.phase,
+    goal: state.selectedGoal,
+    nextStep: makeNextToolStep('present_choices', 'Choose a workflow for the selected goal.', {
+      options: [
+        makeChoiceOption('plan-first', 'Plan first', {
+          description: 'Generate a single plan document with orch_plan mode="standard".',
+          tool: 'orch_plan',
+          args: { mode: 'standard' },
+        }),
+        makeChoiceOption('deep-plan', 'Deep plan', {
+          description: 'Generate parallel planning perspectives with orch_plan mode="deep".',
+          tool: 'orch_plan',
+          args: { mode: 'deep' },
+        }),
+        makeChoiceOption('direct-to-beads', 'Direct to beads', {
+          description: 'Skip planning and create beads directly with br create / br dep add.',
+          tool: 'orch_approve_beads',
+          args: { action: 'start' },
+        }),
+      ],
+    }),
+    data: {
+      kind: 'goal_selected' as const,
+      goal: state.selectedGoal,
+      constraints: state.constraints,
+      workflowOptions: ['plan-first', 'deep-plan', 'direct-to-beads'],
+      hasRepoProfile: state.repoProfile !== undefined,
+    },
+  });
 }

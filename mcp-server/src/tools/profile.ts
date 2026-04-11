@@ -1,5 +1,5 @@
 import type { ToolContext, McpToolResult, OrchestratorState, RepoProfile, ScanResult, ProfileArgs } from '../types.js';
-import { formatRepoProfile } from './shared.js';
+import { formatRepoProfile, makeNextToolStep, makeToolResult } from './shared.js';
 import { profileRepo, loadCachedProfile, saveCachedProfile } from '../profiler.js';
 import { parseBrList } from '../parsers.js';
 import { createLogger } from '../logger.js';
@@ -71,6 +71,8 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
 
   // ── Beads status ──────────────────────────────────────────────
   let beadStatus = '';
+  let openBeadCount = 0;
+  let deferredBeadCount = 0;
   if (hasBeads) {
     const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
     if (brListResult.code === 0) {
@@ -78,6 +80,8 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
       if (parsed.ok) {
         const open = parsed.data.filter(b => b.status === 'open' || b.status === 'in_progress');
         const deferred = parsed.data.filter(b => b.status === 'deferred');
+        openBeadCount = open.length;
+        deferredBeadCount = deferred.length;
         if (open.length > 0 || deferred.length > 0) {
           beadStatus = `\n\n### Existing Beads\n- ${open.length} open/in-progress\n- ${deferred.length} deferred`;
           if (open.length > 0) {
@@ -108,5 +112,39 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
 
   const text = `${roadmap}\n\n${coordLine}${cacheNote}${foundationWarning}${beadStatus}${goalSection}\n\n---\n\n${formatted}`;
 
-  return { content: [{ type: 'text', text }] };
+  return makeToolResult(text, {
+    tool: 'orch_profile',
+    version: 1 as const,
+    status: 'ok' as const,
+    phase: state.phase,
+    nextStep: makeNextToolStep('call_tool', 'Call orch_discover with candidate ideas based on the repo profile.', {
+      tool: 'orch_discover',
+      argsSchemaHint: { ideas: 'CandidateIdea[]' },
+    }),
+    data: {
+      kind: 'profile_ready' as const,
+      fromCache,
+      selectedGoal: state.selectedGoal,
+      coordination: {
+        backend: coordinationStrategy,
+        beadsAvailable: hasBeads,
+      },
+      foundationGaps,
+      existingBeads: {
+        openCount: openBeadCount,
+        deferredCount: deferredBeadCount,
+      },
+      profileSummary: {
+        name: profile.name,
+        languages: profile.languages,
+        frameworks: profile.frameworks,
+        hasTests: profile.hasTests,
+        hasDocs: profile.hasDocs,
+        hasCI: profile.hasCI,
+        testFramework: profile.testFramework,
+        ciPlatform: profile.ciPlatform,
+        entrypoints: profile.entrypoints,
+      },
+    },
+  });
 }

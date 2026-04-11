@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { ToolContext, McpToolResult, CandidateIdea, DiscoverArgs } from '../types.js';
+import { makeNextToolStep, makeToolError, makeToolResult } from './shared.js';
 
 /**
  * orch_discover — Accept LLM-generated ideas and store them in state.
@@ -14,18 +15,12 @@ export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise
   const { state, saveState } = ctx;
 
   if (!state.repoProfile) {
-    return {
-      content: [{ type: 'text', text: 'Error: No repo profile found. Call orch_profile first.' }],
-      isError: true,
-    };
+    return makeToolError('orch_discover', state.phase, 'missing_prerequisite', 'Error: No repo profile found. Call orch_profile first.');
   }
 
   const ideas = (args.ideas || []) as CandidateIdea[];
   if (ideas.length === 0) {
-    return {
-      content: [{ type: 'text', text: 'Error: No ideas provided. Pass at least 3 ideas in the ideas array.' }],
-      isError: true,
-    };
+    return makeToolError('orch_discover', state.phase, 'invalid_input', 'Error: No ideas provided. Pass at least 3 ideas in the ideas array.');
   }
 
   state.candidateIdeas = ideas;
@@ -97,5 +92,21 @@ Present these ${ideas.length} ideas to the user (${topIdeas.length} top, ${honor
 
 ${ideaList}`;
 
-  return { content: [{ type: 'text', text }] };
+  return makeToolResult(text, {
+    tool: 'orch_discover',
+    version: 1 as const,
+    status: 'ok' as const,
+    phase: state.phase,
+    nextStep: makeNextToolStep('call_tool', 'Present the ideas to the user, then call orch_select with the chosen goal.', {
+      tool: 'orch_select',
+      argsSchemaHint: { goal: 'string' },
+    }),
+    data: {
+      kind: 'ideas_registered' as const,
+      totalIdeas: ideas.length,
+      topIdeas: topIdeas.length,
+      honorableIdeas: honorableIdeas.length,
+      ideaIds: ideas.map(idea => idea.id),
+    },
+  });
 }

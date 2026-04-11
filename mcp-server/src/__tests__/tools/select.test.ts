@@ -178,4 +178,72 @@ describe('runSelect', () => {
     expect(result.content[0].text).toContain('Quick fix');
     expect(ctx.state.phase).toBe('planning');
   });
+
+  it('returns structuredContent for successful goal selection', async () => {
+    const { ctx } = makeCtx({ constraints: ['must be backward compatible'] });
+
+    const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Add tests' });
+
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_select',
+      version: 1,
+      status: 'ok',
+      phase: 'planning',
+      goal: 'Add tests',
+      nextStep: {
+        type: 'present_choices',
+        message: 'Choose a workflow for the selected goal.',
+        options: [
+          {
+            id: 'plan-first',
+            label: 'Plan first',
+            description: 'Generate a single plan document with orch_plan mode="standard".',
+            tool: 'orch_plan',
+            args: { mode: 'standard' },
+          },
+          {
+            id: 'deep-plan',
+            label: 'Deep plan',
+            description: 'Generate parallel planning perspectives with orch_plan mode="deep".',
+            tool: 'orch_plan',
+            args: { mode: 'deep' },
+          },
+          {
+            id: 'direct-to-beads',
+            label: 'Direct to beads',
+            description: 'Skip planning and create beads directly with br create / br dep add.',
+            tool: 'orch_approve_beads',
+            args: { action: 'start' },
+          },
+        ],
+      },
+      data: {
+        kind: 'goal_selected',
+        goal: 'Add tests',
+        constraints: ['must be backward compatible'],
+        workflowOptions: ['plan-first', 'deep-plan', 'direct-to-beads'],
+        hasRepoProfile: true,
+      },
+    });
+  });
+
+  it('returns structuredContent for invalid goal errors', async () => {
+    const { ctx } = makeCtx();
+
+    const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: '   ' });
+
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_select',
+      version: 1,
+      status: 'error',
+      phase: 'idle',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'invalid_input',
+          message: 'Error: goal parameter is required and must be non-empty.',
+        },
+      },
+    });
+  });
 });

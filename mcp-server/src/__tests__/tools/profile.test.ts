@@ -374,4 +374,48 @@ describe('runProfile', () => {
 
     expect(result.content[0].text).toContain('No test framework detected');
   });
+
+  it('returns structuredContent for successful profile scans', async () => {
+    const { ctx } = makeCtx();
+
+    const result = await runProfile(ctx, { cwd: '/fake/cwd' });
+
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_profile',
+      version: 1,
+      status: 'ok',
+      phase: 'discovering',
+      nextStep: {
+        type: 'call_tool',
+        message: 'Call orch_discover with candidate ideas based on the repo profile.',
+        tool: 'orch_discover',
+        argsSchemaHint: { ideas: 'CandidateIdea[]' },
+      },
+      data: {
+        kind: 'profile_ready',
+        fromCache: false,
+        selectedGoal: undefined,
+        coordination: {
+          backend: 'beads',
+          beadsAvailable: true,
+        },
+        foundationGaps: ['- No AGENTS.md found. Consider creating one for agent guidance.'],
+        existingBeads: {
+          openCount: 1,
+          deferredCount: 0,
+        },
+        profileSummary: {
+          name: 'cwd',
+          languages: ['TypeScript'],
+          frameworks: [],
+          hasTests: true,
+          hasDocs: true,
+          hasCI: true,
+          testFramework: 'Vitest',
+          ciPlatform: 'GitHub Actions',
+          entrypoints: ['src/index.ts'],
+        },
+      },
+    });
+  });
 });
