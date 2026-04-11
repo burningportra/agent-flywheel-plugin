@@ -1,4 +1,67 @@
-import type { ToolContext, McpToolResult, Bead, BeadResult, ReviewArgs } from '../types.js';
+import type { ToolContext, McpToolResult, Bead, ReviewArgs } from '../types.js';
+
+function okResult(phase: string, text: string, data: Record<string, unknown>): McpToolResult {
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: {
+      tool: 'orch_review',
+      version: 1,
+      status: 'ok',
+      phase,
+      data,
+    },
+  };
+}
+
+function errorResult(phase: string, code: string, message: string, details?: Record<string, unknown>): McpToolResult {
+  return {
+    content: [{ type: 'text', text: message }],
+    isError: true,
+    structuredContent: {
+      tool: 'orch_review',
+      version: 1,
+      status: 'error',
+      phase,
+      data: {
+        kind: 'error',
+        error: {
+          code,
+          message,
+          ...(details ? { details } : {}),
+        },
+      },
+    },
+  };
+}
+
+function parseBrShowBead(raw: string): Bead | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (looksLikeBead(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object') {
+      const candidateKeys = ['bead', 'issue', 'data', 'result'];
+      for (const key of candidateKeys) {
+        const candidate = (parsed as Record<string, unknown>)[key];
+        if (looksLikeBead(candidate)) return candidate as Bead;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function looksLikeBead(value: unknown): value is Bead {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && typeof (value as Record<string, unknown>).id === 'string'
+      && typeof (value as Record<string, unknown>).title === 'string'
+      && typeof (value as Record<string, unknown>).description === 'string'
+      && typeof (value as Record<string, unknown>).status === 'string'
+  );
+}
 
 /**
  * orch_review — Submit implementation work for review.
@@ -11,10 +74,7 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
   const { exec, cwd, state, saveState } = ctx;
 
   if (!args.beadId) {
-    return {
-      content: [{ type: 'text', text: 'Error: beadId is required.' }],
-      isError: true,
-    };
+    return errorResult('reviewing', 'invalid_input', 'Error: beadId is required.');
   }
 
   const beadId = args.beadId;
@@ -36,33 +96,35 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
   // ── Look up bead ──────────────────────────────────────────────
   const brShowResult = await exec('br', ['show', beadId, '--json'], { cwd, timeout: 8000 });
   if (brShowResult.code !== 0) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Bead ${beadId} not found. Run \`br list\` to see available beads.\n\nError: ${brShowResult.stderr}`,
-      }],
-      isError: true,
-    };
+    return errorResult(
+      state.phase,
+      'not_found',
+      `Bead ${beadId} not found. Run \`br list\` to see available beads.\n\nError: ${brShowResult.stderr}`,
+      { beadId, stderr: brShowResult.stderr }
+    );
   }
 
-  let bead: Bead;
-  try {
-    bead = JSON.parse(brShowResult.stdout);
-  } catch {
-    return {
-      content: [{ type: 'text', text: `Error parsing bead ${beadId} from br show output.` }],
-      isError: true,
-    };
+  const bead = parseBrShowBead(brShowResult.stdout);
+  if (!bead) {
+    return errorResult(
+      state.phase,
+      'parse_failure',
+      `Error parsing bead ${beadId} from br show output.`,
+      { beadId }
+    );
   }
 
   const alreadyCompleted = state.beadResults?.[beadId]?.status === 'success';
   if (alreadyCompleted) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Bead ${beadId} is already complete. Move to the next bead or call \`orch_review\` with beadId="__gates__" for guided review gates.`,
-      }],
-    };
+    return okResult(
+      state.phase,
+      `Bead ${beadId} is already complete. Move to the next bead or call \`orch_review\` with beadId="__gates__" for guided review gates.`,
+      {
+        kind: 'review_gate',
+        scope: 'already_complete',
+        beadId,
+      }
+    );
   }
 
   // ── action: skip ──────────────────────────────────────────────
@@ -119,8 +181,6 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
 
   // ── action: hit-me — return parallel review agent specs ───────
   if (args.action === 'hit-me') {
-    const hitMeWasTriggered = state.beadHitMeTriggered?.[beadId] ?? false;
-    const hitMeWasCompleted = state.beadHitMeCompleted?.[beadId] ?? false;
     const round = state.beadReviewPassCounts?.[beadId] ?? 0;
 
     if (!state.beadHitMeTriggered) state.beadHitMeTriggered = {};
@@ -214,24 +274,33 @@ Report what you found. Fix obvious issues directly.`,
       },
     ];
 
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          action: 'spawn-agents',
-          beadId,
-          round,
-          agentTasks,
-          instructions: `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`orch_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`,
-        }, null, 2),
-      }],
+    const payload = {
+      kind: 'review_tasks',
+      strategy: 'hit_me',
+      beadId,
+      round,
+      agentTasks,
+      files,
+      instructions: `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`orch_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`,
     };
+
+    return okResult(
+      state.phase,
+      JSON.stringify({
+        action: 'spawn-agents',
+        beadId,
+        round,
+        agentTasks,
+        instructions: payload.instructions,
+      }, null, 2),
+      payload
+    );
   }
 
-  return {
-    content: [{ type: 'text', text: `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip` }],
-    isError: true,
-  };
+  return errorResult(state.phase, 'unsupported_action', `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip`, {
+    beadId,
+    action: args.action,
+  });
 }
 
 async function nextBeadOrGates(
@@ -267,16 +336,21 @@ async function nextBeadOrGates(
     state.currentGateIndex = 0;
     saveState(state);
 
-    return {
-      content: [{
-        type: 'text',
-        text: `**${status}: Bead ${completedBeadId} (${completedTitle}).**
+    return okResult(
+      'iterating',
+      `**${status}: Bead ${completedBeadId} (${completedTitle}).**
 
 All beads complete! Entering review gates.
 
 **NEXT: Call \`orch_review\` with beadId="__gates__" to run guided review gates.**`,
-      }],
-    };
+      {
+        kind: 'review_gate',
+        scope: 'bead_completion',
+        completedBeadId,
+        completedTitle,
+        status,
+      }
+    );
   }
 
   if (ready.length === 1) {
@@ -287,10 +361,9 @@ All beads complete! Entering review gates.
     state.phase = 'implementing';
     saveState(state);
 
-    return {
-      content: [{
-        type: 'text',
-        text: `**${status}: Bead ${completedBeadId}.** Moving to bead ${nextBead.id}.
+    return okResult(
+      'implementing',
+      `**${status}: Bead ${completedBeadId}.** Moving to bead ${nextBead.id}.
 
 **NEXT: Implement bead ${nextBead.id} (${nextBead.title}), then call \`orch_review\` when done.**
 
@@ -301,8 +374,14 @@ All beads complete! Entering review gates.
 ${nextBead.description}
 
 After implementing, commit and call \`orch_review\` with beadId="${nextBead.id}".`,
-      }],
-    };
+      {
+        kind: 'review_tasks',
+        strategy: 'single_bead',
+        completedBeadId,
+        nextBeadIds: [nextBead.id],
+        beads: [nextBead],
+      }
+    );
   }
 
   // Multiple ready — spawn parallel agents
@@ -318,18 +397,24 @@ After implementing, commit and call \`orch_review\` with beadId="${nextBead.id}"
     task: `Implement bead ${bead.id}: ${bead.title}\n\n${bead.description}\n\nAfter implementing, commit and report your summary.`,
   }));
 
-  return {
-    content: [{
-      type: 'text',
-      text: `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.
+  return okResult(
+    'implementing',
+    `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.
 
 **NEXT: Spawn ${ready.length} parallel agents, then call \`orch_review\` for each when done.**
 
 \`\`\`json
 ${JSON.stringify({ agents: agentConfigs }, null, 2)}
 \`\`\``,
-    }],
-  };
+    {
+      kind: 'review_tasks',
+      strategy: 'parallel_beads',
+      completedBeadId,
+      nextBeadIds: ready.map(bead => bead.id),
+      beads: ready,
+      agentConfigs,
+    }
+  );
 }
 
 async function runGates(ctx: ToolContext, action: 'hit-me' | 'looks-good' | 'skip'): Promise<McpToolResult> {
@@ -354,26 +439,28 @@ async function runGates(ctx: ToolContext, action: 'hit-me' | 'looks-good' | 'ski
     if (consecutiveClean >= 2) {
       state.phase = 'complete';
       saveState(state);
-      return {
-        content: [{
-          type: 'text',
-          text: `## Orchestration Complete
+      return okResult(
+        'complete',
+        `## Orchestration Complete
 
 All gates passed for ${consecutiveClean} consecutive rounds. The implementation is done.
 
 **Summary:** All beads closed, all review gates clean.
 
 Run \`/claude-orchestrator:orchestrate-status\` for a final report.`,
-        }],
-      };
+        {
+          kind: 'orchestration_complete',
+          scope: 'gates',
+          consecutiveCleanRounds: consecutiveClean,
+        }
+      );
     }
 
     saveState(state);
     const nextGate = gateChecks[nextGateIndex];
-    return {
-      content: [{
-        type: 'text',
-        text: `Gate passed. Moving to next gate (${consecutiveClean}/2 clean rounds needed to finish).
+    return okResult(
+      state.phase,
+      `Gate passed. Moving to next gate (${consecutiveClean}/2 clean rounds needed to finish).
 
 ## Next Review Gate
 
@@ -384,8 +471,14 @@ After checking:
 - If it **fails**: fix it, then call \`orch_review\` with beadId="__gates__" and action="hit-me"
 
 **cwd:** ${cwd}`,
-      }],
-    };
+      {
+        kind: 'review_gate',
+        scope: 'gates',
+        gateIndex: nextGateIndex,
+        consecutiveCleanRounds: consecutiveClean,
+        gatePrompt: nextGate,
+      }
+    );
   }
 
   // action="hit-me" or first entry: show current gate and reset clean streak
@@ -396,10 +489,9 @@ After checking:
   const currentGate = gateChecks[gateIndex];
   saveState(state);
 
-  return {
-    content: [{
-      type: 'text',
-      text: `## Review Gate (Round ${round})
+  return okResult(
+    state.phase,
+    `## Review Gate (Round ${round})
 
 ${currentGate}
 
@@ -408,8 +500,15 @@ After completing this gate check:
 - If it **fails**: fix the issue and call \`orch_review\` with beadId="__gates__" and action="hit-me" to spawn fixers
 
 **cwd:** ${cwd}`,
-    }],
-  };
+    {
+      kind: 'review_gate',
+      scope: 'gates',
+      gateIndex,
+      round,
+      consecutiveCleanRounds: state.consecutiveCleanRounds,
+      gatePrompt: currentGate,
+    }
+  );
 }
 
 function regressToPhase(

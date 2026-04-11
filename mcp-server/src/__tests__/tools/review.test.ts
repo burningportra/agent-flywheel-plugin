@@ -87,6 +87,17 @@ describe('runReview', () => {
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: '', action: 'looks-good' });
 
     expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_review',
+      version: 1,
+      status: 'error',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'invalid_input',
+        },
+      },
+    });
     expect(result.content[0].text).toContain('beadId is required');
   });
 
@@ -98,7 +109,39 @@ describe('runReview', () => {
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'missing-bead', action: 'looks-good' });
 
     expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_review',
+      version: 1,
+      status: 'error',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'not_found',
+        },
+      },
+    });
     expect(result.content[0].text).toContain('not found');
+  });
+
+  it('returns structured error when bead JSON cannot be parsed', async () => {
+    const { ctx } = makeCtx({}, [
+      { cmd: 'br', args: ['show', 'test-bead-1', '--json'], result: { code: 0, stdout: 'not-json', stderr: '' } },
+    ]);
+
+    const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'looks-good' });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_review',
+      version: 1,
+      status: 'error',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'parse_failure',
+        },
+      },
+    });
   });
 
   it('returns message when bead is already complete', async () => {
@@ -156,6 +199,17 @@ describe('runReview', () => {
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'looks-good' });
 
     expect(state.phase).toBe('iterating');
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_review',
+      version: 1,
+      status: 'ok',
+      phase: 'iterating',
+      data: {
+        kind: 'review_gate',
+        scope: 'bead_completion',
+        completedBeadId: 'test-bead-1',
+      },
+    });
     expect(result.content[0].text).toContain('All beads complete');
     expect(result.content[0].text).toContain('__gates__');
   });
@@ -174,6 +228,17 @@ describe('runReview', () => {
 
     expect(state.currentBeadId).toBe('test-bead-2');
     expect(state.phase).toBe('implementing');
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_review',
+      version: 1,
+      status: 'ok',
+      phase: 'implementing',
+      data: {
+        kind: 'review_tasks',
+        strategy: 'single_bead',
+        nextBeadIds: ['test-bead-2'],
+      },
+    });
     expect(result.content[0].text).toContain('test-bead-2');
   });
 
@@ -249,6 +314,17 @@ describe('runReview', () => {
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'looks-good' });
 
     const text = result.content[0].text;
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_review',
+      version: 1,
+      status: 'ok',
+      phase: 'implementing',
+      data: {
+        kind: 'review_tasks',
+        strategy: 'parallel_beads',
+        nextBeadIds: ['test-bead-2', 'test-bead-3'],
+      },
+    });
     expect(text).toContain('2 beads now ready');
     expect(text).toContain('Spawn 2 parallel agents');
   });
@@ -261,10 +337,19 @@ describe('runReview', () => {
 
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
 
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.action).toBe('spawn-agents');
-    expect(parsed.beadId).toBe('test-bead-1');
-    expect(parsed.agentTasks).toHaveLength(5);
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_review',
+      version: 1,
+      status: 'ok',
+      phase: 'reviewing',
+      data: {
+        kind: 'review_tasks',
+        strategy: 'hit_me',
+        beadId: 'test-bead-1',
+      },
+    });
+    const structured = result.structuredContent as { data: { agentTasks: unknown[] } };
+    expect(structured.data.agentTasks).toHaveLength(5);
   });
 
   it('includes all review perspectives in hit-me agents', async () => {
@@ -273,8 +358,9 @@ describe('runReview', () => {
 
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
 
-    const parsed = JSON.parse(result.content[0].text);
-    const perspectives = parsed.agentTasks.map((a: { perspective: string }) => a.perspective);
+    const structured = result.structuredContent as { data: { kind: string; agentTasks: Array<{ perspective: string }> } };
+    expect(structured.data.kind).toBe('review_tasks');
+    const perspectives = structured.data.agentTasks.map(a => a.perspective);
     expect(perspectives).toContain('fresh-eyes');
     expect(perspectives).toContain('adversarial');
     expect(perspectives).toContain('ergonomics');
@@ -300,9 +386,9 @@ describe('runReview', () => {
 
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
 
-    const parsed = JSON.parse(result.content[0].text);
+    const structured = result.structuredContent as { data: { agentTasks: Array<{ task: string }> } };
     // At least one agent task should mention the files
-    const allTaskText = parsed.agentTasks.map((a: { task: string }) => a.task).join(' ');
+    const allTaskText = structured.data.agentTasks.map(a => a.task).join(' ');
     expect(allTaskText).toContain('src/feature.ts');
   });
 
@@ -330,6 +416,17 @@ describe('runReview', () => {
 
       const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'hit-me' });
 
+      expect(result.structuredContent).toMatchObject({
+        tool: 'orch_review',
+        version: 1,
+        status: 'ok',
+        data: {
+          kind: 'review_gate',
+          scope: 'gates',
+          gateIndex: 0,
+          round: 1,
+        },
+      });
       expect(result.content[0].text).toContain('Review Gate');
       expect(result.content[0].text).toContain('Gate 1');
     });
@@ -341,6 +438,17 @@ describe('runReview', () => {
 
       expect(state.currentGateIndex).toBe(1);
       expect(state.consecutiveCleanRounds).toBe(1);
+      expect(result.structuredContent).toMatchObject({
+        tool: 'orch_review',
+        version: 1,
+        status: 'ok',
+        data: {
+          kind: 'review_gate',
+          scope: 'gates',
+          gateIndex: 1,
+          consecutiveCleanRounds: 1,
+        },
+      });
       expect(result.content[0].text).toContain('Gate passed');
     });
 
@@ -350,6 +458,16 @@ describe('runReview', () => {
       const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
 
       expect(state.phase).toBe('complete');
+      expect(result.structuredContent).toMatchObject({
+        tool: 'orch_review',
+        version: 1,
+        status: 'ok',
+        phase: 'complete',
+        data: {
+          kind: 'orchestration_complete',
+          consecutiveCleanRounds: 2,
+        },
+      });
       expect(result.content[0].text).toContain('Orchestration Complete');
     });
 

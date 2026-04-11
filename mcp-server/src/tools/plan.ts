@@ -1,10 +1,49 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
-import { slugifyGoal, pickRefinementModel, DEEP_PLAN_MODELS } from './shared.js';
+import { slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
+
+function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', data: Record<string, unknown>): McpToolResult {
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: {
+      tool: 'orch_plan',
+      version: 1,
+      status: 'ok',
+      phase,
+      data,
+    },
+  };
+}
+
+function errorResult(
+  phase: 'planning' | 'awaiting_plan_approval',
+  code: 'missing_prerequisite' | 'invalid_input' | 'not_found',
+  message: string,
+  details?: Record<string, unknown>
+): McpToolResult {
+  return {
+    content: [{ type: 'text', text: message }],
+    isError: true,
+    structuredContent: {
+      tool: 'orch_plan',
+      version: 1,
+      status: 'error',
+      phase,
+      data: {
+        kind: 'error',
+        error: {
+          code,
+          message,
+          ...(details ? { details } : {}),
+        },
+      },
+    },
+  };
+}
 
 /**
  * orch_plan — Generate a plan document for the selected goal.
@@ -17,10 +56,7 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
   const { state, saveState, cwd } = ctx;
 
   if (!state.selectedGoal) {
-    return {
-      content: [{ type: 'text', text: 'Error: No goal selected. Call orch_select first.' }],
-      isError: true,
-    };
+    return errorResult('planning', 'missing_prerequisite', 'Error: No goal selected. Call orch_select first.');
   }
 
   const goal = state.selectedGoal;
@@ -35,10 +71,10 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
   if (args.planFile) {
     const absPath = resolve(cwd, args.planFile);
     if (!existsSync(absPath)) {
-      return {
-        content: [{ type: 'text', text: `Error: planFile not found: ${absPath}` }],
-        isError: true,
-      };
+      return errorResult('planning', 'not_found', `Error: planFile not found: ${absPath}`, {
+        planFile: args.planFile,
+        absolutePath: absPath,
+      });
     }
     const content = readFileSync(absPath, 'utf8');
     const relativePath = args.planFile.startsWith('docs/') ? args.planFile : `docs/plans/${args.planFile}`;
@@ -47,18 +83,27 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
     state.phase = 'awaiting_plan_approval';
     saveState(state);
 
-    return {
-      content: [{
-        type: 'text',
-        text: `**Plan loaded from \`${args.planFile}\`.**
+    return okResult(
+      `**Plan loaded from \`${args.planFile}\`.**
 
 **NEXT: Call \`orch_approve_beads\` to review the plan and proceed to bead creation.**
 
 Goal: "${goal}"${constraintsSummary}
 
 Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
-      }],
-    };
+      'awaiting_plan_approval',
+      {
+        kind: 'plan_registered',
+        source: 'plan_file',
+        goal,
+        mode,
+        planDocument: args.planFile,
+        planStats: {
+          chars: content.length,
+          lines: content.split('\n').length,
+        },
+      }
+    );
   }
 
   // ── If planContent is provided inline, write it to disk then register ──
@@ -74,18 +119,27 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
     state.phase = 'awaiting_plan_approval';
     saveState(state);
 
-    return {
-      content: [{
-        type: 'text',
-        text: `**Plan received and saved to \`${relativePath}\`.**
+    return okResult(
+      `**Plan received and saved to \`${relativePath}\`.**
 
 **NEXT: Call \`orch_approve_beads\` to review the plan and proceed to bead creation.**
 
 Goal: "${goal}"${constraintsSummary}
 
 Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').length} lines).`,
-      }],
-    };
+      'awaiting_plan_approval',
+      {
+        kind: 'plan_registered',
+        source: 'inline_plan_content',
+        goal,
+        mode,
+        planDocument: relativePath,
+        planStats: {
+          chars: args.planContent.length,
+          lines: args.planContent.split('\n').length,
+        },
+      }
+    );
   }
 
   state.phase = 'planning';
@@ -102,10 +156,8 @@ Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').len
     state.planDocument = planPath;
     saveState(state);
 
-    return {
-      content: [{
-        type: 'text',
-        text: `**NEXT: Generate a detailed plan document and save it to \`${planPath}\`.**
+    return okResult(
+      `**NEXT: Generate a detailed plan document and save it to \`${planPath}\`.**
 
 Goal: "${goal}"${constraintsSummary}${profileContext}
 
@@ -126,8 +178,15 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
 ### After generating the plan
 1. Save it to \`${planPath}\` using the Write tool or bash
 2. Call \`orch_approve_beads\` to review the plan and create beads from it`,
-      }],
-    };
+      'planning',
+      {
+        kind: 'plan_prompt',
+        mode: 'standard',
+        goal,
+        planDocument: planPath,
+        constraints: state.constraints,
+      }
+    );
   }
 
   // ── Deep plan (multi-model) ───────────────────────────────────
@@ -209,16 +268,14 @@ Question every architectural choice: is there a simpler way? A more standard app
     });
   }
 
-  return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        action: 'spawn-plan-agents',
-        goal,
-        constraints: state.constraints,
-        planAgents,
-        instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call orch_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
-        synthesisPrompt: `## Best-of-All-Worlds Synthesis
+  const payload = {
+    kind: 'deep_plan_spawn',
+    mode: 'deep',
+    goal,
+    constraints: state.constraints,
+    planAgents,
+    instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call orch_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+    synthesisPrompt: `## Best-of-All-Worlds Synthesis
 
 Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
 
@@ -233,7 +290,18 @@ Then synthesize:
 6. **Flag unresolved tensions** — where plans fundamentally disagree and a judgment call was made.
 
 The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.`,
-      }, null, 2),
-    }],
   };
+
+  return okResult(
+    JSON.stringify({
+        action: 'spawn-plan-agents',
+        goal,
+        constraints: state.constraints,
+        planAgents,
+        instructions: payload.instructions,
+        synthesisPrompt: payload.synthesisPrompt,
+      }, null, 2),
+    'planning',
+    payload
+  );
 }

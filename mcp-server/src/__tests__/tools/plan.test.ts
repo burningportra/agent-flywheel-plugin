@@ -44,6 +44,17 @@ describe('runPlan', () => {
     const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'standard' });
 
     const text = result.content[0].text;
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_plan',
+      version: 1,
+      status: 'ok',
+      phase: 'planning',
+      data: {
+        kind: 'plan_prompt',
+        mode: 'standard',
+        goal: 'Add caching layer',
+      },
+    });
     expect(text).toContain('Add caching layer');
     expect(text).toContain('Plan Document Requirements');
     expect(text).toContain('orch_approve_beads');
@@ -131,13 +142,25 @@ describe('runPlan', () => {
 
       const { ctx, state } = makeCtx({}, tmpDir);
 
-      const result = await runPlan(ctx, { cwd: tmpDir, planFile: 'plan.md' });
+    const result = await runPlan(ctx, { cwd: tmpDir, planFile: 'plan.md' });
 
-      expect(result.isError).toBeUndefined();
-      expect(state.phase).toBe('awaiting_plan_approval');
-      expect(state.planDocument).toBe('plan.md');
-      expect(state.planRefinementRound).toBe(0);
-      expect(result.content[0].text).toContain('Plan loaded from');
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_plan',
+      version: 1,
+      status: 'ok',
+      phase: 'awaiting_plan_approval',
+      data: {
+        kind: 'plan_registered',
+        source: 'plan_file',
+        goal: 'Add caching layer',
+        planDocument: 'plan.md',
+      },
+    });
+    expect(state.phase).toBe('awaiting_plan_approval');
+    expect(state.planDocument).toBe('plan.md');
+    expect(state.planRefinementRound).toBe(0);
+    expect(result.content[0].text).toContain('Plan loaded from');
     });
 
     it('returns error when planFile does not exist', async () => {
@@ -179,13 +202,24 @@ describe('runPlan', () => {
     it('writes plan to disk and transitions to awaiting_plan_approval', async () => {
       const { ctx, state } = makeCtx({}, tmpDir);
 
-      const result = await runPlan(ctx, { cwd: tmpDir, planContent: '# Plan\n\nContent here' });
+    const result = await runPlan(ctx, { cwd: tmpDir, planContent: '# Plan\n\nContent here' });
 
-      expect(result.isError).toBeUndefined();
-      expect(state.phase).toBe('awaiting_plan_approval');
-      expect(state.planDocument).toMatch(/docs\/plans\/.*synthesized\.md$/);
-      expect(state.planRefinementRound).toBe(0);
-      expect(result.content[0].text).toContain('Plan received and saved');
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_plan',
+      version: 1,
+      status: 'ok',
+      phase: 'awaiting_plan_approval',
+      data: {
+        kind: 'plan_registered',
+        source: 'inline_plan_content',
+        goal: 'Add caching layer',
+      },
+    });
+    expect(state.phase).toBe('awaiting_plan_approval');
+    expect(state.planDocument).toMatch(/docs\/plans\/.*synthesized\.md$/);
+    expect(state.planRefinementRound).toBe(0);
+    expect(result.content[0].text).toContain('Plan received and saved');
     });
 
     it('ignores empty/whitespace planContent', async () => {
@@ -209,10 +243,18 @@ describe('runPlan', () => {
 
     const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
 
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.action).toBe('spawn-plan-agents');
-    expect(parsed.goal).toBe('Add caching layer');
-    expect(parsed.planAgents.length).toBeGreaterThanOrEqual(3);
+    expect(result.structuredContent).toMatchObject({
+      tool: 'orch_plan',
+      version: 1,
+      status: 'ok',
+      phase: 'planning',
+      data: {
+        kind: 'deep_plan_spawn',
+        goal: 'Add caching layer',
+      },
+    });
+    const structured = result.structuredContent as { data: { planAgents: unknown[] } };
+    expect(structured.data.planAgents.length).toBeGreaterThanOrEqual(3);
   });
 
   it('includes correctness, robustness, and ergonomics perspectives in deep mode', async () => {
@@ -220,8 +262,9 @@ describe('runPlan', () => {
 
     const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
 
-    const parsed = JSON.parse(result.content[0].text);
-    const perspectives = parsed.planAgents.map((a: { perspective: string }) => a.perspective);
+    const structured = result.structuredContent as { data: { kind: string; planAgents: Array<{ perspective: string }> } };
+    expect(structured.data.kind).toBe('deep_plan_spawn');
+    const perspectives = structured.data.planAgents.map(a => a.perspective);
     expect(perspectives).toContain('correctness');
     expect(perspectives).toContain('robustness');
     expect(perspectives).toContain('ergonomics');
