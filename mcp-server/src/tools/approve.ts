@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ToolContext, McpToolResult, Bead, ApproveArgs } from '../types.js';
-import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, pickRefinementModel, slugifyGoal } from './shared.js';
+import type { ToolContext, McpToolResult, Bead, ApproveArgs, OrchestratorPhase, ToolNextStep } from '../types.js';
+import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
@@ -36,6 +36,98 @@ function countChanges(prev: BeadSnapshot, curr: BeadSnapshot): number {
   return changes;
 }
 
+type ApprovalTarget = 'plan' | 'beads';
+type SizeAssessment = 'too_short' | 'short' | 'detailed';
+
+type ApproveStructuredContent = {
+  tool: 'orch_approve_beads';
+  version: 1;
+  status: 'ok' | 'error';
+  phase: OrchestratorPhase;
+  approvalTarget: ApprovalTarget;
+  nextStep?: ToolNextStep;
+  data: Record<string, unknown>;
+};
+
+const ADVANCED_ACTIONS = ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'] as const;
+
+function makeApproveResult(
+  text: string,
+  phase: OrchestratorPhase,
+  approvalTarget: ApprovalTarget,
+  data: Record<string, unknown>,
+  nextStep?: ToolNextStep
+): McpToolResult<ApproveStructuredContent> {
+  return makeToolResult(text, {
+    tool: 'orch_approve_beads',
+    version: 1,
+    status: 'ok',
+    phase,
+    approvalTarget,
+    nextStep,
+    data,
+  });
+}
+
+function makeApproveError(
+  message: string,
+  phase: OrchestratorPhase,
+  approvalTarget: ApprovalTarget,
+  code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'internal_error',
+  details?: Record<string, unknown>
+): McpToolResult<ApproveStructuredContent> {
+  return {
+    content: [{ type: 'text', text: message }],
+    isError: true,
+    structuredContent: {
+      tool: 'orch_approve_beads',
+      version: 1,
+      status: 'error',
+      phase,
+      approvalTarget,
+      data: {
+        kind: 'error',
+        error: {
+          code,
+          message,
+          ...(details ? { details } : {}),
+        },
+      },
+    },
+  };
+}
+
+function getConvergenceData(state: ToolContext['state'], score: number | undefined): Record<string, unknown> {
+  return {
+    round: state.polishRound,
+    changes: [...state.polishChanges],
+    converged: state.polishConverged,
+    score,
+  };
+}
+
+function getQualityData(beads: Bead[]): Record<string, unknown> {
+  const beadQuality = computeBeadQualityScore(beads);
+  return {
+    score: beadQuality.score,
+    summary: formatBeadQualityScore(beadQuality),
+  };
+}
+
+function getSizeAssessment(lineCount: number): SizeAssessment {
+  if (lineCount < 300) return 'too_short';
+  if (lineCount < 600) return 'short';
+  return 'detailed';
+}
+
+function getBeadApprovalData(state: ToolContext['state'], beads: Bead[], score: number | undefined): Record<string, unknown> {
+  return {
+    activeBeadIds: [...(state.activeBeadIds ?? [])],
+    convergence: getConvergenceData(state, score),
+    quality: getQualityData(beads),
+  };
+}
+
 /**
  * orch_approve_beads — Review and approve bead graph before implementation.
  *
@@ -48,10 +140,9 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   const { exec, cwd, state, saveState } = ctx;
 
   if (!state.selectedGoal) {
-    return {
-      content: [{ type: 'text', text: 'Error: No goal selected. Call orch_select first.' }],
-      isError: true,
-    };
+    return makeApproveError('Error: No goal selected. Call orch_select first.', state.phase, 'beads', 'missing_prerequisite', {
+      requiredTool: 'orch_select',
+    });
   }
 
   // ── Plan approval mode (when phase is awaiting_plan_approval) ──
@@ -66,13 +157,16 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   // Read current beads from br CLI
   const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
   if (brListResult.code !== 0) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error reading beads: ${brListResult.stderr}\n\nEnsure \`br\` CLI is installed and \`br init\` has been run in this directory.`,
-      }],
-      isError: true,
-    };
+    return makeApproveError(
+      `Error reading beads: ${brListResult.stderr}\n\nEnsure \`br\` CLI is installed and \`br init\` has been run in this directory.`,
+      state.phase,
+      'beads',
+      'cli_failure',
+      {
+        command: 'br list --json',
+        stderr: brListResult.stderr,
+      }
+    );
   }
 
   let allBeads: Bead[] = [];
@@ -81,21 +175,26 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     allBeads = parsed.data;
   } else {
     log.warn('Failed to parse br list output', { error: parsed.error });
-    return {
-      content: [{ type: 'text', text: `Error: Could not parse br list output: ${parsed.error}` }],
-      isError: true,
-    };
+    return makeApproveError(`Error: Could not parse br list output: ${parsed.error}`, state.phase, 'beads', 'parse_failure', {
+      command: 'br list --json',
+      parseError: parsed.error,
+    });
   }
 
   const beads = allBeads.filter(b => b.status === 'open' || b.status === 'in_progress');
 
   if (beads.length === 0) {
-    return {
-      content: [{
-        type: 'text',
-        text: `No open beads found. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..."\n\`\`\`\n\nThen call \`orch_approve_beads\` again.`,
-      }],
-    };
+    return makeApproveResult(
+      `No open beads found. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..."\n\`\`\`\n\nThen call \`orch_approve_beads\` again.`,
+      state.phase,
+      'beads',
+      {
+        kind: 'beads_missing',
+        activeBeadIds: [],
+        readyForApproval: false,
+      },
+      makeNextToolStep('run_cli', 'Create at least one open bead with br create before returning to orch_approve_beads.')
+    );
   }
 
   // Track polish round changes
@@ -155,9 +254,19 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     _lastBeadSnapshot = undefined;
     state.phase = 'idle';
     saveState(state);
-    return {
-      content: [{ type: 'text', text: 'Beads rejected. Orchestration stopped. Call `orch_profile` to start over.' }],
-    };
+    return makeApproveResult(
+      'Beads rejected. Orchestration stopped. Call `orch_profile` to start over.',
+      state.phase,
+      'beads',
+      {
+        kind: 'approval_rejected',
+        action: 'reject',
+        activeBeadIds: [],
+      },
+      makeNextToolStep('call_tool', 'Restart orchestration from profiling if you want to try again.', {
+        tool: 'orch_profile',
+      })
+    );
   }
 
   if (args.action === 'polish') {
@@ -169,7 +278,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   }
 
   // action === 'start' — launch implementation
-  return handleStart(ctx, beads, roundHeader, beadList, convergenceScore, state.selectedGoal);
+  return handleStart(ctx, beads, roundHeader, beadList, convergenceScore);
 }
 
 async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<McpToolResult> {
@@ -182,17 +291,20 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
   if (existsSync(absPath)) {
     plan = readFileSync(absPath, 'utf8');
   } else {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error: Plan document not found at \`${planPath}\`.\n\nGenerate the plan first using \`orch_plan\`, then call \`orch_approve_beads\` again.`,
-      }],
-      isError: true,
-    };
+    return makeApproveError(
+      `Error: Plan document not found at \`${planPath}\`.\n\nGenerate the plan first using \`orch_plan\`, then call \`orch_approve_beads\` again.`,
+      state.phase,
+      'plan',
+      'not_found',
+      {
+        planDocument: planPath,
+      }
+    );
   }
 
   const lineCount = plan.split('\n').length;
   const planRound = state.planRefinementRound ?? 0;
+  const sizeAssessment = getSizeAssessment(lineCount);
 
   const sizeGate = lineCount < 100
     ? `\nPlan too short (${lineCount} lines) — needs substantial content before creating beads.`
@@ -205,9 +317,16 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     state.planRefinementRound = 0;
     state.phase = 'idle';
     saveState(state);
-    return {
-      content: [{ type: 'text', text: 'Plan rejected. Orchestration stopped.' }],
-    };
+    return makeApproveResult(
+      'Plan rejected. Orchestration stopped.',
+      state.phase,
+      'plan',
+      {
+        kind: 'approval_rejected',
+        action: 'reject',
+        planDocument: undefined,
+      }
+    );
   }
 
   if (args.action === 'git-diff-review') {
@@ -217,12 +336,21 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
 
     const reviewPrompt = planGitDiffReviewPrompt(plan);
     const integrationHint = `After collecting the reviewer's proposed revisions, call \`orch_approve_beads\` again — the tool will then prompt you to integrate them using \`planIntegrationPrompt\`.`;
-    return {
-      content: [{
-        type: 'text',
-        text: `**📝 Git-diff review pass (round ${planRound + 1})**\n\nSpawn a fresh reviewer agent with this prompt:\n\n---\n${reviewPrompt}\n---\n\nCollect the reviewer's proposed changes. Then spawn an integration agent with:\n\`\`\`\n${planIntegrationPrompt('<original plan from ' + planPath + '>', '<reviewer proposed revisions>')}\n\`\`\`\n\nHave the integration agent save the merged plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\n${sizeGate}\n\n${integrationHint}`,
-      }],
-    };
+    return makeApproveResult(
+      `**📝 Git-diff review pass (round ${planRound + 1})**\n\nSpawn a fresh reviewer agent with this prompt:\n\n---\n${reviewPrompt}\n---\n\nCollect the reviewer's proposed changes. Then spawn an integration agent with:\n\`\`\`\n${planIntegrationPrompt('<original plan from ' + planPath + '>', '<reviewer proposed revisions>')}\n\`\`\`\n\nHave the integration agent save the merged plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\n${sizeGate}\n\n${integrationHint}`,
+      state.phase,
+      'plan',
+      {
+        kind: 'plan_refinement_requested',
+        action: 'git-diff-review',
+        planDocument: planPath,
+        lineCount,
+        sizeAssessment,
+        planRefinementRound: state.planRefinementRound,
+        refinementModel: undefined,
+      },
+      makeNextToolStep('spawn_agents', 'Run the git-diff plan review and integration cycle, then return to orch_approve_beads.')
+    );
   }
 
   if (args.action === 'polish') {
@@ -231,12 +359,21 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     saveState(state);
 
     const refinementModel = pickRefinementModel(planRound);
-    return {
-      content: [{
-        type: 'text',
-        text: `**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\nAlternatively, use \`action: "git-diff-review"\` for a git-diff style review cycle that proposes targeted changes with rationale.\n\n${sizeGate}`,
-      }],
-    };
+    return makeApproveResult(
+      `**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\nAlternatively, use \`action: "git-diff-review"\` for a git-diff style review cycle that proposes targeted changes with rationale.\n\n${sizeGate}`,
+      state.phase,
+      'plan',
+      {
+        kind: 'plan_refinement_requested',
+        action: 'polish',
+        planDocument: planPath,
+        lineCount,
+        sizeAssessment,
+        planRefinementRound: state.planRefinementRound,
+        refinementModel,
+      },
+      makeNextToolStep('generate_artifact', 'Revise the existing plan document and save it back before returning to orch_approve_beads.')
+    );
   }
 
   // action === 'start' — approve plan and transition to bead creation
@@ -244,15 +381,22 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
   state.planRefinementRound = 0;
   saveState(state);
 
-  const slug = slugifyGoal(state.selectedGoal!);
   const beadPrompt = buildPlanToBeadsPrompt(plan, state.selectedGoal!, planPath);
 
-  return {
-    content: [{
-      type: 'text',
-      text: `**Plan approved!** (${lineCount} lines)${sizeGate}\n\n**NEXT: Create beads from the plan using \`br create\` and \`br dep add\`, then call \`orch_approve_beads\` with action="start" to launch implementation.**\n\n---\n\n${beadPrompt}`,
-    }],
-  };
+  return makeApproveResult(
+    `**Plan approved!** (${lineCount} lines)${sizeGate}\n\n**NEXT: Create beads from the plan using \`br create\` and \`br dep add\`, then call \`orch_approve_beads\` with action="start" to launch implementation.**\n\n---\n\n${beadPrompt}`,
+    state.phase,
+    'plan',
+    {
+      kind: 'plan_approved',
+      planDocument: planPath,
+      lineCount,
+      sizeAssessment,
+      planRefinementRound: state.planRefinementRound,
+      readyForBeadCreation: true,
+    },
+    makeNextToolStep('run_cli', 'Create beads from the approved plan with br create / br dep add, then return to orch_approve_beads action="start".')
+  );
 }
 
 function buildPlanToBeadsPrompt(plan: string, goal: string, planPath: string): string {
@@ -285,8 +429,7 @@ async function handleStart(
   beads: Bead[],
   roundHeader: string,
   beadList: string,
-  convergenceScore: number | undefined,
-  goal: string
+  convergenceScore: number | undefined
 ): Promise<McpToolResult> {
   const { exec, cwd, state, saveState } = ctx;
 
@@ -321,12 +464,24 @@ async function handleStart(
 
   if (ready.length === 0) {
     saveState(state);
-    return {
-      content: [{
-        type: 'text',
-        text: `Beads approved! But no ready beads found (all may be blocked).\n\nRun \`br ready\` or \`br dep cycles\` to diagnose.\n\n${beadList}`,
-      }],
-    };
+    return makeApproveResult(
+      `Beads approved! But no ready beads found (all may be blocked).\n\nRun \`br ready\` or \`br dep cycles\` to diagnose.\n\n${beadList}`,
+      state.phase,
+      'beads',
+      {
+        kind: 'beads_approved',
+        launchMode: 'blocked',
+        readyCount: 0,
+        currentBeadId: undefined,
+        readyBeads: [],
+        ...getBeadApprovalData(state, beads, convergenceScore),
+        readiness: {
+          blocked: true,
+          message: 'No ready beads found after approval.',
+        },
+      },
+      makeNextToolStep('run_cli', 'Diagnose blocked beads with br ready or br dep cycles, then return to orch_approve_beads.')
+    );
   }
 
   // Mark ready beads as in_progress
@@ -349,10 +504,8 @@ async function handleStart(
   if (ready.length === 1) {
     // Sequential: single bead
     const bead = ready[0];
-    return {
-      content: [{
-        type: 'text',
-        text: `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}
+    return makeApproveResult(
+      `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}
 
 **NEXT: Implement bead ${bead.id} (${bead.title}), then call \`orch_review\` when done.**
 
@@ -369,8 +522,26 @@ After implementing:
 4. Call \`orch_review\` with beadId="${bead.id}" and a summary of what you did
 
 ${beadList}`,
-      }],
-    };
+      state.phase,
+      'beads',
+      {
+        kind: 'beads_approved',
+        launchMode: 'sequential',
+        readyCount: 1,
+        currentBeadId: state.currentBeadId,
+        readyBeads: [{
+          id: bead.id,
+          title: bead.title,
+          launchInstruction: 'implement',
+          agentName: undefined,
+        }],
+        ...getBeadApprovalData(state, beads, convergenceScore),
+      },
+      makeNextToolStep('call_tool', 'Implement the ready bead, then call orch_review with its summary.', {
+        tool: 'orch_review',
+        argsSchemaHint: { beadId: 'string', action: 'looks-good | hit-me | skip' },
+      })
+    );
   }
 
   // Parallel: multiple ready beads — return agent configs for CC to spawn
@@ -397,10 +568,8 @@ After completing, report your summary to the orchestrator.`;
     };
   });
 
-  return {
-    content: [{
-      type: 'text',
-      text: `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}
+  return makeApproveResult(
+    `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}
 
 **NEXT: Spawn ${ready.length} parallel agents (one per ready bead), then call \`orch_review\` for each when done.**
 
@@ -411,8 +580,23 @@ ${JSON.stringify({ agents: agentConfigs }, null, 2)}
 After all agents complete, call \`orch_review\` for each bead with its agent's summary.
 
 ${beadList}`,
-    }],
-  };
+    state.phase,
+    'beads',
+    {
+      kind: 'beads_approved',
+      launchMode: 'parallel',
+      readyCount: ready.length,
+      currentBeadId: state.currentBeadId,
+      readyBeads: ready.map((bead) => ({
+        id: bead.id,
+        title: bead.title,
+        launchInstruction: 'spawn-agent',
+        agentName: `bead-${bead.id}`,
+      })),
+      ...getBeadApprovalData(state, beads, convergenceScore),
+    },
+    makeNextToolStep('spawn_agents', 'Spawn one implementation agent per ready bead, then call orch_review for each completed bead.')
+  );
 }
 
 function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boolean): McpToolResult {
@@ -422,12 +606,17 @@ function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boo
 
   const model = pickRefinementModel(round);
   const compactList = beads.map(b => `• ${b.id}: ${b.title}`).join('\n');
+  const sharedData = {
+    kind: 'bead_refinement_requested',
+    action: 'polish',
+    refinementMode: fresh ? 'fresh-agent' : 'same-agent',
+    ...getBeadApprovalData(state, beads, state.polishConvergenceScore),
+    advancedActions: [...ADVANCED_ACTIONS],
+  };
 
   if (fresh) {
-    return {
-      content: [{
-        type: 'text',
-        text: `**NEXT: Spawn a fresh refinement agent (round ${round + 1}), then call \`orch_approve_beads\` with action="start" or action="polish" again.**
+    return makeApproveResult(
+      `**NEXT: Spawn a fresh refinement agent (round ${round + 1}), then call \`orch_approve_beads\` with action="start" or action="polish" again.**
 
 Use model \`${model}\` for diverse perspective (prevents taste convergence).
 
@@ -438,14 +627,15 @@ The agent should:
 4. Check for missing dependencies with \`br dep list <id>\`
 
 Current beads (${beads.length} total):\n${compactList}\n\ncd ${cwd}`,
-      }],
-    };
+      state.phase,
+      'beads',
+      sharedData,
+      makeNextToolStep('spawn_agents', 'Spawn a fresh refinement agent, update the bead graph, then return to orch_approve_beads.')
+    );
   }
 
-  return {
-    content: [{
-      type: 'text',
-      text: `**NEXT: Review and refine the beads (round ${round + 1}), then call \`orch_approve_beads\` again.**
+  return makeApproveResult(
+    `**NEXT: Review and refine the beads (round ${round + 1}), then call \`orch_approve_beads\` again.**
 
 For each bead, check:
 - WHAT: Are implementation steps concrete and specific?
@@ -459,8 +649,22 @@ Use \`br dep add/remove\` to fix dependency graph.
 After refining, call \`orch_approve_beads\` with action="start" or action="polish".
 
 Current beads (${beads.length} total):\n${compactList}\n\ncd ${cwd}`,
-    }],
-  };
+    state.phase,
+    'beads',
+    sharedData,
+    makeNextToolStep('present_choices', 'Refine the bead graph, then either approve implementation or request another bead refinement pass.', {
+      options: [
+        makeChoiceOption('approve-beads-start', 'Approve beads and launch implementation', {
+          tool: 'orch_approve_beads',
+          args: { action: 'start' },
+        }),
+        makeChoiceOption('approve-beads-polish', 'Request another bead refinement round', {
+          tool: 'orch_approve_beads',
+          args: { action: 'polish' },
+        }),
+      ],
+    })
+  );
 }
 
 function handleAdvanced(
@@ -472,13 +676,16 @@ function handleAdvanced(
   const { cwd, state, saveState } = ctx;
 
   if (!advancedAction) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error: advancedAction is required when action="advanced". Options: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix`,
-      }],
-      isError: true,
-    };
+    return makeApproveError(
+      `Error: advancedAction is required when action="advanced". Options: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix`,
+      state.phase,
+      'beads',
+      'invalid_input',
+      {
+        action: 'advanced',
+        validAdvancedActions: [...ADVANCED_ACTIONS],
+      }
+    );
   }
 
   const compactList = beads.map(b => `• ${b.id}: ${b.title}`).join('\n');
@@ -556,10 +763,8 @@ Current beads:\n${compactList}\n\ncd ${cwd}`,
     state.phase = 'refining_beads';
     saveState(state);
 
-    return {
-      content: [{
-        type: 'text',
-        text: `**NEXT: Diagnose and fix the bead dependency graph, then call \`orch_approve_beads\` again.**
+    return makeApproveResult(
+      `**NEXT: Diagnose and fix the bead dependency graph, then call \`orch_approve_beads\` again.**
 
 Check for:
 1. **Cycles:** \`br dep cycles\` — if any, remove the cycle-causing dep
@@ -572,8 +777,17 @@ Fix issues with \`br dep add/remove\`, then call \`orch_approve_beads\`.
 cd ${cwd}
 
 Current beads:\n${compactList}`,
-      }],
-    };
+      state.phase,
+      'beads',
+      {
+        kind: 'bead_refinement_requested',
+        action: 'advanced',
+        refinementMode: 'graph-fix',
+        ...getBeadApprovalData(state, beads, state.polishConvergenceScore),
+        advancedActions: [...ADVANCED_ACTIONS],
+      },
+      makeNextToolStep('run_cli', 'Diagnose and repair bead dependencies with br dep commands, then return to orch_approve_beads.')
+    );
   }
 
   return {
