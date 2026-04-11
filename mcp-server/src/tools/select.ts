@@ -66,8 +66,6 @@ ${beadCreationPrompt(state.selectedGoal, repoContext, state.constraints)}`;
         }),
         makeChoiceOption('direct-to-beads', 'Direct to beads', {
           description: 'Skip planning and create beads directly with br create / br dep add.',
-          tool: 'orch_approve_beads',
-          args: { action: 'start' },
         }),
       ],
     }),

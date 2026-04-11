@@ -418,4 +418,62 @@ describe('runProfile', () => {
       },
     });
   });
+
+  it('returns a choice-style nextStep when a goal is already provided', async () => {
+    const { ctx } = makeCtx();
+
+    const result = await runProfile(ctx, { cwd: '/fake/cwd', goal: 'Improve test coverage' });
+
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_profile',
+      version: 1,
+      status: 'ok',
+      phase: 'discovering',
+      nextStep: {
+        type: 'present_choices',
+        message: 'A goal was provided. Either proceed directly to orch_select or run orch_discover to generate alternatives.',
+        options: [
+          {
+            id: 'select-provided-goal',
+            label: 'Use the provided goal',
+            description: 'Skip discovery and continue with orch_select using the supplied goal.',
+            tool: 'orch_select',
+            args: { goal: 'Improve test coverage' },
+          },
+          {
+            id: 'discover-alternatives',
+            label: 'Discover alternatives',
+            description: 'Generate alternative goals with orch_discover before selecting one.',
+            tool: 'orch_discover',
+            args: { ideas: 'CandidateIdea[]' },
+          },
+        ],
+      },
+      data: {
+        kind: 'profile_ready',
+        fromCache: false,
+        selectedGoal: 'Improve test coverage',
+        coordination: {
+          backend: 'beads',
+          beadsAvailable: true,
+        },
+        foundationGaps: ['- No AGENTS.md found. Consider creating one for agent guidance.'],
+        existingBeads: {
+          openCount: 1,
+          deferredCount: 0,
+        },
+        profileSummary: {
+          name: 'cwd',
+          languages: ['TypeScript'],
+          frameworks: [],
+          hasTests: true,
+          hasDocs: true,
+          hasCI: true,
+          testFramework: 'Vitest',
+          ciPlatform: 'GitHub Actions',
+          entrypoints: ['src/index.ts'],
+        },
+      },
+    });
+  });
 });

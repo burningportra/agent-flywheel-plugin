@@ -520,7 +520,7 @@ export interface OrchestrationStructuredError {
   };
 }
 
-export type McpToolResult<TStructured = Record<string, unknown>> = {
+export type McpToolResult<TStructured = unknown> = {
   content: Array<{ type: "text"; text: string }>;
   structuredContent?: TStructured;
   isError?: boolean;

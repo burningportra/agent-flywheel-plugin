@@ -191,6 +191,26 @@ describe('runDiscover', () => {
         topIdeas: 1,
         honorableIdeas: 1,
         ideaIds: ['idea-1', 'idea-2'],
+        ideas: [
+          {
+            id: 'idea-1',
+            title: 'Add rate limiting',
+            category: 'feature',
+            effort: 'medium',
+            impact: 'high',
+            tier: 'top',
+            rationale: 'High traffic endpoints need protection',
+          },
+          {
+            id: 'idea-2',
+            title: 'Better logging',
+            category: 'feature',
+            effort: 'medium',
+            impact: 'high',
+            tier: 'honorable',
+            rationale: 'High traffic endpoints need protection',
+          },
+        ],
       },
     });
   });

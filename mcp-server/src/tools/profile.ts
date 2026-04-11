@@ -112,15 +112,36 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
 
   const text = `${roadmap}\n\n${coordLine}${cacheNote}${foundationWarning}${beadStatus}${goalSection}\n\n---\n\n${formatted}`;
 
+  const nextStep = args.goal
+    ? makeNextToolStep('present_choices', 'A goal was provided. Either proceed directly to orch_select or run orch_discover to generate alternatives.', {
+        options: [
+          {
+            id: 'select-provided-goal',
+            label: 'Use the provided goal',
+            description: 'Skip discovery and continue with orch_select using the supplied goal.',
+            tool: 'orch_select',
+            args: { goal: args.goal },
+          },
+          {
+            id: 'discover-alternatives',
+            label: 'Discover alternatives',
+            description: 'Generate alternative goals with orch_discover before selecting one.',
+            tool: 'orch_discover',
+            args: { ideas: 'CandidateIdea[]' },
+          },
+        ],
+      })
+    : makeNextToolStep('call_tool', 'Call orch_discover with candidate ideas based on the repo profile.', {
+        tool: 'orch_discover',
+        argsSchemaHint: { ideas: 'CandidateIdea[]' },
+      });
+
   return makeToolResult(text, {
     tool: 'orch_profile',
     version: 1 as const,
     status: 'ok' as const,
     phase: state.phase,
-    nextStep: makeNextToolStep('call_tool', 'Call orch_discover with candidate ideas based on the repo profile.', {
-      tool: 'orch_discover',
-      argsSchemaHint: { ideas: 'CandidateIdea[]' },
-    }),
+    nextStep,
     data: {
       kind: 'profile_ready' as const,
       fromCache,

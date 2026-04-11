@@ -107,6 +107,15 @@ ${ideaList}`;
       topIdeas: topIdeas.length,
       honorableIdeas: honorableIdeas.length,
       ideaIds: ideas.map(idea => idea.id),
+      ideas: ideas.map(idea => ({
+        id: idea.id,
+        title: idea.title,
+        category: idea.category,
+        effort: idea.effort,
+        impact: idea.impact,
+        tier: idea.tier,
+        rationale: idea.rationale,
+      })),
     },
   });
 }

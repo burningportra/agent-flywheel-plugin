@@ -212,8 +212,6 @@ describe('runSelect', () => {
             id: 'direct-to-beads',
             label: 'Direct to beads',
             description: 'Skip planning and create beads directly with br create / br dep add.',
-            tool: 'orch_approve_beads',
-            args: { action: 'start' },
           },
         ],
       },
