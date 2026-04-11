@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../types.js';
+import type { OrchestrationToolName } from '../types.js';
 
 describe('createInitialState', () => {
   it('returns an object with all required fields', () => {
@@ -42,5 +43,12 @@ describe('createInitialState', () => {
     const state = createInitialState();
     expect(state.polishChanges).toEqual([]);
     expect(state.polishConverged).toBe(false);
+  });
+});
+
+describe('OrchestrationToolName', () => {
+  it('includes orch_memory so shared contracts cover the full orchestrator tool surface', () => {
+    const toolName: OrchestrationToolName = 'orch_memory';
+    expect(toolName).toBe('orch_memory');
   });
 });

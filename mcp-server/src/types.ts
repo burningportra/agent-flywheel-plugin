@@ -475,7 +475,8 @@ export type OrchestrationToolName =
   | 'orch_select'
   | 'orch_plan'
   | 'orch_approve_beads'
-  | 'orch_review';
+  | 'orch_review'
+  | 'orch_memory';
 
 export interface ToolChoiceOption {
   id: string;
