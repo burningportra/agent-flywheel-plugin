@@ -6,3 +6,6 @@ mcp-server/dist/
 .DS_Store
 /.beads
 /.pi-orchestrator
+/.claude/worktrees
+/.hermes
+/.vite
