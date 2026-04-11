@@ -1,7 +1,74 @@
-import type { OrchestratorState } from '../types.js';
+import type {
+  McpToolResult,
+  OrchestrationStructuredError,
+  OrchestrationToolError,
+  OrchestrationToolName,
+  OrchestratorPhase,
+  OrchestratorState,
+  ToolChoiceOption,
+  ToolNextStep,
+} from '../types.js';
 
 export function formatModelRef(model: { provider?: string; id: string }): string {
   return model.provider ? `${model.provider}/${model.id}` : model.id;
+}
+
+export function makeChoiceOption(
+  id: string,
+  label: string,
+  options: Omit<ToolChoiceOption, 'id' | 'label'> = {}
+): ToolChoiceOption {
+  return {
+    id,
+    label,
+    ...options,
+  };
+}
+
+export function makeNextToolStep(
+  type: ToolNextStep['type'],
+  message: string,
+  options: Omit<ToolNextStep, 'type' | 'message'> = {}
+): ToolNextStep {
+  return {
+    type,
+    message,
+    ...options,
+  };
+}
+
+export function makeToolResult<TStructured>(text: string, structuredContent: TStructured): McpToolResult<TStructured> {
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent,
+  };
+}
+
+export function makeToolError(
+  tool: OrchestrationToolName,
+  phase: OrchestratorPhase,
+  code: OrchestrationToolError['code'],
+  message: string,
+  options: Omit<OrchestrationToolError, 'code' | 'message'> = {}
+): McpToolResult<OrchestrationStructuredError> {
+  return {
+    content: [{ type: 'text', text: message }],
+    isError: true,
+    structuredContent: {
+      tool,
+      version: 1,
+      status: 'error',
+      phase,
+      data: {
+        kind: 'error',
+        error: {
+          code,
+          message,
+          ...options,
+        },
+      },
+    },
+  };
 }
 
 /**

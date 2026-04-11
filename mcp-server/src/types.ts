@@ -469,8 +469,59 @@ export interface ToolContext {
   clearState: () => void;
 }
 
-export type McpToolResult = {
+export type OrchestrationToolName =
+  | 'orch_profile'
+  | 'orch_discover'
+  | 'orch_select'
+  | 'orch_plan'
+  | 'orch_approve_beads'
+  | 'orch_review';
+
+export interface ToolChoiceOption {
+  id: string;
+  label: string;
+  description?: string;
+  tool?: OrchestrationToolName;
+  args?: Record<string, unknown>;
+}
+
+export interface ToolNextStep {
+  type: 'call_tool' | 'present_choices' | 'generate_artifact' | 'spawn_agents' | 'run_cli' | 'resume_phase' | 'none';
+  message: string;
+  tool?: OrchestrationToolName;
+  argsSchemaHint?: Record<string, unknown>;
+  options?: ToolChoiceOption[];
+}
+
+export interface OrchestrationToolError {
+  code:
+    | 'missing_prerequisite'
+    | 'invalid_input'
+    | 'not_found'
+    | 'cli_failure'
+    | 'parse_failure'
+    | 'blocked_state'
+    | 'unsupported_action'
+    | 'internal_error';
+  message: string;
+  retryable?: boolean;
+  details?: Record<string, unknown>;
+}
+
+export interface OrchestrationStructuredError {
+  tool: OrchestrationToolName;
+  version: 1;
+  status: 'error';
+  phase: OrchestratorPhase;
+  data: {
+    kind: 'error';
+    error: OrchestrationToolError;
+  };
+}
+
+export type McpToolResult<TStructured = Record<string, unknown>> = {
   content: Array<{ type: "text"; text: string }>;
+  structuredContent?: TStructured;
   isError?: boolean;
 };
 
