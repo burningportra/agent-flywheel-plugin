@@ -100,6 +100,24 @@ describe('runApprove', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Error reading beads');
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_approve_beads',
+      version: 1,
+      status: 'error',
+      phase: 'awaiting_bead_approval',
+      approvalTarget: 'beads',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'cli_failure',
+          message: expect.stringContaining('Error reading beads'),
+          details: {
+            command: 'br list --json',
+            stderr: 'br not found',
+          },
+        },
+      },
+    });
   });
 
   it('returns error when br list returns invalid JSON', async () => {
@@ -144,6 +162,48 @@ describe('runApprove', () => {
 
     expect(state.phase).toBe('refining_beads');
     expect(result.content[0].text).toContain('Review and refine');
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_approve_beads',
+      version: 1,
+      status: 'ok',
+      phase: 'refining_beads',
+      approvalTarget: 'beads',
+      nextStep: {
+        type: 'present_choices',
+        message: 'Refine the bead graph, then either approve implementation or request another bead refinement pass.',
+        options: [
+          {
+            id: 'approve-beads-start',
+            label: 'Approve beads and launch implementation',
+            tool: 'orch_approve_beads',
+            args: { action: 'start' },
+          },
+          {
+            id: 'approve-beads-polish',
+            label: 'Request another bead refinement round',
+            tool: 'orch_approve_beads',
+            args: { action: 'polish' },
+          },
+        ],
+      },
+      data: {
+        kind: 'bead_refinement_requested',
+        action: 'polish',
+        refinementMode: 'same-agent',
+        activeBeadIds: ['bead-1'],
+        convergence: {
+          round: 0,
+          changes: [],
+          converged: false,
+          score: undefined,
+        },
+        quality: {
+          score: expect.any(Number),
+          summary: expect.stringContaining('Bead quality'),
+        },
+        advancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
+      },
+    });
   });
 
   // ── action=start ─────────────────────────────────────────────
@@ -157,6 +217,44 @@ describe('runApprove', () => {
     expect(state.phase).toBe('implementing');
     expect(state.currentBeadId).toBe('bead-1');
     expect(result.content[0].text).toContain('Beads approved');
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_approve_beads',
+      version: 1,
+      status: 'ok',
+      phase: 'implementing',
+      approvalTarget: 'beads',
+      nextStep: {
+        type: 'call_tool',
+        message: 'Implement the ready bead, then call orch_review with its summary.',
+        tool: 'orch_review',
+        argsSchemaHint: { beadId: 'string', action: 'looks-good | hit-me | skip' },
+      },
+      data: {
+        kind: 'beads_approved',
+        launchMode: 'sequential',
+        readyCount: 1,
+        activeBeadIds: ['bead-1'],
+        currentBeadId: 'bead-1',
+        convergence: {
+          round: 0,
+          changes: [],
+          converged: false,
+          score: undefined,
+        },
+        quality: {
+          score: expect.any(Number),
+          summary: expect.stringContaining('Bead quality'),
+        },
+        readyBeads: [
+          {
+            id: 'bead-1',
+            title: 'Add tests',
+            launchInstruction: 'implement',
+            agentName: undefined,
+          },
+        ],
+      },
+    });
   });
 
   it('resets beadResults and beadReviews on start', async () => {
@@ -185,6 +283,48 @@ describe('runApprove', () => {
     expect(text).toContain('Spawn 2 parallel agents');
     expect(text).toContain('bead-1');
     expect(text).toContain('bead-2');
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_approve_beads',
+      version: 1,
+      status: 'ok',
+      phase: 'implementing',
+      approvalTarget: 'beads',
+      nextStep: {
+        type: 'spawn_agents',
+        message: 'Spawn one implementation agent per ready bead, then call orch_review for each completed bead.',
+      },
+      data: {
+        kind: 'beads_approved',
+        launchMode: 'parallel',
+        readyCount: 2,
+        activeBeadIds: ['bead-1', 'bead-2'],
+        currentBeadId: 'bead-1',
+        convergence: {
+          round: 0,
+          changes: [],
+          converged: false,
+          score: undefined,
+        },
+        quality: {
+          score: expect.any(Number),
+          summary: expect.stringContaining('Bead quality'),
+        },
+        readyBeads: [
+          {
+            id: 'bead-1',
+            title: 'First task',
+            launchInstruction: 'spawn-agent',
+            agentName: 'bead-bead-1',
+          },
+          {
+            id: 'bead-2',
+            title: 'Second task',
+            launchInstruction: 'spawn-agent',
+            agentName: 'bead-bead-2',
+          },
+        ],
+      },
+    });
   });
 
   it('falls back to first 3 beads when br ready fails', async () => {
@@ -230,6 +370,24 @@ describe('runApprove', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('advancedAction is required');
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_approve_beads',
+      version: 1,
+      status: 'error',
+      phase: 'awaiting_bead_approval',
+      approvalTarget: 'beads',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'invalid_input',
+          message: expect.stringContaining('advancedAction is required'),
+          details: {
+            action: 'advanced',
+            validAdvancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
+          },
+        },
+      },
+    });
   });
 
   it('handles blunder-hunt advancedAction', async () => {
@@ -257,6 +415,34 @@ describe('runApprove', () => {
 
     expect(state.phase).toBe('refining_beads');
     expect(result.content[0].text).toContain('dependency graph');
+    expect(result.structuredContent).toEqual({
+      tool: 'orch_approve_beads',
+      version: 1,
+      status: 'ok',
+      phase: 'refining_beads',
+      approvalTarget: 'beads',
+      nextStep: {
+        type: 'run_cli',
+        message: 'Diagnose and repair bead dependencies with br dep commands, then return to orch_approve_beads.',
+      },
+      data: {
+        kind: 'bead_refinement_requested',
+        action: 'advanced',
+        refinementMode: 'graph-fix',
+        activeBeadIds: ['bead-1'],
+        convergence: {
+          round: 0,
+          changes: [],
+          converged: false,
+          score: undefined,
+        },
+        quality: {
+          score: expect.any(Number),
+          summary: expect.stringContaining('Bead quality'),
+        },
+        advancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
+      },
+    });
   });
 
   it('returns error for unknown advancedAction', async () => {
@@ -295,6 +481,25 @@ describe('runApprove', () => {
 
       expect(state.phase).toBe('creating_beads');
       expect(result.content[0].text).toContain('Plan approved');
+      expect(result.structuredContent).toEqual({
+        tool: 'orch_approve_beads',
+        version: 1,
+        status: 'ok',
+        phase: 'creating_beads',
+        approvalTarget: 'plan',
+        nextStep: {
+          type: 'run_cli',
+          message: 'Create beads from the approved plan with br create / br dep add, then return to orch_approve_beads action="start".',
+        },
+        data: {
+          kind: 'plan_approved',
+          planDocument: 'plan.md',
+          lineCount: 120,
+          sizeAssessment: 'too_short',
+          planRefinementRound: 0,
+          readyForBeadCreation: true,
+        },
+      });
     });
 
     it('rejects plan and resets state', async () => {
@@ -327,6 +532,26 @@ describe('runApprove', () => {
       expect(state.phase).toBe('planning');
       expect(state.planRefinementRound).toBe(1);
       expect(result.content[0].text).toContain('Refine the plan');
+      expect(result.structuredContent).toEqual({
+        tool: 'orch_approve_beads',
+        version: 1,
+        status: 'ok',
+        phase: 'planning',
+        approvalTarget: 'plan',
+        nextStep: {
+          type: 'generate_artifact',
+          message: 'Revise the existing plan document and save it back before returning to orch_approve_beads.',
+        },
+        data: {
+          kind: 'plan_refinement_requested',
+          action: 'polish',
+          planDocument: 'plan.md',
+          lineCount: 2,
+          sizeAssessment: 'too_short',
+          planRefinementRound: 1,
+          refinementModel: 'claude-opus-4-6',
+        },
+      });
     });
 
     it('returns error when plan file not found', async () => {
@@ -356,6 +581,26 @@ describe('runApprove', () => {
       expect(state.phase).toBe('planning');
       expect(state.planRefinementRound).toBe(1);
       expect(result.content[0].text).toContain('Git-diff review');
+      expect(result.structuredContent).toEqual({
+        tool: 'orch_approve_beads',
+        version: 1,
+        status: 'ok',
+        phase: 'planning',
+        approvalTarget: 'plan',
+        nextStep: {
+          type: 'spawn_agents',
+          message: 'Run the git-diff plan review and integration cycle, then return to orch_approve_beads.',
+        },
+        data: {
+          kind: 'plan_refinement_requested',
+          action: 'git-diff-review',
+          planDocument: 'plan.md',
+          lineCount: 2,
+          sizeAssessment: 'too_short',
+          planRefinementRound: 1,
+          refinementModel: undefined,
+        },
+      });
     });
   });
 
