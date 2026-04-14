@@ -527,6 +527,11 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        Create a commit with a descriptive message referencing bead <id>.
        Then mark the bead closed: `br update <bead-id> --status closed`
        (Note: the br CLI uses `closed`, NOT `done`.)
+       Verify the close took effect: `br show <bead-id> --json` and confirm
+       `"status": "closed"`. If the status is anything else, retry the update
+       once before continuing to STEP 4. Stragglers are a known failure mode
+       and the coordinator will catch them via `orch_verify_beads`, but
+       verifying here keeps the wave clean.
 
        ## STEP 4 — RELEASE + REPORT (MANDATORY)
        4a. Release all file reservations via release_file_reservations.
@@ -634,18 +639,25 @@ Actions:
   4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
   5. Collect and summarize results. If fewer than 5 reviewers delivered via inbox, synthesize from disk files + `git diff` — do NOT wait indefinitely for unresponsive reviewers.
 
-  > **Expected behavior — beads are already closed:** Because impl agents close beads in their Step 3 (`br update --status closed`), `orch_review` will typically error (e.g. "Cannot read properties of undefined (reading 'split')") when called on completed beads. This is the **normal** case, not an edge case. When this happens:
-  > 1. Skip the `orch_review` MCP tool entirely.
-  > 2. Find the bead's commit SHA: `git log --oneline | grep "<bead-id>"` (or search for the bead title).
-  > 3. Spawn review agents manually with `git diff <sha>~1 <sha>` as their review target instead of relying on `orch_review` output.
-  >
-  > Only use `orch_review` with `action: "looks-good"` if you confirmed the bead is still in an open state (check with `br list`).
+  > **Closed-bead handling:** `orch_review` now reconciles the bead state itself — `looks-good` is idempotent (advances to the next bead/gates), `hit-me` runs a post-close audit (payload tagged `postClose: true`), and `skip` returns `already_closed`. No manual workaround needed. (Prior versions required spawning reviewers from `git diff <sha>~1 <sha>`; that path is gone.)
 
   > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
 
 ## Step 9: Loop until complete
 
-After each bead review cycle, check remaining beads with `br list`. If beads remain, use `AskUserQuestion`:
+**Reconcile the wave first.** Before showing the menu, call `orch_verify_beads` with the IDs of beads completed in this wave:
+
+```
+orch_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
+```
+
+The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
+- **`verified`** — beads `br show` confirms as closed. Move on.
+- **`autoClosed`** — stragglers that had a matching commit; the tool ran `br update --status closed` for you and synced state. Move on.
+- **`unclosedNoCommit`** — beads still open with no commit referencing them. Surface these to the user and ask whether to skip, manually close, or re-run the impl agent.
+- **`errors`** — `br show` failures. Inspect and decide per case.
+
+Then check remaining beads with `br list`. If beads remain, use `AskUserQuestion`:
 
 ```
 AskUserQuestion(questions: [{

@@ -40,6 +40,19 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 - **`bv`** — bead visualizer: renders bead status dashboards, dependency graphs.
 - **`ccc`** — optional codebase indexing/search tool. Not required; the system falls back gracefully if unavailable.
 
+## Bead Lifecycle
+
+After running an implementation, ALWAYS close the bead and verify the close took effect:
+
+```
+br update <bead-id> --status closed
+br show <bead-id> --json   # confirm "status": "closed"
+```
+
+If the second call shows anything else, retry the update once before reporting completion. The orchestrator coordinator additionally calls `orch_verify_beads` after each wave to auto-close stragglers that have a matching commit (`git log --grep=<bead-id> -1`), so a missed close is recoverable but not free — verify locally first.
+
+`orch_review` reconciles the bead state automatically: `looks-good` is idempotent on already-closed beads, `hit-me` runs a post-close audit, and `skip` returns `already_closed`. Do not skip `orch_review` for closed beads — the legacy "spawn reviewers from `git diff <sha>~1 <sha>`" workaround is no longer required.
+
 ## Agent Coordination
 
 - Bootstrap your agent-mail session with `macro_start_session` at the start of each task.
