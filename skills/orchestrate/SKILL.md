@@ -911,8 +911,34 @@ orch_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
 The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
 - **`verified`** — beads `br show` confirms as closed. Move on.
 - **`autoClosed`** — stragglers that had a matching commit; the tool ran `br update --status closed` for you and synced state. Move on.
-- **`unclosedNoCommit`** — beads still open with no commit referencing them. Surface these to the user and ask whether to skip, manually close, or re-run the impl agent.
-- **`errors`** — `br show` failures. Inspect and decide per case.
+- **`unclosedNoCommit`** — beads still open with no commit referencing them. **MUST** present:
+  ```
+  AskUserQuestion(questions: [{
+    question: "<N> bead(s) have no commit and were not auto-closed: <comma-list with statuses>. How should I handle them?",
+    header: "Stragglers",
+    options: [
+      { label: "Re-run impl agent", description: "Spawn a fresh impl agent for these beads (Recommended)" },
+      { label: "Mark deferred", description: "Set status=deferred and proceed without these beads" },
+      { label: "Close manually", description: "I'll close them outside this session — proceed without action" },
+      { label: "Pause cycle", description: "Stop and let me investigate; resume later via /orchestrate" }
+    ],
+    multiSelect: false
+  }])
+  ```
+  Route per choice; never silently skip.
+- **`errors`** — `br show` failures. If the errors map is non-empty, present:
+  ```
+  AskUserQuestion(questions: [{
+    question: "br show failed for <N> bead(s): <comma-list with first error excerpt>. How to proceed?",
+    header: "br errors",
+    options: [
+      { label: "Retry verify", description: "Call orch_verify_beads again on the failed IDs (Recommended)" },
+      { label: "Skip and proceed", description: "Treat the unverifiable beads as still in flight; come back later" },
+      { label: "Pause cycle", description: "Stop so I can debug br locally" }
+    ],
+    multiSelect: false
+  }])
+  ```
 
 Then check remaining beads with `br list`. If beads remain, use `AskUserQuestion`:
 
