@@ -9,6 +9,59 @@ Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--
 
 ## Step 0: Opening Ceremony
 
+### 0.preflight — Captured user input (DO THIS FIRST)
+
+If the user's prompt contains anything beyond `/orchestrate <args>` — a goal sentence, a pasted plan, a path to a plan file, a directive like "fix X then Y" — capture it as `USER_INPUT` and treat it as a candidate goal or plan. **Do NOT act on it yet. Do NOT skip the welcome banner or Step 0b detection.** Run the full Step 0a–0d flow silently so the user sees current state (existing session, open beads, AM status) before deciding.
+
+Then route in Step 0e instead of showing the default main menu:
+
+**Classification heuristics**:
+- **Plan-shaped USER_INPUT** — multi-paragraph, contains `##`/`###` headers, mentions specific files, OR is an existing path matching `docs/plans/*.md` → treat as plan.
+- **Goal-shaped USER_INPUT** — ≤300 chars, no markdown headers, reads as one or two sentences → treat as goal.
+- **Ambiguous** — long unstructured prose → treat as goal but route through `/brainstorming` to refine first.
+
+**Routing override for Step 0e** (only when USER_INPUT is non-empty):
+
+- Plan-shaped:
+  ```
+  AskUserQuestion(questions: [{
+    question: "I see a plan in your message ('<first 60 chars>…'). What should I do with it?",
+    header: "Plan input",
+    options: [
+      { label: "Use as plan", description: "Register via orch_plan and jump to bead creation (Recommended)" },
+      { label: "Treat as goal", description: "Use the plan content as the goal description and run the full flywheel from Step 4" },
+      { label: "Discard", description: "Ignore the input and show the regular start menu" }
+    ],
+    multiSelect: false
+  }])
+  ```
+  - "Use as plan" → if USER_INPUT was a file path, call `orch_plan` with `planFile`. If it was inline, write it to `docs/plans/<date>-<goal-slug>.md` first, then call `orch_plan` with `planFile`. Then jump to Step 5.5.
+  - "Treat as goal" → call `orch_select` with the input as goal, jump to Step 5.
+  - "Discard" → fall back to the default Step 0e menu.
+
+- Goal-shaped:
+  ```
+  AskUserQuestion(questions: [{
+    question: "I see a goal in your message: '<USER_INPUT>'. Run the flywheel on this?",
+    header: "Goal input",
+    options: [
+      { label: "Yes, full flywheel", description: "Skip discovery, plan and implement this goal (Recommended)" },
+      { label: "Refine first", description: "Run /brainstorming to clarify scope before planning" },
+      { label: "Plan only", description: "Generate a plan, stop before implementation" },
+      { label: "Discard", description: "Ignore the input and show the regular start menu" }
+    ],
+    multiSelect: false
+  }])
+  ```
+  - "Yes, full flywheel" → call `orch_select` with USER_INPUT as goal, proceed to Step 5.
+  - "Refine first" → invoke `/brainstorming` with the input, then return to Step 4 with the refined goal.
+  - "Plan only" → call `orch_select`, proceed through Step 5, stop after bead creation.
+  - "Discard" → fall back to the default Step 0e menu.
+
+- Ambiguous → always run `/brainstorming` first, then route as goal-shaped after refinement.
+
+**Hard rule**: never act on USER_INPUT directly without first showing the banner and getting an explicit menu choice. The flywheel's gates exist for a reason — pre-prompt content does NOT bypass them.
+
 ### 0a. Detect version
 
 Attempt to find `mcp-server/package.json` by searching the Claude plugins directory:
@@ -107,6 +160,8 @@ AskUserQuestion(questions: [{
 ```
 
 ### 0e. Route the user's choice
+
+> **If `USER_INPUT` was captured in step 0.preflight, use the routing override there instead of this menu.** The default menu below applies only when the user invoked `/orchestrate` with no extra prompt content.
 
 | Choice | Action |
 |--------|--------|
