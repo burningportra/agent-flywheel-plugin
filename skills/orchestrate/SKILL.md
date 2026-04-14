@@ -390,7 +390,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**Standard plan**: Call `orch_plan` with `cwd` and `mode: "standard"`. After it returns, **STOP and jump to Step 5.6 (Plan-ready gate)**. Do NOT proceed to bead creation without the user explicitly selecting "Create beads" from that gate menu.
+**Standard plan**: Call `orch_plan` with `cwd` and `mode: "standard"`. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
 **Deep plan**:
 
@@ -469,7 +469,109 @@ AskUserQuestion(questions: [{
 8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
-9. **STOP — jump to Step 5.6 (Plan-ready gate).** Do NOT proceed to bead creation without the user explicitly selecting "Create beads" from that gate menu.
+9. **STOP — jump to Step 5.55 (Plan alignment check).** That step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
+
+## Step 5.55: Plan alignment check (MANDATORY — both standard and deep)
+
+> **Hard rule**: After `orch_plan` returns and BEFORE showing the Step 5.6 plan-ready gate, run this alignment check. The deeper the plan, the more assumptions are baked in — the user must confirm those assumptions match intent before any bead is created. This loop mirrors the bead-refinement loop: ask, refine on disagreement, re-ask, until aligned.
+
+### 1. Read the plan and extract qualifying questions
+
+Read `state.planDocument` end-to-end. Identify 2-4 **load-bearing** decisions that, if wrong, would force a major rewrite later. Look specifically for:
+
+- **Scope boundaries** — what's in vs explicitly out (non-goals).
+- **Architectural choices** — pattern X chosen over Y; library/tool selections; trade-offs the plan calls out.
+- **Order/dependency assumptions** — "do A before B because…" claims.
+- **Risk acceptances** — "we'll skip Z and revisit later" notes.
+- **Missing coverage you noticed** — areas the plan brushes past that the user might care about.
+
+Skip the obvious. Ask only about decisions where reasonable people would disagree.
+
+### 2. Present the questions in ONE batch
+
+Use a single `AskUserQuestion` call with up to 4 questions (the tool's max). Each question must have 2-4 distinct, mutually-exclusive options framed as user-facing choices, not yes/no validations:
+
+```
+AskUserQuestion(questions: [
+  {
+    question: "Plan scopes <X, Y, Z>. Anything to add or drop?",
+    header: "Scope",
+    options: [
+      { label: "Scope is right", description: "Proceed with X, Y, Z as defined" },
+      { label: "Drop <Z>", description: "Out of scope for this cycle" },
+      { label: "Add <something>", description: "Specify in Other" }
+    ],
+    multiSelect: false
+  },
+  {
+    question: "Plan picks <approach A> over <approach B> because <reason>. Agree?",
+    header: "Approach",
+    options: [
+      { label: "Agree with A", description: "Proceed with the plan's choice" },
+      { label: "Switch to B", description: "Refine plan to use approach B" },
+      { label: "Hybrid", description: "Specify the blend in Other" }
+    ],
+    multiSelect: false
+  },
+  {
+    question: "Plan defers <risk Z> to a later cycle. Acceptable?",
+    header: "Risk",
+    options: [
+      { label: "Defer is fine", description: "Park Z; revisit next cycle" },
+      { label: "Address now", description: "Refine plan to include Z" }
+    ],
+    multiSelect: false
+  }
+  // Add a 4th only if there's a genuinely load-bearing decision left.
+])
+```
+
+Do NOT pad with low-value questions. 2 sharp questions beat 4 fuzzy ones.
+
+### 3. Branch on the answers
+
+- **All answers confirm the plan** ("Scope is right" / "Agree with A" / "Defer is fine" etc.) → proceed to Step 5.6 (Plan-ready gate). Note in your end-of-turn summary that alignment was confirmed.
+- **Any answer requests a change** → run a refinement round automatically (do NOT prompt the user again first). Spawn:
+
+  ```
+  Agent(model: "opus", name: "align-refine-<N>", isolation: "worktree", run_in_background: true,
+    prompt: "
+      Read the plan at <state.planDocument>.
+      The user reviewed it and requested these changes:
+        - Scope: <user's scope answer + their Other-field text if any>
+        - Approach: <user's approach answer + Other text>
+        - Risk: <user's risk answer + Other text>
+        (omit lines for questions where the user confirmed.)
+
+      Revise the plan to incorporate ALL requested changes. Preserve the
+      structure (sections, task table, verification block). For each change,
+      add a one-line rationale at the change site so future reviewers see
+      the user's intent. Use ultrathink.
+      Write the revised plan to the same file path when done.
+    "
+  )
+  ```
+
+  After it completes, **return to step 1 of this section** (re-read the revised plan, regenerate qualifying questions based on the new content, present again). Loop until all answers confirm.
+
+### 4. Convergence guard
+
+If the alignment loop runs more than 3 rounds without converging, break out and present:
+
+```
+AskUserQuestion(questions: [{
+  question: "We've done <N> alignment rounds without converging. Continue refining or step back?",
+  header: "Stuck",
+  options: [
+    { label: "One more round", description: "User provides specific instructions in Other" },
+    { label: "Back to Step 5.6", description: "Accept current plan; iterate later via Refine plan" },
+    { label: "Start over", description: "Discard plan, return to Step 3" }
+  ],
+  multiSelect: false
+}])
+```
+
+This prevents infinite loops when the plan and the user's intent are fundamentally misaligned (signal to start over) or when the user is over-tweaking (signal to ship and iterate).
 
 ## Step 5.6: Plan-ready gate (MANDATORY — both standard and deep)
 
