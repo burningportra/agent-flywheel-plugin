@@ -325,7 +325,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**Standard plan**: Call `orch_plan` with `cwd` and `mode: "standard"`.
+**Standard plan**: Call `orch_plan` with `cwd` and `mode: "standard"`. After it returns, **STOP and jump to Step 5.6 (Plan-ready gate)**. Do NOT proceed to bead creation without the user explicitly selecting "Create beads" from that gate menu.
 
 **Deep plan**:
 
@@ -404,41 +404,49 @@ AskUserQuestion(questions: [{
 8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
-9. **Plan complete — present next action.** Display a brief summary of the plan (line count, key phases), then use `AskUserQuestion`:
+9. **STOP — jump to Step 5.6 (Plan-ready gate).** Do NOT proceed to bead creation without the user explicitly selecting "Create beads" from that gate menu.
 
-   ```
-   AskUserQuestion(questions: [{
-     question: "Plan created (<N> lines). What next?",
-     header: "Plan ready",
-     options: [
-       { label: "Create beads", description: "Convert the plan into implementation beads (Recommended)" },
-       { label: "Refine plan", description: "Run a fresh refinement round to deepen the plan" },
-       { label: "Review plan", description: "Open the plan file for manual review before proceeding" },
-       { label: "Start over", description: "Discard this plan and pick a different goal" }
-     ],
-     multiSelect: false
-   }])
-   ```
+## Step 5.6: Plan-ready gate (MANDATORY — both standard and deep)
 
-   - **"Create beads"** → proceed to Step 5.5
-   - **"Refine plan"** → run iterative deepening (spawn a fresh agent to review and revise the plan, then return to this menu)
-   - **"Review plan"** → display the plan file path and wait for user input, then return to this menu
-   - **"Start over"** → delete plan, return to Step 3
+> **Hard rule**: After `orch_plan` returns successfully — regardless of `mode` — you MUST stop here and present this menu. Do NOT call `br create`, `orch_approve_beads`, or any implementation tool until the user explicitly selects "Create beads". Skipping this gate is a bug.
 
-   **Iterative deepening** (when "Refine plan" is chosen): spawn a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
-   ```
-   Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_background: true,
-     prompt: "
-       Read the synthesized plan at docs/plans/<date>-<goal-slug>-synthesized.md.
-       You have NOT seen any prior plans or revisions — this is your first and only look.
-       Carefully review the entire plan. Come up with the best revisions you can.
-       For each change, give detailed analysis and rationale.
-       Provide changes in git-diff format. Use ultrathink.
-       Write your revised plan to the same file path when done.
-     "
-   )
-   ```
-   After the refinement agent completes, return to the "Plan ready" menu above. Stop offering "Refine plan" when a round produces only minor wording changes — this signals convergence.
+Display a brief summary of the plan (file path, line count, top-level section headers), then use `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "Plan created (<N> lines, at <path>). What next?",
+  header: "Plan ready",
+  options: [
+    { label: "Create beads", description: "Convert the plan into implementation beads (Recommended)" },
+    { label: "Refine plan", description: "Run a fresh refinement round to deepen the plan" },
+    { label: "Review plan", description: "Open the plan file for manual review before proceeding" },
+    { label: "Start over", description: "Discard this plan and pick a different goal" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Create beads"** → proceed to Step 5.5.
+- **"Refine plan"** → run the iterative deepening recipe below, then return to this menu (loop).
+- **"Review plan"** → print the plan file path, wait for the user's next message, then return to this menu.
+- **"Start over"** → delete the plan file, clear `state.planDocument`, return to Step 3.
+
+**Iterative deepening recipe** (only when "Refine plan" is chosen): spawn a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
+
+```
+Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_background: true,
+  prompt: "
+    Read the plan at <state.planDocument>.
+    You have NOT seen any prior plans or revisions — this is your first and only look.
+    Carefully review the entire plan. Come up with the best revisions you can.
+    For each change, give detailed analysis and rationale.
+    Provide changes in git-diff format. Use ultrathink.
+    Write your revised plan to the same file path when done.
+  "
+)
+```
+
+After the refinement agent completes, return to the "Plan ready" menu above. Stop offering "Refine plan" when a round produces only minor wording changes — this signals convergence.
 
 ## Step 5.5: Create beads from the plan
 
@@ -468,6 +476,8 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
 5. **Beads created — present summary and next action.** Display the bead count and dependency structure, then proceed directly to Step 6.
 
 ## Step 6: Review and approve beads
+
+> **Hard rule**: This step contains TWO mandatory user gates (beads-approval menu, then launch-confirmation menu). Do NOT call `TeamCreate`, `Agent`, or any Step 7 tool until the user has explicitly selected "Launch" from the second menu. Skipping either gate is a bug.
 
 Use `br list` to display the current beads. Then use `AskUserQuestion`:
 
@@ -517,7 +527,7 @@ AskUserQuestion(questions: [{
 
 - **"Launch"** → proceed to Step 7
 - **"Polish more"** → call `orch_approve_beads` with `action: "polish"`, then return to Step 6
-- **"Back to plan"** → return to Step 5 plan menu
+- **"Back to plan"** → return to the Step 5.6 plan-ready gate menu
 
 ## Step 7: Implement each bead
 
