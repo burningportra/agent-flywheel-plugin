@@ -14,6 +14,7 @@ import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
 import { runReview } from './tools/review.js';
 import { runSelect } from './tools/select.js';
+import { runVerifyBeads } from './tools/verify-beads.js';
 import { makeToolError } from './tools/shared.js';
 import type {
   McpToolResult,
@@ -182,6 +183,23 @@ export const TOOLS = [
     },
   },
   {
+    name: 'orch_verify_beads',
+    description: "Verify a wave of beads is closed; auto-close stragglers that have matching commits. Call after impl agents report back, before moving to the next wave. Returns {verified, autoClosed, unclosedNoCommit, errors}.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory' },
+        beadIds: {
+          type: 'array',
+          description: 'Bead IDs completed in this wave to reconcile',
+          minItems: 1,
+          items: { type: 'string' },
+        },
+      },
+      required: ['cwd', 'beadIds'],
+    },
+  },
+  {
     name: 'orch_memory',
     description: 'Search and interact with CASS memory (cm CLI). Use to recall past decisions, gotchas, and patterns from prior orchestration runs. Requires cm CLI to be installed.',
     inputSchema: {
@@ -212,6 +230,7 @@ const DEFAULT_RUNNERS: Record<OrchestrationToolName, ToolRunner> = {
   orch_plan: runPlan as ToolRunner,
   orch_approve_beads: runApprove as ToolRunner,
   orch_review: runReview as ToolRunner,
+  orch_verify_beads: runVerifyBeads as ToolRunner,
   orch_memory: runMemory as ToolRunner,
 };
 

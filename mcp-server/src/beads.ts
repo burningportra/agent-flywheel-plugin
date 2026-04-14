@@ -732,3 +732,54 @@ export function getBeadsSummary(beads: Bead[]): string {
   if (deferred > 0) parts.push(`${deferred} deferred`);
   return parts.join(", ") || "unknown";
 }
+
+// ─── Bead-Close Verification ─────────────────────────────────
+
+export interface BeadStraggler {
+  id: string;
+  status: Bead["status"];
+}
+
+export interface VerifyBeadsClosedReport {
+  /** Bead IDs whose `br show` returned status === "closed". */
+  closed: string[];
+  /** Bead IDs that are still open / in_progress / deferred. */
+  stragglers: BeadStraggler[];
+  /** Bead IDs whose `br show` failed, mapped to error message. */
+  errors: Record<string, string>;
+}
+
+/**
+ * Verify a list of beads are closed. Returns each bead classified as
+ * closed / straggler / errored. Bypasses the read cache so reconciliation
+ * sees freshly-updated state.
+ */
+export async function verifyBeadsClosed(
+  exec: ExecFn,
+  cwd: string,
+  beadIds: string[]
+): Promise<VerifyBeadsClosedReport> {
+  const closed: string[] = [];
+  const stragglers: BeadStraggler[] = [];
+  const errors: Record<string, string> = {};
+
+  for (const id of beadIds) {
+    const result = await brExecJson<unknown>(exec, ["show", id, "--json"], { timeout: 10000, cwd });
+    if (!result.ok) {
+      errors[id] = result.error.brError?.message ?? result.error.stderr ?? `exit ${result.error.exitCode ?? "?"}`;
+      continue;
+    }
+    const bead = parseBead(result.value);
+    if (!bead) {
+      errors[id] = "parse_failure: br show output did not match Bead shape";
+      continue;
+    }
+    if (bead.status === "closed") {
+      closed.push(id);
+    } else {
+      stragglers.push({ id, status: bead.status });
+    }
+  }
+
+  return { closed, stragglers, errors };
+}
