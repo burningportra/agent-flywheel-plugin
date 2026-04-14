@@ -520,4 +520,102 @@ describe('runReview', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Unknown action');
   });
+
+  // ── Already-closed bead handling (state desync recovery) ─────
+
+  describe('bead.status === "closed" preflight', () => {
+    it('looks-good is idempotent on already-closed bead — syncs state and advances', async () => {
+      const closedBead = makeBead({ status: 'closed' });
+      const { ctx, state } = makeCtx({}, [
+        brShowCall(closedBead),
+        brReadyCall([]),
+      ]);
+
+      const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'looks-good' });
+
+      expect(result.isError).toBeUndefined();
+      // State is reconciled with the auto-close
+      expect(state.beadResults!['test-bead-1']).toEqual({
+        beadId: 'test-bead-1',
+        status: 'success',
+        summary: 'Auto-closed by impl agent',
+      });
+      // Should NOT have called br update --status closed (no such mock; would 404)
+      // and should have transitioned (gates phase or next bead)
+      expect(state.phase).toBe('iterating');
+      expect(result.content[0].text).toContain('Already closed by impl agent');
+    });
+
+    it('skip on already-closed bead returns already_closed error', async () => {
+      const closedBead = makeBead({ status: 'closed' });
+      const { ctx } = makeCtx({}, [brShowCall(closedBead)]);
+
+      const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'skip' });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        tool: 'orch_review',
+        version: 1,
+        status: 'error',
+        data: {
+          kind: 'error',
+          error: { code: 'already_closed' },
+        },
+      });
+      expect(result.content[0].text).toContain('already closed');
+    });
+
+    it('hit-me on already-closed bead returns postClose payload with 5 agent specs', async () => {
+      const closedBead = makeBead({ status: 'closed' });
+      const { ctx } = makeCtx({}, [brShowCall(closedBead)]);
+
+      const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
+
+      expect(result.isError).toBeUndefined();
+      const structured = result.structuredContent as {
+        data: {
+          kind: string;
+          postClose: boolean;
+          agentTasks: Array<{ task: string; perspective: string }>;
+          instructions: string;
+        };
+      };
+      expect(structured.data.kind).toBe('review_tasks');
+      expect(structured.data.postClose).toBe(true);
+      expect(structured.data.agentTasks).toHaveLength(5);
+      // postClose note should be prepended to each agent task body
+      for (const task of structured.data.agentTasks) {
+        expect(task.task).toContain('already closed by the impl agent');
+      }
+      expect(structured.data.instructions).toContain('post-close audit');
+    });
+
+    it('hit-me on open bead does NOT tag postClose', async () => {
+      const openBead = makeBead({ status: 'in_progress' });
+      const { ctx } = makeCtx({}, [brShowCall(openBead)]);
+
+      const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
+
+      const structured = result.structuredContent as {
+        data: { postClose: boolean; agentTasks: Array<{ task: string }> };
+      };
+      expect(structured.data.postClose).toBe(false);
+      for (const task of structured.data.agentTasks) {
+        expect(task.task).not.toContain('already closed by the impl agent');
+      }
+    });
+
+    it('hit-me on closed bead with empty description does not crash', async () => {
+      // Regression: extractFilesFromBead must guard empty/missing description.
+      const closedBeadEmpty = makeBead({ status: 'closed', description: '' });
+      const { ctx } = makeCtx({}, [brShowCall(closedBeadEmpty)]);
+
+      const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
+
+      expect(result.isError).toBeUndefined();
+      const structured = result.structuredContent as { data: { files: string[]; postClose: boolean } };
+      expect(structured.data.files).toEqual([]);
+      expect(structured.data.postClose).toBe(true);
+    });
+  });
 });

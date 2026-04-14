@@ -476,6 +476,7 @@ export type OrchestrationToolName =
   | 'orch_plan'
   | 'orch_approve_beads'
   | 'orch_review'
+  | 'orch_verify_beads'
   | 'orch_memory';
 
 export interface ToolChoiceOption {
@@ -503,6 +504,7 @@ export interface OrchestrationToolError {
     | 'parse_failure'
     | 'blocked_state'
     | 'unsupported_action'
+    | 'already_closed'
     | 'internal_error';
   message: string;
   retryable?: boolean;
@@ -534,6 +536,7 @@ export interface SelectArgs { cwd: string; goal: string }
 export interface PlanArgs { cwd: string; mode?: "standard" | "deep"; planContent?: string; planFile?: string }
 export interface ApproveArgs { cwd: string; action: "start" | "polish" | "reject" | "advanced" | "git-diff-review"; advancedAction?: string }
 export interface ReviewArgs { cwd: string; beadId: string; action: "hit-me" | "looks-good" | "skip" }
+export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
 export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store"; content?: string }
 
 // ─── Orchestrator Context (shared runtime for extracted modules) ──

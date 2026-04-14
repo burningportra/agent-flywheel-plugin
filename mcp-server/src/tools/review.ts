@@ -114,6 +114,38 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
     );
   }
 
+  // ── Preflight: actual bead status (handles auto-close from impl agent) ─
+  // If `br show` says the bead is already closed, the impl agent (or someone
+  // else) ran `br update --status closed` without informing the orchestrator.
+  // Reconcile state and route based on the requested action.
+  //
+  // Note: state.beadResults is only synced on the looks-good path. Setting
+  // it for hit-me would trip the `alreadyCompleted` short-circuit below and
+  // suppress the post-close audit the caller asked for.
+  if (bead.status === 'closed') {
+    if (args.action === 'looks-good') {
+      if (!state.beadResults) state.beadResults = {};
+      if (!state.beadResults[beadId]) {
+        state.beadResults[beadId] = {
+          beadId,
+          status: 'success',
+          summary: 'Auto-closed by impl agent',
+        };
+        saveState(state);
+      }
+      return nextBeadOrGates(ctx, beadId, bead.title, 'Already closed by impl agent');
+    }
+    if (args.action === 'skip') {
+      return errorResult(
+        state.phase,
+        'already_closed',
+        `Bead ${beadId} is already closed; skip is not applicable. Move to the next bead or call orch_review with action=looks-good to acknowledge.`,
+        { beadId, status: 'closed' }
+      );
+    }
+    // hit-me on a closed bead falls through; payload is tagged postClose below.
+  }
+
   const alreadyCompleted = state.beadResults?.[beadId]?.status === 'success';
   if (alreadyCompleted) {
     return okResult(
@@ -182,6 +214,10 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
   // ── action: hit-me — return parallel review agent specs ───────
   if (args.action === 'hit-me') {
     const round = state.beadReviewPassCounts?.[beadId] ?? 0;
+    const postClose = bead.status === 'closed';
+    const postCloseNote = postClose
+      ? `**Note:** this bead is already closed by the impl agent. This is a post-close audit — focus on what shipped, surface bugs in landed code, and propose follow-up fixes rather than blocking the close.\n\n`
+      : '';
 
     if (!state.beadHitMeTriggered) state.beadHitMeTriggered = {};
     if (!state.beadHitMeCompleted) state.beadHitMeCompleted = {};
@@ -203,7 +239,7 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
       {
         name: `FreshEyes-${beadId}-r${round}`,
         perspective: 'fresh-eyes',
-        task: `Fresh-eyes code reviewer. You have NEVER seen this code before.
+        task: `${postCloseNote}Fresh-eyes code reviewer. You have NEVER seen this code before.
 
 **Bead:** ${beadId} — ${bead.title}
 **Files to review:** ${fileList}
@@ -217,7 +253,7 @@ Report what you found and what you fixed.`,
       {
         name: `Adversary-${beadId}-r${round}`,
         perspective: 'adversarial',
-        task: `Adversarial code reviewer. Your job is to break this implementation.
+        task: `${postCloseNote}Adversarial code reviewer. Your job is to break this implementation.
 
 **Bead:** ${beadId} — ${bead.title}
 **Files to review:** ${fileList}
@@ -231,7 +267,7 @@ Report your attack attempts and findings.`,
       {
         name: `Ergonomics-${beadId}-r${round}`,
         perspective: 'ergonomics',
-        task: `Ergonomics reviewer. Focus on usability and developer experience.
+        task: `${postCloseNote}Ergonomics reviewer. Focus on usability and developer experience.
 
 **Bead:** ${beadId} — ${bead.title}
 **Files to review:** ${fileList}
@@ -246,7 +282,7 @@ Report improvements made.`,
       {
         name: `RealityCheck-${beadId}-r${round}`,
         perspective: 'reality-check',
-        task: `Reality checker. Verify the implementation actually achieves the goal.
+        task: `${postCloseNote}Reality checker. Verify the implementation actually achieves the goal.
 
 **Goal:** ${goal}
 **Bead:** ${beadId} — ${bead.title}
@@ -260,7 +296,7 @@ Do NOT edit code — just report your findings.`,
       {
         name: `Explorer-${beadId}-r${round}`,
         perspective: 'exploration',
-        task: `Code explorer. Randomly explore the codebase to find related issues.
+        task: `${postCloseNote}Code explorer. Randomly explore the codebase to find related issues.
 
 **Bead:** ${beadId} — ${bead.title}
 **cwd:** ${cwd}
@@ -274,14 +310,20 @@ Report what you found. Fix obvious issues directly.`,
       },
     ];
 
+    const baseInstructions = `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`orch_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
+    const instructions = postClose
+      ? `Bead ${beadId} is already closed; this is a post-close audit. ${baseInstructions} For looks-good, the bead stays closed (idempotent).`
+      : baseInstructions;
+
     const payload = {
       kind: 'review_tasks',
       strategy: 'hit_me',
       beadId,
       round,
+      postClose,
       agentTasks,
       files,
-      instructions: `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`orch_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`,
+      instructions,
     };
 
     return okResult(
@@ -290,8 +332,9 @@ Report what you found. Fix obvious issues directly.`,
         action: 'spawn-agents',
         beadId,
         round,
+        postClose,
         agentTasks,
-        instructions: payload.instructions,
+        instructions,
       }, null, 2),
       payload
     );
@@ -537,6 +580,9 @@ function regressToPhase(
 }
 
 function extractFilesFromBead(bead: Bead): string[] {
+  if (!bead || typeof bead.description !== 'string' || bead.description.length === 0) {
+    return [];
+  }
   const files: string[] = [];
   // Heuristic: lines that look like file paths
   const lines = bead.description.split('\n');
