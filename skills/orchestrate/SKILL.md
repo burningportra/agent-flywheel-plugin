@@ -165,17 +165,47 @@ AskUserQuestion(questions: [{
 
 | Choice | Action |
 |--------|--------|
-| **Resume session** | Load checkpoint, jump to the saved phase |
-| **Work on beads** | Call `orch_approve_beads` with `action: "start"` to launch implementation |
+| **Resume session** | Run the **drift check** below before jumping to the saved phase |
+| **Work on beads** | Jump to **Step 6** (display `br list`, then the beads-approval menu) — do NOT call `orch_approve_beads(action: "start")` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
 | **Set a goal** | Run `/brainstorming` to refine the goal, then proceed to Step 4 |
-| **Research repo** | Prompt for GitHub URL, then invoke `/orchestrate-research <url>` |
+| **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/orchestrate-research` |
 | **Quick fix** | Invoke `/orchestrate-fix` |
 | **Audit** | Invoke `/orchestrate-audit` |
 | **Setup** | Invoke `/orchestrate-setup` |
 
-When the user selects **"Research repo"**, use `AskUserQuestion` to collect the URL:
+#### Resume session — drift check (MANDATORY)
+
+Before jumping to the saved phase, compare the checkpoint to reality:
+
+1. `git rev-parse HEAD` → compare to `checkpoint.gitHead`. If they differ, HEAD has moved.
+2. `br list --json` → compare bead IDs/statuses to `checkpoint.activeBeadIds` and `checkpoint.beadResults`. If beads listed in checkpoint don't exist (or are all closed when checkpoint says `phase: implementing`), state is stale.
+
+If either check shows drift, present:
+
+```
+AskUserQuestion(questions: [{
+  question: "Checkpoint drift detected: <summary, e.g. 'HEAD moved 5 commits ahead; 0/8 active beads still open'>. How should I proceed?",
+  header: "Drift",
+  options: [
+    { label: "Start fresh", description: "Discard the stale checkpoint and run the start menu (Recommended)" },
+    { label: "Inspect first", description: "Show the diff between checkpoint and reality, then re-prompt" },
+    { label: "Force resume", description: "Resume anyway — useful only if you know the checkpoint is still relevant" }
+  ],
+  multiSelect: false
+}])
+```
+
+- "Start fresh" → delete `.pi-orchestrator/checkpoint.json`, route as if user picked "New goal".
+- "Inspect first" → print the diff (`git log <checkpoint.gitHead>..HEAD --oneline` + bead status table), then re-show this menu.
+- "Force resume" → load checkpoint, jump to saved phase as before.
+
+If both checks pass (no drift), resume directly without showing the menu.
+
+#### Research repo — mode selection
+
+Use `AskUserQuestion` to collect the URL and mode:
 
 ```
 AskUserQuestion(questions: [{
@@ -189,9 +219,9 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-The user pastes the GitHub URL in the "Other" text field, or selects a mode first and provides the URL when prompted. Then:
-- **"Research only"** → invoke `/orchestrate-research <url>`
-- **"Research + integrate"** → invoke `/orchestrate-research <url>` with the Major Feature Integration mode (Phases 8-12)
+The user pastes the URL in the "Other" field, or picks a mode first and provides the URL when prompted. Then:
+- **"Research only"** → invoke `/orchestrate-research <url>`.
+- **"Research + integrate"** → invoke `/orchestrate-research <url> --mode integrate` (the slash command's research skill reads `--mode integrate` to run Phases 8–12 / Major Feature Integration). If the slash command rejects the flag, fall back to invoking `/orchestrate-research <url>` and prepend the prompt context "After research, generate an integration plan and create implementation beads."
 
 ### 0f. Degraded modes
 
@@ -510,7 +540,30 @@ After calling `orch_approve_beads` with `action: "start"`, display **both** the 
 
 Populate **Wave** from the bead's dependency wave assignment, **Effort** from the plan's effort estimate, and **Risk Flags** from any warnings or risk notes in the plan output. This gives the user visibility into what is about to be implemented and in what order.
 
-Then use `AskUserQuestion` to confirm launch:
+**Branch on the quality score** — if `score < 0.75`, use the low-quality menu instead of the regular launch menu (do NOT launch silently).
+
+**Low quality (`score < 0.75`):**
+
+```
+AskUserQuestion(questions: [{
+  question: "Quality score: <X.XX>/1.00 — below the 0.75 threshold. <weak-bead-summary>. How should I proceed?",
+  header: "Low quality",
+  options: [
+    { label: "Polish beads", description: "Run another bead refinement round (Recommended)" },
+    { label: "Back to plan", description: "Return to Step 5.6 to refine the plan itself" },
+    { label: "Launch anyway", description: "Proceed despite low score — accept the risk" },
+    { label: "Reject", description: "Discard these beads and start over with a different goal" }
+  ],
+  multiSelect: false
+}])
+```
+
+- "Polish beads" → call `orch_approve_beads` with `action: "polish"`, return to Step 6.
+- "Back to plan" → return to Step 5.6 plan-ready gate menu.
+- "Launch anyway" → proceed to Step 7 (note the user accepted the risk in your end-of-turn summary).
+- "Reject" → call `orch_approve_beads` with `action: "reject"`, return to Step 3.
+
+**Acceptable quality (`score >= 0.75`):**
 
 ```
 AskUserQuestion(questions: [{
@@ -645,7 +698,9 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
 ## Step 8: Review completed beads
 
-When one or more beads complete, present a consolidated review prompt. Never ask per-bead if multiple are ready.
+> **Wave-completion gate (MANDATORY).** Before entering this step, wait until **every** impl agent spawned in the current wave has reported back via Agent Mail (or has been force-stopped per Step 7's escalation path). Track the wave's bead IDs in a local set; do NOT enter Step 8 until that set is empty. If you receive an Agent Mail completion notification mid-wave, store the result and stay in Step 7's monitor loop until the rest finish. Reviewing wave-1 while wave-2 is mid-flight produces stale state and per-bead review prompts (which the consolidation rule below explicitly forbids).
+
+Once the full wave is in, present a consolidated review prompt. Never ask per-bead if multiple beads finished together.
 
 If a **single bead** finishes, use `AskUserQuestion`:
 
@@ -740,8 +795,16 @@ AskUserQuestion(questions: [{
 
 - **"Continue"** → return to Step 7 for the next wave of ready beads
 - **"Check status"** → run `br list` + `bv --robot-triage`, display, then return to this menu
-- **"Pause"** → save checkpoint, end gracefully with a summary of progress so far
+- **"Pause"** → run the pause checklist below, then end the turn
 - **"Wrap up early"** → skip to Step 9.5 with only the completed beads
+
+#### Pause checklist (run in order):
+
+1. **Drain in-flight agents.** For each impl agent still listed in `TaskList` from the current wave: send `SendMessage(to: "<name>", message: {"type": "shutdown_request", "reason": "Session paused"})`. Wait up to 60s for them to exit; force-stop with `TaskStop(task_id: "<id>")` if they hang.
+2. **Retire Agent Mail teammates** that won't be needed on resume (impl-* agents). Leave the coordinator session itself active (it's the orchestrator's identity and CASS will use it on resume).
+3. **Confirm checkpoint is current.** State is checkpointed by every tool call, so this is usually a no-op — but verify `.pi-orchestrator/checkpoint.json` exists and `git rev-parse HEAD` matches `checkpoint.gitHead`. If they differ, the user has uncommitted moves; surface that in the summary.
+4. **Print resume hint.** One line: `Run /orchestrate to resume from <phase> with <N> beads remaining.`
+5. **End turn** with a summary of progress so far (beads closed this session, beads remaining, any blockers). Do not call further tools after the summary.
 
 When ALL beads are complete, display a completion message and proceed directly to Step 9.5:
 
@@ -864,7 +927,14 @@ AskUserQuestion(questions: [{
 ```
 
 Actions:
-- **"Run another cycle"** → return to Step 2 (clear checkpoint first)
+- **"Run another cycle"** → run the cycle-reset checklist below, then return to Step 2.
 - **"Audit the codebase"** → invoke `/orchestrate-audit`
 - **"Check drift"** → invoke `/orchestrate-drift-check`
 - **"Done for now"** → end gracefully with a summary of what shipped
+
+#### Cycle-reset checklist (run in order before re-entering Step 2):
+
+1. **Delete the checkpoint:** `rm -f .pi-orchestrator/checkpoint.json` (Bash). Without this, the next cycle inherits the prior `selectedGoal` / `activeBeadIds` / `phase` and the new "Resume session" drift check fires unnecessarily.
+2. **Verify no impl agents remain.** Run `TaskList`; if any impl-* tasks are still listed, retire and force-stop them per the Step 9 pause checklist before continuing.
+3. **Confirm clean tree** (optional but recommended): `git status -s`. If uncommitted changes exist, surface them to the user before scanning — Step 2's profiler will pick them up either way, but the user should know.
+4. Proceed to Step 2.
