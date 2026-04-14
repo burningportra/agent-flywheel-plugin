@@ -21,7 +21,7 @@ Read it and extract the version. Also read the project name from `package.json` 
 
 Gather context silently (do NOT display raw output yet). Run checks 1-5 in parallel where possible:
 
-1. **MCP tools**: Use `ToolSearch` with query `"select:orch_profile"`. Note if available.
+1. **MCP tools**: Call `orch_profile` directly with `cwd` — if the call succeeds, MCP is available (cache the result to avoid a redundant call in Step 1). If the tool is not found or errors, set `MCP_DEGRADED = true`. Do NOT use `ToolSearch` — MCP tools may be deferred and unavailable to ToolSearch at startup.
 2. **Existing session**: Read `.pi-orchestrator/checkpoint.json` if it exists. Note phase and goal.
 3. **Existing beads**: Run `br list --json 2>/dev/null` and count open/in-progress/closed beads.
 4. **Git status**: Run `git log --oneline -1` to get latest commit.
@@ -140,7 +140,7 @@ The user pastes the GitHub URL in the "Other" text field, or selects a mode firs
 
 ### 0f. Degraded modes
 
-**MCP tools missing** (orch_profile not found in step 0b):
+**MCP tools missing** (orch_profile call failed or tool not found in step 0b):
 
 - Display in the banner: `MCP: not configured — run /orchestrate-setup`
 - Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
@@ -550,6 +550,12 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")
    ```
 
+   **Zero-output escalation**: After 2 nudges, check `git log --oneline` to confirm whether any commits appeared since spawning. If zero new commits:
+   - Do NOT spawn a replacement agent — it will likely stall the same way.
+   - Implement the bead directly as the coordinator.
+   - Close the bead: `br update <id> --status closed`.
+   - This is faster than multiple failed spawn cycles and produces the same outcome.
+
 5. **Store cross-cutting learnings**: When an agent's completion report mentions something non-obvious (unexpected file renames, rebase conflicts, API quirks, tooling workarounds), store it in CASS:
    ```
    orch_memory(operation: "store", content: "Bead <id> (<title>): <learning from agent report>")
@@ -615,14 +621,18 @@ Actions:
 
 - **"Fresh-eyes `<id>`"** → call `orch_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
   1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
-  2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt
+  2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt. Each reviewer prompt **MUST** include:
+     - Instruction to write findings to disk: `docs/reviews/<perspective>-<date>.md`
+     - Instruction to send **only the file path** (not body content) via Agent Mail
+     - **Do NOT** include review content inline in the Agent Mail message body — inbox delivery is unreliable and large bodies may be silently dropped
   3. **Monitor with mandatory nudge loop** — reviewer messages frequently fail to arrive in the coordinator's inbox on the first attempt. After spawning, poll `fetch_inbox` every 30-60 seconds. For each reviewer that has not delivered findings within 2 minutes, nudge by name:
      ```
      SendMessage(to: "<reviewer-name>", message: "Your review findings for bead <id> have not arrived. Please resend to <coordinator-name> via Agent Mail with subject '[review] <id> findings'.")
      ```
      Nudge up to 3 times per reviewer before considering them failed.
+     **Persistent inbox failure fallback**: If inbox remains empty after all nudges, do not block. Read findings files directly from disk (`docs/reviews/<perspective>-<date>.md`) using the Read tool. If no disk file exists either, synthesize from `git diff <base-sha>..HEAD` directly.
   4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
-  5. Collect and summarize results.
+  5. Collect and summarize results. If fewer than 5 reviewers delivered via inbox, synthesize from disk files + `git diff` — do NOT wait indefinitely for unresponsive reviewers.
 
   > **Expected behavior — beads are already closed:** Because impl agents close beads in their Step 3 (`br update --status closed`), `orch_review` will typically error (e.g. "Cannot read properties of undefined (reading 'split')") when called on completed beads. This is the **normal** case, not an edge case. When this happens:
   > 1. Skip the `orch_review` MCP tool entirely.
