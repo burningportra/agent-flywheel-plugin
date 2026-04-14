@@ -7,6 +7,12 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
 
 Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
 
+> ## ⚠️ UNIVERSAL RULE — `AskUserQuestion` is the only way to ask the user anything
+>
+> Every user decision in this skill — phase routing, plan refinement, bead approval, launch confirmation, wrap-up choices, recovery branches — MUST be presented via the `AskUserQuestion` tool with concrete labeled options (2–4 per question). Free-text "ask the user…" prompts, "wait for confirmation", "wait for the user's next message", or implicit decision points are bugs. The "Other" field absorbs custom answers when none of the prepared options fit.
+>
+> If you find yourself about to write text like *"surface this to the user"*, *"propose this to the user"*, *"check with the user"*, or *"only do X if the user confirms"* — STOP and write an `AskUserQuestion` call instead. No exceptions.
+
 ## Step 0: Opening Ceremony
 
 ### 0.preflight — Captured user input (DO THIS FIRST)
@@ -595,7 +601,21 @@ AskUserQuestion(questions: [{
 
 - **"Create beads"** → proceed to Step 5.5.
 - **"Refine plan"** → run the iterative deepening recipe below, then return to this menu (loop).
-- **"Review plan"** → print the plan file path, wait for the user's next message, then return to this menu.
+- **"Review plan"** → print the plan file path so the user can read it offline, then immediately present:
+  ```
+  AskUserQuestion(questions: [{
+    question: "Done reviewing <plan-path>. What next?",
+    header: "Post-review",
+    options: [
+      { label: "Looks good", description: "Proceed to Create beads" },
+      { label: "Refine plan", description: "Run a refinement round (Recommended if changes needed)" },
+      { label: "Start over", description: "Discard plan and pick a different goal" },
+      { label: "Still reading", description: "Re-show this menu in a few minutes" }
+    ],
+    multiSelect: false
+  }])
+  ```
+  Route the answer back into Step 5.6.
 - **"Start over"** → delete the plan file, clear `state.planDocument`, return to Step 3.
 
 **Iterative deepening recipe** (only when "Refine plan" is chosen): spawn a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
@@ -995,7 +1015,22 @@ AskUserQuestion(questions: [{
 - **"Skip wrap-up"** → skip to Step 10
 
 ### 1. Review bead commits
-Run `git log --oneline` to show the bead commits from this session. Propose logical groupings to the user — e.g. "3 beads touched the same subsystem; want me to squash them?" Only squash if the user confirms.
+Run `git log --oneline` to show the bead commits from this session. If two or more touch the same subsystem, propose squashing them via:
+
+```
+AskUserQuestion(questions: [{
+  question: "<N> bead commits touch <subsystem> (<sha-list>). Squash into one?",
+  header: "Squash",
+  options: [
+    { label: "Squash", description: "Combine into one commit with message: '<proposed message>'" },
+    { label: "Keep separate", description: "Leave each bead as its own commit (Recommended for traceability)" },
+    { label: "Pick subset", description: "Specify which SHAs to squash in Other" }
+  ],
+  multiSelect: false
+}])
+```
+
+Only run `git rebase -i` if the user picks Squash or Pick subset. Default-keep is safe.
 
 ### 2. Update documentation
 Before committing anything, update these files to reflect what shipped:
@@ -1006,10 +1041,28 @@ Before committing anything, update these files to reflect what shipped:
 Only update sections that are actually affected by this session's changes. Do not rewrite unchanged sections.
 
 ### 3. Commit any stray tracked/untracked files
-Check `git status` for uncommitted files (plan docs, skill updates, config changes). Commit them in logical groups:
-- Plan artifacts: `docs: add session plan artifact for <goal>`
-- Skills added/updated: `feat(skills): ...`
-- Config or gitignore changes: `chore: ...`
+Check `git status` for uncommitted files (plan docs, skill updates, config changes). If any exist, propose groupings via:
+
+```
+AskUserQuestion(questions: [{
+  question: "Found <N> uncommitted files: <short list>. How should I commit them?",
+  header: "Stray files",
+  options: [
+    { label: "Use proposed groups", description: "<list the proposed group→files mapping in this option's description>" },
+    { label: "One commit", description: "Bundle everything into a single chore: commit" },
+    { label: "Skip stray files", description: "Leave them uncommitted; user will handle" },
+    { label: "Custom split", description: "Specify the grouping in Other" }
+  ],
+  multiSelect: false
+}])
+```
+
+Default proposed groups (use these to populate the first option's description):
+- Plan artifacts → `docs: add session plan artifact for <goal>`
+- Skills added/updated → `feat(skills): ...`
+- Config or gitignore changes → `chore: ...`
+
+Never commit `.env`, credentials, or files matching `*-secret-*` even on "Use proposed groups" — re-prompt and exclude.
 
 ### 4. Version bump
 Determine the correct semver bump based on what shipped and use `AskUserQuestion`:
@@ -1099,5 +1152,18 @@ Actions:
 
 1. **Delete the checkpoint:** `rm -f .pi-orchestrator/checkpoint.json` (Bash). Without this, the next cycle inherits the prior `selectedGoal` / `activeBeadIds` / `phase` and the new "Resume session" drift check fires unnecessarily.
 2. **Verify no impl agents remain.** Run `TaskList`; if any impl-* tasks are still listed, retire and force-stop them per the Step 9 pause checklist before continuing.
-3. **Confirm clean tree** (optional but recommended): `git status -s`. If uncommitted changes exist, surface them to the user before scanning — Step 2's profiler will pick them up either way, but the user should know.
+3. **Confirm clean tree:** run `git status -s`. If uncommitted changes exist, present:
+   ```
+   AskUserQuestion(questions: [{
+     question: "Working tree has <N> uncommitted change(s): <short list>. How should I proceed?",
+     header: "Dirty tree",
+     options: [
+       { label: "Proceed anyway", description: "Step 2's profiler will see the dirty state — that's fine for discovery" },
+       { label: "Stash first", description: "Run git stash, proceed, then remind me to pop later" },
+       { label: "Cancel cycle", description: "Stop here so I can commit or revert manually" }
+     ],
+     multiSelect: false
+   }])
+   ```
+   Route per choice; never silently proceed past a dirty tree without acknowledgment.
 4. Proceed to Step 2.
