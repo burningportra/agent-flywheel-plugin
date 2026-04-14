@@ -119,7 +119,7 @@ AskUserQuestion(questions: [{
   header: "Start",
   options: [
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase" },
-    { label: "Work on beads", description: "<N> open beads ready — jump straight to implementation" },
+    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect" },
     { label: "New goal", description: "Start fresh with a new goal (discards previous session)" },
     { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" }
   ],
@@ -134,7 +134,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do?",
   header: "Start",
   options: [
-    { label: "Work on beads", description: "<N> open beads ready — pick up where you left off" },
+    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect" },
     { label: "New goal", description: "Scan the repo and discover improvement ideas" },
     { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
     { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
@@ -166,7 +166,7 @@ AskUserQuestion(questions: [{
 | Choice | Action |
 |--------|--------|
 | **Resume session** | Run the **drift check** below before jumping to the saved phase |
-| **Work on beads** | Jump to **Step 6** (display `br list`, then the beads-approval menu) — do NOT call `orch_approve_beads(action: "start")` directly |
+| **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `orch_approve_beads` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
 | **Set a goal** | Run `/brainstorming` to refine the goal, then proceed to Step 4 |
@@ -174,6 +174,41 @@ AskUserQuestion(questions: [{
 | **Quick fix** | Invoke `/orchestrate-fix` |
 | **Audit** | Invoke `/orchestrate-audit` |
 | **Setup** | Invoke `/orchestrate-setup` |
+
+#### Work on beads — sub-menu + bootstrap (MANDATORY)
+
+`orch_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, the goal is empty and the tool errors with `missing_prerequisite`. Bootstrap it before any approve call:
+
+1. **Synthesize a default goal from the existing beads.** Read the top 3 open bead titles from `br list --json` and build a default like `Continue: <title-1>; <title-2>; <title-3>` (truncate at 200 chars).
+2. **Confirm or override the goal:**
+   ```
+   AskUserQuestion(questions: [{
+     question: "These beads need a goal label so the orchestrator can resume. Use the synthesized default?",
+     header: "Goal",
+     options: [
+       { label: "Use default", description: "'<synthesized goal>' (Recommended)" },
+       { label: "Custom goal", description: "Provide a one-line goal in the Other field" }
+     ],
+     multiSelect: false
+   }])
+   ```
+3. **Call `orch_select` with the chosen goal.** This populates `state.selectedGoal` and unblocks every downstream tool.
+4. **Then present the action sub-menu:**
+   ```
+   AskUserQuestion(questions: [{
+     question: "<N> open beads. What do you want to do with them?",
+     header: "Beads",
+     options: [
+       { label: "Implement", description: "Jump to Step 6 with launch as the default action (Recommended)" },
+       { label: "Refine", description: "Jump to Step 6 with polish as the default action — restructure beads/deps before implementing" },
+       { label: "Inspect", description: "Show br list + bv dependency graph, then re-show this menu" }
+     ],
+     multiSelect: false
+   }])
+   ```
+   - **"Implement"** → jump to Step 6 (full beads-approval menu; user can still pick Polish or Reject from there).
+   - **"Refine"** → jump to Step 6 but pre-select the polish path: call `orch_approve_beads(action: "polish")` first to enter `refining_beads` phase, then show Step 6's menu so the user can iterate (Polish further / Start / Reject) until satisfied.
+   - **"Inspect"** → run `br list` + `bv --robot-triage` (or `bv` alone if `--robot-triage` not supported), display, then re-show the action sub-menu.
 
 #### Resume session — drift check (MANDATORY)
 
