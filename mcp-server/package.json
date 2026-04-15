@@ -18,7 +18,9 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^2.0.0",
+    "remark-parse": "^11.0.0",
     "typescript": "^5.0.0",
+    "unified": "^11.0.0",
     "vitest": "^2.0.0"
   }
 }

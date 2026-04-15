@@ -39,6 +39,60 @@ export interface Document {
   [key: string]: unknown;
 }
 
+export interface AuqOption {
+  span: Span;
+  label?: string;
+  description?: string;
+  isBareString: boolean;
+}
+
+export interface AuqQuestion {
+  span: Span;
+  question?: string;
+  header?: string;
+  options: AuqOption[];
+  multiSelectExplicit: boolean;
+  multiSelectValue?: boolean;
+}
+
+export interface AskUserQuestionCall {
+  span: Span;
+  questions: AuqQuestion[];
+  parseError: boolean;
+}
+
+export interface SlashRef {
+  span: Span;
+  name: string;
+  insideAuqPayload: boolean;
+}
+
+export interface PlaceholderTag {
+  span: Span;
+  name: string;
+}
+
+export interface DocumentHeader {
+  span: Span;
+  level: number;
+  text: string;
+}
+
+export interface FenceInfo {
+  span: Span;
+  language: string;
+  unclosed: boolean;
+}
+
+export interface ParsedDocument extends Document {
+  fences: FenceInfo[];
+  askUserQuestionCalls: AskUserQuestionCall[];
+  slashReferences: SlashRef[];
+  placeholders: PlaceholderTag[];
+  headers: DocumentHeader[];
+  parserFindings: Finding[];
+}
+
 export interface LintOptions {
   filePath: string;
   rules?: Rule[];

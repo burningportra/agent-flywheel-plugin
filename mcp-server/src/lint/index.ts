@@ -9,6 +9,14 @@ export type {
   Document,
   RuleContext,
   Span,
+  ParsedDocument,
+  AskUserQuestionCall,
+  AuqQuestion,
+  AuqOption,
+  SlashRef,
+  PlaceholderTag,
+  DocumentHeader,
+  FenceInfo,
 } from "./types.js";
 export { createLintLogger } from "./logger.js";
 export type { LintLogger } from "./logger.js";
