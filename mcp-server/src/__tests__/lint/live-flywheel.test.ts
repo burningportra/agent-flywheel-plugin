@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
 
-const MCP_ROOT = "/Volumes/1tb/Projects/claude-orchestrator/mcp-server";
+// Resolve MCP_ROOT relative to this test file so the canary survives repo renames.
+// __tests__/lint/live-flywheel.test.ts → mcp-server/ is up 3 levels.
+const MCP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CLI = join(MCP_ROOT, "dist", "scripts", "lint-skill.js");
 const SKILL = "../skills/flywheel/SKILL.md";
 
