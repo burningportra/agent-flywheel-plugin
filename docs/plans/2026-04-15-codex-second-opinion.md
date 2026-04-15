@@ -26,9 +26,9 @@
 
 6. **AUQ call site count: 38 real + 20 prose = 58 text hits.** Empirically verified:
    ```
-   grep -cE 'AskUserQuestion\s*\(' skills/orchestrate/SKILL.md  → 38
-   grep -c  '`AskUserQuestion`'       skills/orchestrate/SKILL.md  → 20
-   grep -c  'AskUserQuestion'         skills/orchestrate/SKILL.md  → 59 (one extra in a heading/bullet)
+   grep -cE 'AskUserQuestion\s*\(' skills/flywheel/SKILL.md  → 38
+   grep -c  '`AskUserQuestion`'       skills/flywheel/SKILL.md  → 20
+   grep -c  'AskUserQuestion'         skills/flywheel/SKILL.md  → 59 (one extra in a heading/bullet)
    ```
    Correctness (28) was undercounting — likely only matched call sites that opened a block the author recognized. Robustness (59) was overcounting — included every textual reference. The **load-bearing number for rule scoping is 38** (actual calls the linter must parse); the **load-bearing number for IMPL001's "AUQ-within-20-lines" FP defense is 38** (the anchors that exempt surrounding prose). The plan's baseline-generation step (T15) should use 38 as its sanity check, not 28 or 59. The disagreement is itself a bug report: both planners were reading the same file and got different numbers because neither one defined "AUQ call site" precisely. Lock the definition in T2's acceptance criteria: *"a token matching `AskUserQuestion\s*\(` starting at column ≤ indentation of enclosing code fence."*
 
@@ -42,7 +42,7 @@
 
 - **Fingerprint (sha256 of line ± 1) robustness is weaker than claimed.** The plan says it "survives minor line shifts." That's true for pure insertions/deletions above the finding, but fails for:
   - The common case where an editor reformats a code block (whitespace change on adjacent lines → fingerprint breaks).
-  - Rename-refactor across a skill (swap `/orchestrate-scan` → `/orchestrate-audit` on the offending line → fingerprint breaks on purpose, which is *correct* behavior but the plan doesn't say so).
+  - Rename-refactor across a skill (swap `/flywheel-scan` → `/flywheel-audit` on the offending line → fingerprint breaks on purpose, which is *correct* behavior but the plan doesn't say so).
   - Line endings: if CRLF→LF normalization hasn't happened yet when the fingerprint is computed, two machines get different baselines. §1.5 robustness normalization must run *before* fingerprint computation; make that explicit in T12's acceptance criteria.
   Recommend: sha256 of `(trimmed(line-1), trimmed(line), trimmed(line+1))` joined by `\n`. Documented limitation: intentionally breaks on substantive edits.
 

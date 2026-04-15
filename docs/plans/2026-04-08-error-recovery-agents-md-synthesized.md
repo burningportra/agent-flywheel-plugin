@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make `scanRepo()` and `profileRepo()` resilient to partial and total failures of their underlying shell commands and CLI tools, so the orchestrator workflow never crashes at step 1. Additionally, create `AGENTS.md` at the project root to give sub-agents canonical project guidance.
+Make `scanRepo()` and `profileRepo()` resilient to partial and total failures of their underlying shell commands and CLI tools, so the flywheel workflow never crashes at step 1. Additionally, create `AGENTS.md` at the project root to give sub-agents canonical project guidance.
 
 **Key invariant after this plan:** `scanRepo()` always returns a valid `ScanResult` -- it never throws.
 
@@ -225,7 +225,7 @@ Parallelization: T1, T2, T4 run in parallel. T3 waits for T1 (imports `createEmp
 
 **what:** Wrap the fallback `profileRepo()` call in `scanRepo`'s catch block with its own try/catch. If both ccc AND the builtin profiler fail, return a minimal emergency `ScanResult` with an empty profile instead of propagating an unrecoverable exception.
 
-**why:** This is the most dangerous failure mode in scan.ts. The current catch block in `scanRepo` (line 87-90) calls `profileRepo` without any guard. If `profileRepo` also throws (e.g., Docker container with minimal tooling where `find`, `git`, AND `grep` all fail), the entire orchestrate workflow halts with a raw stack trace. After T1, `profileRepo` should rarely throw, but defense-in-depth requires a safety net.
+**why:** This is the most dangerous failure mode in scan.ts. The current catch block in `scanRepo` (line 87-90) calls `profileRepo` without any guard. If `profileRepo` also throws (e.g., Docker container with minimal tooling where `find`, `git`, AND `grep` all fail), the entire flywheel workflow halts with a raw stack trace. After T1, `profileRepo` should rarely throw, but defense-in-depth requires a safety net.
 
 **how:**
 
@@ -292,7 +292,7 @@ Parallelization: T1, T2, T4 run in parallel. T3 waits for T1 (imports `createEmp
 
 **what:** Create `AGENTS.md` with sub-agent guidance covering build commands, constraints, file paths, coordination, and code conventions. Claude Code automatically loads `AGENTS.md` from the project root -- no opt-in required.
 
-**why:** Sub-agents spawned by the orchestrator currently re-derive project conventions from README.md and scattered command files every session. A canonical `AGENTS.md` reduces cognitive load and prevents common mistakes (e.g., using `console.log` in MCP server code, editing `dist/` directly).
+**why:** Sub-agents spawned by the agent-flywheel currently re-derive project conventions from README.md and scattered command files every session. A canonical `AGENTS.md` reduces cognitive load and prevents common mistakes (e.g., using `console.log` in MCP server code, editing `dist/` directly).
 
 **how:** Create the file with the following content:
 
@@ -303,7 +303,7 @@ Guidance for sub-agents working in this repository.
 
 ## Project Overview
 
-claude-orchestrator is an MCP server that drives a multi-phase development workflow: scan, discover, plan, implement, review. The MCP server runs over stdio (JSON-RPC) from `mcp-server/src/server.ts`.
+agent-flywheel is an MCP server that drives a multi-phase development workflow: scan, discover, plan, implement, review. The MCP server runs over stdio (JSON-RPC) from `mcp-server/src/server.ts`.
 
 ## Build
 
@@ -320,16 +320,16 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 3. **TypeScript strict mode.** `tsconfig.json` enables `strict: true`. All code must pass strict type checking.
 4. **NodeNext module resolution.** Use `.js` extensions in all relative imports (e.g., `import { foo } from "./bar.js"`), even when the source file is `.ts`.
 5. **ESM only.** `"type": "module"` in `package.json`. No CommonJS `require()`.
-6. **Never write directly to `.pi-orchestrator/checkpoint.json`.** Use `orch_*` MCP tools for state management.
+6. **Never write directly to `.pi-flywheel/checkpoint.json`.** Use `orch_*` MCP tools for state management.
 7. **All `exec` calls must include a `timeout`.** No open-ended shell commands.
 
 ## Key File Paths
 
 - `mcp-server/src/` -- TypeScript source (edit here)
 - `mcp-server/dist/` -- compiled output (never edit)
-- `.pi-orchestrator/` -- runtime state directory
+- `.pi-flywheel/` -- runtime state directory
 - `skills/` -- skill `.md` files injected into agent system prompts
-- `commands/*.md` -- natural language orchestrator commands
+- `commands/*.md` -- natural language flywheel commands
 - `docs/plans/` -- plan artifacts from deep-plan sessions
 
 ## Available CLI Tools

@@ -3,13 +3,13 @@
 **Goal:** Introduce Vitest as the test framework and write unit tests for the 7 MCP tool handlers (profile, discover, select, plan, approve, review, memory), core state machine transitions, checkpoint read/write, and bead lifecycle. Zero automated coverage currently creates high regression risk.
 
 **Date:** 2026-04-09  
-**Author:** orchestrate skill (standard plan)
+**Author:** flywheel skill (standard plan)
 
 ---
 
 ## 1. Executive Summary
 
-The `claude-orchestrator` MCP server has zero automated test coverage across 46 TypeScript source files. Every fix or feature ships with no regression safety net — a single broken import or state-machine edge case can silently corrupt sessions. This plan introduces Vitest as the test framework (chosen for native ESM + TypeScript support without a compilation step) and delivers unit tests for the three highest-risk layers:
+The `agent-flywheel` MCP server has zero automated test coverage across 46 TypeScript source files. Every fix or feature ships with no regression safety net — a single broken import or state-machine edge case can silently corrupt sessions. This plan introduces Vitest as the test framework (chosen for native ESM + TypeScript support without a compilation step) and delivers unit tests for the three highest-risk layers:
 
 1. **Pure utility functions** — `checkpoint.ts`, `beads.ts`, `types.ts` (deterministic, zero I/O, ideal for unit tests)
 2. **State machine** — `state.ts` + phase transition logic in tool handlers
@@ -387,7 +387,7 @@ No tests call real `br`, `git`, or `claude` CLIs. That's a separate integration 
 
 ### Overall
 - [ ] `npm test` exits 0 with all tests passing
-- [ ] No test writes to the project root `.pi-orchestrator/`
+- [ ] No test writes to the project root `.pi-flywheel/`
 - [ ] No test spawns real `br`, `git`, or `claude` processes
 - [ ] Test suite completes in < 30 seconds
 

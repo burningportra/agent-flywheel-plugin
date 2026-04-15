@@ -1,4 +1,4 @@
-# Gap Analysis: Agent Flywheel Guide vs claude-orchestrator
+# Gap Analysis: Agent Flywheel Guide vs agent-flywheel
 
 Source: https://agent-flywheel.com/complete-guide  
 Updated: 2026-04-09  
@@ -40,8 +40,8 @@ Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.m
 
 ### C5. Strategic Drift Detection — CLOSED
 - **Was**: No drift checking
-- **Now**: `orchestrate-drift-check` skill + `driftCheckInterval` config (default every 3 beads) + `beadsCompletedSinceDriftCheck` counter
-- **Closed by**: skills/orchestrate-drift-check/SKILL.md, mcp-server/src/types.ts
+- **Now**: `flywheel-drift-check` skill + `driftCheckInterval` config (default every 3 beads) + `beadsCompletedSinceDriftCheck` counter
+- **Closed by**: skills/flywheel-drift-check/SKILL.md, mcp-server/src/types.ts
 
 ### C6. Convergence Scoring for Bead Polishing — CLOSED
 - **Was**: No convergence metric computed or surfaced
@@ -55,8 +55,8 @@ Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.m
 
 ### C8. DCG (Destructive Command Guard) — CLOSED
 - **Was**: Only social enforcement via AGENTS.md rules
-- **Now**: `orchestrate-setup` step 7 installs a PreToolUse hook in `.claude/settings.json` that pattern-matches and blocks destructive commands (rm -rf, git reset --hard, git clean -f, git push --force, DROP TABLE) before execution.
-- **Closed by**: skills/orchestrate-setup/SKILL.md
+- **Now**: `flywheel-setup` step 7 installs a PreToolUse hook in `.claude/settings.json` that pattern-matches and blocks destructive commands (rm -rf, git reset --hard, git clean -f, git push --force, DROP TABLE) before execution.
+- **Closed by**: skills/flywheel-setup/SKILL.md
 
 ### C9. bv Prioritization in Marching Orders — CLOSED
 - **Was**: Unclear if agents use bv to pick beads
@@ -65,18 +65,18 @@ Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.m
 
 ### C10. Pre-commit Guard Auto-Install — CLOSED
 - **Was**: Not auto-installed during setup
-- **Now**: `orchestrate-setup` step 6 calls `install_precommit_guard` via Agent Mail MCP tool.
-- **Closed by**: skills/orchestrate-setup/SKILL.md
+- **Now**: `flywheel-setup` step 6 calls `install_precommit_guard` via Agent Mail MCP tool.
+- **Closed by**: skills/flywheel-setup/SKILL.md
 
 ### C11. Three Reasoning Spaces Framing — CLOSED
 - **Was**: Not surfaced to user
 - **Now**: Orchestrate Step 5 displays the Plan/Bead/Code reasoning spaces with 1x/5x/25x rework cost ratios before the planning mode choice.
-- **Closed by**: skills/orchestrate/SKILL.md
+- **Closed by**: skills/flywheel/SKILL.md
 
 ### C12. Best-of-All-Worlds Synthesis Prompt — CLOSED
 - **Was**: Generic "synthesize into one optimal plan" instruction
-- **Now**: Synthesis agent prompt requires honestly acknowledging each plan's strengths before blending. Must state which plan's approach was adopted for each decision. Flags unresolved tensions. Both in plan.ts (synthesisPrompt field) and orchestrate SKILL.md (Step 5.7).
-- **Closed by**: mcp-server/src/tools/plan.ts, skills/orchestrate/SKILL.md
+- **Now**: Synthesis agent prompt requires honestly acknowledging each plan's strengths before blending. Must state which plan's approach was adopted for each decision. Flags unresolved tensions. Both in plan.ts (synthesisPrompt field) and flywheel SKILL.md (Step 5.7).
+- **Closed by**: mcp-server/src/tools/plan.ts, skills/flywheel/SKILL.md
 
 ### C13. UBS Execution — CLOSED
 - **Was**: Listed as stub with no invocation code
@@ -106,7 +106,7 @@ Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.m
 ### C18. Test Bead Auto-Generation — CLOSED
 - **Was**: Test tasks not auto-generated as companion beads
 - **Now**: Orchestrate Step 5.5 includes explicit instruction to create companion test beads when acceptance criteria include testing requirements, with dependencies on impl beads.
-- **Closed by**: skills/orchestrate/SKILL.md
+- **Closed by**: skills/flywheel/SKILL.md
 
 ### C19. Rate Limit / CAAM Guidance — CLOSED
 - **Was**: Vague "switch account" guidance with no detection
@@ -116,12 +116,12 @@ Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.m
 ### C20. Fresh-Round Refinement (Anchoring Prevention) — CLOSED
 - **Was**: No mechanism for sequential fresh-conversation rounds
 - **Now**: Optional Step 5.9 "Iterative deepening" spawns 2-3 fresh agents in isolation, each reviewing the synthesized plan with no memory of prior rounds. Stop when changes are minor.
-- **Closed by**: skills/orchestrate/SKILL.md
+- **Closed by**: skills/flywheel/SKILL.md
 
 ### C21. Major Feature Integration Workflow — CLOSED
-- **Was**: `orchestrate-research` stopped at "extract insights"
+- **Was**: `flywheel-research` stopped at "extract insights"
 - **Now**: Extended with Phases 8-12: integration proposal, iterative deepening, 5x blunder hunt, cross-model feedback, Best-of-All-Worlds final synthesis. Activated when goal is integration, not just research.
-- **Closed by**: skills/orchestrate-research/SKILL.md
+- **Closed by**: skills/flywheel-research/SKILL.md
 
 ---
 

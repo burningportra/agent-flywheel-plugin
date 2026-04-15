@@ -14,7 +14,7 @@ This plan examines six ergonomic friction points found across the MCP server sou
 2. **`agent-mail.ts` — silent RPC failures**: `agentMailRPC` swallows all errors and returns `null`. Call sites cannot distinguish "server unreachable," "tool call rejected," and "malformed response" — all look identical at the call site.
 3. **`profiler.ts` — bare `process.stderr.write` for collector failures**: Error signals from failed collectors are written as raw strings via `process.stderr.write`, bypassing the structured `createLogger` pattern used everywhere else.
 4. **`tools/profile.ts` — duplicate repo-scanning logic**: `buildRepoProfile` in `profile.ts` reimplements most of `profileRepo` from `profiler.ts`. Two divergent implementations of the same thing increases the maintenance cost of changes.
-5. **`checkpoint.ts` — version string passed as bare string parameter**: `writeCheckpoint(cwd, state, orchestratorVersion)` receives a string. Every caller must know to pass `"2.3.0"` — with no single source of truth, versions drift.
+5. **`checkpoint.ts` — version string passed as bare string parameter**: `writeCheckpoint(cwd, state, flywheelVersion)` receives a string. Every caller must know to pass `"2.3.0"` — with no single source of truth, versions drift.
 6. **Testing patterns — no `agent-mail.ts` tests, no `profiler.ts` tests**: The two files with the highest external I/O surface have zero test coverage.
 
 ---
@@ -38,8 +38,8 @@ This plan examines six ergonomic friction points found across the MCP server sou
 **Files:** `mcp-server/src/server.ts` (line 18), `mcp-server/src/checkpoint.ts` (line 142)
 
 **Current state:**
-- `server.ts` line 18: `{ name: "claude-orchestrator", version: "2.0.0" }` — hardcoded, diverges from `package.json` (`"2.3.0"`).
-- `checkpoint.ts` `writeCheckpoint(cwd, state, orchestratorVersion: string)` — callers must pass the version string manually.
+- `server.ts` line 18: `{ name: "agent-flywheel", version: "2.0.0" }` — hardcoded, diverges from `package.json` (`"2.3.0"`).
+- `checkpoint.ts` `writeCheckpoint(cwd, state, flywheelVersion: string)` — callers must pass the version string manually.
 
 **Change:**
 Create `mcp-server/src/version.ts`:
@@ -57,19 +57,19 @@ Update `server.ts` line 17-20:
 ```typescript
 import { ORCHESTRATOR_VERSION } from './version.js';
 const server = new Server(
-  { name: "claude-orchestrator", version: ORCHESTRATOR_VERSION },
+  { name: "agent-flywheel", version: ORCHESTRATOR_VERSION },
   { capabilities: { tools: {} } }
 );
 ```
 
-Update `checkpoint.ts`: remove the `orchestratorVersion` parameter from `writeCheckpoint` and import `ORCHESTRATOR_VERSION` directly:
+Update `checkpoint.ts`: remove the `flywheelVersion` parameter from `writeCheckpoint` and import `ORCHESTRATOR_VERSION` directly:
 
 ```typescript
 // Before (line 139-143):
 export function writeCheckpoint(
   cwd: string,
   state: OrchestratorState,
-  orchestratorVersion: string
+  flywheelVersion: string
 ): boolean {
 
 // After:
@@ -90,7 +90,7 @@ export function writeCheckpoint(
 
 **Line numbers to change:**
 - `server.ts` line 18: replace `version: "2.0.0"` with `version: ORCHESTRATOR_VERSION`
-- `checkpoint.ts` line 139-143: remove `orchestratorVersion` parameter
+- `checkpoint.ts` line 139-143: remove `flywheelVersion` parameter
 - `checkpoint.ts` line 150: use `ORCHESTRATOR_VERSION` instead of parameter
 - All test callsites: `writeCheckpoint(dir, state, '1.0.0-test')` → `writeCheckpoint(dir, state)` (checkpoint.test.ts lines 122, 129, 137, 144, 212, 232)
 
@@ -296,9 +296,9 @@ const profile = await profileRepo(exec, cwd);
 
 **Current state:**
 ```typescript
-case "orch_profile":
+case "flywheel_profile":
   return await runProfile(ctx, args as any);
-case "orch_discover":
+case "flywheel_discover":
   return await runDiscover(ctx, args as any);
 // ...
 ```
@@ -319,7 +319,7 @@ Each tool's `Args` type is already defined locally (e.g., `ProfileArgs` in `prof
 import type { ProfileArgs } from './tools/profile.js';
 // ...
 
-case "orch_profile":
+case "flywheel_profile":
   return await runProfile(ctx, args as ProfileArgs);
 ```
 
@@ -514,8 +514,8 @@ Step 10 is highest-risk — run full test suite before and after.
 - Lines 26-31: replace `process.stderr.write` block with `log.warn('collector failed', { collector: label, reason: ... })`
 
 ### `mcp-server/src/checkpoint.ts`
-- Line 139: remove `orchestratorVersion: string` parameter
-- Line 150: replace `orchestratorVersion` usage with `ORCHESTRATOR_VERSION`
+- Line 139: remove `flywheelVersion: string` parameter
+- Line 150: replace `flywheelVersion` usage with `ORCHESTRATOR_VERSION`
 - Add import: `import { ORCHESTRATOR_VERSION } from './version.js';`
 
 ### `mcp-server/src/tools/profile.ts`
@@ -535,7 +535,7 @@ Step 10 is highest-risk — run full test suite before and after.
 
 ### Version management
 - [ ] `server.ts` `version` field reads from `package.json` at startup, not a hardcoded string
-- [ ] `writeCheckpoint` no longer takes an `orchestratorVersion` string parameter
+- [ ] `writeCheckpoint` no longer takes an `flywheelVersion` string parameter
 - [ ] Changing `package.json` version is the only step needed to update all version references
 
 ### Agent Mail RPC

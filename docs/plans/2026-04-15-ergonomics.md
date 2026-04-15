@@ -44,7 +44,7 @@ BAD:
   error  AskUserQuestion at line 47 has invalid option count
 
 GOOD:
-  [AUQ001] skills/orchestrate/SKILL.md:47:7
+  [AUQ001] skills/flywheel/SKILL.md:47:7
   Question "How deep should discovery go?" has 5 options; AskUserQuestion accepts 2–4.
   Drop or merge one option, or split into two questions.
 ```
@@ -56,7 +56,7 @@ BAD:
   warning: option missing description at line 133
 
 GOOD:
-  [AUQ002] skills/orchestrate/SKILL.md:133:9
+  [AUQ002] skills/flywheel/SKILL.md:133:9
   Option { label: "Quick fix" } has no description field.
   Add: description: "Apply a targeted patch without the full flywheel"
   (autofix available — run with --fix)
@@ -65,7 +65,7 @@ GOOD:
 **AUQ003 — missing multiSelect**
 
 ```
-[AUQ003] skills/orchestrate/SKILL.md:160:5
+[AUQ003] skills/flywheel/SKILL.md:160:5
 Question block starting at line 160 is missing the `multiSelect` field.
 Add `multiSelect: false` (or `true` for multi-choice) before the closing `}])`.
 (autofix available — run with --fix)
@@ -74,7 +74,7 @@ Add `multiSelect: false` (or `true` for multi-choice) before the closing `}])`.
 **AUQ004 — too many questions in one call**
 
 ```
-[AUQ004] skills/orchestrate/SKILL.md:531:1
+[AUQ004] skills/flywheel/SKILL.md:531:1
 AskUserQuestion call at line 531 passes 5 questions; the tool accepts at most 4.
 Split into two calls or merge the least critical questions.
 ```
@@ -82,7 +82,7 @@ Split into two calls or merge the least critical questions.
 **SLASH001 — unresolved slash reference**
 
 ```
-[SLASH001] skills/orchestrate/SKILL.md:349:12
+[SLASH001] skills/flywheel/SKILL.md:349:12
 Slash reference `/idea-wizzard` does not match any installed skill.
 Did you mean `/idea-wizard`? (edit-distance 1)
 Installed skills: idea-wizard, ubs-workflow, brainstorming, ...
@@ -92,7 +92,7 @@ Installed skills: idea-wizard, ubs-workflow, brainstorming, ...
 **PLACE001 — placeholder without referent**
 
 ```
-[PLACE001] skills/orchestrate/SKILL.md:573:27
+[PLACE001] skills/flywheel/SKILL.md:573:27
 Placeholder <N> appears in an Agent() call but has no definition in this step.
 Either replace it with a literal value or add a comment like:
   <!-- N: the current refinement round counter, starts at 1 -->
@@ -102,7 +102,7 @@ Either replace it with a literal value or add a comment like:
 **HARD001 — hard-rule callout without enforcement**
 
 ```
-[HARD001] skills/orchestrate/SKILL.md:12:1
+[HARD001] skills/flywheel/SKILL.md:12:1
 Hard-rule block "UNIVERSAL RULE 1 — AskUserQuestion is the only way..." has no
 enforcement reference in later steps. Add a `<!-- enforced by: AUQ001,IMPL001 -->`
 comment on the same block to close the loop.
@@ -111,7 +111,7 @@ comment on the same block to close the loop.
 **IMPL001 — implicit decision phrase**
 
 ```
-[IMPL001] skills/orchestrate/SKILL.md:892:3
+[IMPL001] skills/flywheel/SKILL.md:892:3
 Implicit-decision phrase "check with the user before proceeding" found.
 Replace with an AskUserQuestion call:
   AskUserQuestion(questions: [{
@@ -251,7 +251,7 @@ const format = args['--format'] ?? (isGHA ? 'gha' : isTTY ? 'pretty' : 'compact'
 
 Example terminal output:
 ```
-skills/orchestrate/SKILL.md
+skills/flywheel/SKILL.md
   47:7  error  [AUQ001] Question "How deep should discovery go?" has 5 options …
  133:9  warn   [AUQ002] Option { label: "Quick fix" } has no description  (autofix)
  349:12 error  [SLASH001] Slash ref `/idea-wizzard` not found  (autofix: /idea-wizard)
@@ -264,8 +264,8 @@ skills/orchestrate/SKILL.md
 Uses the [workflow commands](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions) annotation format:
 
 ```
-::error file=skills/orchestrate/SKILL.md,line=47,col=7,title=AUQ001::Question "How deep should discovery go?" has 5 options; AskUserQuestion accepts 2–4. Drop or merge one.
-::warning file=skills/orchestrate/SKILL.md,line=133,col=9,title=AUQ002::Option { label: "Quick fix" } has no description. Autofix: run npm run lint:skill -- --fix
+::error file=skills/flywheel/SKILL.md,line=47,col=7,title=AUQ001::Question "How deep should discovery go?" has 5 options; AskUserQuestion accepts 2–4. Drop or merge one.
+::warning file=skills/flywheel/SKILL.md,line=133,col=9,title=AUQ002::Option { label: "Quick fix" } has no description. Autofix: run npm run lint:skill -- --fix
 ```
 
 GitHub renders these as inline PR annotations and check-run entries with no additional tooling.
@@ -274,8 +274,8 @@ GitHub renders these as inline PR annotations and check-run entries with no addi
 
 ESLint-style one-line-per-diagnostic for scripting:
 ```
-skills/orchestrate/SKILL.md:47:7: error AUQ001: Question "How deep should discovery go?" has 5 options; accepts 2-4.
-skills/orchestrate/SKILL.md:133:9: warning AUQ002: Option missing description (autofix with --fix)
+skills/flywheel/SKILL.md:47:7: error AUQ001: Question "How deep should discovery go?" has 5 options; accepts 2-4.
+skills/flywheel/SKILL.md:133:9: warning AUQ002: Option missing description (autofix with --fix)
 ```
 
 ### Format: `json`
@@ -285,7 +285,7 @@ skills/orchestrate/SKILL.md:133:9: warning AUQ002: Option missing description (a
   "version": 1,
   "files": [
     {
-      "path": "skills/orchestrate/SKILL.md",
+      "path": "skills/flywheel/SKILL.md",
       "diagnostics": [
         {
           "ruleId": "AUQ001",
@@ -325,7 +325,7 @@ SARIF 2.1 output for reviewdog, CodeQL dashboard, and VS Code SARIF Viewer integ
       "level": "error",
       "message": { "text": "Question has 5 options; AskUserQuestion accepts 2–4." },
       "locations": [{ "physicalLocation": {
-        "artifactLocation": { "uri": "skills/orchestrate/SKILL.md" },
+        "artifactLocation": { "uri": "skills/flywheel/SKILL.md" },
         "region": { "startLine": 47, "startColumn": 7 }
       }}]
     }]
@@ -407,7 +407,7 @@ HTML comments are the correct choice for Markdown files because:
 
 **Inline (current line only)**
 ```markdown
-Invoke `/orchestrate-fix`.  <!-- lint-disable-next-line SLASH001 -->
+Invoke `/flywheel-fix`.  <!-- lint-disable-next-line SLASH001 -->
 ```
 Note: the `lint-disable-next-line` applies to the NEXT line after the comment line, matching ESLint convention. This avoids ambiguity about "which" line the comment is on.
 
@@ -432,7 +432,7 @@ Existing violations captured in `.lint-skill-baseline.json` are silently suppres
 
 The linter emits a `meta-warning` if a suppression comment does not include a `reason:` annotation:
 ```
-[META] skills/orchestrate/SKILL.md:349
+[META] skills/flywheel/SKILL.md:349
 Suppression comment `<!-- lint-disable-next-line SLASH001 -->` has no reason.
 Add: <!-- lint-disable-next-line SLASH001 reason: external skill loaded at runtime -->
 ```
@@ -447,9 +447,9 @@ This is a warning, not an error, and is excluded from baseline calculations. It 
 ```json
 {
   "scripts": {
-    "lint:skill": "tsx scripts/lint-skill.ts skills/orchestrate/SKILL.md",
-    "lint:skill:fix": "tsx scripts/lint-skill.ts skills/orchestrate/SKILL.md --fix",
-    "lint:skill:ci": "tsx scripts/lint-skill.ts skills/orchestrate/SKILL.md --format gha",
+    "lint:skill": "tsx scripts/lint-skill.ts skills/flywheel/SKILL.md",
+    "lint:skill:fix": "tsx scripts/lint-skill.ts skills/flywheel/SKILL.md --fix",
+    "lint:skill:ci": "tsx scripts/lint-skill.ts skills/flywheel/SKILL.md --format gha",
     "test": "npm run lint:skill && vitest run --passWithNoTests"
   }
 }
@@ -542,8 +542,8 @@ This creates `.lint-skill-baseline.json`:
   "generated": "2026-04-15T02:00:00Z",
   "version": 1,
   "suppressions": [
-    { "ruleId": "AUQ002", "file": "skills/orchestrate/SKILL.md", "line": 133, "fingerprint": "sha256:abc123" },
-    { "ruleId": "IMPL001", "file": "skills/orchestrate/SKILL.md", "line": 892, "fingerprint": "sha256:def456" }
+    { "ruleId": "AUQ002", "file": "skills/flywheel/SKILL.md", "line": 133, "fingerprint": "sha256:abc123" },
+    { "ruleId": "IMPL001", "file": "skills/flywheel/SKILL.md", "line": 892, "fingerprint": "sha256:def456" }
   ]
 }
 ```
@@ -741,11 +741,11 @@ Options:
   -V, --version   Print version
 
 Examples:
-  lint-skill skills/orchestrate/SKILL.md
+  lint-skill skills/flywheel/SKILL.md
   lint-skill skills/**/*.md --format json | jq '.summary'
-  lint-skill skills/orchestrate/SKILL.md --fix --fix-dry-run
-  lint-skill skills/orchestrate/SKILL.md --baseline .lint-skill-baseline.json
-  lint-skill skills/orchestrate/SKILL.md --rules AUQ001,SLASH001
+  lint-skill skills/flywheel/SKILL.md --fix --fix-dry-run
+  lint-skill skills/flywheel/SKILL.md --baseline .lint-skill-baseline.json
+  lint-skill skills/flywheel/SKILL.md --rules AUQ001,SLASH001
 
 Exit codes:
   0   No errors (warnings do not affect exit code unless --max-warnings exceeded)
@@ -828,12 +828,12 @@ T15: Update AGENTS.md with hard constraint #9
 ## What the Developer Sees on First `npm test`
 
 ```
-> claude-orchestrator@2.9.0 test
+> agent-flywheel@2.9.0 test
 > npm run lint:skill && vitest run --passWithNoTests
 
-lint-skill v1.0.0 — skills/orchestrate/SKILL.md (1438 lines)
+lint-skill v1.0.0 — skills/flywheel/SKILL.md (1438 lines)
 
-skills/orchestrate/SKILL.md
+skills/flywheel/SKILL.md
    47:7  error   [AUQ001]  Question "How deep should discovery go?" has 5 options; …
   133:9  warn    [AUQ002]  Option { label: "Quick fix" } has no description  (autofix)
   349:12 error   [SLASH001] Slash ref `/idea-wizzard` not found  (did you mean /idea-wizard?)  (autofix)

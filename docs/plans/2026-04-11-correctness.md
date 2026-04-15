@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-The six orchestration tools `orch_profile`, `orch_discover`, `orch_select`, `orch_plan`, `orch_approve_beads`, and `orch_review` currently return only text via `content`, even when some responses are already machine-shaped JSON serialized into text (`orch_plan` deep mode, `orch_review` hit-me, parallel-bead handoff in `orch_approve_beads`). This is the core correctness risk: downstream automation has to parse prose or JSON embedded in prose, which is fragile, under-typed, and inconsistent across branches.
+The six flywheel tools `flywheel_profile`, `flywheel_discover`, `flywheel_select`, `flywheel_plan`, `flywheel_approve_beads`, and `flywheel_review` currently return only text via `content`, even when some responses are already machine-shaped JSON serialized into text (`flywheel_plan` deep mode, `flywheel_review` hit-me, parallel-bead handoff in `flywheel_approve_beads`). This is the core correctness risk: downstream automation has to parse prose or JSON embedded in prose, which is fragile, under-typed, and inconsistent across branches.
 
 The safest implementation path is to add explicit `structuredContent` contracts without breaking current text consumers:
 
@@ -38,24 +38,24 @@ From `mcp-server/src/server.ts` and `mcp-server/src/types.ts`:
 
 ### Current tool behavior by branch
 
-`orch_profile`
+`flywheel_profile`
 - Mutates phase to `profiling`, then `discovering`
 - Stores `repoProfile`, coordination backend/strategy, optional `selectedGoal`
 - Returns a long human summary only
 - Important structured data already exists in memory but is not emitted directly
 
-`orch_discover`
+`flywheel_discover`
 - Requires `state.repoProfile`
 - Stores `candidateIdeas`, sets phase `awaiting_selection`
 - Writes a best-effort artifact to temp dir
 - Returns a human-formatted idea list only
 
-`orch_select`
+`flywheel_select`
 - Validates `goal`
 - Sets `selectedGoal`, phase `planning`, preserves/initializes `constraints`
 - Returns workflow options and direct-to-beads instructions only in prose
 
-`orch_plan`
+`flywheel_plan`
 - Has three materially different success modes:
   1. planning prompt (`mode=standard`, no plan input)
   2. spawn-plan-agents config (`mode=deep`, no plan input) returned as JSON string in text
@@ -63,7 +63,7 @@ From `mcp-server/src/server.ts` and `mcp-server/src/types.ts`:
 - Error branch for missing selected goal
 - Error branch for missing `planFile`
 
-`orch_approve_beads`
+`flywheel_approve_beads`
 - Has two major super-modes:
   1. plan approval mode when `state.planDocument` is active
   2. bead approval mode using `br list --json`
@@ -71,7 +71,7 @@ From `mcp-server/src/server.ts` and `mcp-server/src/types.ts`:
 - Produces multiple machine-worthy outcomes currently encoded as prose or JSON-in-fences/text
 - Uses module-level `_lastBeadSnapshot`, which creates a correctness-sensitive hidden state during refinement rounds
 
-`orch_review`
+`flywheel_review`
 - Supports normal bead review plus sentinels:
   - `__gates__`
   - `__regress_to_plan__`
@@ -160,10 +160,10 @@ Define one top-level union per tool. Each should have:
 
 Recommended unions:
 
-### `orch_profile`
+### `flywheel_profile`
 
 Success contract should include at minimum:
-- `tool: "orch_profile"`
+- `tool: "flywheel_profile"`
 - `ok: true`
 - `phaseAfter: "discovering"`
 - `profile`
@@ -176,29 +176,29 @@ Success contract should include at minimum:
 
 Error contract likely only needed for server-level exception path or future validation expansion, since current tool body mostly succeeds/fails by throwing.
 
-### `orch_discover`
+### `flywheel_discover`
 
 Need explicit distinction between success and prerequisite/input failure.
 
 Success fields:
-- `tool: "orch_discover"`
+- `tool: "flywheel_discover"`
 - `ok: true`
 - `phaseAfter: "awaiting_selection"`
 - `ideaCounts: { total, top, honorable }`
 - `ideas` (full normalized list)
 - optional artifact metadata if write succeeded
-- `nextStep: { tool: "orch_select", reason: "user_must_choose_goal" }`
+- `nextStep: { tool: "flywheel_select", reason: "user_must_choose_goal" }`
 
 Error fields:
-- `tool: "orch_discover"`
+- `tool: "flywheel_discover"`
 - `ok: false`
 - `error.code: "missing_repo_profile" | "missing_ideas" | ...`
 - `phaseAfter` should reflect unchanged phase when applicable
 
-### `orch_select`
+### `flywheel_select`
 
 Success fields:
-- `tool: "orch_select"`
+- `tool: "flywheel_select"`
 - `ok: true`
 - `phaseAfter: "planning"`
 - `selectedGoal`
@@ -212,7 +212,7 @@ Success fields:
 Error fields:
 - `error.code: "invalid_goal"`
 
-### `orch_plan`
+### `flywheel_plan`
 
 This tool needs the most careful discriminated union because it has multiple incompatible outputs.
 
@@ -244,13 +244,13 @@ For `plan_registered`:
 - `planDocument`
 - `source: "planFile" | "planContent"`
 - `stats: { chars, lines }`
-- `nextStep: { tool: "orch_approve_beads", action: "start|polish|reject?" }` (probably action omitted here; just next tool)
+- `nextStep: { tool: "flywheel_approve_beads", action: "start|polish|reject?" }` (probably action omitted here; just next tool)
 
 Error codes:
 - `missing_selected_goal`
 - `plan_file_not_found`
 
-### `orch_approve_beads`
+### `flywheel_approve_beads`
 
 This needs two-level discrimination:
 - `approvalTarget: "plan" | "beads"`
@@ -287,7 +287,7 @@ Critical structured fields:
 
 Important correctness note: some current text returns embed JSON inside fenced blocks for agent configs. Structured content should contain the raw arrays/objects, while text may keep the existing blocks for compatibility.
 
-### `orch_review`
+### `flywheel_review`
 
 Use `resultType` with explicit sentinels/actions:
 - `review_agents_requested`
@@ -299,7 +299,7 @@ Use `resultType` with explicit sentinels/actions:
 - `bead_skipped_next_parallel`
 - `gate_presented`
 - `gate_advanced`
-- `orchestration_complete`
+- `flywheel_complete`
 - `phase_regressed`
 - `already_complete`
 - `error`
@@ -324,13 +324,13 @@ These should be explicitly documented in types/tests and checked in implementati
 2. If `isError === true`, then `structuredContent.ok === false`.
 3. If `structuredContent.ok === false`, include a stable `error.code`.
 4. If `phaseAfter` is present, it must equal the actual saved `state.phase` after mutation.
-5. For `orch_plan`:
+5. For `flywheel_plan`:
    - `resultType === "plan_registered"` implies `state.planDocument` is set and `phaseAfter === "awaiting_plan_approval"`.
    - `resultType === "plan_prompt"` implies `state.planDocument` exists and `phaseAfter === "planning"`.
-6. For `orch_approve_beads` start success:
+6. For `flywheel_approve_beads` start success:
    - single-start branch implies exactly one ready bead and `currentBeadId` matches it
    - parallel-start branch implies `agentConfigs.length === readyBeads.length`
-7. For `orch_review` hit-me:
+7. For `flywheel_review` hit-me:
    - `beadHitMeTriggered[beadId] === true`
    - `beadHitMeCompleted[beadId] === false`
    - `agentTasks.length === 5` under current behavior
@@ -352,7 +352,7 @@ Preserve existing text output as much as possible, especially in tests that asse
 - `Orchestration Complete`
 - `Unknown action`
 
-Where current text is JSON stringified (`orch_plan` deep mode, `orch_review` hit-me), keep the text output for now, but add the same object under `structuredContent`. This minimizes breakage for existing consumers that already parse the text while giving new consumers a canonical path.
+Where current text is JSON stringified (`flywheel_plan` deep mode, `flywheel_review` hit-me), keep the text output for now, but add the same object under `structuredContent`. This minimizes breakage for existing consumers that already parse the text while giving new consumers a canonical path.
 
 ### API compatibility
 
@@ -394,7 +394,7 @@ File:
 - `mcp-server/src/server.ts`
 
 Changes:
-- For each orchestration tool in `TOOLS`, add an output schema field if supported by the MCP SDK shape in use.
+- For each flywheel tool in `TOOLS`, add an output schema field if supported by the MCP SDK shape in use.
 - If the SDK/tool descriptor typing does not currently expose `outputSchema`, still centralize schema objects for later attachment and use them in tests/helpers.
 
 Correctness checkpoints:
@@ -402,7 +402,7 @@ Correctness checkpoints:
 - output contract mirrors actual runtime union branches
 - avoid a mismatch where schema claims a required field some branch does not supply
 
-## Phase 3: migrate `orch_profile`
+## Phase 3: migrate `flywheel_profile`
 
 File:
 - `mcp-server/src/tools/profile.ts`
@@ -417,7 +417,7 @@ Correctness edge cases to encode:
 - goal supplied vs absent
 - profile still succeeds if bead parsing fails; structured output should reflect what is known, not invent missing bead data
 
-## Phase 4: migrate `orch_discover` and `orch_select`
+## Phase 4: migrate `flywheel_discover` and `flywheel_select`
 
 Files:
 - `mcp-server/src/tools/discover.ts`
@@ -435,7 +435,7 @@ Correctness edge cases:
 - `constraints` initialization/preservation
 - `select` success without `repoProfile`
 
-## Phase 5: migrate `orch_plan`
+## Phase 5: migrate `flywheel_plan`
 
 File:
 - `mcp-server/src/tools/plan.ts`
@@ -454,7 +454,7 @@ Correctness edge cases:
 
 Important observation: there is an unused `relativePath` variable in the `planFile` branch. The plan should explicitly avoid copying such dead values into the structured contract.
 
-## Phase 6: migrate `orch_approve_beads`
+## Phase 6: migrate `flywheel_approve_beads`
 
 File:
 - `mcp-server/src/tools/approve.ts`
@@ -482,7 +482,7 @@ Correctness edge cases:
 Special correctness concern:
 `_lastBeadSnapshot` is module-level hidden state. Structured outputs must describe only the resulting state, not assume snapshot correctness across module reloads. Tests should keep isolating module state as they already do.
 
-## Phase 7: migrate `orch_review`
+## Phase 7: migrate `flywheel_review`
 
 File:
 - `mcp-server/src/tools/review.ts`
@@ -572,7 +572,7 @@ First pass should update only as needed to accommodate generic typing, but all c
 Examples:
 
 `profile.test.ts`
-- assert `structuredContent.tool === "orch_profile"`
+- assert `structuredContent.tool === "flywheel_profile"`
 - assert `structuredContent.profile.name === state.repoProfile.name`
 - assert `structuredContent.phaseAfter === "discovering"`
 
@@ -599,7 +599,7 @@ Examples:
 `review.test.ts`
 - hit-me: `resultType === "review_agents_requested"`, `agentTasks.length === 5`
 - looks-good all-done: `resultType === "bead_passed_all_done_enter_gates"`
-- gates completion: `resultType === "orchestration_complete"`
+- gates completion: `resultType === "flywheel_complete"`
 - regression sentinels: `resultType === "phase_regressed"`
 
 ### 3. Add state/structured lockstep tests
@@ -634,13 +634,13 @@ Recommended execution sequence after implementation:
 5. `server.ts` publishes output contracts for the six tools if supported by the MCP SDK descriptor shape in this repository version.
 6. Tool tests cover the new structured payloads for representative success/error branches and state-transition branches.
 7. Full `mcp-server` tests pass.
-8. No source files outside the MCP server orchestration contract area are changed unnecessarily.
+8. No source files outside the MCP server flywheel contract area are changed unnecessarily.
 
 ## Risks and mitigations
 
 ### Risk 1: branch explosion creates weak unions
 
-`orch_approve_beads` and `orch_review` have many branches. If the contract is too loose, structured output becomes misleading.
+`flywheel_approve_beads` and `flywheel_review` have many branches. If the contract is too loose, structured output becomes misleading.
 
 Mitigation:
 - use discriminated unions with explicit `resultType`
@@ -695,12 +695,12 @@ Mitigation:
 
 For implementation clarity, keep these branch discriminants stable:
 
-- `orch_profile`: `resultType = "profile_ready" | "error"`
-- `orch_discover`: `resultType = "ideas_stored" | "error"`
-- `orch_select`: `resultType = "goal_selected" | "error"`
-- `orch_plan`: `resultType = "plan_prompt" | "deep_plan_spawn" | "plan_registered" | "error"`
-- `orch_approve_beads`: `approvalTarget = "plan" | "beads"` plus per-target `resultType`
-- `orch_review`: `resultType = "review_agents_requested" | "bead_transition" | "gate_transition" | "phase_regressed" | "already_complete" | "error"`
+- `flywheel_profile`: `resultType = "profile_ready" | "error"`
+- `flywheel_discover`: `resultType = "ideas_stored" | "error"`
+- `flywheel_select`: `resultType = "goal_selected" | "error"`
+- `flywheel_plan`: `resultType = "plan_prompt" | "deep_plan_spawn" | "plan_registered" | "error"`
+- `flywheel_approve_beads`: `approvalTarget = "plan" | "beads"` plus per-target `resultType`
+- `flywheel_review`: `resultType = "review_agents_requested" | "bead_transition" | "gate_transition" | "phase_regressed" | "already_complete" | "error"`
 
 If desired, subtypes can refine `bead_transition` and `gate_transition`, but avoid too many near-duplicate discriminants unless tests genuinely benefit.
 
@@ -717,7 +717,7 @@ This order reduces the chance of broad type churn with unclear branch coverage.
 
 ## Definition of done
 
-The work is done when a client can call any of the six orchestration tools and reliably determine, from `structuredContent` alone:
+The work is done when a client can call any of the six flywheel tools and reliably determine, from `structuredContent` alone:
 - what branch executed
 - whether it succeeded
 - what state transition occurred

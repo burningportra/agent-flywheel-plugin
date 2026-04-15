@@ -4,7 +4,7 @@ Guidance for sub-agents working in this repository.
 
 ## Project Overview
 
-claude-orchestrator is an MCP server that drives a multi-phase development workflow: scan, discover, plan, implement, review. The MCP server runs over stdio (JSON-RPC) from `mcp-server/src/server.ts`.
+agent-flywheel is an MCP server that drives a multi-phase development workflow: scan, discover, plan, implement, review. The MCP server runs over stdio (JSON-RPC) from `mcp-server/src/server.ts`.
 
 ## Build
 
@@ -21,7 +21,7 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 3. **TypeScript strict mode.** `tsconfig.json` enables `strict: true`. All code must pass strict type checking.
 4. **NodeNext module resolution.** Use `.js` extensions in all relative imports (e.g., `import { foo } from "./bar.js"`), even when the source file is `.ts`.
 5. **ESM only.** `"type": "module"` in `package.json`. No CommonJS `require()`.
-6. **Never write directly to `.pi-orchestrator/checkpoint.json`.** Use `orch_*` MCP tools for state management.
+6. **Never write directly to `.pi-flywheel/checkpoint.json`.** Use `orch_*` MCP tools for state management.
 7. **All `exec` calls must include a `timeout`.** No open-ended shell commands.
 8. **Propagate `signal` through `exec` calls.** When the calling function receives an `AbortSignal`, pass it to every `exec()` call: `exec(cmd, args, { timeout, cwd, signal })`. The `ExecFn` type (from `exec.ts`) accepts `signal?: AbortSignal`.
 
@@ -29,9 +29,9 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 
 - `mcp-server/src/` — TypeScript source (edit here)
 - `mcp-server/dist/` — compiled output (never edit)
-- `.pi-orchestrator/` — runtime state directory
+- `.pi-flywheel/` — runtime state directory
 - `skills/` — skill `.md` files injected into agent system prompts
-- `commands/*.md` — natural language orchestrator commands
+- `commands/*.md` — natural language flywheel commands
 - `docs/plans/` — plan artifacts from deep-plan sessions
 
 ## Available CLI Tools
@@ -49,9 +49,9 @@ br update <bead-id> --status closed
 br show <bead-id> --json   # confirm "status": "closed"
 ```
 
-If the second call shows anything else, retry the update once before reporting completion. The orchestrator coordinator additionally calls `orch_verify_beads` after each wave to auto-close stragglers that have a matching commit (`git log --grep=<bead-id> -1`), so a missed close is recoverable but not free — verify locally first.
+If the second call shows anything else, retry the update once before reporting completion. The agent-flywheel coordinator additionally calls `flywheel_verify_beads` after each wave to auto-close stragglers that have a matching commit (`git log --grep=<bead-id> -1`), so a missed close is recoverable but not free — verify locally first.
 
-`orch_review` reconciles the bead state automatically: `looks-good` is idempotent on already-closed beads, `hit-me` runs a post-close audit, and `skip` returns `already_closed`. Do not skip `orch_review` for closed beads — the legacy "spawn reviewers from `git diff <sha>~1 <sha>`" workaround is no longer required.
+`flywheel_review` reconciles the bead state automatically: `looks-good` is idempotent on already-closed beads, `hit-me` runs a post-close audit, and `skip` returns `already_closed`. Do not skip `flywheel_review` for closed beads — the legacy "spawn reviewers from `git diff <sha>~1 <sha>`" workaround is no longer required.
 
 ## Agent Coordination
 
@@ -136,7 +136,7 @@ Test files live in `mcp-server/src/__tests__/`. Follow existing patterns — use
 
 ## SKILL.md linting
 
-Changes to `skills/orchestrate/SKILL.md` (and any future SKILL.md files) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, and Universal Rule 1 enforcement.
+Changes to `skills/flywheel/SKILL.md` (and any future SKILL.md files) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, and Universal Rule 1 enforcement.
 
 - Local: `cd mcp-server && npm run lint:skill`
 - Auto-fix safe issues (future): `npm run lint:skill -- --fix` (deferred to v1.1)

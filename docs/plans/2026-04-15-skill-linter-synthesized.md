@@ -4,15 +4,15 @@
 **Date:** 2026-04-15
 **Sources:** `2026-04-15-correctness.md` (PurpleWolf), `2026-04-15-ergonomics.md` (ergonomics-planner), `2026-04-15-robustness.md` (PinkCompass)
 **Target:** `mcp-server/src/lint/` + `mcp-server/scripts/lint-skill.ts` + Vitest suite + GitHub Actions CI
-**Repo:** `claude-orchestrator` v2.9.0 (TypeScript/ESM/NodeNext, Vitest 2.x, strict TS)
+**Repo:** `agent-flywheel` v2.9.0 (TypeScript/ESM/NodeNext, Vitest 2.x, strict TS)
 
 ---
 
 ## 1. Context
 
-`skills/orchestrate/SKILL.md` is 1438 lines, authored jointly by humans and AI agents over months. It contains ~28–59 `AskUserQuestion` call sites (count varies by measurement; plans disagreed — clarified in §17), ~5 hard-rule callouts, and hundreds of `/slash-skill` references and `<placeholder>` tags. Prior incidents (bead-z9g: `*/` inside nested fences cascading into 100+ TS errors; UBS false-positive floods freezing merges) have made it clear that a linter here must:
+`skills/flywheel/SKILL.md` is 1438 lines, authored jointly by humans and AI agents over months. It contains ~28–59 `AskUserQuestion` call sites (count varies by measurement; plans disagreed — clarified in §17), ~5 hard-rule callouts, and hundreds of `/slash-skill` references and `<placeholder>` tags. Prior incidents (bead-z9g: `*/` inside nested fences cascading into 100+ TS errors; UBS false-positive floods freezing merges) have made it clear that a linter here must:
 
-1. Enforce the invariants the orchestrate skill depends on (Universal Rule 1: every decision goes through `AskUserQuestion` with 2–4 options each carrying a `description`).
+1. Enforce the invariants the flywheel skill depends on (Universal Rule 1: every decision goes through `AskUserQuestion` with 2–4 options each carrying a `description`).
 2. Produce zero false positives on the current file at HEAD.
 3. Never be the thing that blocks an unrelated merge at 3am.
 
@@ -267,7 +267,7 @@ Findings sorted by `(path, line, col, rule_id, message)`. No `Date.now()`, no ti
   "rulesetVersion": 1,
   "files": [
     {
-      "path": "skills/orchestrate/SKILL.md",
+      "path": "skills/flywheel/SKILL.md",
       "diagnostics": [
         {
           "ruleId": "AUQ003",
@@ -479,7 +479,7 @@ Three separate jobs (build / test / lint-skill) so a failing skill lint does not
 
 ### 11.2 `--reproduce-ci` (from robustness §4.5)
 
-Sugar for `--ci --baseline .lintskill-baseline.json --file skills/orchestrate/SKILL.md --log-level=info --format pretty`. Documented as the single command for CI repro.
+Sugar for `--ci --baseline .lintskill-baseline.json --file skills/flywheel/SKILL.md --log-level=info --format pretty`. Documented as the single command for CI repro.
 
 ### 11.3 `SKILL_LINT_EMERGENCY=1` guard (from robustness §11.3)
 
@@ -495,11 +495,11 @@ Adopted from ergonomics §6 and correctness §1.3, merged:
 {
   "scripts": {
     "build": "tsc",
-    "lint:skill": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --baseline .lintskill-baseline.json",
-    "lint:skill:fix": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --fix",
-    "lint:skill:ci": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --ci --baseline .lintskill-baseline.json --format gha",
-    "lint:skill:json": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --ci --format json",
-    "lint:skill:update-baseline": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --update-baseline",
+    "lint:skill": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --baseline .lintskill-baseline.json",
+    "lint:skill:fix": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --fix",
+    "lint:skill:ci": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --ci --baseline .lintskill-baseline.json --format gha",
+    "lint:skill:json": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --ci --format json",
+    "lint:skill:update-baseline": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --update-baseline",
     "lint:skill:update-manifest": "tsx scripts/lint-skill.ts --update-manifest",
     "test": "vitest run --passWithNoTests && npm run lint:skill"
   },
@@ -527,7 +527,7 @@ Adopted from ergonomics §6 and correctness §1.3, merged:
   "schemaVersion": 1,
   "generated": "2026-04-15T02:00:00Z",
   "entries": [
-    { "ruleId": "PLACE001", "file": "skills/orchestrate/SKILL.md", "line": 573, "sha256": "abc…", "reason": "" }
+    { "ruleId": "PLACE001", "file": "skills/flywheel/SKILL.md", "line": 573, "sha256": "abc…", "reason": "" }
   ]
 }
 ```
@@ -560,7 +560,7 @@ Under `mcp-server/src/__tests__/lint/fixtures/`:
 
 - **Rule fixtures (from correctness §8 + ergonomics §10):** `clean.md`, `auq001-too-few.md`, `auq001-too-many.md`, `auq002-missing-desc.md`, `auq002-bare-string.md`, `auq003-header-missing.md`, `auq003-header-too-long.md`, `auq003-header-emoji.md`, `auq004-implicit.md`, `slash001-typo.md`, `slash001-inside-url.md`, `slash001-http-path.md`, `place001-orphan.md`, `place001-html-tag.md`, `hard001-enforced.md`, `hard001-orphan.md`, `impl001-raw.md`, `impl001-exempt-ur1.md`, `impl001-exempt-followed.md`, `mixed-realistic.md`.
 - **Adversarial fixtures (from robustness §10.1):** `empty.md`, `whitespace-only.md`, `unclosed-fence.md`, `nested-fence.md`, `nested-fence-with-comment-terminator.md` (bead-z9g replay), `crlf.md`, `mixed-line-endings.md`, `utf8-bom.md`, `very-long-line.md`, `large.md` (10 MiB), `over-cap.md` (11 MiB), `invalid-utf8.md.binary`, `null-bytes.md.binary`, `malformed-aq-json.md`, `aq-with-comments.md`, `aq-with-trailing-commas.md`, `aq-50-lines.md`, `aq-tab-indented.md`, `placeholder-in-code.md`, `placeholder-html-like.md`, `symlink.md`, `broken-symlink.md`.
-- **Live canary (from correctness §8.5):** `live-orchestrate.test.ts` runs `lint()` against the real `skills/orchestrate/SKILL.md` and asserts zero errors after baseline+allowlist.
+- **Live canary (from correctness §8.5):** `live-flywheel.test.ts` runs `lint()` against the real `skills/flywheel/SKILL.md` and asserts zero errors after baseline+allowlist.
 - **Golden determinism (from robustness §7.3):** `golden-input.md` + `golden-output.txt`; test asserts byte-identical stdout.
 
 ### 14.2 Coverage target
@@ -630,7 +630,7 @@ T16: Pre-commit hook template | depends_on: [T14] | files: [mcp-server/scripts/p
 
 T17: GitHub Actions CI workflow | depends_on: [T14, T15] | files: [.github/workflows/ci.yml, .nvmrc] | acceptance: three jobs (build, test, lint-skill); node-version-file: .nvmrc; SKILL_LINT_EMERGENCY guard; artifacts uploaded on failure.
 
-T18: Live-file snapshot test (canary) | depends_on: [T14, T15] | files: [mcp-server/src/__tests__/lint/live-orchestrate.test.ts] | acceptance: lint real skills/orchestrate/SKILL.md with baseline → zero errors.
+T18: Live-file snapshot test (canary) | depends_on: [T14, T15] | files: [mcp-server/src/__tests__/lint/live-flywheel.test.ts] | acceptance: lint real skills/flywheel/SKILL.md with baseline → zero errors.
 
 T19: Adversarial fixture suite + golden-file determinism test | depends_on: [T14] | files: [mcp-server/src/__tests__/lint/fixtures/robustness/*, golden-input.md, golden-output.txt] | acceptance: all fixtures from §14.1 present; golden output byte-identical across runs.
 

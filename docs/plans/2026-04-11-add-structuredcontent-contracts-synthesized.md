@@ -1,12 +1,12 @@
 # Synthesized Plan: Add `structuredContent` contracts for all `orch_*` tools
 
 Date: 2026-04-11
-Scope: `orch_profile`, `orch_discover`, `orch_select`, `orch_plan`, `orch_approve_beads`, `orch_review`
-Primary goal: introduce explicit, typed, machine-readable `structuredContent` contracts for every branch of the orchestration tools while preserving current human-readable `content` compatibility.
+Scope: `flywheel_profile`, `flywheel_discover`, `flywheel_select`, `flywheel_plan`, `flywheel_approve_beads`, `flywheel_review`
+Primary goal: introduce explicit, typed, machine-readable `structuredContent` contracts for every branch of the flywheel tools while preserving current human-readable `content` compatibility.
 
 ## Executive summary
 
-The three source plans agree on the core move: make `structuredContent` a first-class, additive contract for all orchestration tools, not a prose replacement. The synthesized implementation should preserve readable terminal text while making workflow state, next actions, errors, and machine-oriented payloads available without text scraping.
+The three source plans agree on the core move: make `structuredContent` a first-class, additive contract for all flywheel tools, not a prose replacement. The synthesized implementation should preserve readable terminal text while making workflow state, next actions, errors, and machine-oriented payloads available without text scraping.
 
 This plan combines:
 - the correctness plan’s branch-by-branch discipline, invariants, and lockstep state/output expectations
@@ -14,11 +14,11 @@ This plan combines:
 - the ergonomics plan’s strong shared envelope, `nextStep` semantics, explicit choice/action modeling, and host/Hermes usability focus
 
 Best-of-all-worlds recommendation:
-1. Add a shared versioned orchestration result envelope and a generic `McpToolResult<TStructured>`.
+1. Add a shared versioned flywheel result envelope and a generic `McpToolResult<TStructured>`.
 2. Use discriminated unions per tool so every success and error branch is machine-distinguishable.
 3. Keep `content` human-friendly and compatibility-safe; stop making it the sole carrier of machine-critical data.
 4. Introduce shared builders in `mcp-server/src/tools/shared.ts` so text and structured output are authored together.
-5. Roll out low-risk tools first to prove the pattern, but prioritize eliminating JSON-in-text anti-patterns in `orch_plan` and `orch_review` early within the implementation sequence.
+5. Roll out low-risk tools first to prove the pattern, but prioritize eliminating JSON-in-text anti-patterns in `flywheel_plan` and `flywheel_review` early within the implementation sequence.
 6. Prefer compact structured payloads; include full task/config arrays only when automation truly needs them.
 7. Add output schema metadata in `server.ts` if the SDK supports it, but treat runtime `structuredContent` as canonical and metadata as advisory until verified.
 8. Expand tests so every important branch asserts text compatibility, structured contract correctness, and state/result coherence.
@@ -28,7 +28,7 @@ Best-of-all-worlds recommendation:
 ### Unique strengths from `2026-04-11-correctness.md`
 
 The correctness plan contributed the strongest branch inventory and invariant thinking. It is especially valuable for:
-- mapping the real branch surface of `orch_plan`, `orch_approve_beads`, and `orch_review`
+- mapping the real branch surface of `flywheel_plan`, `flywheel_approve_beads`, and `flywheel_review`
 - insisting that every branch have an explicit discriminant rather than a loose optional blob
 - requiring state/output lockstep (`phaseAfter`, `planDocument`, `currentBeadId`, bead results)
 - identifying correctness-sensitive edge cases like `_lastBeadSnapshot`, plan registration modes, gate completion logic, and regression sentinels
@@ -91,7 +91,7 @@ This synthesized plan uses those ergonomics conventions as the canonical public 
 
 ### Shared result envelope
 
-Add a shared envelope for all orchestration structured outputs.
+Add a shared envelope for all flywheel structured outputs.
 
 Recommended shape:
 
@@ -106,7 +106,7 @@ export interface ToolNextStep {
     | "resume_phase"
     | "none";
   message: string;
-  tool?: "orch_profile" | "orch_discover" | "orch_select" | "orch_plan" | "orch_approve_beads" | "orch_review";
+  tool?: "flywheel_profile" | "flywheel_discover" | "flywheel_select" | "flywheel_plan" | "flywheel_approve_beads" | "flywheel_review";
   argsSchemaHint?: Record<string, unknown>;
   options?: Array<{
     id: string;
@@ -119,7 +119,7 @@ export interface ToolNextStep {
 
 export interface OrchestrationContractBase {
   version: 1;
-  tool: "orch_profile" | "orch_discover" | "orch_select" | "orch_plan" | "orch_approve_beads" | "orch_review";
+  tool: "flywheel_profile" | "flywheel_discover" | "flywheel_select" | "flywheel_plan" | "flywheel_approve_beads" | "flywheel_review";
   status: "ok" | "error";
   phase: OrchestratorPhase | "unknown";
   goal?: string;
@@ -150,7 +150,7 @@ export type McpToolResult<TStructured = Record<string, unknown>> = {
 
 ### Contract shape rules
 
-1. Every orchestration `structuredContent` object must include:
+1. Every flywheel `structuredContent` object must include:
    - `tool`
    - `version: 1`
    - `status`
@@ -174,7 +174,7 @@ export type McpToolResult<TStructured = Record<string, unknown>> = {
 
 Recommended layout:
 - Keep the generic `McpToolResult` and small shared primitives in `mcp-server/src/types.ts`.
-- Move the larger orchestration contract families into a new `mcp-server/src/tool-contracts.ts` if `types.ts` becomes too dense.
+- Move the larger flywheel contract families into a new `mcp-server/src/tool-contracts.ts` if `types.ts` becomes too dense.
 - If repository style strongly prefers one file, keep them in `types.ts`, but avoid a giant unstructured section.
 
 ### Result builders
@@ -196,7 +196,7 @@ Key rule: both human text and structured payload should be derived from the same
 
 All examples below assume the common envelope and a tool-specific `data` object.
 
-### 1. `orch_profile`
+### 1. `flywheel_profile`
 
 `data.kind` values:
 - `profile_ready`
@@ -225,13 +225,13 @@ Recommended payload for `profile_ready`:
 - optionally `scanSummary` / `scanSignals` if already compact and useful
 
 Recommended `nextStep`:
-- default: `call_tool -> orch_discover`
+- default: `call_tool -> flywheel_discover`
 - if a goal was supplied and the product wants explicit choice UX: `present_choices` between discovery and direct goal selection flow
 
 Payload-size note:
 - Do not duplicate `RepoProfile.structure`, README text, or key file contents in structured output initially.
 
-### 2. `orch_discover`
+### 2. `flywheel_discover`
 
 `data.kind` values:
 - `ideas_registered`
@@ -255,14 +255,14 @@ Recommended payload for `ideas_registered`:
 - `artifact?: { attempted: boolean; written: boolean; path?: string }`
 
 Recommended `nextStep`:
-- `present_choices` with one option per idea, each wiring to `orch_select`
+- `present_choices` with one option per idea, each wiring to `flywheel_select`
 
 Error codes to normalize:
 - `missing_repo_profile`
 - `missing_ideas`
 - `invalid_ideas`
 
-### 3. `orch_select`
+### 3. `flywheel_select`
 
 `data.kind` values:
 - `goal_selected`
@@ -278,7 +278,7 @@ Recommended payload for `goal_selected`:
     recommendedFor: string[];
     nextAction: {
       type: "call_tool" | "run_cli";
-      tool?: "orch_plan" | "orch_approve_beads";
+      tool?: "flywheel_plan" | "flywheel_approve_beads";
       args?: Record<string, unknown>;
     };
   }>`
@@ -293,7 +293,7 @@ Error codes:
 Ergonomic rule:
 - Include structured workflow options and next actions, but keep the rich terminal prose menu intact.
 
-### 4. `orch_plan`
+### 4. `flywheel_plan`
 
 `data.kind` values:
 - `plan_prompt`
@@ -338,7 +338,7 @@ Recommended payload for `plan_registered`:
 - `stats: { chars: number; lines: number }`
 
 Recommended `nextStep`:
-- `call_tool -> orch_approve_beads`
+- `call_tool -> flywheel_approve_beads`
 
 Error codes:
 - `missing_selected_goal`
@@ -348,7 +348,7 @@ Error codes:
 Critical migration rule:
 - Keep the current deep-plan JSON text block for one compatibility cycle if needed, but make `structuredContent.data.planAgents` and related fields canonical immediately.
 
-### 5. `orch_approve_beads`
+### 5. `flywheel_approve_beads`
 
 This tool should carry a second discriminator because it has two distinct review domains.
 
@@ -418,7 +418,7 @@ Payload-size rule:
 - Use previews/summaries for bead descriptions in review menus.
 - Include full parallel `agentConfigs` when machine execution depends on them.
 
-### 6. `orch_review`
+### 6. `flywheel_review`
 
 `data.kind` values:
 - `review_agents_requested`
@@ -426,7 +426,7 @@ Payload-size rule:
 - `parallel_next_beads`
 - `review_gate`
 - `gate_passed`
-- `orchestration_complete`
+- `flywheel_complete`
 - `phase_regression`
 - `already_complete`
 - `error`
@@ -483,7 +483,7 @@ Critical migration rule:
 1. Expand `McpToolResult` in `mcp-server/src/types.ts`
    - add generic `structuredContent?`
 
-2. Add shared orchestration primitives
+2. Add shared flywheel primitives
    - `ToolNextStep`
    - `OrchestrationContractBase`
    - `OrchestrationToolError`
@@ -529,14 +529,14 @@ Changes:
 - add builders for success/error/next-step payloads
 
 Exit criteria:
-- one simple orchestration tool can return `structuredContent` through the full server boundary unchanged
+- one simple flywheel tool can return `structuredContent` through the full server boundary unchanged
 
 ### Phase 2: low-risk workflow tools
 
 Recommended order:
-1. `orch_select`
-2. `orch_discover`
-3. `orch_profile`
+1. `flywheel_select`
+2. `flywheel_discover`
+3. `flywheel_profile`
 
 Why:
 - simpler flows
@@ -559,7 +559,7 @@ Why these next:
 - they already expose implicit contracts in stringified JSON
 
 Exit criteria:
-- `orch_plan` deep mode and `orch_review` hit-me can be consumed entirely from `structuredContent`
+- `flywheel_plan` deep mode and `flywheel_review` hit-me can be consumed entirely from `structuredContent`
 - compatibility JSON text may remain temporarily, but is no longer primary
 
 ### Phase 4: structure the complex approval flow
@@ -603,10 +603,10 @@ Goals:
 ### `mcp-server/src/types.ts`
 - expand `McpToolResult`
 - add shared result/error/next-step primitives
-- add or re-export orchestration structured contract families
+- add or re-export flywheel structured contract families
 
 ### `mcp-server/src/tool-contracts.ts` (recommended if needed)
-- hold per-tool contract unions and shared orchestration contract helpers if `types.ts` becomes too crowded
+- hold per-tool contract unions and shared flywheel contract helpers if `types.ts` becomes too crowded
 
 ### `mcp-server/src/tools/shared.ts`
 - add result-builder helpers
@@ -696,28 +696,28 @@ High-value assertions:
 ### 4. Add semantic equivalence tests for former JSON-in-text branches
 
 For:
-- `orch_plan` deep mode
-- `orch_review` hit-me
-- `orch_approve_beads` parallel launch
-- `orch_review` parallel next-beads
+- `flywheel_plan` deep mode
+- `flywheel_review` hit-me
+- `flywheel_approve_beads` parallel launch
+- `flywheel_review` parallel next-beads
 
 Assert that all machine-critical data is available from `structuredContent` alone, and that any retained text JSON blocks are semantically aligned.
 
 ### 5. Add structured error tests
 
 Cover at least:
-- `orch_discover` without profile / without usable ideas
-- `orch_select` invalid goal
-- `orch_plan` without selected goal / missing plan file
-- `orch_approve_beads` missing goal / CLI failures / invalid advanced action
-- `orch_review` missing bead / parse failures / unknown action
+- `flywheel_discover` without profile / without usable ideas
+- `flywheel_select` invalid goal
+- `flywheel_plan` without selected goal / missing plan file
+- `flywheel_approve_beads` missing goal / CLI failures / invalid advanced action
+- `flywheel_review` missing bead / parse failures / unknown action
 
 ### 6. Add payload-size checks for representative large branches
 
 Measure approximate JSON size for:
-- `orch_plan` deep mode
-- `orch_review` hit-me
-- `orch_approve_beads` parallel implementation
+- `flywheel_plan` deep mode
+- `flywheel_review` hit-me
+- `flywheel_approve_beads` parallel implementation
 
 The goal is not arbitrary micro-optimization, but early detection of accidental payload blow-up.
 
@@ -757,8 +757,8 @@ If `outputSchema` is supported by the installed MCP SDK typing/runtime, attach i
 1. All six target `orch_*` tools return `structuredContent` on all major success branches.
 2. All explicit error branches return structured errors in addition to `isError: true`.
 3. Every structured result uses the shared envelope with `tool`, `version`, `status`, `phase`, and `data.kind`.
-4. `orch_plan` deep mode and `orch_review` hit-me no longer require text scraping for machine consumers.
-5. `orch_approve_beads` and `orch_review` complex branch families are machine-distinguishable without prose inspection.
+4. `flywheel_plan` deep mode and `flywheel_review` hit-me no longer require text scraping for machine consumers.
+5. `flywheel_approve_beads` and `flywheel_review` complex branch families are machine-distinguishable without prose inspection.
 6. `nextStep` is populated for every branch that expects a follow-up action.
 7. Existing human-readable `content` remains present and compatibility-safe.
 8. Payload-size-sensitive branches are intentionally compact or explicitly measured and guarded.
@@ -776,7 +776,7 @@ Mitigation:
 ### Risk 2: weak unions in high-branch tools
 Mitigation:
 - require `data.kind` discriminants everywhere
-- split `orch_approve_beads` by `approvalTarget`
+- split `flywheel_approve_beads` by `approvalTarget`
 - cover representative branches explicitly in tests
 
 ### Risk 3: payload-size blow-up
@@ -839,7 +839,7 @@ Rationale:
 
 ## Definition of done
 
-The rollout is done when a machine consumer can call any of the six orchestration tools and, from `structuredContent` alone, reliably determine:
+The rollout is done when a machine consumer can call any of the six flywheel tools and, from `structuredContent` alone, reliably determine:
 - what happened
 - whether it succeeded
 - what phase the workflow is now in

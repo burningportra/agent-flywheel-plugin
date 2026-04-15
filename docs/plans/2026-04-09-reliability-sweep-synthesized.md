@@ -16,7 +16,7 @@
 - `mcp-server/src/version.ts` -- NEW file (~5 lines)
 - `mcp-server/src/server.ts` -- line 18: replace hardcoded `"2.0.0"` with import
 - `mcp-server/src/state.ts` -- line 6: remove hardcoded `VERSION`, import from `version.ts`
-- `mcp-server/src/checkpoint.ts` -- lines 139-150: remove `orchestratorVersion` parameter, import `VERSION` directly
+- `mcp-server/src/checkpoint.ts` -- lines 139-150: remove `flywheelVersion` parameter, import `VERSION` directly
 - `mcp-server/src/__tests__/checkpoint.test.ts` -- lines 122, 129, 137, 144, 212, 232: remove version arg from `writeCheckpoint` calls
 
 **Approach (best of Ergonomics + Correctness):**
@@ -27,7 +27,7 @@ const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 export const VERSION: string = pkg.version;
 ```
-Import `VERSION` in `server.ts`, `state.ts`, and `checkpoint.ts`. Remove the `orchestratorVersion` parameter from `writeCheckpoint` entirely (Ergonomics approach) -- callers should not need to pass what is a module-level constant.
+Import `VERSION` in `server.ts`, `state.ts`, and `checkpoint.ts`. Remove the `flywheelVersion` parameter from `writeCheckpoint` entirely (Ergonomics approach) -- callers should not need to pass what is a module-level constant.
 
 **Acceptance criteria:**
 - `server.ts` reports the correct version from `package.json` to MCP SDK

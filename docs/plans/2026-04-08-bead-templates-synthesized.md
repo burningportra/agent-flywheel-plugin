@@ -54,8 +54,8 @@ This plan adds **5 new templates**, a **startup integrity validator**, and targe
 | Candidate | Reason for Deferral |
 |---|---|
 | `add-migration` | Too project-specific; migration tooling varies widely. Custom descriptions serve better. |
-| `upgrade-dependency` | Low frequency per orchestration session; semver bump shape is simple enough for custom descriptions. |
-| `add-cli-command` | This orchestrator's CLI commands are a specialized concern; a generic CLI template wouldn't generalize. |
+| `upgrade-dependency` | Low frequency per flywheel session; semver bump shape is simple enough for custom descriptions. |
+| `add-cli-command` | This agent-flywheel's CLI commands are a specialized concern; a generic CLI template wouldn't generalize. |
 | `add-type-definitions` | Type-only work is usually part of a broader feature/refactor bead, not standalone. |
 | `extract-module` | Overlaps 80%+ with `refactor-module`; the different acceptance criteria don't justify a separate template. |
 | `security-hardening` | Overlaps with `fix-bug`; a dedicated template risks false confidence about security completeness. |
@@ -287,7 +287,7 @@ Wrap all 3 existing templates with `defineTemplate()`.
 - **label:** `Add integration`
 - **summary:** `Connect two subsystems or services with error handling at the boundary.`
 - **Placeholders (all required):**
-  - `sourceSystem` -- System or module initiating the integration. Example: `"orchestrator planning phase"`
+  - `sourceSystem` -- System or module initiating the integration. Example: `"flywheel planning phase"`
   - `targetSystem` -- System or module being integrated with. Example: `"MCP tool server"`
   - `integrationPurpose` -- Why these systems need to communicate. Example: `"pass approved beads to the tool server for agent execution"`
   - `interfaceContract` -- Expected interface or data contract. Example: `"BeadPayload JSON with id, description, and acceptanceCriteria fields"`
@@ -478,7 +478,7 @@ These were proposed in the robustness plan but deferred for complexity/value rea
 
 ### When to Create a Template vs Use Custom Descriptions
 
-- **Create a template** when the bead shape occurs 3+ times per typical orchestration session and has consistent structural requirements
+- **Create a template** when the bead shape occurs 3+ times per typical flywheel session and has consistent structural requirements
 - **Use custom descriptions** for rare, project-specific, or highly variable work
 - **Do not** create a template that would be too vague to provide meaningful structure (e.g., a generic "add feature" template)
 

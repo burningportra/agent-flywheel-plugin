@@ -11,7 +11,7 @@ Two reliability gaps:
 
 **Gap A — Logging:** `console.warn` and `console.error` are already stderr-safe (no stdout corruption risk), but logging is ad hoc across 8 files with no consistent format, log levels, or context tagging. A lightweight structured logger centralizes output format, enables log-level filtering via env var, and makes CI log analysis tractable.
 
-**Gap B — SwarmTender:** `SwarmTender` detects stuck agents and exposes `nudgeStuckAgent` / `releaseStaleReservations` helpers, but escalation is entirely manual — the caller must wire it up. In practice it never happens automatically. Adding an auto-escalation state machine (nudge → wait → kill) + completion summary eliminates the #1 manual intervention in the orchestrate skill.
+**Gap B — SwarmTender:** `SwarmTender` detects stuck agents and exposes `nudgeStuckAgent` / `releaseStaleReservations` helpers, but escalation is entirely manual — the caller must wire it up. In practice it never happens automatically. Adding an auto-escalation state machine (nudge → wait → kill) + completion summary eliminates the #1 manual intervention in the flywheel skill.
 
 ---
 
@@ -88,7 +88,7 @@ stuck detected
 
 When the last agent is removed (`agents.size === 0`), emit `onSwarmComplete`.
 
-**Auto-nudge is opt-in:** The auto-escalation only activates when `options.orchestratorAgentName` is set. Without it, stuck detection still fires `onStuck` as before (backward compatible).
+**Auto-nudge is opt-in:** The auto-escalation only activates when `options.flywheelAgentName` is set. Without it, stuck detection still fires `onStuck` as before (backward compatible).
 
 ---
 
@@ -118,7 +118,7 @@ Add `nudgesSent`, `lastNudgedAt` to `AgentStatus`. Add new config fields + callb
 
 Write unit tests for:
 - Logger: level filtering, structured output format, context tagging
-- SwarmTender: escalation state machine transitions (stuck → nudge → kill), completion summary, backward compat without orchestratorAgentName
+- SwarmTender: escalation state machine transitions (stuck → nudge → kill), completion summary, backward compat without flywheelAgentName
 
 ### Phase 5 — Build + verify (T5)
 **Depends on:** T1, T2, T3, T4
@@ -160,8 +160,8 @@ function log(level: Level, ctx: string, msg: string, fields?: Record<string, unk
 
 Replace:
 ```typescript
-console.error(`[claude-orchestrator] Tool ${name} error:`, err);
-console.error("[claude-orchestrator] MCP server started");
+console.error(`[agent-flywheel] Tool ${name} error:`, err);
+console.error("[agent-flywheel] MCP server started");
 ```
 With:
 ```typescript
@@ -228,7 +228,7 @@ Replace 1× `console.warn` with `log.warn(...)` using ctx `"bead-templates"`.
 - Test: stuck agent → nudge sent after stuckThreshold
 - Test: stuck agent → second nudge sent after nudgeDelayMs cooldown
 - Test: stuck agent → kill fired after maxNudges exceeded + killWaitMs elapsed
-- Test: no auto-escalation when `orchestratorAgentName` is absent (backward compat)
+- Test: no auto-escalation when `flywheelAgentName` is absent (backward compat)
 - Test: `onSwarmComplete` fires when last agent removed
 - Test: `removeAgent` on non-stuck agent still triggers completion
 
@@ -243,7 +243,7 @@ Replace 1× `console.warn` with `log.warn(...)` using ctx `"bead-templates"`.
 - [ ] `AgentStatus` has `nudgesSent` and `lastNudgedAt` fields
 - [ ] `TenderConfig` has `nudgeDelayMs`, `maxNudges`, `killWaitMs` with documented defaults
 - [ ] `SwarmTenderOptions` has `onKill` and `onSwarmComplete` callbacks
-- [ ] Auto-escalation only activates when `orchestratorAgentName` is set (backward compat)
+- [ ] Auto-escalation only activates when `flywheelAgentName` is set (backward compat)
 - [ ] `onSwarmComplete` fires when agent count drops to 0
 
 ---
@@ -272,6 +272,6 @@ Tasks:
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
 | Logger output breaks existing tests that assert on console | Low | All existing tests mock console or don't assert on it; logger uses `process.stderr.write` |
-| Tender auto-kill prematurely kills slow-but-legitimate agents | Medium | Default `killWaitMs=120_000` (2 min after 2 nudges) gives 5+ min total grace; opt-in via `orchestratorAgentName` |
+| Tender auto-kill prematurely kills slow-but-legitimate agents | Medium | Default `killWaitMs=120_000` (2 min after 2 nudges) gives 5+ min total grace; opt-in via `flywheelAgentName` |
 | Agent Mail unavailable when nudge fires | Low | `nudgeStuckAgent` already handles failure gracefully (returns void) |
 | TypeScript strict mode rejects new optional fields | Low | Initialize `nudgesSent: 0, lastNudgedAt: 0` in constructor alongside existing fields |

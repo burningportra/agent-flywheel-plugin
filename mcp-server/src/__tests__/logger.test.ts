@@ -25,7 +25,7 @@ function parseLines(lines: string[]): Record<string, unknown>[] {
 
 describe('createLogger — level filtering', () => {
   it('suppresses debug and info at default level (warn)', () => {
-    // Default env (no ORCH_LOG_LEVEL set) — module loaded at test startup with warn
+    // Default env (no FW_LOG_LEVEL set) — module loaded at test startup with warn
     const log = createLogger('test');
     const lines = captureStderr(() => {
       log.debug('debug msg');
@@ -40,9 +40,9 @@ describe('createLogger — level filtering', () => {
     expect(parsed[1].level).toBe('error');
   });
 
-  it('emits all levels when ORCH_LOG_LEVEL=debug', async () => {
+  it('emits all levels when FW_LOG_LEVEL=debug', async () => {
     vi.resetModules();
-    process.env.ORCH_LOG_LEVEL = 'debug';
+    process.env.FW_LOG_LEVEL = 'debug';
     try {
       // @ts-expect-error Vitest supports query-string imports for fresh module eval
       const { createLogger: freshCreateLogger } = await import('../logger.js?debug');
@@ -57,13 +57,13 @@ describe('createLogger — level filtering', () => {
       const levels = parseLines(lines).map((l) => l.level);
       expect(levels).toEqual(['debug', 'info', 'warn', 'error']);
     } finally {
-      delete process.env.ORCH_LOG_LEVEL;
+      delete process.env.FW_LOG_LEVEL;
     }
   });
 
-  it('emits only error when ORCH_LOG_LEVEL=error', async () => {
+  it('emits only error when FW_LOG_LEVEL=error', async () => {
     vi.resetModules();
-    process.env.ORCH_LOG_LEVEL = 'error';
+    process.env.FW_LOG_LEVEL = 'error';
     try {
       // @ts-expect-error Vitest supports query-string imports for fresh module eval
       const { createLogger: freshCreateLogger } = await import('../logger.js?error');
@@ -77,13 +77,13 @@ describe('createLogger — level filtering', () => {
       expect(lines).toHaveLength(1);
       expect(parseLines(lines)[0].level).toBe('error');
     } finally {
-      delete process.env.ORCH_LOG_LEVEL;
+      delete process.env.FW_LOG_LEVEL;
     }
   });
 
-  it('falls back to warn for unknown ORCH_LOG_LEVEL', async () => {
+  it('falls back to warn for unknown FW_LOG_LEVEL', async () => {
     vi.resetModules();
-    process.env.ORCH_LOG_LEVEL = 'verbose';
+    process.env.FW_LOG_LEVEL = 'verbose';
     try {
       // @ts-expect-error Vitest supports query-string imports for fresh module eval
       const { createLogger: freshCreateLogger } = await import('../logger.js?verbose');
@@ -104,7 +104,7 @@ describe('createLogger — level filtering', () => {
       expect(logLines).toHaveLength(1);
       expect(parseLines(logLines)[0].level).toBe('warn');
     } finally {
-      delete process.env.ORCH_LOG_LEVEL;
+      delete process.env.FW_LOG_LEVEL;
     }
   });
 });
@@ -112,19 +112,19 @@ describe('createLogger — level filtering', () => {
 // ─── Output format ───────────────────────────────────────────────
 
 describe('createLogger — output format', () => {
-  // These tests use the default module (warn level). We set ORCH_LOG_LEVEL=debug
+  // These tests use the default module (warn level). We set FW_LOG_LEVEL=debug
   // and reload so info/debug calls are visible too.
   let freshCreateLogger: typeof createLogger;
 
   beforeEach(async () => {
     vi.resetModules();
-    process.env.ORCH_LOG_LEVEL = 'debug';
+    process.env.FW_LOG_LEVEL = 'debug';
     // @ts-expect-error Vitest supports query-string imports for fresh module eval
     const mod = await import('../logger.js?format');
     freshCreateLogger = mod.createLogger;
   });
 
-  afterEach(() => { delete process.env.ORCH_LOG_LEVEL; });
+  afterEach(() => { delete process.env.FW_LOG_LEVEL; });
 
   it('writes valid JSON to stderr', () => {
     const log = freshCreateLogger('myctx');

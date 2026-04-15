@@ -3,13 +3,13 @@
 **Author:** PurpleWolf (correctness perspective, deep-plan)
 **Date:** 2026-04-15
 **Target:** `scripts/lint-skill.ts` + Vitest suite + GitHub Actions CI
-**Repo:** claude-orchestrator v2.9.0 (TypeScript/ESM/NodeNext, Vitest 2.x, strict TS)
+**Repo:** agent-flywheel v2.9.0 (TypeScript/ESM/NodeNext, Vitest 2.x, strict TS)
 
 ---
 
 ## 0. Goals and non-goals
 
-**Goal:** A provably-correct linter that parses `skills/orchestrate/SKILL.md` (1438 lines, ~28 `AskUserQuestion` call sites) and enforces:
+**Goal:** A provably-correct linter that parses `skills/flywheel/SKILL.md` (1438 lines, ~28 `AskUserQuestion` call sites) and enforces:
 
 1. Every `AskUserQuestion` call site has 2–4 options, each with a `description`.
 2. Every `/slash-name` reference resolves to an installed skill.
@@ -19,10 +19,10 @@
 
 **Non-goals:**
 - Markdown prettification, typo checking, or spell-checking.
-- Validating non-orchestrate skills (out of initial scope; generalisable later).
+- Validating non-flywheel skills (out of initial scope; generalisable later).
 - Natural-language linting beyond hard red-flag phrases.
 
-**Correctness contract:** Zero false positives on the existing `skills/orchestrate/SKILL.md` at HEAD after one round of allowlist curation (see §9). All rule logic is deterministic, idempotent, and side-effect-free.
+**Correctness contract:** Zero false positives on the existing `skills/flywheel/SKILL.md` at HEAD after one round of allowlist curation (see §9). All rule logic is deterministic, idempotent, and side-effect-free.
 
 ---
 
@@ -86,8 +86,8 @@ Add to `mcp-server/package.json` scripts:
 ```json
 {
   "scripts": {
-    "lint:skill": "tsx scripts/lint-skill.ts ../skills/orchestrate/SKILL.md",
-    "lint:skill:json": "tsx scripts/lint-skill.ts --json ../skills/orchestrate/SKILL.md",
+    "lint:skill": "tsx scripts/lint-skill.ts ../skills/flywheel/SKILL.md",
+    "lint:skill:json": "tsx scripts/lint-skill.ts --json ../skills/flywheel/SKILL.md",
     "test": "vitest run --passWithNoTests && npm run lint:skill"
   }
 }
@@ -134,7 +134,7 @@ Add `tsx` to `devDependencies` (no new runtime dep in the MCP server itself).
 Once the regex fires on `AskUserQuestion(`, the parser switches to a brace-balanced scanner:
 
 - Track `(`, `)`, `{`, `}`, `[`, `]` balance.
-- Honour string literals: `"..."`, `'...'`, and backtick (within JS-ish payload — the orchestrator SKILL uses JS-style argument syntax). Escape sequences: `\"`, `\'`, `\\`.
+- Honour string literals: `"..."`, `'...'`, and backtick (within JS-ish payload — the flywheel SKILL uses JS-style argument syntax). Escape sequences: `\"`, `\'`, `\\`.
 - The call ends when outer `(` is closed.
 - Capture the full text of the call + absolute line/col of opening and closing parens.
 
@@ -160,7 +160,7 @@ Additional exclusions:
 - HTTP methods: `GET /api/...` → skip when followed by another `/` within 80 chars on same line.
 - Anonymised examples in prose: wrapped in backticks with a leading `/` that looks like a command fragment are OK (we strip backticks then apply the exclusion list).
 
-The heuristic matches tokens like `/idea-wizard`, `/orchestrate-fix`, `/brainstorming` (these DO resolve to installed skills per the skill list in the system reminder) but avoids `/api/users`, `http://example.com`, and `~/.claude/plugins/foo`.
+The heuristic matches tokens like `/idea-wizard`, `/flywheel-fix`, `/brainstorming` (these DO resolve to installed skills per the skill list in the system reminder) but avoids `/api/users`, `http://example.com`, and `~/.claude/plugins/foo`.
 
 ---
 
@@ -218,7 +218,7 @@ export interface Rule {
 - **Hint:** nearest skill by Levenshtein distance ≤3. `"Did you mean /{nearest}?"`
 - **Source of truth:** see §5.
 - **Exemptions:**
-  - Explicit allowlist: `.lintskill-allowlist.json` → `knownExternalSlashes: ["/fast", "/clear", "/help", "/orchestrate", "/orchestrate-fix", ...]`. The allowlist ships with `/orchestrate-*` plus Claude Code built-ins; `/orchestrate-*` are local to this repo and not in `~/.claude/plugins/` but ARE in `skills/`.
+  - Explicit allowlist: `.lintskill-allowlist.json` → `knownExternalSlashes: ["/fast", "/clear", "/help", "/flywheel", "/flywheel-fix", ...]`. The allowlist ships with `/flywheel-*` plus Claude Code built-ins; `/flywheel-*` are local to this repo and not in `~/.claude/plugins/` but ARE in `skills/`.
   - Anything matching the local `skills/*/SKILL.md` set.
 
 ### PLACE001 — placeholder tags have a referent
@@ -285,7 +285,7 @@ Every source of FP identified and mitigated:
 Sanity-check pass (done mentally against the existing SKILL.md):
 - 28 `AskUserQuestion(` occurrences — all inside fenced `` ``` `` blocks with explicit `header` (≤12 chars looks OK by eye), 2–4 options each, all have descriptions. Expected pass count: 28/28 on AUQ001/AUQ002/AUQ003 after allowlist.
 - 5 `> **Hard rule**:` callouts — each followed within 10 lines by explicit guard text ("Do NOT", "Never") or an AUQ call. Expected pass: 5/5 on HARD001.
-- Slash refs count is dominated by `/orchestrate-*` variants (all in `commands/`, `skills/`) and specialist skills (`/idea-wizard`, `/ubs-workflow`, `/caam`, `/ui-polish`, `/docs-de-slopify`, `/brainstorming`, `/multi-model-triangulation`, `/xf`, `/orchestrate-research`, `/orchestrate-setup`, `/orchestrate-fix`, `/orchestrate-audit`, `/orchestrate-drift-check`) — all present in the installed skill list (visible in session system reminders). Expected pass: 100%.
+- Slash refs count is dominated by `/flywheel-*` variants (all in `commands/`, `skills/`) and specialist skills (`/idea-wizard`, `/ubs-workflow`, `/caam`, `/ui-polish`, `/docs-de-slopify`, `/brainstorming`, `/multi-model-triangulation`, `/xf`, `/flywheel-research`, `/flywheel-setup`, `/flywheel-fix`, `/flywheel-audit`, `/flywheel-drift-check`) — all present in the installed skill list (visible in session system reminders). Expected pass: 100%.
 
 ---
 
@@ -295,7 +295,7 @@ Sanity-check pass (done mentally against the existing SKILL.md):
 
 ### 5.1 Resolver sources (in priority order)
 
-1. **Repo-local skills:** `skills/*/SKILL.md` (authoritative for this repo's orchestrate-family skills). Maps directory name to slash name (`skills/orchestrate-fix/SKILL.md` → `/orchestrate-fix`).
+1. **Repo-local skills:** `skills/*/SKILL.md` (authoritative for this repo's flywheel-family skills). Maps directory name to slash name (`skills/flywheel-fix/SKILL.md` → `/flywheel-fix`).
 2. **User-installed plugin skills:** `~/.claude/plugins/*/skills/*/SKILL.md` glob. Each directory name under `skills/` becomes `/{dirname}`. A SKILL.md's frontmatter `name:` field, if present, takes precedence over the directory name.
 3. **Allowlist file:** `.lintskill-allowlist.json` key `knownExternalSlashes`. For skills you know exist but aren't discoverable locally (e.g. Claude Code CLI built-ins like `/fast`, `/clear`, `/help`).
 
@@ -307,7 +307,7 @@ Sanity-check pass (done mentally against the existing SKILL.md):
 
 **Why not MCP lookup?** The linter should run with zero network / zero MCP server dependency — it's a static check.
 
-**Why include `~/.claude/plugins`?** Because the orchestrate skill references user-wide skills (`/idea-wizard`, `/brainstorming`, `/xf`, etc.) that live in the plugins directory, not this repo. The system-reminder skill catalog lists 200+ of these.
+**Why include `~/.claude/plugins`?** Because the flywheel skill references user-wide skills (`/idea-wizard`, `/brainstorming`, `/xf`, etc.) that live in the plugins directory, not this repo. The system-reminder skill catalog lists 200+ of these.
 
 **CI override:** In GitHub Actions, `~/.claude/plugins` won't exist. The CI job runs with `LINT_SKILL_PLUGIN_ROOT=/tmp/fake-plugins` and a committed `.lintskill-allowlist.json` that covers all externally-referenced slashes. The allowlist is the CI source of truth; local devs get extra signal from their real plugin dir.
 
@@ -338,12 +338,12 @@ Uses `fs.readdir` recursively (no new glob dep). Timeout enforced via `AbortSign
 ### 6.1 Terminal (default)
 
 ```
-skills/orchestrate/SKILL.md:36:3  error  AUQ003  Question header "Plan input" OK, but header missing on question at line 56.
-skills/orchestrate/SKILL.md:56:3  warn   AUQ004  Question "Goal input": multiSelect not explicitly set.
-skills/orchestrate/SKILL.md:340:76 error SLASH001 Slash reference "/idea-wizrd" not resolved. Did you mean /idea-wizard?
-skills/orchestrate/SKILL.md:115:9 error  IMPL001 Implicit decision phrase "wait for confirmation" - use AskUserQuestion.
+skills/flywheel/SKILL.md:36:3  error  AUQ003  Question header "Plan input" OK, but header missing on question at line 56.
+skills/flywheel/SKILL.md:56:3  warn   AUQ004  Question "Goal input": multiSelect not explicitly set.
+skills/flywheel/SKILL.md:340:76 error SLASH001 Slash reference "/idea-wizrd" not resolved. Did you mean /idea-wizard?
+skills/flywheel/SKILL.md:115:9 error  IMPL001 Implicit decision phrase "wait for confirmation" - use AskUserQuestion.
 
-  3 errors, 1 warning in skills/orchestrate/SKILL.md
+  3 errors, 1 warning in skills/flywheel/SKILL.md
 ```
 
 Colour via ANSI escapes gated on `process.stdout.isTTY`; CI gets plain output.
@@ -361,7 +361,7 @@ Stable schema, versioned:
     {
       "ruleId": "AUQ003",
       "severity": "error",
-      "file": "skills/orchestrate/SKILL.md",
+      "file": "skills/flywheel/SKILL.md",
       "line": 36,
       "column": 3,
       "endLine": 36,
@@ -504,7 +504,7 @@ Location: `mcp-server/src/__tests__/lint/fixtures/`.
 | `auq003-header-emoji.md` | `header: "Plan ✅ OK"` (counting test) | 0 (under 12 chars by `Array.from`) |
 | `auq004-implicit.md` | No `multiSelect` | 1 × AUQ004 |
 | `slash001-typo.md` | `/idea-wizrd` reference | 1 × SLASH001 with suggestion |
-| `slash001-inside-url.md` | `https://example.com/orchestrate` | 0 (URL exemption) |
+| `slash001-inside-url.md` | `https://example.com/flywheel` | 0 (URL exemption) |
 | `slash001-http-path.md` | `GET /api/users` | 0 (path exemption) |
 | `place001-orphan.md` | `<FOO>` placeholder, no referent | 1 × PLACE001 |
 | `place001-html-tag.md` | `<br>`, `<details>` | 0 (HTML exemption) |
@@ -514,7 +514,7 @@ Location: `mcp-server/src/__tests__/lint/fixtures/`.
 | `impl001-exempt-ur1.md` | Phrase inside Universal Rule 1 callout | 0 |
 | `impl001-exempt-followed.md` | Phrase followed by AUQ within 20 lines | 0 |
 | `mixed-realistic.md` | 200-line file, 3 AUQ calls, 2 hard rules, ~10 slash refs | Baseline list (snapshot) |
-| `live-orchestrate.md` | Copy of actual `skills/orchestrate/SKILL.md` | Baseline from allowlist (see §9) — must be 0 after allowlist applied |
+| `live-flywheel.md` | Copy of actual `skills/flywheel/SKILL.md` | Baseline from allowlist (see §9) — must be 0 after allowlist applied |
 
 ### 8.3 Test layout
 
@@ -550,13 +550,13 @@ Not a v1 blocker; placed in a separate bead (`T9`).
 
 ### 8.5 Snapshot test for the live file
 
-One snapshot test runs `lint` against the actual `skills/orchestrate/SKILL.md` and asserts zero findings (after allowlist). This is the production canary — it catches regressions the instant someone edits SKILL.md in a way that violates a rule.
+One snapshot test runs `lint` against the actual `skills/flywheel/SKILL.md` and asserts zero findings (after allowlist). This is the production canary — it catches regressions the instant someone edits SKILL.md in a way that violates a rule.
 
 ---
 
 ## 9. Incremental adoption (rollout)
 
-**Risk:** Running the linter against the existing `skills/orchestrate/SKILL.md` for the first time might surface legitimate historical findings. We need a path that (a) doesn't block day 1 merges and (b) doesn't let new drift accumulate.
+**Risk:** Running the linter against the existing `skills/flywheel/SKILL.md` for the first time might surface legitimate historical findings. We need a path that (a) doesn't block day 1 merges and (b) doesn't let new drift accumulate.
 
 ### 9.1 Baseline + allowlist strategy
 
@@ -568,13 +568,13 @@ One snapshot test runs `lint` against the actual `skills/orchestrate/SKILL.md` a
      "createdAt": "2026-04-15",
      "knownExternalSlashes": [
        "/fast", "/clear", "/help",
-       "/orchestrate", "/orchestrate-fix", "/orchestrate-audit",
-       "/orchestrate-research", "/orchestrate-setup", "/orchestrate-drift-check",
+       "/flywheel", "/flywheel-fix", "/flywheel-audit",
+       "/flywheel-research", "/flywheel-setup", "/flywheel-drift-check",
        "/idea-wizard", "/brainstorming", "/ubs-workflow", "/caam",
        "/ui-polish", "/docs-de-slopify", "/multi-model-triangulation", "/xf"
      ],
      "acceptedFindings": [
-       { "file": "skills/orchestrate/SKILL.md", "ruleId": "HARD001", "line": 745, "reason": "Nested hard rule — manually verified" }
+       { "file": "skills/flywheel/SKILL.md", "ruleId": "HARD001", "line": 745, "reason": "Nested hard rule — manually verified" }
      ]
    }
    ```
@@ -650,8 +650,8 @@ Format: each bead has `id`, `title`, `depends_on: [ids]`, `files touched`, `acce
 
 ### T10 — Live-file snapshot test
 - **depends_on:** [T8]
-- **files:** `mcp-server/src/__tests__/lint/live-orchestrate.test.ts`.
-- **acceptance:** asserts lint against real `skills/orchestrate/SKILL.md` returns 0 errors. Regressions caught by unit test, not CI artifact.
+- **files:** `mcp-server/src/__tests__/lint/live-flywheel.test.ts`.
+- **acceptance:** asserts lint against real `skills/flywheel/SKILL.md` returns 0 errors. Regressions caught by unit test, not CI artifact.
 
 ### T11 (optional, follow-up) — Property tests with fast-check
 - **depends_on:** [T2, T4]

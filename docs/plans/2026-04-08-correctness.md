@@ -35,7 +35,7 @@ The critical issue is `profileRepo` at line 13: it uses `Promise.all` to run `co
 
 ### AGENTS.md: Missing Sub-Agent Guidance
 
-No `AGENTS.md` file exists at the project root. Sub-agents spawned by the orchestrator (implementation agents, review agents, audit agents) currently receive no project-level guidance about:
+No `AGENTS.md` file exists at the project root. Sub-agents spawned by the agent-flywheel (implementation agents, review agents, audit agents) currently receive no project-level guidance about:
 - Build commands
 - TypeScript/NodeNext constraints
 - Which directories are generated (never edit)
@@ -283,7 +283,7 @@ Both `collectCommits` (line 89: `if (result.code !== 0) return []`) and `collect
 
 ### T5: Create AGENTS.md
 
-**File:** `/Volumes/1tb/Projects/claude-orchestrator/AGENTS.md` (new file)
+**File:** `/Volumes/1tb/Projects/agent-flywheel/AGENTS.md` (new file)
 
 **What:** Create the `AGENTS.md` file at the project root with sub-agent guidance.
 
@@ -324,7 +324,7 @@ No test suite configured yet. Verify changes by running the build command above.
 ## Project Structure
 
 ```
-├── commands/*.md          — Natural language orchestrator commands
+├── commands/*.md          — Natural language flywheel commands
 ├── skills/                — Skills injected into agent system prompts
 ├── hooks/hooks.json       — Session lifecycle hooks
 ├── mcp-server/src/        — TypeScript MCP server source
@@ -336,7 +336,7 @@ No test suite configured yet. Verify changes by running the build command above.
 │   ├── beads.ts           — br CLI wrapper
 │   └── tools/             — Individual MCP tool implementations
 ├── mcp-server/dist/       — Compiled output (do not edit)
-└── .pi-orchestrator/      — Runtime state directory
+└── .pi-flywheel/      — Runtime state directory
 ```
 
 ## Code Conventions

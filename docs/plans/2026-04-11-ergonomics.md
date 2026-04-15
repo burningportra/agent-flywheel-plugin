@@ -2,18 +2,18 @@
 
 Date: 2026-04-11
 Perspective: Ergonomics
-Scope: `orch_profile`, `orch_discover`, `orch_select`, `orch_plan`, `orch_approve_beads`, `orch_review`
+Scope: `flywheel_profile`, `flywheel_discover`, `flywheel_select`, `flywheel_plan`, `flywheel_approve_beads`, `flywheel_review`
 
 ## Executive Summary
 
-The current MCP tool surface is optimized for human-readable prose, but several `orch_*` tools also smuggle machine-readable meaning inside free-form text. In practice, hosts and agents must scrape markdown, parse ad hoc JSON embedded inside text blocks, or infer workflow state from phrasing like “NEXT: Call `orch_select`”. That is workable for Claude-in-the-loop, but ergonomically poor for:
+The current MCP tool surface is optimized for human-readable prose, but several `orch_*` tools also smuggle machine-readable meaning inside free-form text. In practice, hosts and agents must scrape markdown, parse ad hoc JSON embedded inside text blocks, or infer workflow state from phrasing like “NEXT: Call `flywheel_select`”. That is workable for Claude-in-the-loop, but ergonomically poor for:
 
 - host integrations that want to render buttons, workflow status, or next-step affordances
 - Hermes and other agents that should not have to prompt-scrape prose to decide what to do next
 - future test coverage that should assert stable contracts instead of brittle phrasing
 - migration to richer MCP clients that already understand `structuredContent`
 
-The plan is to add first-class, typed `structuredContent` contracts to every orchestration tool while preserving current text output compatibility. The ergonomic goal is not “replace prose with JSON”; it is “make the machine contract explicit while keeping the prose pleasant to read and safe for older clients.”
+The plan is to add first-class, typed `structuredContent` contracts to every flywheel tool while preserving current text output compatibility. The ergonomic goal is not “replace prose with JSON”; it is “make the machine contract explicit while keeping the prose pleasant to read and safe for older clients.”
 
 Recommended design:
 
@@ -29,7 +29,7 @@ Recommended design:
 3. Add helper builders in `mcp-server/src/tools/shared.ts` so each tool returns:
    - readable `content` prose for humans
    - predictable `structuredContent` for machines
-4. Preserve existing prose as much as possible, but stop encoding machine-only payloads solely inside text. In particular, `orch_plan` deep mode and `orch_review` hit-me mode should expose their JSON payloads as real `structuredContent`, with prose kept as a summary/instruction layer.
+4. Preserve existing prose as much as possible, but stop encoding machine-only payloads solely inside text. In particular, `flywheel_plan` deep mode and `flywheel_review` hit-me mode should expose their JSON payloads as real `structuredContent`, with prose kept as a summary/instruction layer.
 5. Update tests so they verify both backward-compatible text and stable structured contracts.
 
 This yields a far more discoverable API, a cleaner migration path for Hermes, less prompt scraping, and better host rendering opportunities without forcing a breaking change.
@@ -41,9 +41,9 @@ This yields a far more discoverable API, a cleaner migration path for Hermes, le
 From `mcp-server/src/server.ts` and the tool implementations:
 
 - `McpToolResult` currently only allows `content` and optional `isError`.
-- `orch_profile`, `orch_discover`, `orch_select`, and most `orch_approve_beads` branches return only markdown-ish text.
-- `orch_plan` deep mode returns `JSON.stringify(...)` inside `content[0].text` instead of actual `structuredContent`.
-- `orch_review` hit-me mode likewise returns `JSON.stringify(...)` inside text.
+- `flywheel_profile`, `flywheel_discover`, `flywheel_select`, and most `flywheel_approve_beads` branches return only markdown-ish text.
+- `flywheel_plan` deep mode returns `JSON.stringify(...)` inside `content[0].text` instead of actual `structuredContent`.
+- `flywheel_review` hit-me mode likewise returns `JSON.stringify(...)` inside text.
 - The server already lives in an MCP ecosystem where `structuredContent` is a normal concept; the repo even has agent-mail code/tests that explicitly read `result.structuredContent`.
 
 ### Ergonomic issues
@@ -92,7 +92,7 @@ From `mcp-server/src/server.ts` and the tool implementations:
    If a host or agent is expected to parse it, it belongs in `structuredContent`.
 
 5. Phase and next-step semantics should be first-class
-   The orchestration tools are a workflow engine. Workflow metadata should not be implicit.
+   The flywheel tools are a workflow engine. Workflow metadata should not be implicit.
 
 6. Keep prose readable and concise
    Text should summarize what happened and what the user/agent should do, not duplicate every field verbatim.
@@ -101,7 +101,7 @@ From `mcp-server/src/server.ts` and the tool implementations:
 
 ### Shared envelope
 
-Add a consistent result envelope for all orchestration tools:
+Add a consistent result envelope for all flywheel tools:
 
 ```ts
 interface ToolNextStep {
@@ -114,7 +114,7 @@ interface ToolNextStep {
     | "resume_phase"
     | "none";
   message: string;
-  tool?: "orch_profile" | "orch_discover" | "orch_select" | "orch_plan" | "orch_approve_beads" | "orch_review";
+  tool?: "flywheel_profile" | "flywheel_discover" | "flywheel_select" | "flywheel_plan" | "flywheel_approve_beads" | "flywheel_review";
   argsSchemaHint?: Record<string, unknown>;
   options?: Array<{
     id: string;
@@ -126,7 +126,7 @@ interface ToolNextStep {
 }
 
 interface OrchestrationStructuredContentBase {
-  tool: "orch_profile" | "orch_discover" | "orch_select" | "orch_plan" | "orch_approve_beads" | "orch_review";
+  tool: "flywheel_profile" | "flywheel_discover" | "flywheel_select" | "flywheel_plan" | "flywheel_approve_beads" | "flywheel_review";
   version: 1;
   status: "ok" | "error";
   phase: import("./types.js").OrchestratorPhase | "unknown";
@@ -164,7 +164,7 @@ This is especially important because current errors are prose-only and make host
 
 ## Proposed Tool Contracts
 
-### 1. `orch_profile`
+### 1. `flywheel_profile`
 
 Current ergonomic role:
 - returns repo summary
@@ -197,20 +197,20 @@ interface OrchProfileStructuredData {
 ```
 
 Recommended `nextStep` behavior:
-- if `args.goal` present: `present_choices` between `orch_select` and `orch_discover`
-- otherwise: `call_tool` -> `orch_discover`
+- if `args.goal` present: `present_choices` between `flywheel_select` and `flywheel_discover`
+- otherwise: `call_tool` -> `flywheel_discover`
 
 Ergonomic gains:
 - host can render repo cards and foundation warnings directly
 - Hermes can immediately decide whether discovery is required
 - no need to parse “Since a goal was provided...” prose
 
-### 2. `orch_discover`
+### 2. `flywheel_discover`
 
 Current ergonomic role:
 - stores ideas
 - tells agent to present ideas to user
-- then call `orch_select`
+- then call `flywheel_select`
 
 Proposed `data` shape:
 
@@ -232,14 +232,14 @@ interface OrchDiscoverStructuredData {
 
 Recommended `nextStep` behavior:
 - `present_choices` with `options` derived from ideas
-- each option can pre-wire `tool: "orch_select"` with `{ goal: idea.title }` or better `{ goal: idea.title/description string }`
+- each option can pre-wire `tool: "flywheel_select"` with `{ goal: idea.title }` or better `{ goal: idea.title/description string }`
 
 Ergonomic gains:
 - hosts can render idea pickers instead of dumping markdown only
 - Hermes can safely present structured candidate options to the user
 - scores, risks, synergies become directly available without text mining
 
-### 3. `orch_select`
+### 3. `flywheel_select`
 
 Current ergonomic role:
 - persists selected goal
@@ -259,7 +259,7 @@ interface OrchSelectStructuredData {
     recommendedFor: string[];
     nextAction: {
       type: "call_tool" | "run_cli";
-      tool?: "orch_plan";
+      tool?: "flywheel_plan";
       args?: Record<string, unknown>;
     };
   }>;
@@ -275,7 +275,7 @@ Ergonomic gains:
 - host can render buttons for standard plan / deep plan / direct beads
 - prose can stay exactly as helpful as today
 
-### 4. `orch_plan`
+### 4. `flywheel_plan`
 
 This tool needs the biggest ergonomic cleanup because it currently mixes three very different behaviors:
 
@@ -333,13 +333,13 @@ type OrchPlanStructuredData =
 Recommended `nextStep` behavior:
 - standard prompt branch: `generate_artifact`
 - deep plan branch: `spawn_agents`
-- plan registered branch: `call_tool` -> `orch_approve_beads`
+- plan registered branch: `call_tool` -> `flywheel_approve_beads`
 
 Critical ergonomic change:
 - stop putting the deep-plan payload only in `content[0].text`
 - keep a short prose summary, but expose `planAgents` and `synthesisPrompt` as `structuredContent`
 
-### 5. `orch_approve_beads`
+### 5. `flywheel_approve_beads`
 
 This tool has multiple sub-flows and should expose them clearly:
 - plan approval mode
@@ -406,7 +406,7 @@ Ergonomic gains:
 - bead quality and convergence can be displayed numerically without text parsing
 - advanced actions stop being hidden inside prose
 
-### 6. `orch_review`
+### 6. `flywheel_review`
 
 This tool currently has the other major structured-output problem:
 - hit-me returns JSON as stringified text
@@ -478,14 +478,14 @@ Naming matters because these contracts are intended for both humans and machines
 1. Use `kind` for response family discrimination
    Better than ambiguous booleans like `isDeepPlan` or `needsApproval`.
 
-2. Use `nextStep` for immediate orchestration guidance
+2. Use `nextStep` for immediate flywheel guidance
    Avoid `next`, `instruction`, or `actionHint` fragmentation.
 
 3. Use `availableActions` only for literal action menus accepted by the same tool
-   Example: `orch_approve_beads` should expose `availableActions` and `advancedActions`.
+   Example: `flywheel_approve_beads` should expose `availableActions` and `advancedActions`.
 
 4. Use `workflowOptions` for user-facing branches
-   Example: `orch_select` should expose plan-first / deep-plan / direct-to-beads as `workflowOptions`.
+   Example: `flywheel_select` should expose plan-first / deep-plan / direct-to-beads as `workflowOptions`.
 
 5. Use `stats` for quantitative metadata
    Example: chars, lines, counts.
@@ -520,7 +520,7 @@ export type McpToolResult = {
 };
 ```
 
-2. Add shared orchestration result helpers/types:
+2. Add shared flywheel result helpers/types:
 - `OrchestrationStructuredContentBase`
 - `ToolNextStep`
 - error contract type
@@ -709,7 +709,7 @@ Why these first:
 Acceptance checkpoint:
 - these tools all return stable `nextStep` contracts and preserve current prose readability
 
-### Phase 3: `orch_plan` contract split
+### Phase 3: `flywheel_plan` contract split
 
 Files:
 - `mcp-server/src/tools/plan.ts`
@@ -722,7 +722,7 @@ Why isolated:
 Acceptance checkpoint:
 - deep mode no longer requires `JSON.parse(result.content[0].text)` in tests or host logic
 
-### Phase 4: `orch_approve_beads` branching contract
+### Phase 4: `flywheel_approve_beads` branching contract
 
 Files:
 - `mcp-server/src/tools/approve.ts`
@@ -735,7 +735,7 @@ Why after plan:
 Acceptance checkpoint:
 - plan approval mode and bead approval mode are machine-distinguishable without prose inspection
 
-### Phase 5: `orch_review` and sentinel ergonomics
+### Phase 5: `flywheel_review` and sentinel ergonomics
 
 Files:
 - `mcp-server/src/tools/review.ts`
@@ -763,11 +763,11 @@ Acceptance checkpoint:
 
 #### `mcp-server/src/__tests__/tools/profile.test.ts`
 Add assertions for:
-- `structuredContent.tool === "orch_profile"`
+- `structuredContent.tool === "flywheel_profile"`
 - `structuredContent.status === "ok"`
 - `structuredContent.phase === "discovering"`
 - `structuredContent.data.repoProfile` present
-- `structuredContent.nextStep.tool` equals `orch_discover` or menu type if goal provided
+- `structuredContent.nextStep.tool` equals `flywheel_discover` or menu type if goal provided
 - error branches, if added, expose structured error codes
 
 #### `mcp-server/src/__tests__/tools/discover.test.ts`
@@ -835,17 +835,17 @@ High-priority changes:
 
 ### Functional acceptance
 
-1. All six orchestration tools return valid `structuredContent` on success.
-2. All six orchestration tools return structured errors on failure.
-3. `orch_plan` deep mode and `orch_review` hit-me mode no longer require parsing JSON out of `content[0].text`.
+1. All six flywheel tools return valid `structuredContent` on success.
+2. All six flywheel tools return structured errors on failure.
+3. `flywheel_plan` deep mode and `flywheel_review` hit-me mode no longer require parsing JSON out of `content[0].text`.
 4. `content` prose remains present and readable for all existing human-facing flows.
 5. `structuredContent.nextStep` is populated for all branches that expect a follow-up action.
 
 ### Ergonomic acceptance
 
 1. A host can render the next action without parsing prose.
-2. A host can render workflow choices for `orch_select` and `orch_approve_beads` directly from structured fields.
-3. Hermes can drive the orchestration workflow by reading `structuredContent` alone.
+2. A host can render workflow choices for `flywheel_select` and `flywheel_approve_beads` directly from structured fields.
+3. Hermes can drive the flywheel workflow by reading `structuredContent` alone.
 4. Copy edits to human prose do not break machine integrations.
 5. Contributors can understand each tool’s machine contract by reading exported types instead of reverse-engineering strings.
 
@@ -923,7 +923,7 @@ Mitigation:
 That would undercut the entire ergonomics goal.
 
 Mitigation:
-- explicitly prioritize `orch_plan` deep mode and `orch_review` hit-me mode in code review
+- explicitly prioritize `flywheel_plan` deep mode and `flywheel_review` hit-me mode in code review
 - add tests that consume `structuredContent` instead of parsing text
 
 ### Risk 6: sentinel-heavy review flow stays opaque
@@ -938,16 +938,16 @@ Mitigation:
 ## Recommended Implementation Order by ROI
 
 1. `types.ts` + `tools/shared.ts`
-2. `orch_plan`
-3. `orch_review`
-4. `orch_select`
-5. `orch_profile`
-6. `orch_discover`
-7. `orch_approve_beads`
+2. `flywheel_plan`
+3. `flywheel_review`
+4. `flywheel_select`
+5. `flywheel_profile`
+6. `flywheel_discover`
+7. `flywheel_approve_beads`
 8. tests and docs polish
 
 Why this order differs slightly from pure workflow order:
-- `orch_plan` and `orch_review` currently have the worst machine ergonomics because they serialize JSON into text
+- `flywheel_plan` and `flywheel_review` currently have the worst machine ergonomics because they serialize JSON into text
 - fixing those first delivers immediate Hermes value
 
 If minimizing code-review risk is more important than fastest payoff, use the earlier low-complexity-first phase order instead.
@@ -973,4 +973,4 @@ Implement structured contracts as an additive compatibility layer, not a prose r
 - stable next-step semantics for hosts and Hermes
 - no prompt scraping required for core workflow transitions
 
-If done with a shared envelope and disciplined helper functions, this change will make the orchestration tools substantially easier to discover, integrate, test, and automate, while keeping the current terminal-readable experience intact.
+If done with a shared envelope and disciplined helper functions, this change will make the flywheel tools substantially easier to discover, integrate, test, and automate, while keeping the current terminal-readable experience intact.

@@ -30,13 +30,13 @@ This defeats TypeScript's type system entirely. A malformed argument object (mis
 ```ts
 // Add after McpToolResult definition (~line 474)
 export type ToolName =
-  | "orch_profile"
-  | "orch_discover"
-  | "orch_select"
-  | "orch_plan"
-  | "orch_approve_beads"
-  | "orch_review"
-  | "orch_memory";
+  | "flywheel_profile"
+  | "flywheel_discover"
+  | "flywheel_select"
+  | "flywheel_plan"
+  | "flywheel_approve_beads"
+  | "flywheel_review"
+  | "flywheel_memory";
 
 export interface ProfileArgs { cwd: string; goal?: string }
 export interface DiscoverArgs { cwd: string; ideas: CandidateIdea[] }
@@ -47,13 +47,13 @@ export interface ReviewArgs { cwd: string; beadId: string; action: "hit-me" | "l
 export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store"; content?: string }
 
 export type ToolArgsMap = {
-  orch_profile: ProfileArgs;
-  orch_discover: DiscoverArgs;
-  orch_select: SelectArgs;
-  orch_plan: PlanArgs;
-  orch_approve_beads: ApproveArgs;
-  orch_review: ReviewArgs;
-  orch_memory: MemoryArgs;
+  flywheel_profile: ProfileArgs;
+  flywheel_discover: DiscoverArgs;
+  flywheel_select: SelectArgs;
+  flywheel_plan: PlanArgs;
+  flywheel_approve_beads: ApproveArgs;
+  flywheel_review: ReviewArgs;
+  flywheel_memory: MemoryArgs;
 };
 ```
 
@@ -74,7 +74,7 @@ const rawArgs = (request.params.arguments ?? {}) as Record<string, unknown>;
 const cwd = extractCwd(rawArgs);
 if (!cwd) { return { content: [...], isError: true }; }
 // Now dispatch with typed args:
-case "orch_profile":
+case "flywheel_profile":
   return await runProfile(ctx, rawArgs as ProfileArgs);
 ```
 
@@ -225,7 +225,7 @@ export const VERSION: string = pkg.version;
 // server.ts line 18
 import { VERSION } from './version.js';
 const server = new Server(
-  { name: "claude-orchestrator", version: VERSION },
+  { name: "agent-flywheel", version: VERSION },
   ...
 );
 

@@ -2,14 +2,14 @@
 
 Date: 2026-04-11
 Perspective: Robustness
-Scope: `orch_profile`, `orch_discover`, `orch_select`, `orch_plan`, `orch_approve_beads`, `orch_review`
+Scope: `flywheel_profile`, `flywheel_discover`, `flywheel_select`, `flywheel_plan`, `flywheel_approve_beads`, `flywheel_review`
 Code inspected: `mcp-server/src/server.ts`, `mcp-server/src/tools/{profile,discover,select,plan,approve,review,shared}.ts`, `mcp-server/src/types.ts`, `mcp-server/src/__tests__/tools/*`
 
 ---
 
 ## Executive Summary
 
-The current MCP server returns only text content from the orchestration tools. Several tools already embed machine-readable JSON inside text blobs (`orch_plan` deep mode, `orch_review` hit-me mode, parallel next-bead flows), but the contract is implicit, inconsistent, and fragile for hosts that want to consume tool output programmatically.
+The current MCP server returns only text content from the flywheel tools. Several tools already embed machine-readable JSON inside text blobs (`flywheel_plan` deep mode, `flywheel_review` hit-me mode, parallel next-bead flows), but the contract is implicit, inconsistent, and fragile for hosts that want to consume tool output programmatically.
 
 The safest rollout is not "replace text with JSON". It is:
 
@@ -42,16 +42,16 @@ This shape has no `structuredContent`, no result discriminant, and no per-tool o
 
 ### 2. Server dispatch passes tool output through unchanged
 
-`mcp-server/src/server.ts` dispatches each tool and returns the tool result directly. That means structured output support can be added mostly at the tool/type layer without changing orchestration semantics, but `server.ts` will likely need metadata and/or stronger typing updates.
+`mcp-server/src/server.ts` dispatches each tool and returns the tool result directly. That means structured output support can be added mostly at the tool/type layer without changing flywheel semantics, but `server.ts` will likely need metadata and/or stronger typing updates.
 
 ### 3. Some tools already carry implicit machine-readable payloads inside text
 
 This is the strongest evidence that structured contracts are overdue:
 
-- `orch_plan` deep mode returns `JSON.stringify({ action: 'spawn-plan-agents', ... }, null, 2)` as text.
-- `orch_review` hit-me returns `JSON.stringify({ action: 'spawn-agents', ... }, null, 2)` as text.
-- `orch_approve_beads` returns JSON agent configs inside fenced code blocks for parallel implementation.
-- `orch_review` next-bead parallel branch returns JSON agent configs inside fenced code blocks.
+- `flywheel_plan` deep mode returns `JSON.stringify({ action: 'spawn-plan-agents', ... }, null, 2)` as text.
+- `flywheel_review` hit-me returns `JSON.stringify({ action: 'spawn-agents', ... }, null, 2)` as text.
+- `flywheel_approve_beads` returns JSON agent configs inside fenced code blocks for parallel implementation.
+- `flywheel_review` next-bead parallel branch returns JSON agent configs inside fenced code blocks.
 
 These are already de facto contracts, but they are fragile because consumers must scrape text.
 
@@ -62,7 +62,7 @@ The existing tests under `mcp-server/src/__tests__/tools` mainly assert on:
 - state transitions
 - `isError`
 - presence of specific phrases in `content[0].text`
-- ad hoc `JSON.parse(result.content[0].text)` for `orch_plan` deep mode and `orch_review` hit-me mode
+- ad hoc `JSON.parse(result.content[0].text)` for `flywheel_plan` deep mode and `flywheel_review` hit-me mode
 
 This means the current suite will not prevent drift between text and future `structuredContent` unless new dual-surface assertions are added.
 
@@ -70,10 +70,10 @@ This means the current suite will not prevent drift between text and future `str
 
 Robustness-sensitive cases:
 
-- `orch_profile` can include large formatted repo summaries.
-- `orch_discover` can include 3-15 ideas plus rationale/scores.
-- `orch_plan` deep mode can emit multiple large prompts and synthesis instructions.
-- `orch_approve_beads` and `orch_review` can emit many agent task specs.
+- `flywheel_profile` can include large formatted repo summaries.
+- `flywheel_discover` can include 3-15 ideas plus rationale/scores.
+- `flywheel_plan` deep mode can emit multiple large prompts and synthesis instructions.
+- `flywheel_approve_beads` and `flywheel_review` can emit many agent task specs.
 
 Structured payloads must therefore be intentionally compact and should avoid duplicating large freeform text where not required.
 
@@ -91,16 +91,16 @@ Structured payloads must therefore be intentionally compact and should avoid dup
 
 Non-goals for the first rollout:
 
-- Rewriting orchestration flow logic
+- Rewriting flywheel flow logic
 - Removing existing human-readable instructions
-- Changing `orch_memory`
+- Changing `flywheel_memory`
 - Introducing a heavyweight schema library if simple TS + plain JSON contracts are enough
 
 ---
 
 ## Proposed Architecture
 
-### A. Introduce a versioned orchestration result envelope
+### A. Introduce a versioned flywheel result envelope
 
 Add a small family of output contracts in `mcp-server/src/types.ts`.
 
@@ -114,7 +114,7 @@ export interface McpTextContentBlock {
 
 export interface OrchestrationContractBase {
   contractVersion: 1;
-  tool: 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review';
+  tool: 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review';
   kind: string;
 }
 
@@ -167,7 +167,7 @@ This reduces payload size, duplication, and synchronization bugs.
 
 ### D. Prefer stable enums and small discriminated unions
 
-Each tool should emit a small `kind` enum representing its output variant. Example for `orch_plan`:
+Each tool should emit a small `kind` enum representing its output variant. Example for `flywheel_plan`:
 
 - `plan_prompt`
 - `deep_plan_spawn`
@@ -186,7 +186,7 @@ Phase 1 rule: runtime `structuredContent` is the source of truth; metadata is ad
 
 ## Proposed Structured Contracts by Tool
 
-### 1. `orch_profile`
+### 1. `flywheel_profile`
 
 Current behavior:
 - updates state
@@ -196,7 +196,7 @@ Proposed contract:
 
 ```ts
 interface OrchProfileStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_profile';
+  tool: 'flywheel_profile';
   kind: 'profile_ready' | 'error';
   phase: 'discovering';
   fromCache?: boolean;
@@ -211,7 +211,7 @@ interface OrchProfileStructuredContent extends OrchestrationContractBase {
     deferredCount: number;
   };
   nextStep: {
-    suggestedTool: 'orch_discover' | 'orch_select';
+    suggestedTool: 'flywheel_discover' | 'flywheel_select';
     reason: string;
   };
   profileSummary: {
@@ -235,7 +235,7 @@ Robustness note:
 - Do not include full `structure`, README, or key-file contents in structured content initially; that would bloat payloads.
 - Keep the full rich profile only in text.
 
-### 2. `orch_discover`
+### 2. `flywheel_discover`
 
 Current behavior:
 - stores ideas
@@ -246,7 +246,7 @@ Proposed contract:
 
 ```ts
 interface OrchDiscoverStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_discover';
+  tool: 'flywheel_discover';
   kind: 'ideas_registered' | 'error';
   phase: 'awaiting_selection';
   counts: {
@@ -265,7 +265,7 @@ interface OrchDiscoverStructuredContent extends OrchestrationContractBase {
     weightedScore?: number;
   }>;
   nextStep: {
-    suggestedTool: 'orch_select';
+    suggestedTool: 'flywheel_select';
     reason: string;
   };
   artifact?: {
@@ -280,7 +280,7 @@ Robustness note:
 - Include a compact idea list only; avoid duplicating full long descriptions if text already carries them.
 - Capture best-effort artifact write status in structured form because silent best-effort failures are hard to diagnose today.
 
-### 3. `orch_select`
+### 3. `flywheel_select`
 
 Current behavior:
 - sets `selectedGoal`
@@ -291,7 +291,7 @@ Proposed contract:
 
 ```ts
 interface OrchSelectStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_select';
+  tool: 'flywheel_select';
   kind: 'goal_selected' | 'error';
   phase: 'planning';
   goal: string;
@@ -300,7 +300,7 @@ interface OrchSelectStructuredContent extends OrchestrationContractBase {
     id: 'plan-first' | 'deep-plan' | 'direct-to-beads';
     label: string;
     recommendedFor: string;
-    nextTool?: 'orch_plan' | 'orch_approve_beads';
+    nextTool?: 'flywheel_plan' | 'flywheel_approve_beads';
   }>;
   nextStep: {
     suggestedUserDecision: 'choose_workflow';
@@ -311,7 +311,7 @@ interface OrchSelectStructuredContent extends OrchestrationContractBase {
 Robustness note:
 - Do not put the large bead creation prompt into structured content; provide canonical option metadata only.
 
-### 4. `orch_plan`
+### 4. `flywheel_plan`
 
 Current behavior has three major success modes plus errors:
 - standard prompt mode
@@ -322,7 +322,7 @@ Proposed discriminated contract:
 
 ```ts
 interface OrchPlanPromptStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_plan';
+  tool: 'flywheel_plan';
   kind: 'plan_prompt';
   phase: 'planning';
   mode: 'standard';
@@ -331,12 +331,12 @@ interface OrchPlanPromptStructuredContent extends OrchestrationContractBase {
   planDocument: string;
   nextStep: {
     suggestedAction: 'write_plan_file';
-    followupTool: 'orch_approve_beads';
+    followupTool: 'flywheel_approve_beads';
   };
 }
 
 interface OrchPlanDeepStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_plan';
+  tool: 'flywheel_plan';
   kind: 'deep_plan_spawn';
   phase: 'planning';
   mode: 'deep';
@@ -355,7 +355,7 @@ interface OrchPlanDeepStructuredContent extends OrchestrationContractBase {
 }
 
 interface OrchPlanRegisteredStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_plan';
+  tool: 'flywheel_plan';
   kind: 'plan_registered';
   phase: 'awaiting_plan_approval';
   mode: 'standard' | 'deep';
@@ -367,7 +367,7 @@ interface OrchPlanRegisteredStructuredContent extends OrchestrationContractBase 
     source: 'planFile' | 'planContent';
   };
   nextStep: {
-    suggestedTool: 'orch_approve_beads';
+    suggestedTool: 'flywheel_approve_beads';
   };
 }
 ```
@@ -376,7 +376,7 @@ Robustness note:
 - This is the highest-value contract because it replaces current JSON-in-text scraping.
 - Keep existing text JSON in phase 1 for compatibility, but structured content becomes canonical.
 
-### 5. `orch_approve_beads`
+### 5. `flywheel_approve_beads`
 
 This tool has two distinct domains:
 - plan approval mode
@@ -386,7 +386,7 @@ Proposed discriminated union:
 
 ```ts
 interface OrchApprovePlanReviewStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_approve_beads';
+  tool: 'flywheel_approve_beads';
   kind: 'plan_review_status' | 'plan_review_prompt' | 'plan_approved';
   phase: 'planning' | 'creating_beads' | 'awaiting_plan_approval';
   goal: string;
@@ -398,12 +398,12 @@ interface OrchApprovePlanReviewStructuredContent extends OrchestrationContractBa
   };
   nextStep: {
     suggestedAction: 'refine_plan' | 'run_git_diff_review' | 'create_beads';
-    suggestedTool?: 'orch_approve_beads';
+    suggestedTool?: 'flywheel_approve_beads';
   };
 }
 
 interface OrchApproveBeadsStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_approve_beads';
+  tool: 'flywheel_approve_beads';
   kind: 'beads_review_status' | 'beads_polish_prompt' | 'implementation_started' | 'parallel_implementation_ready' | 'error';
   phase: 'awaiting_bead_approval' | 'refining_beads' | 'implementing';
   goal: string;
@@ -443,7 +443,7 @@ Robustness note:
 - For `readyBeads`, only include short description previews in structured content, not full long descriptions, unless there is exactly one ready bead.
 - For parallel configs, structured content can be full-fidelity because machine use is the point, but size must be tested.
 
-### 6. `orch_review`
+### 6. `flywheel_review`
 
 This tool has the most output variants:
 - bead review agent spawn
@@ -456,7 +456,7 @@ Proposed discriminated union:
 
 ```ts
 interface OrchReviewStructuredContent extends OrchestrationContractBase {
-  tool: 'orch_review';
+  tool: 'flywheel_review';
   kind:
     | 'review_agents_requested'
     | 'bead_completed'
@@ -465,7 +465,7 @@ interface OrchReviewStructuredContent extends OrchestrationContractBase {
     | 'parallel_next_beads'
     | 'gates_prompt'
     | 'gate_passed'
-    | 'orchestration_complete'
+    | 'flywheel_complete'
     | 'phase_regressed'
     | 'error';
   phase: string;
@@ -474,7 +474,7 @@ interface OrchReviewStructuredContent extends OrchestrationContractBase {
   goal?: string;
   reviewRound?: number;
   nextStep?: {
-    suggestedTool?: 'orch_review' | 'orch_approve_beads';
+    suggestedTool?: 'flywheel_review' | 'flywheel_approve_beads';
     suggestedAction?: string;
   };
   agentTasks?: Array<{
@@ -565,9 +565,9 @@ Exit criteria:
 ### Phase 2 — Add structured contracts to low-risk, low-payload tools first
 
 Recommended order:
-1. `orch_select`
-2. `orch_discover`
-3. `orch_profile`
+1. `flywheel_select`
+2. `flywheel_discover`
+3. `flywheel_profile`
 
 Why this order:
 - simpler state transitions
@@ -582,15 +582,15 @@ Tasks:
 Exit criteria:
 - all three tools pass old text assertions and new structured assertions
 
-### Phase 3 — Convert `orch_plan` and `orch_review` JSON-in-text flows
+### Phase 3 — Convert `flywheel_plan` and `flywheel_review` JSON-in-text flows
 
 Goal:
 - formalize the most scrape-prone outputs first
 
 Tasks:
-1. `orch_plan` deep mode emits `structuredContent.planAgents` identical in semantics to the current JSON text payload.
-2. `orch_review` hit-me emits `structuredContent.agentTasks` identical in semantics to current JSON text payload.
-3. `orch_review` next-bead parallel path emits structured agent configs.
+1. `flywheel_plan` deep mode emits `structuredContent.planAgents` identical in semantics to the current JSON text payload.
+2. `flywheel_review` hit-me emits `structuredContent.agentTasks` identical in semantics to current JSON text payload.
+3. `flywheel_review` next-bead parallel path emits structured agent configs.
 4. Preserve current JSON text blocks in phase 1 for compatibility.
 5. Add snapshot-like tests ensuring text JSON and structured payload remain semantically aligned.
 
@@ -598,7 +598,7 @@ Exit criteria:
 - no host needs to parse `content[0].text` for these flows anymore
 - compatibility text remains present
 
-### Phase 4 — Convert `orch_approve_beads` complex union flows
+### Phase 4 — Convert `flywheel_approve_beads` complex union flows
 
 Goal:
 - structure plan-review and bead-review/launch outputs without making payloads explode
@@ -742,7 +742,7 @@ Robustness concerns:
 ### `mcp-server/src/__tests__/tools/profile.test.ts`
 
 Add assertions for:
-- `structuredContent.tool === 'orch_profile'`
+- `structuredContent.tool === 'flywheel_profile'`
 - `kind === 'profile_ready'`
 - next-step metadata
 - gap arrays / counts
@@ -817,10 +817,10 @@ For each tool path:
 ### 3. Add semantic dual-surface consistency tests
 
 Especially for current JSON-in-text flows:
-- `orch_plan` deep mode
-- `orch_review` hit-me
-- `orch_approve_beads` parallel implementation
-- `orch_review` parallel next-beads
+- `flywheel_plan` deep mode
+- `flywheel_review` hit-me
+- `flywheel_approve_beads` parallel implementation
+- `flywheel_review` parallel next-beads
 
 Recommended pattern:
 - parse current JSON text when present
@@ -830,13 +830,13 @@ Recommended pattern:
 ### 4. Add structured error tests
 
 Cover at least:
-- `orch_discover` without profile
-- `orch_discover` empty ideas
-- `orch_select` empty goal
-- `orch_plan` without selected goal
-- `orch_plan` missing `planFile`
-- `orch_approve_beads` missing goal / failed `br list` / invalid `advancedAction`
-- `orch_review` missing beadId / bead not found / unknown action
+- `flywheel_discover` without profile
+- `flywheel_discover` empty ideas
+- `flywheel_select` empty goal
+- `flywheel_plan` without selected goal
+- `flywheel_plan` missing `planFile`
+- `flywheel_approve_beads` missing goal / failed `br list` / invalid `advancedAction`
+- `flywheel_review` missing beadId / bead not found / unknown action
 
 ### 5. Add payload-size tests
 
@@ -868,8 +868,8 @@ At minimum ensure no exceptions occur when logging payload sizes/kinds.
 2. All six target tools return `structuredContent` on success.
 3. All major error paths return structured error payloads in addition to `isError: true` and text.
 4. `structuredContent` includes `contractVersion` and stable discriminants.
-5. `orch_plan` deep mode and `orch_review` hit-me no longer require text scraping for machine consumers.
-6. `orch_approve_beads` and `orch_review` complex branch outputs are covered by structured unions.
+5. `flywheel_plan` deep mode and `flywheel_review` hit-me no longer require text scraping for machine consumers.
+6. `flywheel_approve_beads` and `flywheel_review` complex branch outputs are covered by structured unions.
 7. Test suite verifies both text compatibility and structured correctness.
 8. Payload-size-sensitive paths are measured and kept within acceptable limits or compacted intentionally.
 9. Server/tool metadata documents the existence of structured contracts without breaking older hosts.
@@ -1038,4 +1038,4 @@ Why this order:
 
 ## Final Recommendation
 
-Implement structured contracts as a dual-surface, additive rollout with compact, versioned, discriminated unions per tool. The most important robustness move is not merely adding `structuredContent`; it is making the contract stable across all branches, especially errors and multi-agent spawn flows, while preserving current text compatibility. The best first wins are `orch_plan`, `orch_review`, and `orch_approve_beads`, because those tools already expose implicit machine-readable payloads inside brittle text.
+Implement structured contracts as a dual-surface, additive rollout with compact, versioned, discriminated unions per tool. The most important robustness move is not merely adding `structuredContent`; it is making the contract stable across all branches, especially errors and multi-agent spawn flows, while preserving current text compatibility. The best first wins are `flywheel_plan`, `flywheel_review`, and `flywheel_approve_beads`, because those tools already expose implicit machine-readable payloads inside brittle text.

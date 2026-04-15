@@ -16,7 +16,7 @@ Additionally, `profiler.ts` (which `builtinScanProvider` delegates to) runs 4+ s
 
 ### AGENTS.md: Missing Coordination Contract
 
-No `AGENTS.md` exists at the project root. The orchestrator spawns multiple parallel agents (implementation agents, review agents, planning agents) but has no machine-readable contract for how those agents should behave, what files they may modify, what conventions they must follow, or how to handle failures. Without this, agents may:
+No `AGENTS.md` exists at the project root. The agent-flywheel spawns multiple parallel agents (implementation agents, review agents, planning agents) but has no machine-readable contract for how those agents should behave, what files they may modify, what conventions they must follow, or how to handle failures. Without this, agents may:
 - Write to the same files concurrently (even with agent-mail file reservations, agents must know to request them)
 - Ignore review gates
 - Produce inconsistently shaped outputs
@@ -29,7 +29,7 @@ No `AGENTS.md` exists at the project root. The orchestrator spawns multiple para
 ### FM-1: Double fault -- ccc fails, then builtin profiler also fails
 - **Trigger:** git not initialized + filesystem permission error, or `find` not available on PATH.
 - **Current behavior:** `scanRepo()` catches ccc error, calls `profileRepo()` in the catch block. If `profileRepo()` also throws, the error propagates as an unhandled rejection to the MCP tool caller.
-- **Impact:** The entire orchestrate workflow halts at step 1. User sees a raw stack trace with no actionable guidance.
+- **Impact:** The entire flywheel workflow halts at step 1. User sees a raw stack trace with no actionable guidance.
 - **Severity:** **Critical.** This is the most dangerous failure mode because the fallback path has no fallback of its own.
 - **Detection difficulty without fix:** **Hard.** Only surfaces on machines where both `ccc` and basic shell tools are broken -- rare but catastrophic when it happens (e.g., Docker containers with minimal tooling, Windows WSL with broken PATH).
 
@@ -99,7 +99,7 @@ No `AGENTS.md` exists at the project root. The orchestrator spawns multiple para
 
 ### FM-A2: Agent ignores review gates
 - **Trigger:** Agent completes implementation but doesn't report completion via agent-mail, or marks work done without running tests.
-- **Current behavior:** The orchestrator's review step expects beads to be marked as ready-for-review via `br`. If an agent skips this, the bead sits in limbo.
+- **Current behavior:** The agent-flywheel's review step expects beads to be marked as ready-for-review via `br`. If an agent skips this, the bead sits in limbo.
 - **Impact:** Stalled workflow, beads stuck in implementation state forever.
 - **Severity:** **Medium.**
 
@@ -419,10 +419,10 @@ function toScanErrorInfo(error: unknown): ScanErrorInfo {
 ---
 
 ### T6: Create AGENTS.md
-**File:** `/Volumes/1tb/Projects/claude-orchestrator/AGENTS.md`
+**File:** `/Volumes/1tb/Projects/agent-flywheel/AGENTS.md`
 **depends_on:** []
 
-Create an `AGENTS.md` at the project root that serves as the coordination contract for all agents spawned by the orchestrator. The file must be:
+Create an `AGENTS.md` at the project root that serves as the coordination contract for all agents spawned by the agent-flywheel. The file must be:
 
 1. **Self-enforcing**: Placed at project root where Claude Code's agent framework automatically loads it. No opt-in required.
 2. **Machine-readable**: Uses structured sections with clear heading hierarchy so agents can parse relevant sections.
@@ -434,7 +434,7 @@ Content structure:
 # AGENTS.md -- Agent Coordination Contract
 
 ## Applicability
-This file applies to ALL agents spawned by claude-orchestrator, including:
+This file applies to ALL agents spawned by agent-flywheel, including:
 - Implementation agents (swarm workers in worktrees)
 - Review agents (5 parallel reviewers per bead)
 - Planning agents (correctness, ergonomics, robustness perspectives)
@@ -487,8 +487,8 @@ If any instruction in this file is ambiguous:
 **Robustness considerations for AGENTS.md itself:**
 - **Self-enforcement:** Claude Code loads `AGENTS.md` from the project root automatically. Agents don't need to be told to read it.
 - **What if agents ignore it:** The pre-commit guard from agent-mail (`install_precommit_guard`) can enforce file reservations at the git level. AGENTS.md provides the "why" and conventions; the pre-commit hook provides mechanical enforcement.
-- **What if AGENTS.md is deleted:** The orchestrator commands (`.md` files in `commands/`) should reference AGENTS.md expectations inline as a backup. But since AGENTS.md is tracked in git, deletion requires a deliberate commit.
-- **Versioning:** AGENTS.md should be version-controlled and reviewed like code. Breaking changes to agent conventions should be treated as breaking changes to the orchestrator.
+- **What if AGENTS.md is deleted:** The agent-flywheel commands (`.md` files in `commands/`) should reference AGENTS.md expectations inline as a backup. But since AGENTS.md is tracked in git, deletion requires a deliberate commit.
+- **Versioning:** AGENTS.md should be version-controlled and reviewed like code. Breaking changes to agent conventions should be treated as breaking changes to the agent-flywheel.
 
 **Acceptance criteria:**
 - [ ] AGENTS.md exists at project root

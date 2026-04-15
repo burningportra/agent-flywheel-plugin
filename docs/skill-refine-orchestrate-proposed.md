@@ -1,8 +1,8 @@
-# Proposed Changes to orchestrate SKILL.md
+# Proposed Changes to flywheel SKILL.md
 
 Session: 2026-04-15 | Evidence-driven refinements from `scripts/lint-skill.ts` build cycle (16 commits, 12 beads, 7 waves, 176 tests)
 
-Refiner: EmeraldBay | Agent Mail project: `/Volumes/1tb/Projects/claude-orchestrator`
+Refiner: EmeraldBay | Agent Mail project: `/Volumes/1tb/Projects/agent-flywheel`
 
 ---
 
@@ -141,18 +141,18 @@ Cost: one shell command, seconds. Benefit: the user arbitrates on real numbers, 
 
 ---
 
-## Change 4: Step 9 — Document `orch_verify_beads` parse_failure known limitation + fallback
+## Change 4: Step 9 — Document `flywheel_verify_beads` parse_failure known limitation + fallback
 
-**Problem:** Every `orch_verify_beads` call this session returned `{ errors: { "<bead-id>": "parse_failure: br show output did not match Bead shape" } }`. Root cause: `br show <id> --json` returns `[{...}]` (an array of length 1) but `verifyBeadsClosed` passes the parsed value directly to `parseBead` which expects `{...}` (an object). The tool is broken for the common case. The skill currently mandates this tool at the start of Step 9 with no documented fallback.
+**Problem:** Every `flywheel_verify_beads` call this session returned `{ errors: { "<bead-id>": "parse_failure: br show output did not match Bead shape" } }`. Root cause: `br show <id> --json` returns `[{...}]` (an array of length 1) but `verifyBeadsClosed` passes the parsed value directly to `parseBead` which expects `{...}` (an object). The tool is broken for the common case. The skill currently mandates this tool at the start of Step 9 with no documented fallback.
 
 **BEFORE** (SKILL.md lines 1087-1125, Step 9 opening block):
 ```markdown
 ## Step 9: Loop until complete
 
-**Reconcile the wave first.** Before showing the menu, call `orch_verify_beads` with the IDs of beads completed in this wave:
+**Reconcile the wave first.** Before showing the menu, call `flywheel_verify_beads` with the IDs of beads completed in this wave:
 
 \`\`\`
-orch_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
+flywheel_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
 \`\`\`
 
 The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
@@ -168,7 +168,7 @@ The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
 ```markdown
 ## Step 9: Loop until complete
 
-> **Known limitation (v2.9.x): `orch_verify_beads` may fail with `parse_failure` on every bead.**
+> **Known limitation (v2.9.x): `flywheel_verify_beads` may fail with `parse_failure` on every bead.**
 > Root cause: `br show <id> --json` returns a single-element array `[{...}]` but `verifyBeadsClosed` passes the parsed value directly to `parseBead` (which expects `{...}`). Tracked as a skill-level TODO — fix the array-shape unwrap in `mcp-server/src/tools/verify-beads.ts` for v1.1.
 >
 > **If all results come back as `errors: { ... parse_failure ... }`, use the manual fallback below instead of looping on "Retry verify":**
@@ -182,12 +182,12 @@ The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
 >    - `status == "closed"` → verified, move on.
 >    - `status != "closed"` AND commit exists → straggler; run `br update <bead-id> --status closed` yourself (this is what `autoClosed` would have done).
 >    - `status != "closed"` AND no commit → route into the `unclosedNoCommit` menu below with the bead ID.
-> 3. Only treat a parse-failure-free run as authoritative. If `orch_verify_beads` returns a mix of valid results and parse-failures, trust the valid ones and apply the fallback only to the failed IDs.
+> 3. Only treat a parse-failure-free run as authoritative. If `flywheel_verify_beads` returns a mix of valid results and parse-failures, trust the valid ones and apply the fallback only to the failed IDs.
 
-**Reconcile the wave first.** Before showing the menu, call `orch_verify_beads` with the IDs of beads completed in this wave:
+**Reconcile the wave first.** Before showing the menu, call `flywheel_verify_beads` with the IDs of beads completed in this wave:
 
 \`\`\`
-orch_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
+flywheel_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
 \`\`\`
 
 The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
@@ -300,7 +300,7 @@ If none of these fit, escalate to `/slb` with the full command, expected outcome
 | 1 | Step 7 sub-step 4 (lines 987-991) | "Zero-output escalation" misses the "commits-exist-but-bead-not-closed" case — observed 2/7 waves | Split into Case A (verify + close, no nudge) and Case B (existing zero-commit path) |
 | 2 | Step 7 STEP 2a (lines 933-938) | `tsc --noEmit` misses missing tsconfig/script-referenced files; agent commits broken build | Require full `npm run build` + new 2a.1 reference-resolution gate for any path referenced from scripts/CI/imports |
 | 3 | Step 5.55 section 1 (lines 514-526) | Alignment questions built on disputed numeric claims from divergent plans — user arbitrates wrong numbers | New section 1a: empirically verify numeric claims with a command before asking |
-| 4 | Step 9 opener (lines 1087-1125) | `orch_verify_beads` hits `parse_failure` on every bead due to array-shape bug in `parseBead`; 7/7 waves this session | Document known limitation + manual `br show` / `git log --grep` fallback; mark tool for v1.1 repair |
+| 4 | Step 9 opener (lines 1087-1125) | `flywheel_verify_beads` hits `parse_failure` on every bead due to array-shape bug in `parseBead`; 7/7 waves this session | Document known limitation + manual `br show` / `git log --grep` fallback; mark tool for v1.1 repair |
 | 5 | Step 5.55 section 3 (lines 568-597) | Unanimous alignment votes from a single source (e.g. all Codex picks) still force a re-extract loop | Add decisive-convergence branch — one refinement round, skip re-ask |
 | 6 | Step 7 pre-loop (line 845) | DCG blocks destructive commands without documented workarounds; agents improvise unsafely | Add a 6-row workaround table covering `rm -rf && mkdir`, `git checkout HEAD`, `git reset --hard`, `git push --force`, `DROP TABLE`, `rm -rf` |
 

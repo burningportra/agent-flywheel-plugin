@@ -92,7 +92,7 @@ export async function agentMailRPC<T = unknown>(
 const { name, arguments: args } = request.params;
 const cwd = (args as any)?.cwd as string;
 // ...
-case "orch_profile": return await runProfile(ctx, args as any);
+case "flywheel_profile": return await runProfile(ctx, args as any);
 ```
 Every tool handler receives `args as any`. If a caller omits a required field (e.g., passes `goal` but not `cwd`), the cast hides the type error and propagates `undefined` deep into tool implementations where it crashes with an unhelpful error.
 
@@ -101,8 +101,8 @@ Every tool handler receives `args as any`. If a caller omits a required field (e
 |---|---|
 | MCP client passes `arguments: {}` (no cwd) | cwd is undefined, caught at line 194, good |
 | MCP client passes `arguments: { cwd: 123 }` (wrong type) | makeExec(123) — spawn with numeric cwd, OS error deep in child_process |
-| `orch_discover` called with `ideas: "not-an-array"` | runDiscover receives string for ideas, crashes with unhelpful TypeError |
-| `orch_plan` called with `planFile: 42` | Passed as-is to fs.readFileSync — crash deep in plan.ts |
+| `flywheel_discover` called with `ideas: "not-an-array"` | runDiscover receives string for ideas, crashes with unhelpful TypeError |
+| `flywheel_plan` called with `planFile: 42` | Passed as-is to fs.readFileSync — crash deep in plan.ts |
 
 ### Proposed fix
 
@@ -201,7 +201,7 @@ export type ExecFn = (
 - `mcp-server/package.json` line 4: `"version": "2.3.0"`
 
 ### Current behavior
-The version embedded in every checkpoint envelope (`orchestratorVersion: "2.0.0"`) is **hardcoded** and lags behind the actual package version by 3 minor versions. When `validateCheckpoint` reads a checkpoint, it stores this version but has no logic to act on version mismatches.
+The version embedded in every checkpoint envelope (`flywheelVersion: "2.0.0"`) is **hardcoded** and lags behind the actual package version by 3 minor versions. When `validateCheckpoint` reads a checkpoint, it stores this version but has no logic to act on version mismatches.
 
 ### Failure scenarios
 | Scenario | Current outcome |
@@ -232,8 +232,8 @@ const VERSION = pkgJson.version;
 
 Add a version mismatch warning (not hard rejection, to avoid breaking old checkpoints):
 ```typescript
-// After orchestratorVersion check, add:
-if (e.orchestratorVersion !== currentVersion) {
+// After flywheelVersion check, add:
+if (e.flywheelVersion !== currentVersion) {
   // return as a warning, not a failure — caller decides whether to reject
   // This requires passing currentVersion into validateCheckpoint, or returning warnings alongside ValidationResult
 }
@@ -253,7 +253,7 @@ Change `ValidationResult` to include an optional `warnings: string[]` alongside 
 `mcp-server/src/checkpoint.ts` lines 138–170 (`writeCheckpoint`)
 
 ### Current behavior
-`writeCheckpoint` uses `writeFileSync(tmp) → renameSync(tmp → main)`. The atomic rename is correct for single-writer scenarios. However, if two MCP tool calls are issued concurrently (e.g., two rapid back-to-back calls to `orch_profile` on the same `cwd`), both may enter `writeCheckpoint` simultaneously. The race condition:
+`writeCheckpoint` uses `writeFileSync(tmp) → renameSync(tmp → main)`. The atomic rename is correct for single-writer scenarios. However, if two MCP tool calls are issued concurrently (e.g., two rapid back-to-back calls to `flywheel_profile` on the same `cwd`), both may enter `writeCheckpoint` simultaneously. The race condition:
 
 1. Call A writes tmp
 2. Call B writes tmp (overwrites A's tmp)
@@ -278,14 +278,14 @@ Use a per-`cwd` write mutex (simple in-process Map of Promises):
 // checkpoint.ts — add near top
 const writeLocks = new Map<string, Promise<boolean>>();
 
-export function writeCheckpoint(cwd: string, state: OrchestratorState, orchestratorVersion: string): Promise<boolean> {
+export function writeCheckpoint(cwd: string, state: OrchestratorState, flywheelVersion: string): Promise<boolean> {
   const prev = writeLocks.get(cwd) ?? Promise.resolve(true);
-  const next = prev.then(() => writeCheckpointInner(cwd, state, orchestratorVersion));
+  const next = prev.then(() => writeCheckpointInner(cwd, state, flywheelVersion));
   writeLocks.set(cwd, next.catch(() => true)); // don't let a failed write block the lock forever
   return next;
 }
 
-function writeCheckpointInner(cwd: string, state: OrchestratorState, orchestratorVersion: string): boolean {
+function writeCheckpointInner(cwd: string, state: OrchestratorState, flywheelVersion: string): boolean {
   // ... existing implementation ...
 }
 ```

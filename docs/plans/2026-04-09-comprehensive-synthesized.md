@@ -2,7 +2,7 @@
 
 ## Goal
 
-Comprehensive codebase improvement for claude-orchestrator (TypeScript MCP server) across 8 areas:
+Comprehensive codebase improvement for agent-flywheel (TypeScript MCP server) across 8 areas:
 
 1. Clean up dead code and stale TODOs
 2. Add model-routing fallback strategy

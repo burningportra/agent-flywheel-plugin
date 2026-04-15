@@ -3,7 +3,7 @@
 Date: 2026-04-15
 Perspective: Robustness / SRE
 Author: PinkCompass (deep-plan session)
-Target: `claude-orchestrator` v2.9.0 — pre-merge infrastructure
+Target: `agent-flywheel` v2.9.0 — pre-merge infrastructure
 Companion perspectives: Correctness, Ergonomics (separate plans)
 
 ---
@@ -27,7 +27,7 @@ This plan is exclusively about **what breaks and what the linter does when it br
 
 ## Repo Context That Shapes This Plan
 
-- **Target file**: `skills/orchestrate/SKILL.md` — 1438 lines, 59 `AskUserQuestion` call sites, dense with mixed code fences, inline JSON examples, and `<placeholder>`-style tags.
+- **Target file**: `skills/flywheel/SKILL.md` — 1438 lines, 59 `AskUserQuestion` call sites, dense with mixed code fences, inline JSON examples, and `<placeholder>`-style tags.
 - **21 local skills** already live under `skills/*/SKILL.md`. Plus global user skills under `~/.claude/plugins/`, `~/.claude/skills/`, and marketplace skills. Resolution is non-trivial (see §2).
 - **Stack**: TypeScript MCP server at `mcp-server/src/`, Vitest 2.x, NodeNext ESM, strict TS, `.js` import extensions mandated. Scripts currently live at root (no `scripts/` dir yet — must create).
 - **AGENTS.md hard constraints** (inherited by this linter since it sits in the same repo):
@@ -214,7 +214,7 @@ Two linter processes on the same file:
 
 - Never trust `process.cwd()`. Resolve SKILL.md path:
   - If `--file` explicit → use as-is (resolve to absolute).
-  - Else default to `{repo_root}/skills/orchestrate/SKILL.md` where `repo_root` = walk up from the linter script location until a `.git` dir is found. Cap walk at 10 levels.
+  - Else default to `{repo_root}/skills/flywheel/SKILL.md` where `repo_root` = walk up from the linter script location until a `.git` dir is found. Cap walk at 10 levels.
   - Manifest and exceptions path resolved relative to `repo_root`.
 - Log the resolved `repo_root` at `--log-level=debug`.
 
@@ -239,7 +239,7 @@ Create `.github/workflows/lint-skill.yml`:
 - Also trigger on `workflow_dispatch` so it can be run manually.
 - Single job, single step. No matrix.
 - **Node version pinned to `.nvmrc`** (add `.nvmrc` with `22.x` to match `@types/node@^22`). Prevents the "dev has Node 20, CI has Node 22, subtle behavior differs" class of bugs.
-- `actions/checkout@v4` → `actions/setup-node@v4` → `cd mcp-server && npm ci` → `npm run lint:skill -- --ci --file ../skills/orchestrate/SKILL.md`.
+- `actions/checkout@v4` → `actions/setup-node@v4` → `cd mcp-server && npm ci` → `npm run lint:skill -- --ci --file ../skills/flywheel/SKILL.md`.
 - Caching: `actions/setup-node`'s built-in cache keyed on `mcp-server/package-lock.json`. No further caching.
 - Fail-fast: default (job fails on first non-zero exit).
 
@@ -269,7 +269,7 @@ Mitigation: `--baseline {path}` flag.
 ### 4.5 `--reproduce-ci` flag
 
 Purpose: let a dev run exactly what CI ran.
-- Implementation: `--reproduce-ci` is sugar for `--ci --baseline scripts/lint-skill-baseline.json --file skills/orchestrate/SKILL.md --log-level=info`.
+- Implementation: `--reproduce-ci` is sugar for `--ci --baseline scripts/lint-skill-baseline.json --file skills/flywheel/SKILL.md --log-level=info`.
 - Documented in `--help` as the single command for CI repro.
 
 ### 4.6 Slow-CI mitigations
@@ -411,8 +411,8 @@ The linter is pre-merge infrastructure; a 3am pager needs logs that explain what
 Structured, line-per-event, to stderr. Example:
 
 ```
-[2026-04-15T02:30:00Z] [info] lint-skill file=skills/orchestrate/SKILL.md bytes=98234 rules=4
-[2026-04-15T02:30:00Z] [debug] repo_root=/Volumes/1tb/Projects/claude-orchestrator
+[2026-04-15T02:30:00Z] [info] lint-skill file=skills/flywheel/SKILL.md bytes=98234 rules=4
+[2026-04-15T02:30:00Z] [debug] repo_root=/Volumes/1tb/Projects/agent-flywheel
 [2026-04-15T02:30:00Z] [debug] rule=SKILL-020 started
 [2026-04-15T02:30:00Z] [debug] rule=SKILL-020 done duration_ms=42 findings=0
 ```
@@ -597,7 +597,7 @@ Add `docs/lint-skill-runbook.md` (out of scope to write here; flagged) with:
 3. **Baseline decay** — if baselines are never reduced, the ratchet rots. Mitigation: add a `--baseline-report` mode that prints age of each baseline entry; ergonomics concern, flagged for that perspective.
 4. **Cross-platform CI** — plan assumes Linux runner. Windows runners would need path-separator fixes (`\\` vs `/`). v1: Linux-only, documented.
 5. **Pre-commit integration** — nice-to-have, not v1. Would require a fast path (parse cache) to keep commit time under 500ms. Flagged for ergonomics plan.
-6. **Interaction with `orchestrate-refine-skill` skill** — that skill modifies SKILL.md in-place. If it runs concurrently with a linter invocation, the mid-lint-modify path (§1.1) kicks in. Document in the runbook.
+6. **Interaction with `flywheel-refine-skill` skill** — that skill modifies SKILL.md in-place. If it runs concurrently with a linter invocation, the mid-lint-modify path (§1.1) kicks in. Document in the runbook.
 
 ---
 

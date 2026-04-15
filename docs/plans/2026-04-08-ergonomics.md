@@ -22,7 +22,7 @@ Two distinct ergonomic gaps exist in the codebase:
 
 ### 1.2 AGENTS.md — Missing Entirely
 
-`/Volumes/1tb/Projects/claude-orchestrator/AGENTS.md` does not exist. Sub-agents spawned by the orchestrator bootstrap from skills and commands, but have no single canonical file that answers:
+`/Volumes/1tb/Projects/agent-flywheel/AGENTS.md` does not exist. Sub-agents spawned by the agent-flywheel bootstrap from skills and commands, but have no single canonical file that answers:
 
 - How is this project built?
 - What commands are safe to run?
@@ -188,7 +188,7 @@ export async function scanRepo(exec: ExecFn, cwd: string, signal?: AbortSignal):
 
 ### 4.1 What Makes a Great AGENTS.md
 
-An effective AGENTS.md for a multi-agent orchestrator project answers exactly these questions for a sub-agent bootstrapping a new session:
+An effective AGENTS.md for a multi-agent agent-flywheel project answers exactly these questions for a sub-agent bootstrapping a new session:
 
 1. **What is this project?** (1–2 sentences, not duplicating README)
 2. **How do I build it?** (exact commands, no ambiguity)
@@ -223,7 +223,7 @@ An effective AGENTS.md for a multi-agent orchestrator project answers exactly th
 ### 4.3 AGENTS.md Content Design
 
 **Project Overview** (3 sentences max):
-- What the orchestrator does
+- What the agent-flywheel does
 - What MCP server does
 - Where the entry point is
 
@@ -241,15 +241,15 @@ cd mcp-server && npm run dev   # TypeScript watch mode
 **Key File Paths:**
 Only paths a sub-agent would need to find things, not an architecture diagram:
 - `mcp-server/src/` — TypeScript source (the thing you'll edit most)
-- `.pi-orchestrator/checkpoint.json` — live session state (read-only unless you are the state owner)
+- `.pi-flywheel/checkpoint.json` — live session state (read-only unless you are the state owner)
 - `skills/` — skill `.md` files injected into agent system prompts
 - `docs/plans/` — plan artifacts from deep-plan sessions
 
 **Hard Constraints:**
 This section is the most valuable part of AGENTS.md. Include:
-1. Never write directly to `.pi-orchestrator/checkpoint.json` — use `orch_*` MCP tools.
+1. Never write directly to `.pi-flywheel/checkpoint.json` — use `orch_*` MCP tools.
 2. Never run `ccc init` in the project root unless `ccc status` returns "Not in an initialized project directory."
-3. Do not `rm -rf` worktrees — use `orchestrate-cleanup` skill.
+3. Do not `rm -rf` worktrees — use `flywheel-cleanup` skill.
 4. Always log diagnostics to stderr, never stdout, in MCP server code.
 5. All `exec` calls must pass a `timeout` — no open-ended shell commands.
 
@@ -329,7 +329,7 @@ Brief bootstrap pattern for agent-mail, referencing the `macro_start_session` to
 
 ### T5 — Create AGENTS.md at repo root
 
-**File:** `/Volumes/1tb/Projects/claude-orchestrator/AGENTS.md`
+**File:** `/Volumes/1tb/Projects/agent-flywheel/AGENTS.md`
 **What:** Create the AGENTS.md file following the structure in section 4.2 above. Content must be accurate to the current codebase (verified against `package.json`, `README.md`, and `mcp-server/src/`).
 **Acceptance criteria:**
 - [ ] File exists at repo root: `AGENTS.md`

@@ -312,4 +312,4 @@ Success depends entirely on plan and bead quality. Once those artifacts are exce
 
 The Agentic Coding Flywheel inverts traditional development by treating planning as the primary cognitive investment. By keeping entire systems legible within model context windows during planning, by synthesizing competing models' strengths, and by converting that planning into richly-detailed executable memory (beads), the methodology enables swarms of agents to produce production-quality code in hours rather than weeks.
 
-The compounding return comes from each cycle: better beads produce cleaner implementation, which uncovers remaining issues faster, which feed back into refined planning for the next feature cycle. The human becomes the architect and orchestrator rather than the builder.
+The compounding return comes from each cycle: better beads produce cleaner implementation, which uncovers remaining issues faster, which feed back into refined planning for the next feature cycle. The human becomes the architect and flywheel operator rather than the builder.
