@@ -1,7 +1,14 @@
 {
   "schemaVersion": 1,
-  "generated": "2026-04-15T03:53:41.337Z",
+  "generated": "2026-04-15T14:26:14.891Z",
   "skills": [
+    "brainstorming",
+    "caam",
+    "cass",
+    "cass-memory",
+    "changelog-md-workmanship",
+    "docs-de-slopify",
+    "dsr",
     "flywheel",
     "flywheel-audit",
     "flywheel-cleanup",
@@ -21,7 +28,13 @@
     "flywheel-swarm-stop",
     "flywheel-tool-feedback",
     "frontend-design",
+    "gdb-for-debugging",
+    "idea-wizard",
     "memory",
+    "multi-model-triangulation",
+    "slb",
+    "ubs-workflow",
+    "ui-polish",
     "ui-ux-polish"
   ]
 }

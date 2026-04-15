@@ -93,7 +93,7 @@ function runMempalace(args: string[], timeoutMs = 10_000): string | null {
  * milestones/problems/emotional).
  *
  * @param transcriptPath - Absolute path to a pi session .jsonl file
- * @param projectSlug    - Wing name (e.g. "pi-orchestrator"). Use sanitiseSlug().
+ * @param projectSlug    - Wing name (e.g. "pi-flywheel"). Use sanitiseSlug().
  * @returns true if CLI exited 0, false on any error. Never throws.
  */
 export function mineSession(transcriptPath: string, projectSlug: string): boolean {
@@ -242,7 +242,7 @@ export function getEpisodicStats(): EpisodicStats {
  * Sanitise a directory basename into a MemPalace wing slug.
  * Replaces any non-alphanumeric character with "-".
  *
- * Example: "/Volumes/1tb/Projects/pi-orchestrator" → "pi-orchestrator"
+ * Example: "/Volumes/1tb/Projects/pi-flywheel" → "pi-flywheel"
  *          "my project (v2)" → "my-project--v2-"
  */
 export function sanitiseSlug(cwd: string): string {
