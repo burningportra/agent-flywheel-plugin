@@ -1,24 +1,26 @@
 # agent-flywheel
 
-Multi-agent coding flywheel for Claude Code. Implements the Agentic Coding Flywheel: deep planning, parallel execution, and guided review gates — all using Claude Code's native Agent tool, skills, hooks, and MCP servers.
+Multi-agent coding flywheel for Claude Code. Implements the Agentic Coding Flywheel: deep planning, parallel execution, and guided review gates - all using Claude Code's native Agent tool, skills, hooks, and MCP servers.
+
+Repository: https://github.com/burningportra/agent-flywheel-plugin
 
 ## What it does
 
 agent-flywheel drives a complete development cycle:
 
-1. **Scan** — profiles the repository (languages, frameworks, TODOs, key files)
-2. **Discover** — generates ranked improvement ideas based on the codebase
-3. **Plan** — creates implementation tasks (beads) with optional deep planning via 3 parallel AI models
-4. **Implement** — spawns sub-agents in isolated git worktrees per bead
-5. **Review** — fresh-eyes review by 5 parallel agents per bead
-6. **Repeat** — loops through all beads with drift checks between rounds
+1. **Scan** - profiles the repository (languages, frameworks, TODOs, key files)
+2. **Discover** - generates ranked improvement ideas based on the codebase
+3. **Plan** - creates implementation tasks (beads) with optional deep planning via 3 parallel AI models
+4. **Implement** - spawns sub-agents in isolated git worktrees per bead
+5. **Review** - fresh-eyes review by 5 parallel agents per bead
+6. **Repeat** - loops through all beads with drift checks between rounds
 
 ## Prerequisites
 
 - [Claude Code](https://github.com/anthropics/claude-code) (latest)
-- [br](https://github.com/burningportra/br) — bead tracker CLI
-- [bv](https://github.com/burningportra/bv) — bead visualizer CLI
-- [agent-mail](https://github.com/burningportra/agent-mail) — multi-agent coordination server
+- [br](https://github.com/burningportra/br) - bead tracker CLI
+- [bv](https://github.com/burningportra/bv) - bead visualizer CLI
+- [agent-mail](https://github.com/burningportra/agent-mail) - multi-agent coordination server
 
 ```bash
 # Install br and bv (example)
@@ -31,14 +33,16 @@ uv run python -m mcp_agent_mail.cli serve-http
 ## Installation
 
 ```bash
-claude --plugin-dir ./agent-flywheel
+git clone https://github.com/burningportra/agent-flywheel-plugin.git agent-flywheel
+cd agent-flywheel
+claude --plugin-dir .
 ```
 
 Or install permanently:
 
 ```bash
-# Add to your Claude Code settings
-claude settings plugins add ./agent-flywheel
+# From the repo root
+claude settings plugins add .
 ```
 
 ## Build the MCP server
@@ -89,7 +93,7 @@ npm run build
 ## Architecture
 
 ```
-claude --plugin-dir ./agent-flywheel
+claude --plugin-dir .
 │
 ├── commands/*.md          ← Natural language instructions for Claude
 ├── skills/frontend-design/ ← Injected into agent system prompts
@@ -122,12 +126,12 @@ claude --plugin-dir ./agent-flywheel
 
 **Key design decisions:**
 
-- **CC Agent tool handles all parallelism** — no subprocess spawning. `Agent(isolation: "worktree")` replaces WorktreePool. `run_in_background: true` replaces SwarmTender polling.
-- **MCP server is stateless** — state lives in `.pi-flywheel/checkpoint.json`. The server reads and writes it atomically.
-- **Commands drive the conversation** — each `.md` file instructs Claude how to run the flywheel workflow, ask the user questions, and call the MCP tools.
-- **agent-mail handles coordination** — file reservations prevent concurrent writes; messaging lets agents report progress.
-- **Structured logging via `createLogger`** — all diagnostic output writes JSON lines to stderr (`FW_LOG_LEVEL` controls verbosity). Never touches stdout, keeping the MCP JSON-RPC channel clean.
-- **SwarmTender auto-escalation** — `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudgesPerPoll` per poll cycle, default 3), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `flywheelAgentName`; backward compatible when unset.
+- **CC Agent tool handles all parallelism** - no subprocess spawning. `Agent(isolation: "worktree")` replaces WorktreePool. `run_in_background: true` replaces SwarmTender polling.
+- **MCP server is stateless** - state lives in `.pi-flywheel/checkpoint.json`. The server reads and writes it atomically.
+- **Commands drive the conversation** - each `.md` file instructs Claude how to run the flywheel workflow, ask the user questions, and call the MCP tools.
+- **agent-mail handles coordination** - file reservations prevent concurrent writes; messaging lets agents report progress.
+- **Structured logging via `createLogger`** - all diagnostic output writes JSON lines to stderr (`FW_LOG_LEVEL` controls verbosity). Never touches stdout, keeping the MCP JSON-RPC channel clean.
+- **SwarmTender auto-escalation** - `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudgesPerPoll` per poll cycle, default 3), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `flywheelAgentName`; backward compatible when unset.
 
 ## Models used
 
