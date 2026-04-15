@@ -1,7 +1,7 @@
 {
   "name": "claude-orchestrator",
   "description": "Multi-agent coding orchestrator — deep planning, parallel execution, guided review gates. Based on the Agentic Coding Flywheel.",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "author": { "name": "burningportra" },
   "homepage": "https://github.com/burningportra/claude-orchestrator",
   "repository": "https://github.com/burningportra/claude-orchestrator",
