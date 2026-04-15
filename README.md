@@ -99,21 +99,25 @@ claude --plugin-dir ./claude-orchestrator
 │    ├── agent-mail (http)  ← Coordination: messaging, file reservations
 │    └── orchestrator (stdio) ← State machine + br/bv/git CLI glue
 │
-└── mcp-server/src/         ← TypeScript MCP server
-     ├── server.ts           ← 8 MCP tools registered
-     ├── state.ts            ← Load/save OrchestratorState via checkpoint
-     ├── checkpoint.ts       ← Atomic disk persistence
-     ├── beads.ts            ← br CLI wrapper + verifyBeadsClosed reconciliation
-     ├── agent-mail.ts       ← agent-mail JSON-RPC client + checkAgentMailHealth()
-     ├── exec.ts             ← ExecFn type; shell exec with timeout + AbortSignal
-     ├── logger.ts           ← Structured stderr logger (createLogger)
-     ├── profiler.ts         ← Repo profiler; collects file tree, commits, TODOs
-     ├── scan.ts             ← ccc-based codebase analysis with signal propagation
-     ├── deep-plan.ts        ← 3-agent deep planning with fault isolation + synthesis
-     ├── tender.ts           ← SwarmTender: agent health monitoring, nudge budget (maxNudgesPerPoll), auto-escalation
-     └── tools/              ← orch_profile, orch_discover, orch_select,
-                                orch_plan, orch_approve_beads, orch_review,
-                                orch_verify_beads, orch_memory
+└── mcp-server/
+     ├── src/                 ← TypeScript MCP server
+     │    ├── server.ts       ← 8 MCP tools registered
+     │    ├── state.ts        ← Load/save OrchestratorState via checkpoint
+     │    ├── checkpoint.ts   ← Atomic disk persistence
+     │    ├── beads.ts        ← br CLI wrapper + verifyBeadsClosed reconciliation
+     │    ├── agent-mail.ts   ← agent-mail JSON-RPC client + checkAgentMailHealth()
+     │    ├── exec.ts         ← ExecFn type; shell exec with timeout + AbortSignal
+     │    ├── logger.ts       ← Structured stderr logger (createLogger)
+     │    ├── profiler.ts     ← Repo profiler; collects file tree, commits, TODOs
+     │    ├── scan.ts         ← ccc-based codebase analysis with signal propagation
+     │    ├── deep-plan.ts    ← 3-agent deep planning with fault isolation + synthesis
+     │    ├── tender.ts       ← SwarmTender: agent health monitoring, nudge budget (maxNudgesPerPoll), auto-escalation
+     │    ├── lint/           ← SKILL.md linter (parser, 5 rules, 4 reporters, baseline + manifest)
+     │    └── tools/          ← orch_profile, orch_discover, orch_select,
+     │                            orch_plan, orch_approve_beads, orch_review,
+     │                            orch_verify_beads, orch_memory
+     └── scripts/
+          └── lint-skill.ts   ← standalone CLI; CI runs compiled dist/scripts/lint-skill.js
 ```
 
 **Key design decisions:**
