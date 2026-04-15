@@ -259,8 +259,12 @@ Report what you found and what you fixed.`,
 **Files to review:** ${fileList}
 **cwd:** ${cwd}
 
-Try to: trigger edge cases, find security holes, construct inputs that cause failures.
+**Mandatory first step**: invoke \`/ubs-workflow\` on the changed files to run the Ultimate Bug Scanner comprehensive review. Its findings are your baseline before manual attack.
+
+Then go further: trigger edge cases, find security holes, construct inputs that cause failures.
 Fix any real vulnerabilities or bugs directly.
+
+If your review surfaces a crash, hang, or memory issue in compiled code, invoke \`/gdb-for-debugging\` to reproduce it under a debugger and capture a stack trace in the report.
 
 Report your attack attempts and findings.`,
       },

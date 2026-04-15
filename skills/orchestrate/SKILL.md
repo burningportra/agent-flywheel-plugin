@@ -7,11 +7,17 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
 
 Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
 
-> ## ⚠️ UNIVERSAL RULE — `AskUserQuestion` is the only way to ask the user anything
+> ## ⚠️ UNIVERSAL RULE 1 — `AskUserQuestion` is the only way to ask the user anything
 >
 > Every user decision in this skill — phase routing, plan refinement, bead approval, launch confirmation, wrap-up choices, recovery branches — MUST be presented via the `AskUserQuestion` tool with concrete labeled options (2–4 per question). Free-text "ask the user…" prompts, "wait for confirmation", "wait for the user's next message", or implicit decision points are bugs. The "Other" field absorbs custom answers when none of the prepared options fit.
 >
 > If you find yourself about to write text like *"surface this to the user"*, *"propose this to the user"*, *"check with the user"*, or *"only do X if the user confirms"* — STOP and write an `AskUserQuestion` call instead. No exceptions.
+>
+> ## ⚠️ UNIVERSAL RULE 2 — invoke specialist skills by name when they apply
+>
+> This SKILL references many specialist skills by slash-name (`/idea-wizard`, `/ubs-workflow`, `/caam`, `/ui-polish`, `/docs-de-slopify`, testing-*, stack-specific skills, etc.). When a step names one, invoke it via the `Skill` tool rather than re-implementing its logic inline. Specialist skills carry project-tested prompts and conventions you don't have time to recreate.
+>
+> Equally important: if a step does NOT name a skill but you notice one applies to the situation (e.g. a React component bead and `/react-component-generator` exists), invoke it anyway. Skills are hints-with-authority — use them by default, skip only when they clearly don't fit.
 
 ## Step 0: Opening Ceremony
 
@@ -323,6 +329,27 @@ Before discovering ideas, query CASS for past goal history: call `orch_memory` w
 - Boost ideas similar to past successes
 - Surface anti-patterns to avoid
 
+**Choose discovery depth** via AskUserQuestion:
+
+```
+AskUserQuestion(questions: [{
+  question: "How deep should discovery go?",
+  header: "Discovery depth",
+  options: [
+    { label: "Fast (default)", description: "orch_discover one-shot \u2014 5-10 ranked ideas (Recommended for repeat cycles)" },
+    { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30\u21925\u219215 pipeline \u2014 matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
+    { label: "Market-validated", description: "Run /idea-wizard, then /xf to check X/Twitter signal on each top idea" },
+    { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation for second-opinion scoring across Codex/Gemini/Grok" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **Fast** → continue below with `orch_discover`.
+- **Deep** → invoke `/idea-wizard`, feed its output into `orch_discover`, then continue with the standard goal-selection menu.
+- **Market-validated** → run `/idea-wizard`, then for each top-3 idea invoke `/xf` with a query like `"<idea title>" site:x.com`. Annotate each candidate with real-world signal before showing the goal menu.
+- **Triangulated** → run `/idea-wizard`, then `/multi-model-triangulation` on the top-5 list to surface which ideas all models agree on vs which are one-model bets.
+
 If `MCP_DEGRADED` is false, call `orch_discover` with `cwd`.
 
 If `MCP_DEGRADED` is true (or `orch_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
@@ -390,7 +417,8 @@ AskUserQuestion(questions: [{
   header: "Plan mode",
   options: [
     { label: "Standard plan", description: "Single planning pass — faster" },
-    { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality, takes longer" }
+    { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality, takes longer (Recommended)" },
+    { label: "Triangulated plan", description: "Deep plan + /multi-model-triangulation second-opinion on the synthesis before alignment check — highest quality, longest" }
   ],
   multiSelect: false
 }])
@@ -474,6 +502,8 @@ AskUserQuestion(questions: [{
 
 8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
+
+   **Triangulated plan mode** — if the user picked "Triangulated plan" at Step 5 entry, AFTER `orch_plan` returns, invoke `/multi-model-triangulation` with the synthesized plan file as input. Capture the triangulation report (agreements, disagreements, unique insights per model). Present the report alongside the Step 5.55 alignment questions so the user sees where external models diverge from the Opus synthesis before approving.
 
 9. **STOP — jump to Step 5.55 (Plan alignment check).** That step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
@@ -810,6 +840,10 @@ Claude owns architecture / complex reasoning, Codex owns fast iteration / testin
 
 **Codex input-buffer quirk** — after the prompt lands in a Codex agent, send Enter TWICE (or append a trailing newline) so the long prompt clears the input buffer.
 
+**Rate-limit management** — if any impl agent reports a rate-limit error (429, "usage limit reached", etc.), invoke `/caam` to switch that model's account. `caam activate <model> <backup-account>` takes <100ms and keeps the wave moving. Don't kill and restart the agent; the wrapper just re-authenticates the current session.
+
+**Destructive-command coordination** — if any impl agent proposes `git reset --hard`, `git push --force`, `DROP TABLE`, `rm -rf`, `kubectl delete`, or similar, invoke `/slb` to require two-person approval. The coordinator is the second party; never let an agent self-approve destructive ops. If `/dcg` is configured as a hook, most of these are already blocked at the harness layer — still confirm via `/slb` for anything slipping through.
+
 ### Implementation loop
 
 Use `TaskCreate` to create a task per bead. For each ready bead:
@@ -856,6 +890,37 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        ## STEP 0.5 — LOAD MEMORY (if CASS available)
        Call orch_memory with operation='search' and query='implementation gotchas <bead-title>'.
        If results returned, review them before starting — they contain lessons from past sessions.
+
+       ## STEP 0.7 — DOMAIN-SKILL LOOKUP (invoke relevant skills BEFORE writing code)
+       Scan the bead title + description for domain keywords and invoke the matching skill
+       via the Skill tool. Each hit gives you best-practice patterns specific to that stack.
+
+         Bead mentions                            Invoke skill
+         ─────────────────────────────────────────────────────────
+         admin, /admin, /api/admin              → /admin-page-for-nextjs-sites
+         A/B test, variant, experiment          → /ab-testing
+         MRR, churn, cohort, customer analytics → /saas-customer-analytics
+         stripe, paypal, checkout, subscription → /stripe-checkout
+         supabase, RLS, drizzle, postgres SaaS  → /supabase
+         tanstack, react-query, react-table     → /tanstack
+         react component, .tsx, JSX             → /react-component-generator
+         og image, twitter card, social preview → /og-share-images
+         TUI, bubble tea, charm, CLI UI         → /tui-glamorous
+         installer, curl|bash, one-liner        → /installer-workmanship
+         CLI automation, atuin, shell history   → /automating-your-automations
+         perf, optimize, bottleneck, p95, p99   → /extreme-software-optimization
+         MCP tool, MCP server                   → /mcp-server-design
+         multi-repo, ru sync                    → /ru-multi-repo-workflow
+         crash, segfault, hang, deadlock        → /gdb-for-debugging
+         playwright, e2e webapp, next.js test   → /e2e-testing-for-webapps
+         fuzz, property-based, crash discovery  → /testing-fuzzing
+         protocol, RFC, conformance             → /testing-conformance-harnesses
+         snapshot, approval, golden output      → /testing-golden-artifacts
+         ML test, oracle-less, metamorphic      → /testing-metamorphic
+         formal proof, lean, rust verification  → /lean-formal-feedback-loop
+
+       If no keywords match, skip and proceed to STEP 1. Never force a skill invocation on
+       an unrelated bead — the lookup is hints, not mandates.
 
        ## STEP 1 — IMPLEMENT
        <bead title>
@@ -1138,7 +1203,20 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- "Create catch-up test beads" → `br create` one bead per MISSING entry with description `Write tests for <file>: unit coverage + edge cases`, then return to Step 7 for the test-bead wave. After those close, re-enter Step 9.25.
+- "Create catch-up test beads" → `br create` one bead per MISSING entry with description `Write tests for <file>: unit coverage + edge cases`. Pick the right testing skill per bead based on what the file does:
+
+  | File type / domain                                   | Skill to cite in the test-bead description |
+  |------------------------------------------------------|--------------------------------------------|
+  | Business logic touching real DB / external API       | `/testing-real-service-e2e-no-mocks`        |
+  | Protocol implementations, RFC parsers, codecs         | `/testing-conformance-harnesses`            |
+  | Parsers, serializers, deterministic output            | `/testing-golden-artifacts`                 |
+  | Security-critical code, input validators, crypto      | `/testing-fuzzing`                          |
+  | ML models, compilers, search, oracle-less systems     | `/testing-metamorphic`                      |
+  | Next.js webapp UI flows                              | `/e2e-testing-for-webapps`                  |
+  | Rust code needing formal proofs                       | `/lean-formal-feedback-loop`                |
+  | Default (plain unit tests)                           | (no extra skill — standard test framework)  |
+
+  After test beads close, return to Step 7 for the test-bead wave. After those close, re-enter Step 9.25.
 - Everything else → advance to Step 9.4.
 
 ## Step 9.4: UI/UX polish pass (optional — only if project has a UI)
@@ -1160,9 +1238,9 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-If "Run polish pass" is chosen, invoke the `/ui-ux-polish` skill (or, if unavailable, run the canonical 5-step loop: scrutiny → pick suggestions → beadify → implement wave → repeat 2-3× until improvements are marginal). Come back to Step 9.5 when done.
+If "Run polish pass" is chosen, invoke `/ui-polish` (Stripe-level iterative polish). If the project-local `/ui-ux-polish` skill is preferred, use that instead. Either runs the canonical 5-step loop: scrutiny → pick suggestions → beadify → implement wave → repeat 2-3× until improvements are marginal. Come back to Step 9.5 when done.
 
-If "Light polish only" is chosen, spawn one reviewer agent with the scrutiny prompt from `/ui-ux-polish` and present its top 5 findings as an `AskUserQuestion` — user picks which to fix inline vs defer to next cycle.
+If "Light polish only" is chosen, spawn one reviewer agent with the scrutiny prompt from `/ui-polish` and present its top 5 findings as an `AskUserQuestion` — user picks which to fix inline vs defer to next cycle.
 
 ## Step 9.5: Wrap-up — commit, version bump, rebuild
 
@@ -1223,7 +1301,9 @@ Only update sections that are actually affected by this session's changes. Do no
 - "Game-changer" / "powerful" / "seamless" / "robust" filler adjectives.
 - Three-item list tricolons in every paragraph.
 
-If the `/docs-de-slopify` skill is available, invoke it on the changed doc files. Otherwise sweep manually. Technical docs (AGENTS.md, internal specs) are exempt — the rule targets user-facing prose.
+Invoke `/docs-de-slopify` on the changed doc files — it runs the canonical de-slop sweep. Technical docs (AGENTS.md, internal specs) are exempt — the rule targets user-facing prose.
+
+**CHANGELOG rebuild** — if `CHANGELOG.md` exists or the project is published, invoke `/changelog-md-workmanship` to rebuild the changelog from git tags, issues, and PR titles. This is cleaner than manually appending and catches commits that were missed.
 
 ### 3. Commit any stray tracked/untracked files
 Check `git status` for uncommitted files (plan docs, skill updates, config changes). If any exist, propose groupings via:
@@ -1269,7 +1349,7 @@ AskUserQuestion(questions: [{
 Update `mcp-server/package.json` version field unless "Skip" was chosen.
 
 ### 5. Rebuild
-Run `npm run build` in `mcp-server/` to compile the bumped version into `dist/`.
+Run `npm run build` in `mcp-server/` to compile the bumped version into `dist/`. If the project publishes cross-platform binaries and GitHub Actions is throttled or unavailable, invoke `/dsr` (Doodlestein Self-Releaser) as a fallback to produce local release artifacts.
 
 ### 6. Commit the version bump
 ```
@@ -1281,6 +1361,10 @@ git commit -m "chore: bump version to X.Y.Z — <one-line summary of what shippe
 `git log --oneline -10` so the user can see the clean commit stack before moving on.
 
 ## Step 10: Store session learnings
+
+`orch_memory(operation: "store")` is the default path and wraps CASS under the hood. If the `cm` CLI is available and you want richer procedural memory semantics (tags, hierarchies, retrieval ranking), invoke `/cass-memory` directly instead — same underlying store, more control over how the learning is categorized.
+
+For mining *prior* sessions (not storing new ones), invoke `/cass` — it ranks past prompts, decisions, and patterns beyond what `orch_memory search` surfaces.
 
 Call `orch_memory` with `operation: "store"` and `cwd` to distill and persist session learnings:
 - What worked well (tool choices, agent configurations, planning strategies)
