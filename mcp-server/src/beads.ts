@@ -337,6 +337,31 @@ export async function readyBeads(
 }
 
 /**
+ * Normalize the shape of `br show --json` output across br versions.
+ *
+ * br has returned the bead in several shapes historically:
+ *   - `{...}`              (object)                — older br
+ *   - `[{...}]`            (single-element array)  — current br v0.1.x
+ *   - `{ bead: {...} }`    (wrapped)               — observed in some forks
+ *   - `{ issues: [{...}] }` (plural wrapper)       — older parser adapters
+ *
+ * This helper unwraps any of the above to a single bead object. Returns the
+ * input unchanged if no known wrapper matches, letting `parseBead` make the
+ * final call on shape validity.
+ */
+export function unwrapBrShowValue(raw: unknown): unknown {
+  if (Array.isArray(raw)) {
+    return raw.length > 0 ? raw[0] : raw;
+  }
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    if (obj.bead && typeof obj.bead === "object") return obj.bead;
+    if (Array.isArray(obj.issues) && obj.issues.length > 0) return obj.issues[0];
+  }
+  return raw;
+}
+
+/**
  * Gets a single bead by ID via `br show <id> --json`.
  */
 export async function getBeadById(
@@ -344,9 +369,10 @@ export async function getBeadById(
   cwd: string,
   id: string
 ): Promise<Bead | null> {
-  const result = await brExecJson<Bead>(exec, ["show", id, "--json"], { timeout: 10000, cwd });
+  const result = await brExecJson<unknown>(exec, ["show", id, "--json"], { timeout: 10000, cwd });
   if (!result.ok) return null;
-  return result.value ?? null;
+  const unwrapped = unwrapBrShowValue(result.value);
+  return parseBead(unwrapped);
 }
 
 /**
@@ -769,7 +795,10 @@ export async function verifyBeadsClosed(
       errors[id] = result.error.brError?.message ?? result.error.stderr ?? `exit ${result.error.exitCode ?? "?"}`;
       continue;
     }
-    const bead = parseBead(result.value);
+    // br show --json returns [{...}] (single-element array) in current br versions.
+    // Unwrap before parsing. Also handle { bead: {...} } / { issues: [{...}] } wrappers defensively.
+    const unwrapped = unwrapBrShowValue(result.value);
+    const bead = parseBead(unwrapped);
     if (!bead) {
       errors[id] = "parse_failure: br show output did not match Bead shape";
       continue;

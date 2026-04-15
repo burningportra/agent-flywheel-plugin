@@ -47,6 +47,24 @@ function brShowCall(bead: Bead): ExecCall {
   };
 }
 
+/** Matches the real br v0.1.x `br show --json` shape: single-element array. */
+function brShowArrayCall(bead: Bead): ExecCall {
+  return {
+    cmd: 'br',
+    args: ['show', bead.id, '--json'],
+    result: { code: 0, stdout: JSON.stringify([bead]), stderr: '' },
+  };
+}
+
+/** Regression: some br forks wrap the bead in { bead: {...} }. */
+function brShowWrappedCall(bead: Bead): ExecCall {
+  return {
+    cmd: 'br',
+    args: ['show', bead.id, '--json'],
+    result: { code: 0, stdout: JSON.stringify({ bead }), stderr: '' },
+  };
+}
+
 function brShowError(beadId: string, stderr: string): ExecCall {
   return {
     cmd: 'br',
@@ -87,7 +105,7 @@ describe('runVerifyBeads', () => {
     });
   });
 
-  it('reports all beads verified when each br show returns status closed', async () => {
+  it('reports all beads verified when each br show returns status closed (object shape)', async () => {
     const a = makeBead({ id: 'a-1', status: 'closed' });
     const b = makeBead({ id: 'b-2', status: 'closed' });
     const { ctx } = makeCtx({}, [brShowCall(a), brShowCall(b)]);
@@ -100,6 +118,35 @@ describe('runVerifyBeads', () => {
     expect(data.autoClosed).toEqual([]);
     expect(data.unclosedNoCommit).toEqual([]);
     expect(data.errors).toEqual({});
+  });
+
+  it('unwraps br show single-element array shape [{...}] (regression: br v0.1.x)', async () => {
+    const a = makeBead({ id: 'arr-1', status: 'closed' });
+    const b = makeBead({ id: 'arr-2', status: 'in_progress' });
+    const { ctx } = makeCtx({}, [
+      brShowArrayCall(a),
+      brShowArrayCall(b),
+      { cmd: 'git', args: ['log', '--grep=arr-2', '--oneline', '-1'], result: { code: 0, stdout: '', stderr: '' } },
+    ]);
+
+    const result = await runVerifyBeads(ctx, { cwd: '/fake/cwd', beadIds: ['arr-1', 'arr-2'] });
+
+    const data = (result.structuredContent as any).data;
+    // Before the fix this returned errors: { 'arr-1': 'parse_failure...', 'arr-2': 'parse_failure...' }
+    expect(data.errors).toEqual({});
+    expect(data.verified).toEqual(['arr-1']);
+    expect(data.unclosedNoCommit).toEqual([{ id: 'arr-2', status: 'in_progress' }]);
+  });
+
+  it('unwraps { bead: {...} } shape (regression: br fork wrapper)', async () => {
+    const a = makeBead({ id: 'wrap-1', status: 'closed' });
+    const { ctx } = makeCtx({}, [brShowWrappedCall(a)]);
+
+    const result = await runVerifyBeads(ctx, { cwd: '/fake/cwd', beadIds: ['wrap-1'] });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.errors).toEqual({});
+    expect(data.verified).toEqual(['wrap-1']);
   });
 
   it('auto-closes stragglers that have a matching commit and updates state', async () => {
