@@ -1,0 +1,84 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - run: npm ci
+        working-directory: mcp-server
+      - run: npm run build
+        working-directory: mcp-server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: mcp-server/dist
+          retention-days: 1
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - run: npm ci
+        working-directory: mcp-server
+      - run: npm test
+        working-directory: mcp-server
+
+  manifest-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -e
+          A=$(ls skills/ | sort)
+          B=$(jq -r '.skills[]' mcp-server/.lintskill-manifest.json | sort)
+          if ! diff <(echo "$A") <(echo "$B"); then
+            echo "::error::manifest is out of sync; run npm run lint:skill:update-manifest in mcp-server/"
+            exit 1
+          fi
+
+  lint-skill:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - run: npm ci
+        working-directory: mcp-server
+      - run: npm run build
+        working-directory: mcp-server
+      - run: node dist/scripts/lint-skill.js --file ../skills/orchestrate/SKILL.md --ci --baseline .lintskill-baseline.json --format gha
+        working-directory: mcp-server
+      - run: node dist/scripts/lint-skill.js --file ../skills/orchestrate/SKILL.md --ci --format json > lint-skill-report.json
+        working-directory: mcp-server
+        if: failure()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-skill-report
+          path: mcp-server/lint-skill-report.json
+          retention-days: 14

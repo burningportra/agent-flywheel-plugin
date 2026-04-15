@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "rulesetVersion": 1,
+  "generated": "2026-04-15T03:54:07.199Z",
+  "entries": [
+    {
+      "ruleId": "SKILL-010",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 1075,
+      "fingerprint": "sha256:5c50853d085862b8c76584c8cb54798c0fdc111a831cf79e727d795273b9df93",
+      "reason": ""
+    },
+    {
+      "ruleId": "AUQ003",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 335,
+      "fingerprint": "sha256:87d0ed90a3e9897b0262469fbf073725c62470b619a418f329aef3196fc12c9c",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 340,
+      "fingerprint": "sha256:23c897008c8f7ec71fd0b99ddb184cb5d0c83a558995ecbb09121414fcc1683a",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 341,
+      "fingerprint": "sha256:bffdcc6912c642efaef4e7bc0100d6f220ee2f606be7e34b11ecbb2e688736e3",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 341,
+      "fingerprint": "sha256:bffdcc6912c642efaef4e7bc0100d6f220ee2f606be7e34b11ecbb2e688736e3",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 342,
+      "fingerprint": "sha256:17315f11cf55cfea1a880ea4ea05987df87e0451c3ce4a93b5092e7b921042ce",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 342,
+      "fingerprint": "sha256:17315f11cf55cfea1a880ea4ea05987df87e0451c3ce4a93b5092e7b921042ce",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 421,
+      "fingerprint": "sha256:d30426d73558d65d732290fe04cc0c82c96fe178d0b8a4a6bbcf8a3550237686",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 435,
+      "fingerprint": "sha256:ab5a048ef132a0790fc9bed6889c34dc7c161df2204353b74514356c40c1445a",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 1181,
+      "fingerprint": "sha256:f7aa22448908c43d8ffe00739cfc9aa730b69d57bbefac8870190165545c112c",
+      "reason": ""
+    },
+    {
+      "ruleId": "IMPL001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 570,
+      "fingerprint": "sha256:0366bbecbedb4da5ff78dc3aa0c07eea2a1dc08a9ded5b0114405539f82ea3a8",
+      "reason": ""
+    },
+    {
+      "ruleId": "IMPL001",
+      "rulesetVersion": 1,
+      "file": "/Volumes/1tb/Projects/claude-orchestrator/skills/orchestrate/SKILL.md",
+      "line": 767,
+      "fingerprint": "sha256:c878c227f11c2c40fdc1b50f860244c5c588ecebd38072ddc5082021367a8741",
+      "reason": ""
+    }
+  ]
+}

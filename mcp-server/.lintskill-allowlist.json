@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "knownExternalSlashes": [
+    "fast",
+    "clear",
+    "help",
+    "compact",
+    "doctor",
+    "ide",
+    "init",
+    "model",
+    "permissions",
+    "pr_comments",
+    "release-notes",
+    "review",
+    "status",
+    "todos",
+    "vim",
+    "brainstorming"
+  ],
+  "acceptedFindings": []
+}

@@ -133,3 +133,14 @@ cd mcp-server && npm test
 ```
 
 Test files live in `mcp-server/src/__tests__/`. Follow existing patterns — use `vi.mock` for external deps, `vi.spyOn(process.stderr, 'write')` to capture logger output, `vi.useFakeTimers()` for time-dependent tests. Always add a regression test when fixing a bug.
+
+## SKILL.md linting
+
+Changes to `skills/orchestrate/SKILL.md` (and any future SKILL.md files) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, and Universal Rule 1 enforcement.
+
+- Local: `cd mcp-server && npm run lint:skill`
+- Auto-fix safe issues (future): `npm run lint:skill -- --fix` (deferred to v1.1)
+- Update baseline after curating findings: `npm run lint:skill:update-baseline`
+- Update skill manifest after adding/removing skills: `npm run lint:skill:update-manifest`
+
+CI enforces this on every PR via `.github/workflows/ci.yml` (`lint-skill` job). The job runs `node dist/scripts/lint-skill.js --ci --baseline` and emits PR annotations via the `gha` reporter format.

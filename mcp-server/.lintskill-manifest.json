@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "generated": "2026-04-15T03:53:41.337Z",
+  "skills": [
+    "frontend-design",
+    "memory",
+    "orchestrate",
+    "orchestrate-audit",
+    "orchestrate-cleanup",
+    "orchestrate-drift-check",
+    "orchestrate-fix",
+    "orchestrate-healthcheck",
+    "orchestrate-refine-skill",
+    "orchestrate-refine-skills",
+    "orchestrate-research",
+    "orchestrate-rollback",
+    "orchestrate-scan",
+    "orchestrate-setup",
+    "orchestrate-status",
+    "orchestrate-stop",
+    "orchestrate-swarm",
+    "orchestrate-swarm-status",
+    "orchestrate-swarm-stop",
+    "orchestrate-tool-feedback",
+    "ui-ux-polish"
+  ]
+}
