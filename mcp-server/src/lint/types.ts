@@ -105,3 +105,10 @@ export interface LintResult {
   /** Internal errors (rules that threw or timed out). Aggregated separately from findings. */
   internalErrors: Array<{ ruleId: string; message: string }>;
 }
+
+export interface ReporterOptions {
+  /** Force-disable colors even on TTY. */
+  noColor?: boolean;
+  /** Override which findings are visible (default: all severities). */
+  minSeverity?: "error" | "warn" | "info";
+}
