@@ -470,6 +470,7 @@ export interface ToolContext {
 }
 
 export type FlywheelToolName =
+  | 'flywheel_ping'
   | 'flywheel_profile'
   | 'flywheel_discover'
   | 'flywheel_select'

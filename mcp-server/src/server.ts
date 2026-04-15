@@ -10,6 +10,7 @@ import { clearState, loadState, saveState } from './state.js';
 import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
 import { runMemory } from './tools/memory-tool.js';
+import { runPing } from './tools/ping.js';
 import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
 import { runReview } from './tools/review.js';
@@ -44,6 +45,15 @@ interface CallToolHandlerDependencies {
 }
 
 export const TOOLS = [
+  {
+    name: 'flywheel_ping',
+    description: 'Health check for the agent-flywheel MCP server. Returns a pong response with the server name, version, and current timestamp. Requires no arguments. Call this to verify the server is alive before running other flywheel tools.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
   {
     name: 'flywheel_profile',
     description: 'Scan the current repository to collect its tech stack, structure, commits, TODOs, and key files. Returns a structured profile and discovery instructions. Call this first before any other flywheel tool.',
@@ -224,6 +234,7 @@ export const TOOLS = [
 ];
 
 const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
+  flywheel_ping: () => runPing(),
   flywheel_profile: runProfile as ToolRunner,
   flywheel_discover: runDiscover as ToolRunner,
   flywheel_select: runSelect as ToolRunner,
@@ -311,6 +322,11 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
         content: [{ type: 'text', text: `Unknown tool: ${name}` }],
         isError: true,
       };
+    }
+
+    // flywheel_ping is cwd-free — bypass the state/exec setup entirely
+    if (name === 'flywheel_ping') {
+      return runPing();
     }
 
     const cwd = normalizedArgs.cwd as string;
