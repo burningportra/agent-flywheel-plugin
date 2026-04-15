@@ -462,6 +462,13 @@ AskUserQuestion(questions: [{
 
 5. **Collect plans** — call `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` to retrieve message summaries. Each agent sent the file path to their plan on disk (e.g. `docs/plans/<date>-<perspective>.md`). Read the plan files directly from disk using the Read tool — do NOT rely on inbox message bodies for large plan content, as they may be truncated or unwieldy.
 
+   **Progressive plan commit (recommended).** As soon as each perspective plan lands on disk, commit it — do NOT batch plan artifacts for Step 9.5 wrap-up. This keeps the git log interleaved with the implementation cycle so future bisects land on a plan+code pair. One commit per perspective plan + one for the synthesized plan + one for the triangulation report:
+   ```bash
+   git add docs/plans/<date>-correctness.md
+   git commit -m "docs(plans): add <date>-correctness.md (deep-plan pass, <goal-slug>)"
+   ```
+   Step 9.5 §3 should find fewer stray plan artifacts; only the `-final.md` revision written post-alignment-check usually needs batching there.
+
 6. **Shutdown teammates individually** — structured shutdown messages CANNOT be broadcast to `"*"`. Send to each agent by name:
    ```
    SendMessage(to: "correctness-planner", message: {"type": "shutdown_request", "reason": "Planning complete."})
@@ -1030,7 +1037,24 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")
    ```
 
-   **Idle-agent escalation**: After 2 nudges, check `git log --oneline --grep="<bead-id>"` to determine what shape of failure you're in. There are TWO common cases — diagnose first, then act:
+   **Proactive close (recommended — skip the escalation tree entirely).** Instead of waiting for 2 nudges to diagnose an idle agent, poll `git log --grep="<bead-id>" --oneline -1` every 30s after spawn. As soon as a commit referencing the bead appears AND the agent is idle (per `TaskList`), verify the commit's diff matches the bead's acceptance criteria, then close the bead yourself:
+   ```bash
+   br update <bead-id> --status closed
+   br show <bead-id> --json | jq -r '.[0].status'   # must print "closed"
+   ```
+   This saves ~60s per bead (no nudge round-trip) and handles the dominant failure mode (agent commits but skips `br update`) without any dialog. Only fall into the idle-agent escalation tree below when the coordinator could NOT verify the commit OR the bead's acceptance is ambiguous.
+
+   **Monitor-script hygiene.** When using the `Monitor` tool to poll for commits/files/bead-closures, the shell loop MUST end with `exit 0` explicitly — a `for i in $(seq ...); do ... break; done` with no trailing statement inherits the exit code of the last iteration's `sleep` command, which can be non-zero on timeout and fires a spurious `script failed (exit 1)` notification. Pattern:
+   ```bash
+   for i in $(seq 1 90); do
+     if condition_met; then echo "DONE"; exit 0; fi
+     sleep 15
+   done
+   echo "timeout"
+   exit 0   # ← required; timeout is not a failure
+   ```
+
+   **Idle-agent escalation** (fallback when proactive close doesn't apply): After 2 nudges, check `git log --oneline --grep="<bead-id>"` to determine what shape of failure you're in. There are TWO common cases — diagnose first, then act:
 
    **Case A — Commits exist but bead not closed** (MORE common): The agent did the implementation work and committed, then went idle before calling `br update --status closed`. Verify:
    ```
@@ -1143,12 +1167,11 @@ Actions:
 
 ## Step 9: Loop until complete
 
-> **Known limitation (v2.9.x): `orch_verify_beads` may fail with `parse_failure` on every bead.**
-> Root cause: `br show <id> --json` returns a single-element array `[{...}]` but `verifyBeadsClosed` passes the parsed value directly to `parseBead` (which expects `{...}`). Tracked as a skill-level TODO — fix the array-shape unwrap in `mcp-server/src/beads.ts` `verifyBeadsClosed()` for v1.1.
+> **Fixed in v2.10.1:** `orch_verify_beads` correctly unwraps the `br show --json` array shape via `unwrapBrShowValue()` in `mcp-server/src/beads.ts`. If you see `parse_failure` errors on a current install, you're on v2.9.x or older — rebuild via `cd mcp-server && npm run build`. The fallback procedure below remains valid for older installs and for cases where `br` emits an entirely new shape.
 >
-> **If all results come back as `errors: { ... parse_failure ... }`, use the manual fallback below instead of looping on "Retry verify":**
+> **Manual fallback (only if verify still fails for some IDs):**
 >
-> 1. For each bead ID in the wave, run:
+> 1. For each failing bead ID, run:
 >    ```bash
 >    br show <bead-id> --json | jq -r '.[0].status'
 >    git log --oneline --grep="<bead-id>" -n 5
@@ -1157,7 +1180,6 @@ Actions:
 >    - `status == "closed"` → verified, move on.
 >    - `status != "closed"` AND commit exists → straggler; run `br update <bead-id> --status closed` yourself (this is what `autoClosed` would have done).
 >    - `status != "closed"` AND no commit → route into the `unclosedNoCommit` menu below with the bead ID.
-> 3. Only treat a parse-failure-free run as authoritative. If `orch_verify_beads` returns a mix of valid results and parse-failures, trust the valid ones and apply the fallback only to the failed IDs.
 
 **Reconcile the wave first.** Before showing the menu, call `orch_verify_beads` with the IDs of beads completed in this wave:
 
@@ -1494,7 +1516,17 @@ Actions:
 
 1. **Delete the checkpoint:** `rm -f .pi-orchestrator/checkpoint.json` (Bash). Without this, the next cycle inherits the prior `selectedGoal` / `activeBeadIds` / `phase` and the new "Resume session" drift check fires unnecessarily.
 2. **Verify no impl agents remain.** Run `TaskList`; if any impl-* tasks are still listed, retire and force-stop them per the Step 9 pause checklist before continuing.
-3. **Confirm clean tree:** run `git status -s`. If uncommitted changes exist, present:
+3. **Drain active teams (MANDATORY — prevents team leaks across sessions).** For each team this session created in `~/.claude/teams/`:
+   ```bash
+   # Trim team config to team-lead only (in-process agents don't respond to shutdown_request)
+   jq '.members = [.members[] | select(.name == "team-lead")]' \
+     ~/.claude/teams/<team-name>/config.json \
+     > ~/.claude/teams/<team-name>/config.json.tmp \
+     && mv ~/.claude/teams/<team-name>/config.json.tmp \
+        ~/.claude/teams/<team-name>/config.json
+   ```
+   Then call `TeamDelete` for each. Verify `ls ~/.claude/teams/` returns no teams from this session. **Prior sessions' orphaned teams should also be swept here — `coolant-solver`-style leaks accumulate otherwise.**
+4. **Confirm clean tree:** run `git status -s`. If uncommitted changes exist, present:
    ```
    AskUserQuestion(questions: [{
      question: "Working tree has <N> uncommitted change(s): <short list>. How should I proceed?",
@@ -1508,4 +1540,6 @@ Actions:
    }])
    ```
    Route per choice; never silently proceed past a dirty tree without acknowledgment.
-4. Proceed to Step 2.
+5. Proceed to Step 2.
+
+> **"Done for now" also triggers team-drain.** Step 12's "Done for now" end-state should run the same team-drain as sub-step 3 above before returning control to the user — otherwise teams leak across Claude Code sessions (the runtime does NOT gc them on session exit).
