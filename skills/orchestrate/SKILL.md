@@ -549,10 +549,16 @@ Do NOT pad with low-value questions. 2 sharp questions beat 4 fuzzy ones.
         - Risk: <user's risk answer + Other text>
         (omit lines for questions where the user confirmed.)
 
-      Revise the plan to incorporate ALL requested changes. Preserve the
-      structure (sections, task table, verification block). For each change,
-      add a one-line rationale at the change site so future reviewers see
-      the user's intent. Use ultrathink.
+      Revise the plan to incorporate ALL requested changes. Prior reviewers
+      found **80+ distinct implications** downstream of changes like these
+      that they fixed — ripple effects in dependencies, coverage gaps,
+      invalidated assumptions. Find AT LEAST that many. Don't just patch
+      the three lines the user pointed at; trace every knock-on effect
+      through the plan and fix those too.
+
+      Preserve the structure (sections, task table, verification block).
+      For each change, add a one-line rationale at the change site so future
+      reviewers see the user's intent. Use ultrathink.
       Write the revised plan to the same file path when done.
     "
   )
@@ -625,7 +631,11 @@ Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_bac
   prompt: "
     Read the plan at <state.planDocument>.
     You have NOT seen any prior plans or revisions — this is your first and only look.
-    Carefully review the entire plan. Come up with the best revisions you can.
+    Prior reviewers found **80+ distinct issues** in this plan that they fixed.
+    Find AT LEAST that many. Be ruthless — surface every assumption,
+    every missing edge case, every hand-wavy section, every dependency that
+    isn't airtight. Do not accept the plan at face value. The goal is
+    exhaustive critique, not polite commentary.
     For each change, give detailed analysis and rationale.
     Provide changes in git-diff format. Use ultrathink.
     Write your revised plan to the same file path when done.
@@ -660,7 +670,45 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
 
 > **WARNING:** Use `br list` for all read-only bead inspection. Never call `orch_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
 
-5. **Beads created — present summary and next action.** Display the bead count and dependency structure, then proceed directly to Step 6.
+5. **Beads created — run coverage + dedup checks before Step 6.**
+
+6. **Plan↔Bead coverage check (MANDATORY).** Parse `##`/`###` section headers from `state.planDocument`. For each section, search the bead list for any bead whose title or description references that section's topic. Build a coverage report: `<section> → <bead-ids or NONE>`.
+
+   Present:
+   ```
+   AskUserQuestion(questions: [{
+     question: "Plan↔Bead coverage: <X>/<Y> sections covered. <missing section list if any>. What next?",
+     header: "Coverage",
+     options: [
+       { label: "All covered", description: "Every plan section has at least one bead — proceed to dedup" },
+       { label: "Create catch-up beads", description: "Generate beads for the missing section(s) before proceeding (Recommended)" },
+       { label: "Sections out of scope", description: "Mark missing sections as deferred in plan; proceed" }
+     ],
+     multiSelect: false
+   }])
+   ```
+   - "Create catch-up beads" → run `br create` per missing section with a stub description the user refines, then re-run this check.
+   - "Sections out of scope" → append a `## Deferred` block to the plan listing the dropped sections, then proceed.
+
+7. **Deduplication sweep (MANDATORY).** Scan bead titles + descriptions for overlap: two beads touching the same files with similar intent, or near-duplicate titles. Build a `<duplicate-pair → suggested-merge>` report.
+
+   Present:
+   ```
+   AskUserQuestion(questions: [{
+     question: "Dedup scan: <N> overlap pair(s) found: <list>. How to resolve?",
+     header: "Dedup",
+     options: [
+       { label: "Merge all", description: "Combine each pair into the canonical richer bead; carry over dependencies" },
+       { label: "Review per-pair", description: "Go through each pair; list which to merge / keep in Other" },
+       { label: "None found", description: "No real overlaps — proceed to Step 6 (Recommended when scan is empty)" },
+       { label: "Keep separate", description: "Pairs are distinct; add a one-line rationale to each bead's description explaining the distinction" }
+     ],
+     multiSelect: false
+   }])
+   ```
+   On merge, use `br update` to extend the canonical bead's description + `br dep add` to carry over edges, then `br close <duplicate-id> --reason "merged into <canonical>"`.
+
+8. **Proceed to Step 6** once coverage is acknowledged and dedup is resolved.
 
 ## Step 6: Review and approve beads
 
@@ -691,6 +739,11 @@ If the user asks "what's the quality score?" before choosing to start, call `orc
 After calling `orch_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
 
 **Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, discuss with user before proceeding)
+
+**Polish red flags** (independent of score — surface these to the user alongside the score when any apply):
+- **Oscillation** — polish rounds keep flipping between two approaches. Signal: the taste question is unresolved; pick one, commit the trade-off in the plan, and stop polishing.
+- **Expansion** — each round *adds* beads rather than refining existing ones. Signal: scope is unbounded; return to Step 5.6 to re-scope the plan before more bead polish.
+- **Low-quality plateau** — score stable at 0.60-0.70 across 3+ rounds. Signal: the plan framing is off; start fresh from Step 3 with a different goal angle.
 
 | Bead ID | Title | Wave | Effort | Risk Flags |
 |---------|-------|------|--------|------------|
@@ -741,6 +794,24 @@ AskUserQuestion(questions: [{
 
 ## Step 7: Implement each bead
 
+### Pre-loop — swarm scaling + stagger
+
+**Agent ratio by open-bead count** (from `br ready --json`). Pick the smallest tier that accommodates your wave:
+
+| Open beads | Claude : Codex : Gemini | Notes |
+|-----------|--------------------------|-------|
+| < 100     | 1 : 1 : 1                | Single rep each — coordination overhead stays low |
+| 100-399   | 3 : 3 : 2                | Standard swarm |
+| 400+      | 4 : 4 : 2                | Parallel tracks essential |
+
+Claude owns architecture / complex reasoning, Codex owns fast iteration / testing, Gemini provides a second perspective for docs / review. Cap parallel spawns at the wave's independent-bead count — do not spin up agents with nothing to do.
+
+**Thundering-herd mitigation** — stagger spawns by **30 seconds minimum**. Do NOT spawn all agents simultaneously; they all read AGENTS.md, hit Agent Mail, and query `br ready` at once — piling onto the same frontier bead. Use `run_in_background: true` and wait 30s between each `Agent(...)` call.
+
+**Codex input-buffer quirk** — after the prompt lands in a Codex agent, send Enter TWICE (or append a trailing newline) so the long prompt clears the input buffer.
+
+### Implementation loop
+
 Use `TaskCreate` to create a task per bead. For each ready bead:
 
 1. Create a named implementation team if multiple beads are parallelizable:
@@ -775,7 +846,12 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        0c. Send a 'started' message to '<coordinator-agent-name>' via send_message
            with subject '[impl] <bead-id> started'.
 
-       Only after 0a, 0b, 0c are ALL complete may you proceed to Step 1.
+       0d. **Re-read AGENTS.md end-to-end** (MANDATORY — do not skip even if
+           you think you remember it). Agents that skip this produce
+           non-idiomatic code and break project conventions. If the repo has
+           no AGENTS.md, note that in your started message.
+
+       Only after 0a, 0b, 0c, 0d are ALL complete may you proceed to Step 1.
 
        ## STEP 0.5 — LOAD MEMORY (if CASS available)
        Call orch_memory with operation='search' and query='implementation gotchas <bead-title>'.
@@ -786,8 +862,21 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        <bead description>
        Acceptance criteria: <criteria>
 
-       ## STEP 2 — VALIDATE
-       Run tests and linting relevant to your changes. Fix any failures.
+       ## STEP 2 — VALIDATE (MANDATORY GATES — all must pass before STEP 3)
+       Run in order; fix failures before proceeding. Do NOT commit until all pass.
+
+       2a. **Compile + lint gate** — pick the stack's commands:
+           - Rust:       cargo check --all-targets && cargo clippy --all-targets -- -D warnings && cargo fmt --check
+           - Go:         go build ./... && go vet ./...
+           - TypeScript: npx tsc --noEmit (plus your eslint / biome script)
+           - Python:     python -m compileall -q . (plus ruff / mypy per project)
+           Check package.json / Cargo.toml / Makefile for project-specific scripts first.
+
+       2b. **Test gate** — run the test suite for files you touched (not the whole suite unless fast).
+
+       2c. **UBS gate** (if `ubs` CLI is installed): `ubs <changed-files>`. Treat
+           findings as blocking unless clearly out of scope. If `ubs` is not
+           available, note that in your completion report and skip this gate.
 
        ## STEP 2.5 — STORE LEARNINGS
        If you encountered anything non-obvious during implementation — unexpected API behavior,
@@ -852,6 +941,16 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    - Force-stop with `TaskStop(task_id: "<saved-task-id>")` if the task ID is available.
    - Retire in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`.
    - If still listed in the team, edit `~/.claude/teams/<team>/config.json` to remove from the `"members"` array, then retry `TeamDelete` when ready.
+
+### Stuck-swarm diagnostics
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Multiple agents pick the same bead | Unsynced starts; not marking `in_progress` early | Stagger starts 30s; require `br update --status in_progress` + Agent Mail claim before any edit; audit file reservations |
+| Agent circles after compaction | Forgot the AGENTS.md contract | Nudge: `SendMessage(to: "<name>", message: "Re-read AGENTS.md so it's still fresh, then continue from your last Agent Mail message.")` — kill+restart only if it stays erratic |
+| Bead sits `in_progress` too long | Crash / blocker / lost plot | Check Agent Mail thread for last report; if silent, implement directly as coordinator OR split the blocker into sub-beads with `br create` + `br dep add` |
+| Contradictory implementations across beads | Poor coordination / stale reservations | Audit `file_reservation_paths`; revise bead boundaries so two beads never edit the same file |
+| Much code, goal still far | Strategic drift | Run the "Come to Jesus" reality check in Step 9's Check-status option |
 
 ## Step 8: Review completed beads
 
@@ -977,9 +1076,32 @@ AskUserQuestion(questions: [{
 ```
 
 - **"Continue"** → return to Step 7 for the next wave of ready beads
-- **"Check status"** → run `br list` + `bv --robot-triage`, display, then return to this menu
+- **"Check status"** → run `br list` + `bv --robot-triage` and display. Then run the **Come-to-Jesus drift reality-check** below before returning to this menu.
 - **"Pause"** → run the pause checklist below, then end the turn
 - **"Wrap up early"** → skip to Step 9.5 with only the completed beads
+
+#### Come-to-Jesus drift reality-check
+
+Busy agents are not the goal — closing the *actual* gap is. After displaying status, ask:
+
+```
+AskUserQuestion(questions: [{
+  question: "If we intelligently completed every remaining open bead, would '<original selectedGoal>' actually be achieved?",
+  header: "Drift",
+  options: [
+    { label: "Yes, on track", description: "Return to the progress menu and continue" },
+    { label: "Missing pieces", description: "New beads needed to close the gap — create them before more impl" },
+    { label: "Strategic drift", description: "Remaining beads won't close the gap — invoke /orchestrate-drift-check and regress to plan refinement" },
+    { label: "Goal has changed", description: "Update selectedGoal via orch_select, then re-scope the bead graph" }
+  ],
+  multiSelect: false
+}])
+```
+
+- "Yes" → return to progress menu.
+- "Missing pieces" → `br create` the gap-closers with dependencies wired to the ready frontier, then return to progress menu.
+- "Strategic drift" → invoke `/orchestrate-drift-check` for diagnostic output, then call `orch_review` with `beadId: "__regress_to_plan__"` to revisit the plan.
+- "Goal has changed" → call `orch_select` with the new goal, then return to the progress menu so the user can decide whether to keep or reject current beads.
 
 #### Pause checklist (run in order):
 
@@ -992,6 +1114,55 @@ AskUserQuestion(questions: [{
 When ALL beads are complete, display a completion message and proceed directly to Step 9.5:
 
 > All <N> beads complete. Proceeding to wrap-up.
+
+## Step 9.25: Test-coverage sweep (MANDATORY before wrap-up)
+
+After all beads close, scan changed files for missing test coverage before starting Step 9.5:
+
+1. Determine changed files since session start: `git diff --name-only <session-start-sha>..HEAD`.
+2. For each changed production file, check for a sibling/mirror test file (`*.test.ts` / `*_test.go` / `test_*.py` / `*.spec.rs` per stack convention).
+3. Build a coverage summary: `<file> → <test-file or MISSING>`.
+
+Present:
+
+```
+AskUserQuestion(questions: [{
+  question: "Test-coverage sweep: <X>/<Y> changed files have tests. Missing: <list>. How to proceed?",
+  header: "Coverage",
+  options: [
+    { label: "Coverage is adequate", description: "Either tests exist or gaps are intentional (e.g., pure type-only files) — proceed to Step 9.4" },
+    { label: "Create catch-up test beads", description: "Generate beads for missing test files and run a mini-Step-7 loop to implement (Recommended for production-bound releases)" },
+    { label: "Skip coverage sweep", description: "Proceed without adding tests — note the gap in the wrap-up summary" }
+  ],
+  multiSelect: false
+}])
+```
+
+- "Create catch-up test beads" → `br create` one bead per MISSING entry with description `Write tests for <file>: unit coverage + edge cases`, then return to Step 7 for the test-bead wave. After those close, re-enter Step 9.25.
+- Everything else → advance to Step 9.4.
+
+## Step 9.4: UI/UX polish pass (optional — only if project has a UI)
+
+Detect UI: check `package.json` for `react` / `vue` / `svelte` / `next` / `nuxt` / `solid-js`, OR the presence of `.tsx` / `.vue` / `.svelte` files, OR Flutter / SwiftUI / Jetpack Compose signals. If no UI detected, skip to Step 9.5.
+
+If UI detected, present:
+
+```
+AskUserQuestion(questions: [{
+  question: "Project has UI. Run a polish pass before wrap-up?",
+  header: "UI polish",
+  options: [
+    { label: "Run polish pass", description: "Invoke the 5-step scrutiny → beads → implement loop (Recommended for production-bound cycles)" },
+    { label: "Skip this cycle", description: "Defer polish — revisit next cycle (Recommended for internal / early-stage work)" },
+    { label: "Light polish only", description: "Run scrutiny prompt once, surface top 5 issues, skip beadifying" }
+  ],
+  multiSelect: false
+}])
+```
+
+If "Run polish pass" is chosen, invoke the `/ui-ux-polish` skill (or, if unavailable, run the canonical 5-step loop: scrutiny → pick suggestions → beadify → implement wave → repeat 2-3× until improvements are marginal). Come back to Step 9.5 when done.
+
+If "Light polish only" is chosen, spawn one reviewer agent with the scrutiny prompt from `/ui-ux-polish` and present its top 5 findings as an `AskUserQuestion` — user picks which to fix inline vs defer to next cycle.
 
 ## Step 9.5: Wrap-up — commit, version bump, rebuild
 
@@ -1037,8 +1208,22 @@ Before committing anything, update these files to reflect what shipped:
 
 - **`AGENTS.md`** — update the Hard Constraints, Testing, and any module-level guidance that changed (e.g. new logger convention, new test runner, new CLI tools). Sub-agents read this; stale guidance causes bugs.
 - **`README.md`** — update the architecture map (add/remove files), key design decisions (document new patterns), and the models table if routing changed.
+- **`CHANGELOG.md`** (if present) — append the shipped version's entry.
 
 Only update sections that are actually affected by this session's changes. Do not rewrite unchanged sections.
+
+**De-slopify all user-facing docs before committing.** README / CHANGELOG / public-facing docs must strip these AI-tell signatures:
+
+- Emdash overuse (use commas / periods / semicolons instead).
+- "It's not X, it's Y" contrast structure.
+- "Here's why" / "Here's the thing" clickbait leads.
+- "Let's dive in" / "buckle up" forced enthusiasm.
+- "At its core…" / "fundamentally…" pseudo-profound openers.
+- "It's worth noting…" / "it's important to remember…" unnecessary hedges.
+- "Game-changer" / "powerful" / "seamless" / "robust" filler adjectives.
+- Three-item list tricolons in every paragraph.
+
+If the `/docs-de-slopify` skill is available, invoke it on the changed doc files. Otherwise sweep manually. Technical docs (AGENTS.md, internal specs) are exempt — the rule targets user-facing prose.
 
 ### 3. Commit any stray tracked/untracked files
 Check `git status` for uncommitted files (plan docs, skill updates, config changes). If any exist, propose groupings via:
