@@ -1,5 +1,5 @@
 import type { ExecFn } from "./exec.js";
-import type { OrchestratorState } from "./types.js";
+import type { FlywheelState } from "./types.js";
 import { polishInstructions, summaryInstructions, realityCheckInstructions, deSlopifyInstructions, landingChecklistInstructions, learningsExtractionPrompt } from "./prompts.js";
 import { reflectMemory, readMemory } from "./memory.js";
 import { readBeads, extractArtifacts as extractBeadArtifacts } from "./beads.js";
@@ -11,7 +11,7 @@ import { getDomainChecklist, formatDomainReviewItems } from "./domain-knowledge.
 export async function runGuidedGates(
   exec: ExecFn,
   cwd: string,
-  st: OrchestratorState,
+  st: FlywheelState,
   extraInfo: string,
   saveState: () => void
 ): Promise<{ content: { type: "text"; text: string }[]; details: any }> {
@@ -82,14 +82,14 @@ export async function runGuidedGates(
 
   if (!chosen) chosen = "done";
 
-  const callbackHint = `\n\nAfter completing this, call \`orch_review\` with beadId "__gates__" and verdict "pass" for the next gate.`;
+  const callbackHint = `\n\nAfter completing this, call \`flywheel_review\` with beadId "__gates__" and verdict "pass" for the next gate.`;
 
   // Regression hint appended to gates where fundamental issues might surface.
   // Flywheel: "If a gate fails, drop back a phase instead of pushing forward."
   const regressionHint = `\n\n---\n**If this gate revealed fundamental issues:**\n` +
-    `- \`orch_review\` with beadId \"__regress_to_beads__\" -> go back to bead creation\n` +
-    `- \`orch_review\` with beadId \"__regress_to_plan__\" -> go back to plan refinement\n` +
-    `- \`orch_review\` with beadId \"__regress_to_implement__\" -> go back to implementation`;
+    `- \`flywheel_review\` with beadId \"__regress_to_beads__\" -> go back to bead creation\n` +
+    `- \`flywheel_review\` with beadId \"__regress_to_plan__\" -> go back to plan refinement\n` +
+    `- \`flywheel_review\` with beadId \"__regress_to_implement__\" -> go back to implementation`;
 
   if (chosen === "done" || chosen.startsWith("done")) {
     st.currentGateIndex = 0;
@@ -100,7 +100,7 @@ export async function runGuidedGates(
 
     const learningsText = learningsExtractionPrompt(goal, activeBeads.map((b) => b.id));
 
-    // Self-improvement loop: save structured feedback for future orchestrations
+    // Self-improvement loop: save structured feedback for future flywheel runs
     try {
       const { collectFeedback, saveFeedback } = await import("./feedback.js");
       const feedback = collectFeedback(st);
@@ -167,7 +167,7 @@ export async function runGuidedGates(
       content: [
         {
           type: "text",
-          text: `**NEXT: Call \`parallel_subagents\` NOW with the config below.**\n\n## Peer Review - Round ${round}\n\n\`\`\`json\n${peerJson}\n\`\`\`\n\nAfter all complete, present findings and apply fixes. Then call \`orch_review\` with beadId "__gates__" and verdict "pass".${regressionHint}`,
+          text: `**NEXT: Call \`parallel_subagents\` NOW with the config below.**\n\n## Peer Review - Round ${round}\n\n\`\`\`json\n${peerJson}\n\`\`\`\n\nAfter all complete, present findings and apply fixes. Then call \`flywheel_review\` with beadId "__gates__" and verdict "pass".${regressionHint}`,
         },
       ],
       details: { iterating: true, round, peerReview: true },
@@ -177,7 +177,7 @@ export async function runGuidedGates(
   if (chosen.startsWith("tests")) {
     const ubsAvailable = await detectUbs(exec, cwd);
     const ubsRequired = ubsAvailable
-      ? `\n\n**Required:** Run \`ubs <changed-files>\` and fix ALL issues before calling orch_review.`
+      ? `\n\n**Required:** Run \`ubs <changed-files>\` and fix ALL issues before calling flywheel_review.`
       : "";
     return {
       content: [
@@ -241,7 +241,7 @@ Use ultrathink.${callbackHint}${regressionHint}`,
           : "(no output)");
     const ubsSection = ubsClean
       ? `\n\n✅ **UBS scan passed** — no issues found.`
-      : `\n\n❌ **UBS found issues — fix before committing:**\n\`\`\`\n${ubsOutput}\n\`\`\`\n\nFix all issues, then call \`orch_review\` with beadId "__gates__" and verdict "fail" to re-run this gate.`;
+      : `\n\n❌ **UBS found issues — fix before committing:**\n\`\`\`\n${ubsOutput}\n\`\`\`\n\nFix all issues, then call \`flywheel_review\` with beadId "__gates__" and verdict "fail" to re-run this gate.`;
     return {
       content: [{
         type: "text",
@@ -317,7 +317,7 @@ Use ultrathink.${callbackHint}${regressionHint}`,
   // Unreachable: all gate choices are handled above.
   // If we get here something is wrong - return a safe fallback.
   return {
-    content: [{ type: "text", text: `Unknown gate choice: "${chosen}". Call \`orch_review\` with beadId "__gates__" to continue.` }],
+    content: [{ type: "text", text: `Unknown gate choice: "${chosen}". Call \`flywheel_review\` with beadId "__gates__" to continue.` }],
     details: { iterating: true, round, unknownGate: chosen },
   };
 }

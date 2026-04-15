@@ -64,7 +64,7 @@ describe('SwarmTender — constructor', () => {
 
 // ─── Escalation state machine ────────────────────────────────────
 
-describe('SwarmTender — auto-escalation (orchestratorAgentName set)', () => {
+describe('SwarmTender — auto-escalation (flywheelAgentName set)', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -85,7 +85,7 @@ describe('SwarmTender — auto-escalation (orchestratorAgentName set)', () => {
           maxNudges: 2,
           killWaitMs: 999_999,
         },
-        orchestratorAgentName: 'Coordinator',
+        flywheelAgentName: 'Coordinator',
         onStuck,
         onKill,
       }
@@ -125,7 +125,7 @@ describe('SwarmTender — auto-escalation (orchestratorAgentName set)', () => {
           maxNudges: 1,
           killWaitMs: POLL,    // kill after one poll interval
         },
-        orchestratorAgentName: 'Coordinator',
+        flywheelAgentName: 'Coordinator',
         onKill,
         onSwarmComplete,
       }
@@ -154,7 +154,7 @@ describe('SwarmTender — auto-escalation (orchestratorAgentName set)', () => {
     expect(summary.stuckAgentNames).toContain('/wt/0');
   });
 
-  it('does NOT auto-escalate when orchestratorAgentName is absent', async () => {
+  it('does NOT auto-escalate when flywheelAgentName is absent', async () => {
     const onKill = vi.fn();
     const tender = makeTender(
       [{ path: '/wt/0', stepIndex: 0 }],
@@ -168,7 +168,7 @@ describe('SwarmTender — auto-escalation (orchestratorAgentName set)', () => {
           maxNudges: 1,
           killWaitMs: 0,
         },
-        // orchestratorAgentName intentionally omitted
+        // flywheelAgentName intentionally omitted
         onKill,
       }
     );

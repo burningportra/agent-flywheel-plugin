@@ -38,7 +38,7 @@ describe('isValidBeadId', () => {
   });
 
   it.each([
-    ['claude-orchestrator-1ru', false],  // multi-hyphen, last segment not all digits
+    ['agent-flywheel-1ru', false],  // multi-hyphen, last segment not all digits
     ['123', false],                       // starts with digit
     ['BD-123', false],                    // uppercase
     ['', false],                          // empty

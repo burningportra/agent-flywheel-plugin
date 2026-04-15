@@ -1,4 +1,4 @@
-import type { ToolContext, McpToolResult, OrchestratorState, RepoProfile, ScanResult, ProfileArgs } from '../types.js';
+import type { ToolContext, McpToolResult, FlywheelState, RepoProfile, ScanResult, ProfileArgs } from '../types.js';
 import { formatRepoProfile, makeNextToolStep, makeToolResult } from './shared.js';
 import { profileRepo, loadCachedProfile, saveCachedProfile } from '../profiler.js';
 import { parseBrList } from '../parsers.js';
@@ -7,7 +7,7 @@ import { createLogger } from '../logger.js';
 const log = createLogger('profile');
 
 /**
- * orch_profile — Scan the current repo and build a profile.
+ * flywheel_profile — Scan the current repo and build a profile.
  *
  * Runs git log, finds key files, detects language/framework/CI/test tooling.
  * Detects the br CLI (beads) for coordination backend.
@@ -52,7 +52,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
 
   state.repoProfile = profile;
   state.coordinationBackend = coordinationBackend;
-  state.coordinationStrategy = coordinationStrategy as OrchestratorState['coordinationStrategy'];
+  state.coordinationStrategy = coordinationStrategy as FlywheelState['coordinationStrategy'];
   state.coordinationMode ??= 'worktree';
   if (args.goal) state.selectedGoal = args.goal;
   state.phase = 'discovering';
@@ -85,7 +85,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
         if (open.length > 0 || deferred.length > 0) {
           beadStatus = `\n\n### Existing Beads\n- ${open.length} open/in-progress\n- ${deferred.length} deferred`;
           if (open.length > 0) {
-            beadStatus += `\n\nTo work on existing beads, call \`orch_approve_beads\` with action="start".`;
+            beadStatus += `\n\nTo work on existing beads, call \`flywheel_approve_beads\` with action="start".`;
           }
         }
       } else {
@@ -101,8 +101,8 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   const roadmap = `**Workflow:** profile → discover → select → plan → approve_beads → implement → review`;
 
   const goalSection = args.goal
-    ? `\n\n### Goal\n${args.goal}\n\nSince a goal was provided, you can skip discovery and call \`orch_select\` directly with this goal, or call \`orch_discover\` to generate alternatives.`
-    : `\n\n### Next Step\nCall \`orch_discover\` with 5-15 project ideas based on this profile.`;
+    ? `\n\n### Goal\n${args.goal}\n\nSince a goal was provided, you can skip discovery and call \`flywheel_select\` directly with this goal, or call \`flywheel_discover\` to generate alternatives.`
+    : `\n\n### Next Step\nCall \`flywheel_discover\` with 5-15 project ideas based on this profile.`;
 
   const formatted = formatRepoProfile(profile);
 
@@ -113,31 +113,31 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   const text = `${roadmap}\n\n${coordLine}${cacheNote}${foundationWarning}${beadStatus}${goalSection}\n\n---\n\n${formatted}`;
 
   const nextStep = args.goal
-    ? makeNextToolStep('present_choices', 'A goal was provided. Either proceed directly to orch_select or run orch_discover to generate alternatives.', {
+    ? makeNextToolStep('present_choices', 'A goal was provided. Either proceed directly to flywheel_select or run flywheel_discover to generate alternatives.', {
         options: [
           {
             id: 'select-provided-goal',
             label: 'Use the provided goal',
-            description: 'Skip discovery and continue with orch_select using the supplied goal.',
-            tool: 'orch_select',
+            description: 'Skip discovery and continue with flywheel_select using the supplied goal.',
+            tool: 'flywheel_select',
             args: { goal: args.goal },
           },
           {
             id: 'discover-alternatives',
             label: 'Discover alternatives',
-            description: 'Generate alternative goals with orch_discover before selecting one.',
-            tool: 'orch_discover',
+            description: 'Generate alternative goals with flywheel_discover before selecting one.',
+            tool: 'flywheel_discover',
             args: { ideas: 'CandidateIdea[]' },
           },
         ],
       })
-    : makeNextToolStep('call_tool', 'Call orch_discover with candidate ideas based on the repo profile.', {
-        tool: 'orch_discover',
+    : makeNextToolStep('call_tool', 'Call flywheel_discover with candidate ideas based on the repo profile.', {
+        tool: 'flywheel_discover',
         argsSchemaHint: { ideas: 'CandidateIdea[]' },
       });
 
   return makeToolResult(text, {
-    tool: 'orch_profile',
+    tool: 'flywheel_profile',
     version: 1 as const,
     status: 'ok' as const,
     phase: state.phase,

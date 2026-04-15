@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runVerifyBeads } from '../../tools/verify-beads.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState, Bead } from '../../types.js';
+import type { FlywheelState, Bead } from '../../types.js';
 import type { ExecCall } from '../helpers/mocks.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -20,7 +20,7 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
 }
 
 function makeCtx(
-  stateOverrides: Partial<OrchestratorState> = {},
+  stateOverrides: Partial<FlywheelState> = {},
   execCalls: ExecCall[] = [],
 ) {
   const state = makeState({
@@ -33,7 +33,7 @@ function makeCtx(
     exec,
     cwd: '/fake/cwd',
     state,
-    saveState: (_s: OrchestratorState) => {},
+    saveState: (_s: FlywheelState) => {},
     clearState: () => {},
   };
   return { ctx, state };
@@ -98,7 +98,7 @@ describe('runVerifyBeads', () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_verify_beads',
+      tool: 'flywheel_verify_beads',
       version: 1,
       status: 'error',
       data: { error: { code: 'invalid_input' } },
@@ -166,11 +166,11 @@ describe('runVerifyBeads', () => {
     expect(data.autoClosed).toEqual([{ beadId: 'op-1', commit: 'abc1234' }]);
     expect(data.unclosedNoCommit).toEqual([]);
 
-    // State must be reconciled so subsequent orch_review short-circuits cleanly.
+    // State must be reconciled so subsequent flywheel_review short-circuits cleanly.
     expect(state.beadResults!['op-1']).toEqual({
       beadId: 'op-1',
       status: 'success',
-      summary: 'Auto-closed by orch_verify_beads (commit: abc1234)',
+      summary: 'Auto-closed by flywheel_verify_beads (commit: abc1234)',
     });
   });
 

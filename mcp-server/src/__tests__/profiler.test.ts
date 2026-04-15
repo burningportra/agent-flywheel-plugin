@@ -57,7 +57,7 @@ function baseExecCalls() {
         '--exclude-dir=target',
         '--exclude-dir=__pycache__',
         '--exclude-dir=.venv',
-        '--exclude-dir=.pi-orchestrator',
+        '--exclude-dir=.pi-flywheel',
         '-E', '(TODO|FIXME|HACK|XXX):',
         '.',
       ],

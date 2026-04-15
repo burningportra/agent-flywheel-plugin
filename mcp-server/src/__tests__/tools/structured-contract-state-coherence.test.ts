@@ -9,7 +9,7 @@ import { runPlan } from '../../tools/plan.js';
 import { runReview } from '../../tools/review.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 import type { ExecCall } from '../helpers/mocks.js';
-import type { Bead, CandidateIdea, OrchestratorState, RepoProfile } from '../../types.js';
+import type { Bead, CandidateIdea, FlywheelState, RepoProfile } from '../../types.js';
 
 function makeRepoProfile(overrides: Partial<RepoProfile> = {}): RepoProfile {
   return {
@@ -68,7 +68,7 @@ function baseProfileExecCalls(): ExecCall[] {
     },
     {
       cmd: 'git',
-      args: ['show', 'HEAD:.pi-orchestrator/profile-cache.json'],
+      args: ['show', 'HEAD:.pi-flywheel/profile-cache.json'],
       result: { code: 1, stdout: '', stderr: 'missing cache' },
     },
     {
@@ -105,7 +105,7 @@ function baseProfileExecCalls(): ExecCall[] {
         '--exclude-dir=target',
         '--exclude-dir=__pycache__',
         '--exclude-dir=.venv',
-        '--exclude-dir=.pi-orchestrator',
+        '--exclude-dir=.pi-flywheel',
         '-E', '(TODO|FIXME|HACK|XXX):',
         '.',
       ],
@@ -164,20 +164,20 @@ function baseProfileExecCalls(): ExecCall[] {
     },
     {
       cmd: 'git',
-      args: ['update-index', '--add', '--cacheinfo', '100644', 'blob-sha', '.pi-orchestrator/profile-cache.json'],
+      args: ['update-index', '--add', '--cacheinfo', '100644', 'blob-sha', '.pi-flywheel/profile-cache.json'],
       result: { code: 0, stdout: '', stderr: '' },
     },
   ];
 }
 
-function makeCtx(execCalls: ExecCall[] = [], stateOverrides: Partial<OrchestratorState> = {}, cwd = '/fake/cwd') {
+function makeCtx(execCalls: ExecCall[] = [], stateOverrides: Partial<FlywheelState> = {}, cwd = '/fake/cwd') {
   const state = makeState(stateOverrides);
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec: createMockExec(execCalls),
     cwd,
     state,
-    saveState: (next: OrchestratorState) => { saved.push(structuredClone(next)); },
+    saveState: (next: FlywheelState) => { saved.push(structuredClone(next)); },
     clearState: () => {},
   };
   return { ctx, state, saved };
@@ -221,7 +221,7 @@ describe('structured contract and state coherence', () => {
     expect(structured.data.existingBeads).toEqual({ openCount: 1, deferredCount: 1 });
     expect(result.content[0].text).toContain('Coordination: beads');
     expect(result.content[0].text).toContain('1 open/in-progress');
-    expect(result.content[0].text).toContain('Call `orch_discover`');
+    expect(result.content[0].text).toContain('Call `flywheel_discover`');
   });
 
   it('keeps discover text, structuredContent, and persisted candidate state aligned', async () => {
@@ -244,9 +244,9 @@ describe('structured contract and state coherence', () => {
     };
 
     expect(state.phase).toBe(structured.phase);
-    expect(saved.at(-1)?.candidateIdeas?.map(idea => idea.id)).toEqual(structured.data.ideaIds);
-    expect(state.candidateIdeas?.map(idea => idea.id)).toEqual(structured.data.ideaIds);
-    expect(state.candidateIdeas?.map(idea => idea.title)).toEqual(structured.data.ideas.map(idea => idea.title));
+    expect(saved.at(-1)?.candidateIdeas?.map((idea: CandidateIdea) => idea.id)).toEqual(structured.data.ideaIds);
+    expect(state.candidateIdeas?.map((idea: CandidateIdea) => idea.id)).toEqual(structured.data.ideaIds);
+    expect(state.candidateIdeas?.map((idea: CandidateIdea) => idea.title)).toEqual(structured.data.ideas.map((idea: { id: string; title: string; tier?: string }) => idea.title));
     expect(structured.data.totalIdeas).toBe(state.candidateIdeas?.length);
     expect(structured.data.topIdeas).toBe(1);
     expect(structured.data.honorableIdeas).toBe(1);
@@ -262,7 +262,7 @@ describe('structured contract and state coherence', () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toEqual({
-      tool: 'orch_discover',
+      tool: 'flywheel_discover',
       version: 1,
       status: 'error',
       phase: 'discovering',
@@ -312,7 +312,7 @@ describe('structured contract and state coherence', () => {
     expect(result.isError).toBe(true);
     expect(state.planDocument).toBeUndefined();
     expect(result.structuredContent).toEqual({
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       version: 1,
       status: 'error',
       phase: 'planning',
@@ -404,7 +404,7 @@ describe('structured contract and state coherence', () => {
     expect(state.phase).toBe('reviewing');
     expect(saved).toHaveLength(0);
     expect(result.structuredContent).toEqual({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'error',
       phase: 'reviewing',

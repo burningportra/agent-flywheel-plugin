@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadState, saveState, clearState } from '../state.js';
 import { createInitialState } from '../types.js';
-import type { OrchestratorState } from '../types.js';
+import type { FlywheelState } from '../types.js';
 
 let testDir: string;
 beforeEach(() => { testDir = mkdtempSync(join(tmpdir(), 'orch-state-test-')); });
@@ -19,26 +19,26 @@ describe('loadState', () => {
   });
 
   it('returns initial state when checkpoint is in "idle" phase', async () => {
-    const idle: OrchestratorState = { ...createInitialState(), phase: 'idle' };
+    const idle: FlywheelState = { ...createInitialState(), phase: 'idle' };
     await saveState(testDir, idle);
     expect(loadState(testDir)).toEqual(createInitialState());
   });
 
   it('returns initial state when checkpoint is in "complete" phase', async () => {
-    const complete: OrchestratorState = { ...createInitialState(), phase: 'complete' };
+    const complete: FlywheelState = { ...createInitialState(), phase: 'complete' };
     await saveState(testDir, complete);
     expect(loadState(testDir)).toEqual(createInitialState());
   });
 
   it('restores state when checkpoint is in "profiling" phase', async () => {
-    const profiling: OrchestratorState = { ...createInitialState(), phase: 'profiling' };
+    const profiling: FlywheelState = { ...createInitialState(), phase: 'profiling' };
     await saveState(testDir, profiling);
     const restored = loadState(testDir);
     expect(restored.phase).toBe('profiling');
   });
 
   it('restores state when checkpoint is in "implementing" phase', async () => {
-    const implementing: OrchestratorState = {
+    const implementing: FlywheelState = {
       ...createInitialState(),
       phase: 'implementing',
       selectedGoal: 'build the thing',
@@ -54,7 +54,7 @@ describe('loadState', () => {
 
 describe('saveState + loadState round-trip', () => {
   it('round-trips a state with selectedGoal', async () => {
-    const state: OrchestratorState = {
+    const state: FlywheelState = {
       ...createInitialState(),
       phase: 'planning',
       selectedGoal: 'add rate limiting',
@@ -70,7 +70,7 @@ describe('saveState + loadState round-trip', () => {
   });
 
   it('round-trips bead-centric state fields', async () => {
-    const state: OrchestratorState = {
+    const state: FlywheelState = {
       ...createInitialState(),
       phase: 'reviewing',
       activeBeadIds: ['abc-123', 'def-456'],
@@ -91,7 +91,7 @@ describe('saveState + loadState round-trip', () => {
 
 describe('clearState', () => {
   it('subsequent loadState returns initial state after clear', async () => {
-    const state: OrchestratorState = { ...createInitialState(), phase: 'planning' };
+    const state: FlywheelState = { ...createInitialState(), phase: 'planning' };
     await saveState(testDir, state);
     expect(loadState(testDir).phase).toBe('planning');
 
@@ -110,7 +110,7 @@ describe('saveState edge cases', () => {
   it('does not throw when checkpoint dir does not exist yet', async () => {
     const nested = join(testDir, 'deep', 'nested');
     // The nested dir itself doesn't exist, but saveState's writeCheckpoint
-    // creates .pi-orchestrator inside it — so the parent must exist.
+    // creates .pi-flywheel inside it — so the parent must exist.
     // Actually saveState calls mkdirSync with { recursive: true } on the
     // checkpoint dir, so this should work as long as 'nested' doesn't need
     // to exist. Let's test with the testDir which does exist.

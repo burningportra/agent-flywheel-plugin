@@ -18,7 +18,7 @@ import { runVerifyBeads } from './tools/verify-beads.js';
 import { makeToolError } from './tools/shared.js';
 import type {
   McpToolResult,
-  OrchestrationToolName,
+  FlywheelToolName,
   ToolContext,
 } from './types.js';
 import { VERSION } from './version.js';
@@ -27,7 +27,7 @@ const log = createLogger('server');
 
 type ToolRunner = (ctx: ToolContext, args: any) => Promise<McpToolResult>;
 
-type ToolRunnerMap = Partial<Record<OrchestrationToolName, ToolRunner>>;
+type ToolRunnerMap = Partial<Record<FlywheelToolName, ToolRunner>>;
 
 interface ToolValidationError {
   message: string;
@@ -45,8 +45,8 @@ interface CallToolHandlerDependencies {
 
 export const TOOLS = [
   {
-    name: 'orch_profile',
-    description: 'Scan the current repository to collect its tech stack, structure, commits, TODOs, and key files. Returns a structured profile and discovery instructions. Call this first before any other orchestration tool.',
+    name: 'flywheel_profile',
+    description: 'Scan the current repository to collect its tech stack, structure, commits, TODOs, and key files. Returns a structured profile and discovery instructions. Call this first before any other flywheel tool.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -58,8 +58,8 @@ export const TOOLS = [
     },
   },
   {
-    name: 'orch_discover',
-    description: 'Accept LLM-generated project ideas based on the repo profile. Call orch_profile first. Pass 5-15 structured ideas; this tool stores them and instructs you to call orch_select next.',
+    name: 'flywheel_discover',
+    description: 'Accept LLM-generated project ideas based on the repo profile. Call flywheel_profile first. Pass 5-15 structured ideas; this tool stores them and instructs you to call flywheel_select next.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -105,7 +105,7 @@ export const TOOLS = [
     },
   },
   {
-    name: 'orch_select',
+    name: 'flywheel_select',
     description: 'Set the selected goal and transition to planning phase. After presenting ideas to the user (via conversation), call this with their chosen goal. Returns workflow instructions for plan-first, deep-plan, or direct-to-beads.',
     inputSchema: {
       type: 'object',
@@ -117,7 +117,7 @@ export const TOOLS = [
     },
   },
   {
-    name: 'orch_plan',
+    name: 'flywheel_plan',
     description: 'Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. Provide planFile (preferred) or planContent to register a completed plan and transition to bead creation.',
     inputSchema: {
       type: 'object',
@@ -142,7 +142,7 @@ export const TOOLS = [
     },
   },
   {
-    name: 'orch_approve_beads',
+    name: 'flywheel_approve_beads',
     description: 'Review and approve bead graph before implementation. Reads beads from br CLI, computes convergence, and acts based on action parameter. Call after creating beads with br create.',
     inputSchema: {
       type: 'object',
@@ -163,7 +163,7 @@ export const TOOLS = [
     },
   },
   {
-    name: 'orch_review',
+    name: 'flywheel_review',
     description: "Submit bead implementation for review. action=hit-me spawns parallel review agents (returns agent task specs for Claude Code to spawn). action=looks-good marks bead done and advances. action=skip defers the bead. Use beadId=__gates__ for guided review gates after all beads are done.",
     inputSchema: {
       type: 'object',
@@ -183,7 +183,7 @@ export const TOOLS = [
     },
   },
   {
-    name: 'orch_verify_beads',
+    name: 'flywheel_verify_beads',
     description: "Verify a wave of beads is closed; auto-close stragglers that have matching commits. Call after impl agents report back, before moving to the next wave. Returns {verified, autoClosed, unclosedNoCommit, errors}.",
     inputSchema: {
       type: 'object',
@@ -200,8 +200,8 @@ export const TOOLS = [
     },
   },
   {
-    name: 'orch_memory',
-    description: 'Search and interact with CASS memory (cm CLI). Use to recall past decisions, gotchas, and patterns from prior orchestration runs. Requires cm CLI to be installed.',
+    name: 'flywheel_memory',
+    description: 'Search and interact with CASS memory (cm CLI). Use to recall past decisions, gotchas, and patterns from prior flywheel runs. Requires cm CLI to be installed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -223,18 +223,18 @@ export const TOOLS = [
   },
 ];
 
-const DEFAULT_RUNNERS: Record<OrchestrationToolName, ToolRunner> = {
-  orch_profile: runProfile as ToolRunner,
-  orch_discover: runDiscover as ToolRunner,
-  orch_select: runSelect as ToolRunner,
-  orch_plan: runPlan as ToolRunner,
-  orch_approve_beads: runApprove as ToolRunner,
-  orch_review: runReview as ToolRunner,
-  orch_verify_beads: runVerifyBeads as ToolRunner,
-  orch_memory: runMemory as ToolRunner,
+const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
+  flywheel_profile: runProfile as ToolRunner,
+  flywheel_discover: runDiscover as ToolRunner,
+  flywheel_select: runSelect as ToolRunner,
+  flywheel_plan: runPlan as ToolRunner,
+  flywheel_approve_beads: runApprove as ToolRunner,
+  flywheel_review: runReview as ToolRunner,
+  flywheel_verify_beads: runVerifyBeads as ToolRunner,
+  flywheel_memory: runMemory as ToolRunner,
 };
 
-function isKnownToolName(name: string): name is OrchestrationToolName {
+function isKnownToolName(name: string): name is FlywheelToolName {
   return TOOLS.some((tool) => tool.name === name);
 }
 
@@ -292,7 +292,7 @@ function makeValidationErrorResult(toolName: string, validationError: ToolValida
 }
 
 export function createCallToolHandler(dependencies: CallToolHandlerDependencies) {
-  const runners: Record<OrchestrationToolName, ToolRunner> = {
+  const runners: Record<FlywheelToolName, ToolRunner> = {
     ...DEFAULT_RUNNERS,
     ...dependencies.runners,
   };
@@ -341,7 +341,7 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
 
 export function createServer(): Server {
   const server = new Server(
-    { name: 'claude-orchestrator', version: VERSION },
+    { name: 'agent-flywheel', version: VERSION },
     { capabilities: { tools: {} } }
   );
 

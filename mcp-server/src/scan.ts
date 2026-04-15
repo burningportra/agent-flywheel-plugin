@@ -15,7 +15,7 @@ const CCC_SCAN_QUERIES = [
   {
     id: "workflow-entrypoints",
     title: "Workflow and entrypoints",
-    query: "orchestrator workflow command entrypoint state machine",
+    query: "flywheel workflow command entrypoint state machine",
   },
   {
     id: "planning-review",

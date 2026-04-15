@@ -39,7 +39,7 @@ export interface CleanupSummary {
 
 // ─── Constants ─────────────────────────────────────────────────
 
-const WORKTREE_DIR = ".pi-orchestrator/worktrees";
+const WORKTREE_DIR = ".pi-flywheel/worktrees";
 
 function worktreePath(repoRoot: string, stepIndex: number): string {
   return join(repoRoot, WORKTREE_DIR, `step-${stepIndex}`);
@@ -189,7 +189,7 @@ export async function autoCommitWorktree(
 // ─── Orphan Detection & Cleanup ────────────────────────────────
 
 /**
- * Find worktrees in `.pi-orchestrator/worktrees/` that aren't in the tracked list.
+ * Find worktrees in `.pi-flywheel/worktrees/` that aren't in the tracked list.
  * Returns info about each orphan including dirty status and branch name (if detectable).
  */
 export async function findOrphanedWorktrees(
@@ -278,7 +278,7 @@ export async function cleanupOrphanedWorktrees(
       const commitResult = await autoCommitWorktree(
         exec,
         orphan.path,
-        `[claude-orchestrator] auto-commit: recovery of orphaned worktree`
+        `[agent-flywheel] auto-commit: recovery of orphaned worktree`
       );
       if (commitResult.ok && commitResult.data) {
         summary.autoCommitted++;
@@ -448,7 +448,7 @@ export class WorktreePool {
         const commitResult = await autoCommitWorktree(
           this.exec,
           info.path,
-          `[claude-orchestrator] auto-commit: safe cleanup of worktree step-${idx}`
+          `[agent-flywheel] auto-commit: safe cleanup of worktree step-${idx}`
         );
         if (commitResult.ok && commitResult.data) {
           summary.autoCommitted++;

@@ -1,7 +1,7 @@
 /**
  * Self-Improvement Loop — Feedback & Prompt Tracking
  *
- * A. Post-orchestration feedback — structured survey saved after completion
+ * A. Post-flywheel feedback — structured survey saved after completion
  * B. Automatic CASS context injection — prepend relevant rules to prompts
  * C. Prompt effectiveness tracking — track which prompts produce real changes
  */
@@ -12,10 +12,10 @@ import { parseFeedbackFile } from "./parsers.js";
 
 // ─── A. Post-Orchestration Feedback ─────────────────────────
 
-export interface OrchestrationFeedback {
+export interface FlywheelFeedback {
   /** ISO timestamp. */
   timestamp: string;
-  /** The orchestration goal. */
+  /** The flywheel goal. */
   goal: string;
   /** Total beads created. */
   beadCount: number;
@@ -37,12 +37,12 @@ export interface OrchestrationFeedback {
   spaceViolationCount: number;
 }
 
-const FEEDBACK_DIR = ".pi/orchestrator-feedback";
+const FEEDBACK_DIR = ".pi/flywheel-feedback";
 
 /**
- * Collect feedback from the current orchestration state.
+ * Collect feedback from the current flywheel state.
  */
-export function collectFeedback(state: import('./types.js').OrchestratorState): OrchestrationFeedback {
+export function collectFeedback(state: import('./types.js').FlywheelState): FlywheelFeedback {
   const beadResults = Object.values(state.beadResults ?? {});
   const completedCount = beadResults.filter((r) => r.status === "success").length;
 
@@ -64,7 +64,7 @@ export function collectFeedback(state: import('./types.js').OrchestratorState): 
 /**
  * Save feedback to the project-local feedback directory.
  */
-export function saveFeedback(cwd: string, feedback: OrchestrationFeedback): string {
+export function saveFeedback(cwd: string, feedback: FlywheelFeedback): string {
   const dir = join(cwd, FEEDBACK_DIR);
   mkdirSync(dir, { recursive: true });
   const filename = `feedback-${Date.now()}.json`;
@@ -76,7 +76,7 @@ export function saveFeedback(cwd: string, feedback: OrchestrationFeedback): stri
 /**
  * Load all feedback files from the project.
  */
-export function loadAllFeedback(cwd: string): OrchestrationFeedback[] {
+export function loadAllFeedback(cwd: string): FlywheelFeedback[] {
   const dir = join(cwd, FEEDBACK_DIR);
   if (!existsSync(dir)) return [];
   try {
@@ -92,7 +92,7 @@ export function loadAllFeedback(cwd: string): OrchestrationFeedback[] {
           return null;
         }
       })
-      .filter((f): f is OrchestrationFeedback => f != null);
+      .filter((f): f is FlywheelFeedback => f != null);
   } catch {
     return [];
   }
@@ -102,7 +102,7 @@ export function loadAllFeedback(cwd: string): OrchestrationFeedback[] {
  * Compute aggregate stats from all feedback.
  */
 export interface FeedbackStats {
-  totalOrchestrations: number;
+  totalFlywheelRuns: number;
   avgBeadCount: number;
   avgCompletionRate: number;
   avgPolishRounds: number;
@@ -111,10 +111,10 @@ export interface FeedbackStats {
   avgForegoneScore: number | null;
 }
 
-export function computeFeedbackStats(feedbacks: OrchestrationFeedback[]): FeedbackStats {
+export function computeFeedbackStats(feedbacks: FlywheelFeedback[]): FeedbackStats {
   if (feedbacks.length === 0) {
     return {
-      totalOrchestrations: 0,
+      totalFlywheelRuns: 0,
       avgBeadCount: 0,
       avgCompletionRate: 0,
       avgPolishRounds: 0,
@@ -136,7 +136,7 @@ export function computeFeedbackStats(feedbacks: OrchestrationFeedback[]): Feedba
   const foregoneScores = feedbacks.filter((f) => f.foregoneScore != null).map((f) => f.foregoneScore!);
 
   return {
-    totalOrchestrations: n,
+    totalFlywheelRuns: n,
     avgBeadCount: Math.round(avgBeadCount * 10) / 10,
     avgCompletionRate: Math.round(avgCompletionRate * 100),
     avgPolishRounds: Math.round(avgPolishRounds * 10) / 10,
@@ -147,9 +147,9 @@ export function computeFeedbackStats(feedbacks: OrchestrationFeedback[]): Feedba
 }
 
 export function formatFeedbackStats(stats: FeedbackStats): string {
-  if (stats.totalOrchestrations === 0) return "No orchestration history yet.";
+  if (stats.totalFlywheelRuns === 0) return "No flywheel history yet.";
   const lines = [
-    `📊 **Orchestration History** (${stats.totalOrchestrations} runs)`,
+    `📊 **Flywheel History** (${stats.totalFlywheelRuns} runs)`,
     `  Avg beads/run:      ${stats.avgBeadCount}`,
     `  Completion rate:     ${stats.avgCompletionRate}%`,
     `  Avg polish rounds:   ${stats.avgPolishRounds}`,
@@ -174,7 +174,7 @@ export function withCassContext(prompt: string, cwd: string, taskDescription?: s
     const memory = readMemory(cwd, taskDescription);
     if (!memory) return prompt;
 
-    return `## Context from Prior Orchestrations\n${memory}\n\n---\n\n${prompt}`;
+    return `## Context from Prior Flywheel Runs\n${memory}\n\n---\n\n${prompt}`;
   } catch {
     return prompt;
   }
@@ -296,10 +296,10 @@ export function parseToolFeedback(output: string, toolName: string): ToolFeedbac
   } catch { return null; }
 }
 
-/** Save tool feedback to .pi-orchestrator-feedback/tools/<toolName>.jsonl */
+/** Save tool feedback to .pi-flywheel-feedback/tools/<toolName>.jsonl */
 export function saveToolFeedback(cwd: string, feedback: ToolFeedback): void {
   try {
-    const dir = join(cwd, ".pi-orchestrator-feedback", "tools");
+    const dir = join(cwd, ".pi-flywheel-feedback", "tools");
     mkdirSync(dir, { recursive: true });
     const file = join(dir, `${feedback.toolName}.jsonl`);
     appendFileSync(file, JSON.stringify(feedback) + "\n", "utf8");

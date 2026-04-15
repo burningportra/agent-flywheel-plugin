@@ -118,7 +118,7 @@ export function getContext(task: string, cwd?: string): CassContext | null {
  */
 export function readMemory(cwd: string, task?: string): string {
   if (!detectCass()) return "";
-  const ctx = getContext(task || "orchestration session", cwd);
+  const ctx = getContext(task || "flywheel session", cwd);
   if (!ctx) return "";
 
   const parts: string[] = [];
@@ -206,7 +206,7 @@ export function markRule(bulletId: string, helpful: boolean, reason?: string, cw
 
 /**
  * Run `cm onboard` to bootstrap memory for a new project.
- * Should be called once when starting orchestration on a project that has no
+ * Should be called once when starting flywheel on a project that has no
  * existing CASS memory. Best-effort — returns true if successful.
  */
 export function onboardMemory(cwd?: string): boolean {
@@ -247,7 +247,7 @@ export function reflectMemory(cwd?: string): boolean {
  */
 export function mineSkillGaps(
   cwd: string,
-  topic: string = "planning beads orchestration"
+  topic: string = "planning beads flywheel"
 ): string | null {
   if (!detectCass()) return null;
   const output = runCm(["context", topic, "--json"], cwd);

@@ -1,5 +1,5 @@
 /**
- * Single source of truth for the orchestrator version.
+ * Single source of truth for the agent-flywheel version.
  * Reads from package.json so it stays in sync automatically.
  */
 import { createRequire } from "module";

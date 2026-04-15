@@ -1,9 +1,9 @@
-import type { RepoProfile, Bead, BeadResult, ScanResult, OrchestratorPhase } from "./types.js";
+import type { RepoProfile, Bead, BeadResult, ScanResult, FlywheelPhase } from "./types.js";
 import type { PlanToBeadAudit } from "./beads.js";
 import { formatTemplatesForPrompt } from "./bead-templates.js";
 
 // ─── Workflow Roadmap ───────────────────────────────────────
-const WORKFLOW_PHASES: { key: OrchestratorPhase; label: string }[] = [
+const WORKFLOW_PHASES: { key: FlywheelPhase; label: string }[] = [
   { key: "profiling", label: "Scan" },
   { key: "discovering", label: "Discover" },
   { key: "awaiting_selection", label: "Select" },
@@ -13,7 +13,7 @@ const WORKFLOW_PHASES: { key: OrchestratorPhase; label: string }[] = [
   { key: "complete", label: "Done" },
 ];
 
-export function workflowRoadmap(currentPhase: OrchestratorPhase): string {
+export function workflowRoadmap(currentPhase: FlywheelPhase): string {
   const phaseIdx = WORKFLOW_PHASES.findIndex(p => p.key === currentPhase);
   return WORKFLOW_PHASES.map((p, i) => {
     const marker = i < phaseIdx ? "v" : i === phaseIdx ? ">" : "o";
@@ -88,7 +88,7 @@ export function formatRepoProfile(profile: RepoProfile, scanResult?: ScanResult)
 }
 
 // ─── System Prompt for Orchestrator Mode ────────────────────
-export function orchestratorSystemPrompt(
+export function flywheelSystemPrompt(
   hasSophia: boolean,
   coordBackend?: import("./coordination.js").CoordinationBackend
 ): string {
@@ -100,7 +100,7 @@ export function orchestratorSystemPrompt(
   if (useBeadsAgentMail) {
     coordinationSection = `
 ## Coordination: Beads + Agent Mail
-The orchestrator uses **beads** for task lifecycle and **agent-mail** for inter-agent messaging and file reservations.
+The agent-flywheel uses **beads** for task lifecycle and **agent-mail** for inter-agent messaging and file reservations.
 
 ### Beads (task tracking)
 - Create beads via \`br create "Title" -t task -p <priority> -d "..."\` in bash
@@ -123,7 +123,7 @@ ${hasSophia ? "\nSophia is also available as a secondary backend for CR/task man
   } else if (hasSophia) {
     coordinationSection = `
 ## Sophia Integration
-The orchestrator uses Sophia for change request and task management. When beads are created:
+The agent-flywheel uses Sophia for change request and task management. When beads are created:
 - A Sophia CR is created automatically with tasks matching beads
 - Use \`sophia cr task done <crId> <taskId> --commit-type feat --from-contract\` to checkpoint completed tasks
 - After all beads, \`sophia cr validate\` and \`sophia cr review\` run automatically
@@ -131,48 +131,48 @@ The orchestrator uses Sophia for change request and task management. When beads 
 ## Parallel Execution with Worktree Isolation
 When beads are independent (no shared files), use \`parallel_subagents\` with git worktree isolation:
 
-1. The orchestrator creates a **WorktreePool** - each parallel bead gets its own git worktree checkout
+1. The agent-flywheel creates a **WorktreePool** - each parallel bead gets its own git worktree checkout
 2. For each parallel group, spawn sub-agents via \`parallel_subagents\`, passing the worktree path as the working directory
 3. Each sub-agent works in isolation - no file conflicts between parallel beads
 4. After all agents in a group complete, worktree changes are merged back to the main branch sequentially
 5. Worktrees are cleaned up after merge
 
 Use \`br ready\` to determine which beads can run in parallel.
-If worktree creation fails, the orchestrator falls back to sequential execution in the shared directory.`;
+If worktree creation fails, the agent-flywheel falls back to sequential execution in the shared directory.`;
   }
 
-  return `You are operating as a repo-aware multi-agent orchestrator. You have access to specialized orchestrator tools that drive a structured workflow.
+  return `You are operating as a repo-aware multi-agent flywheel. You have access to specialized flywheel tools that drive a structured workflow.
 
 ## Your Workflow
-1. Call \`orch_profile\` to scan the repository
-2. Call \`orch_discover\` to generate project ideas from the profile
-3. Call \`orch_select\` to present ideas to the user and get their choice
-4. If the workflow produces a plan, return to \`orch_approve_beads\` to review/approve the plan in-menu before creating beads
-5. Create beads for the selected goal via \`br create\` in bash, setting dependencies with \`br dep add\`, then call \`orch_approve_beads\` to enter the bead approval menu
-6. For each bead, implement using code tools (read, write, edit, bash), then call \`orch_review\`
-7. After all beads pass review, the orchestrator runs post-completion checks and offers follow-up actions
+1. Call \`flywheel_profile\` to scan the repository
+2. Call \`flywheel_discover\` to generate project ideas from the profile
+3. Call \`flywheel_select\` to present ideas to the user and get their choice
+4. If the workflow produces a plan, return to \`flywheel_approve_beads\` to review/approve the plan in-menu before creating beads
+5. Create beads for the selected goal via \`br create\` in bash, setting dependencies with \`br dep add\`, then call \`flywheel_approve_beads\` to enter the bead approval menu
+6. For each bead, implement using code tools (read, write, edit, bash), then call \`flywheel_review\`
+7. After all beads pass review, the agent-flywheel runs post-completion checks and offers follow-up actions
 ${coordinationSection}
 
 ## Multi-Pass Review
 Each bead goes through multiple review passes:
-1. **Self-review**: You assess your own work against acceptance criteria via \`orch_review\`
+1. **Self-review**: You assess your own work against acceptance criteria via \`flywheel_review\`
 2. **Adversarial review**: A second pass with fresh eyes checks for bugs, oversights, ergonomics issues
 3. **Cross-agent review**: After ALL beads complete, an independent reviewer sub-agent audits the full diff
 
 Each pass uses a different perspective to catch what the previous one missed.
 
 ## Post-Completion
-After all beads and reviews pass, the orchestrator offers:
+After all beads and reviews pass, the agent-flywheel offers:
 - **Polish pass**: Improve clarity, remove generic AI patterns, tighten ergonomics
 - **Commit strategy**: Group changes into logical commits with detailed messages
 - **Skill extraction**: Check if the work product should become a reusable skill
 
 ## CASS Memory
-- Use \`orch_memory\` tool with action \`context\` to get task-relevant rules and anti-patterns
-- Use \`orch_memory\` tool with action \`mark\` to give feedback on rules (\`helpful\` or \`harmful\`)
+- Use \`flywheel_memory\` tool with action \`context\` to get task-relevant rules and anti-patterns
+- Use \`flywheel_memory\` tool with action \`mark\` to give feedback on rules (\`helpful\` or \`harmful\`)
 - Use \`/memory\` command to view, search, add rules, or mark rules as harmful
-- When a CASS rule helps you, mark it: \`orch_memory\` action=mark query=<bulletId> helpful=true
-- When a rule leads you astray, mark it: \`orch_memory\` action=mark query=<bulletId> helpful=false reason="explanation"
+- When a CASS rule helps you, mark it: \`flywheel_memory\` action=mark query=<bulletId> helpful=true
+- When a rule leads you astray, mark it: \`flywheel_memory\` action=mark query=<bulletId> helpful=false reason="explanation"
 
 ## Epistemic Discipline
 - Report outcomes faithfully: if tests fail, say so with the relevant output.
@@ -186,14 +186,14 @@ After all beads and reviews pass, the orchestrator offers:
 
 ## Rules
 - Follow the workflow in order. Do not skip steps.
-- Keep every handoff inside the orchestrate workflow/menus. If a plan exists, route back through \`orch_approve_beads\` before bead creation; if beads exist, route through \`orch_approve_beads\` before implementation; if implementation is in progress, route through \`orch_review\`.
+- Keep every handoff inside the flywheel workflow/menus. If a plan exists, route back through \`flywheel_approve_beads\` before bead creation; if beads exist, route through \`flywheel_approve_beads\` before implementation; if implementation is in progress, route through \`flywheel_review\`.
 - **CRITICAL: When a tool result says "NEXT: Call \`tool_name\`", you MUST call that tool IMMEDIATELY in your next response. Do NOT stop to summarize, ask questions, or chat. Just call the tool.**
 - After each tool call, read the result carefully before proceeding.
 - When implementing beads, use the standard code tools (read, write, edit, bash) to make actual changes.
 - If a review fails, re-implement based on the revision instructions, then review again (max 3 retries per bead).
-- Do NOT add commentary between orchestrator tool calls. The user sees the tool results directly.
-- If orch_select returns no selection, stop gracefully.
-- If you experience context compaction during this session, immediately re-read AGENTS.md and the current orchestration state via \`/orchestrate-status\` before continuing.`;
+- Do NOT add commentary between flywheel tool calls. The user sees the tool results directly.
+- If flywheel_select returns no selection, stop gracefully.
+- If you experience context compaction during this session, immediately re-read AGENTS.md and the current flywheel state via \`/flywheel-status\` before continuing.`;
 }
 
 // ─── Discovery Prompt ────────────────────────────────────────
@@ -686,10 +686,10 @@ ${prevContext}
 ### Marching Orders
 - Reread AGENTS.md so it's still fresh in your mind. Use ultrathink.
 - Read the relevant files first.
-- Use \`orch_memory\` if prior learnings would help.
+- Use \`flywheel_memory\` if prior learnings would help.
 - Implement with focused changes only.
 - Do a fresh-eyes review of modified code before finishing.
-- When done, call \`orch_review\` with what you changed and what you checked.
+- When done, call \`flywheel_review\` with what you changed and what you checked.
 
 **Next bead routing:** \`bv --robot-next\` for solo work, \`bv --robot-triage\` for swarms, fallback \`br ready --json\`. Use \`bv --robot-insights\` if the graph looks stuck.`;
 }
@@ -771,7 +771,7 @@ export function crossAgentReviewInstructions(
 ): string {
   return `## Independent Cross-Agent Code Review
 
-You are an independent reviewer auditing the FULL diff of this orchestration.
+You are an independent reviewer auditing the FULL diff of this flywheel run.
 You did NOT write this code. Review it with zero assumptions.
 
 ### Goal
@@ -804,7 +804,7 @@ Provide:
 export function polishInstructions(goal: string, artifacts: string[]): string {
   return `## Polish Pass (De-Slopify)
 
-Review all files changed during this orchestration and improve them:
+Review all files changed during this flywheel run and improve them:
 
 ### Goal context
 ${goal}
@@ -836,7 +836,7 @@ export function commitStrategyInstructions(
 
   return `## Commit Strategy
 
-Group the changes from this orchestration into logical commits with detailed messages.
+Group the changes from this flywheel run into logical commits with detailed messages.
 
 ### Beads completed
 ${beadDetails.join("\n\n")}
@@ -858,7 +858,7 @@ export function skillExtractionInstructions(
 ): string {
   return `## Skill Extraction Check
 
-Evaluate whether the work from this orchestration should become a reusable agent skill.
+Evaluate whether the work from this flywheel run should become a reusable agent skill.
 
 ### What was built
 Goal: ${goal}
@@ -1228,7 +1228,7 @@ export function researchHandoffPrompt(
 ): string {
   const profileNote = hasRepoProfile
     ? ""
-    : "\n\n> No repo profile found. `orch_approve_beads` will profile the repo automatically.";
+    : "\n\n> No repo profile found. `flywheel_approve_beads` will profile the repo automatically.";
 
   return `## Research complete - execute the full pipeline now
 
@@ -1241,7 +1241,7 @@ Goal: _"${selectedGoal}"_
 
 ## NEXT: Execute these steps in order, WITHOUT pausing or asking for confirmation.
 
-### Step 1 - Call \`orch_approve_beads\` NOW
+### Step 1 - Call \`flywheel_approve_beads\` NOW
 This reads the proposal, scores its quality, and optionally runs up to 4 refinement rounds.
 When it completes, it will return explicit \`br create\` commands - follow them exactly.
 
@@ -1252,17 +1252,17 @@ Each bead must include:
 - \`### Files:\` section listing every file it will touch
 - \`- [ ]\` acceptance criteria
 
-### Step 3 - Call \`orch_approve_beads\` again
+### Step 3 - Call \`flywheel_approve_beads\` again
 Quality-checks the created beads. Fixes shallow descriptions automatically.
 Approves the beads and transitions to the implementing phase.
 
-### Step 4 - Call \`orch_review\` to start implementing
+### Step 4 - Call \`flywheel_review\` to start implementing
 Picks the first ready bead and returns implementation instructions.
-Keep calling \`orch_review\` after each bead until all pass.
+Keep calling \`flywheel_review\` after each bead until all pass.
 
 ---
 
-**Call \`orch_approve_beads\` now to begin.**`;
+**Call \`flywheel_approve_beads\` now to begin.**`;
 }
 
 /** Step 3: Inversion analysis - what can WE do that THEY cannot? */
@@ -1540,7 +1540,7 @@ Ground every recommendation in the repository context above - do not hallucinate
 
 /**
  * Git-diff style plan review — asks a fresh model to propose specific changes with rationale.
- * Used by the "📝 Git-diff review" plan refinement option in orch_approve_beads.
+ * Used by the "📝 Git-diff review" plan refinement option in flywheel_approve_beads.
  */
 export function planGitDiffReviewPrompt(planText: string): string {
   return `Carefully review this entire plan for me and come up with your best revisions in terms of better architecture, new features, changed features, etc. to make it better, more robust/reliable, more performant, more compelling/useful, etc. For each proposed change, give me your detailed analysis and rationale/justification for why it would make the project better along with the git-diff style change versus the original plan shown below:
@@ -1636,7 +1636,7 @@ export function learningsExtractionPrompt(goal: string, beadIds: string[]): stri
 Goal: ${goal}
 Beads completed: ${beadIds.join(", ")}
 
-Reflect on this orchestration and extract actionable learnings by answering these 5 questions:
+Reflect on this flywheel run and extract actionable learnings by answering these 5 questions:
 
 ### 1. What architectural decisions were made and why?
 Identify key design choices, trade-offs, and the reasoning behind them.
@@ -1658,10 +1658,10 @@ Did any tools misbehave? Were there workflow bottlenecks or ergonomic problems?
 For each learning, save it to CASS memory:
 
 \`\`\`bash
-cm add '<learning>' --category orchestration --json
+cm add '<learning>' --category flywheel --json
 \`\`\`
 
-Use appropriate categories: \`orchestration\`, \`architecture\`, \`gotcha\`, \`pattern\`, \`tooling\`
+Use appropriate categories: \`flywheel\`, \`architecture\`, \`gotcha\`, \`pattern\`, \`tooling\`
 
 Add 3-7 rules. Each should be specific, actionable, and traceable to beads: ${beadIds.join(", ")}`;
 }
@@ -1778,7 +1778,7 @@ export function formatBeadQualityAudit(results: BeadQualityAuditResult[]): strin
 // ─── Existing-Codebase Maintenance Prompts ────────────────────────────────
 
 /**
- * Full codebase audit prompt - used by /orchestrate-audit.
+ * Full codebase audit prompt - used by /flywheel-audit.
  * Spawned as parallel agents: bugs, security, tests, dead-code.
  */
 export function auditAgentPrompt(
@@ -1864,7 +1864,7 @@ cd ${cwd}`;
 }
 
 /**
- * Targeted scan prompt - used by /orchestrate-scan.
+ * Targeted scan prompt - used by /flywheel-scan.
  * Scoped to specific files/paths and one focus area.
  */
 export function scanAgentPrompt(
@@ -1937,5 +1937,5 @@ br sync --flush-only
 git add .beads/ && git commit -m "chore: add fix beads from audit"
 \`\`\`
 
-After creating beads, call \`orch_approve_beads\` to review before implementing.`;
+After creating beads, call \`flywheel_approve_beads\` to review before implementing.`;
 }

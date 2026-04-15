@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runReview } from '../../tools/review.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState, Bead } from '../../types.js';
+import type { FlywheelState, Bead } from '../../types.js';
 import type { ExecCall } from '../helpers/mocks.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -20,7 +20,7 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
 }
 
 function makeCtx(
-  stateOverrides: Partial<OrchestratorState> = {},
+  stateOverrides: Partial<FlywheelState> = {},
   execCalls: ExecCall[] = [],
 ) {
   const state = makeState({
@@ -33,12 +33,12 @@ function makeCtx(
     ...stateOverrides,
   });
   const exec = createMockExec(execCalls);
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec,
     cwd: '/fake/cwd',
     state,
-    saveState: (s: OrchestratorState) => { saved.push(structuredClone(s)); },
+    saveState: (s: FlywheelState) => { saved.push(structuredClone(s)); },
     clearState: () => {},
   };
   return { ctx, state, saved };
@@ -88,7 +88,7 @@ describe('runReview', () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'error',
       data: {
@@ -110,7 +110,7 @@ describe('runReview', () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'error',
       data: {
@@ -132,7 +132,7 @@ describe('runReview', () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'error',
       data: {
@@ -200,7 +200,7 @@ describe('runReview', () => {
 
     expect(state.phase).toBe('iterating');
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'ok',
       phase: 'iterating',
@@ -229,7 +229,7 @@ describe('runReview', () => {
     expect(state.currentBeadId).toBe('test-bead-2');
     expect(state.phase).toBe('implementing');
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'ok',
       phase: 'implementing',
@@ -315,7 +315,7 @@ describe('runReview', () => {
 
     const text = result.content[0].text;
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'ok',
       phase: 'implementing',
@@ -338,7 +338,7 @@ describe('runReview', () => {
     const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
 
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'ok',
       phase: 'reviewing',
@@ -417,7 +417,7 @@ describe('runReview', () => {
       const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'hit-me' });
 
       expect(result.structuredContent).toMatchObject({
-        tool: 'orch_review',
+        tool: 'flywheel_review',
         version: 1,
         status: 'ok',
         data: {
@@ -439,7 +439,7 @@ describe('runReview', () => {
       expect(state.currentGateIndex).toBe(1);
       expect(state.consecutiveCleanRounds).toBe(1);
       expect(result.structuredContent).toMatchObject({
-        tool: 'orch_review',
+        tool: 'flywheel_review',
         version: 1,
         status: 'ok',
         data: {
@@ -452,23 +452,23 @@ describe('runReview', () => {
       expect(result.content[0].text).toContain('Gate passed');
     });
 
-    it('completes orchestration after 2 consecutive clean rounds', async () => {
+    it('completes flywheel after 2 consecutive clean rounds', async () => {
       const { ctx, state } = makeCtx({ currentGateIndex: 0, consecutiveCleanRounds: 1 });
 
       const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
 
       expect(state.phase).toBe('complete');
       expect(result.structuredContent).toMatchObject({
-        tool: 'orch_review',
+        tool: 'flywheel_review',
         version: 1,
         status: 'ok',
         phase: 'complete',
         data: {
-          kind: 'orchestration_complete',
+          kind: 'flywheel_complete',
           consecutiveCleanRounds: 2,
         },
       });
-      expect(result.content[0].text).toContain('Orchestration Complete');
+      expect(result.content[0].text).toContain('Flywheel Complete');
     });
 
     it('resets clean streak on hit-me (issue found)', async () => {
@@ -554,7 +554,7 @@ describe('runReview', () => {
 
       expect(result.isError).toBe(true);
       expect(result.structuredContent).toMatchObject({
-        tool: 'orch_review',
+        tool: 'flywheel_review',
         version: 1,
         status: 'error',
         data: {

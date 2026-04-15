@@ -1,5 +1,5 @@
 /**
- * Model detection and selection for orchestrator planning.
+ * Model detection and selection for agent-flywheel planning.
  *
  * In the MCP context, we don't have access to a model registry like the pi
  * extension context provides. Instead, we use hardcoded fallback model lists

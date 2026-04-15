@@ -17,7 +17,7 @@ function okResult(phase: string, text: string, data: VerifyBeadsOutcome): McpToo
   return {
     content: [{ type: 'text', text }],
     structuredContent: {
-      tool: 'orch_verify_beads',
+      tool: 'flywheel_verify_beads',
       version: 1,
       status: 'ok',
       phase,
@@ -27,7 +27,7 @@ function okResult(phase: string, text: string, data: VerifyBeadsOutcome): McpToo
 }
 
 /**
- * orch_verify_beads — Reconcile a wave of beads after impl agents report back.
+ * flywheel_verify_beads — Reconcile a wave of beads after impl agents report back.
  *
  * For each bead ID:
  *   - if `br show` reports `closed`, count as verified.
@@ -38,7 +38,7 @@ function okResult(phase: string, text: string, data: VerifyBeadsOutcome): McpToo
  *   - if `br show` errors, record under `errors`.
  *
  * Updates `state.beadResults` for any newly-closed beads so subsequent
- * `orch_review` calls short-circuit cleanly.
+ * `flywheel_review` calls short-circuit cleanly.
  */
 export async function runVerifyBeads(
   ctx: ToolContext,
@@ -48,7 +48,7 @@ export async function runVerifyBeads(
 
   if (!Array.isArray(args.beadIds) || args.beadIds.length === 0) {
     return makeToolError(
-      'orch_verify_beads',
+      'flywheel_verify_beads',
       state.phase,
       'invalid_input',
       'Error: beadIds must be a non-empty array of bead IDs.'
@@ -94,7 +94,7 @@ export async function runVerifyBeads(
       state.beadResults[beadId] = {
         beadId,
         status: 'success',
-        summary: `Auto-closed by orch_verify_beads (commit: ${commit.slice(0, 7)})`,
+        summary: `Auto-closed by flywheel_verify_beads (commit: ${commit.slice(0, 7)})`,
       };
     }
     saveState(state);

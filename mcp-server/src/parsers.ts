@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import type { Bead, BvInsights, BvNextPick } from "./types.js";
-import type { OrchestrationFeedback } from "./feedback.js";
+import type { FlywheelFeedback } from "./feedback.js";
 
 // ─── Result Type ────────────────────────────────────────────
 
@@ -314,12 +314,12 @@ export function parseProfileCache(raw: string): ParseResult<ProfileCache> {
 
 export function parseFeedbackFile(
   raw: string
-): ParseResult<OrchestrationFeedback> {
+): ParseResult<FlywheelFeedback> {
   const json = tryParseJson(raw);
   if (!json.ok) return json;
 
   const result = FeedbackFileSchema.safeParse(json.data);
   if (!result.success)
     return { ok: false, error: formatZodError(result.error) };
-  return { ok: true, data: result.data as OrchestrationFeedback };
+  return { ok: true, data: result.data as FlywheelFeedback };
 }

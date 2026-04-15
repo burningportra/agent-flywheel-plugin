@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runDiscover } from '../../tools/discover.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState, CandidateIdea, RepoProfile } from '../../types.js';
+import type { FlywheelState, CandidateIdea, RepoProfile } from '../../types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -36,15 +36,15 @@ function makeIdea(overrides: Partial<CandidateIdea> = {}): CandidateIdea {
   };
 }
 
-function makeCtx(stateOverrides: Partial<OrchestratorState> = {}) {
+function makeCtx(stateOverrides: Partial<FlywheelState> = {}) {
   const exec = createMockExec();
   const state = makeState({ repoProfile: makeRepoProfile(), ...stateOverrides });
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec,
     cwd: '/fake/cwd',
     state,
-    saveState: (s: OrchestratorState) => { saved.push(structuredClone(s)); },
+    saveState: (s: FlywheelState) => { saved.push(structuredClone(s)); },
     clearState: () => {},
   };
   return { ctx, state, saved };
@@ -94,7 +94,7 @@ describe('runDiscover', () => {
     const text = result.content[0].text;
     expect(text).toContain('Rate limiting');
     expect(text).toContain('Better logging');
-    expect(text).toContain('orch_select');
+    expect(text).toContain('flywheel_select');
   });
 
   it('includes idea count summary in output', async () => {
@@ -175,14 +175,14 @@ describe('runDiscover', () => {
     const result = await runDiscover(ctx, { cwd: '/fake/cwd', ideas });
 
     expect(result.structuredContent).toEqual({
-      tool: 'orch_discover',
+      tool: 'flywheel_discover',
       version: 1,
       status: 'ok',
       phase: 'awaiting_selection',
       nextStep: {
         type: 'call_tool',
-        message: 'Present the ideas to the user, then call orch_select with the chosen goal.',
-        tool: 'orch_select',
+        message: 'Present the ideas to the user, then call flywheel_select with the chosen goal.',
+        tool: 'flywheel_select',
         argsSchemaHint: { goal: 'string' },
       },
       data: {
@@ -222,7 +222,7 @@ describe('runDiscover', () => {
     const result = await runDiscover(ctx, { cwd: '/fake/cwd', ideas: [makeIdea()] });
 
     expect(result.structuredContent).toEqual({
-      tool: 'orch_discover',
+      tool: 'flywheel_discover',
       version: 1,
       status: 'error',
       phase: 'idle',
@@ -230,7 +230,7 @@ describe('runDiscover', () => {
         kind: 'error',
         error: {
           code: 'missing_prerequisite',
-          message: 'Error: No repo profile found. Call orch_profile first.',
+          message: 'Error: No repo profile found. Call flywheel_profile first.',
         },
       },
     });

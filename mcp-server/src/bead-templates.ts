@@ -426,7 +426,7 @@ Acceptance criteria:
 - {{implementationFile}}
 - {{testFile}}`,
     placeholders: [
-      { name: "sourceSystem", description: "System or module initiating the integration", example: "orchestrator planning phase", required: true },
+      { name: "sourceSystem", description: "System or module initiating the integration", example: "flywheel planning phase", required: true },
       { name: "targetSystem", description: "System or module being integrated with", example: "MCP tool server", required: true },
       { name: "integrationPurpose", description: "Why these systems need to communicate", example: "pass approved beads to the tool server for agent execution", required: true },
       { name: "interfaceContract", description: "Expected interface or data contract between the systems", example: "BeadPayload JSON with id, description, and acceptanceCriteria fields", required: true },

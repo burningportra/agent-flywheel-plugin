@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ToolContext, McpToolResult, Bead, ApproveArgs, OrchestratorPhase, ToolNextStep } from '../types.js';
+import type { ToolContext, McpToolResult, Bead, ApproveArgs, FlywheelPhase, ToolNextStep } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
@@ -40,10 +40,10 @@ type ApprovalTarget = 'plan' | 'beads';
 type SizeAssessment = 'too_short' | 'short' | 'detailed';
 
 type ApproveStructuredContent = {
-  tool: 'orch_approve_beads';
+  tool: 'flywheel_approve_beads';
   version: 1;
   status: 'ok' | 'error';
-  phase: OrchestratorPhase;
+  phase: FlywheelPhase;
   approvalTarget: ApprovalTarget;
   nextStep?: ToolNextStep;
   data: Record<string, unknown>;
@@ -53,13 +53,13 @@ const ADVANCED_ACTIONS = ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 
 
 function makeApproveResult(
   text: string,
-  phase: OrchestratorPhase,
+  phase: FlywheelPhase,
   approvalTarget: ApprovalTarget,
   data: Record<string, unknown>,
   nextStep?: ToolNextStep
 ): McpToolResult<ApproveStructuredContent> {
   return makeToolResult(text, {
-    tool: 'orch_approve_beads',
+    tool: 'flywheel_approve_beads',
     version: 1,
     status: 'ok',
     phase,
@@ -71,7 +71,7 @@ function makeApproveResult(
 
 function makeApproveError(
   message: string,
-  phase: OrchestratorPhase,
+  phase: FlywheelPhase,
   approvalTarget: ApprovalTarget,
   code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'internal_error',
   details?: Record<string, unknown>
@@ -80,7 +80,7 @@ function makeApproveError(
     content: [{ type: 'text', text: message }],
     isError: true,
     structuredContent: {
-      tool: 'orch_approve_beads',
+      tool: 'flywheel_approve_beads',
       version: 1,
       status: 'error',
       phase,
@@ -129,19 +129,19 @@ function getBeadApprovalData(state: ToolContext['state'], beads: Bead[], score: 
 }
 
 /**
- * orch_approve_beads — Review and approve bead graph before implementation.
+ * flywheel_approve_beads — Review and approve bead graph before implementation.
  *
  * action="start"    — Approve beads and launch implementation
  * action="polish"   — Request another refinement round
- * action="reject"   — Reject and stop orchestration
+ * action="reject"   — Reject and stop the flywheel
  * action="advanced" — Advanced refinement (requires advancedAction param)
  */
 export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<McpToolResult> {
   const { exec, cwd, state, saveState } = ctx;
 
   if (!state.selectedGoal) {
-    return makeApproveError('Error: No goal selected. Call orch_select first.', state.phase, 'beads', 'missing_prerequisite', {
-      requiredTool: 'orch_select',
+    return makeApproveError('Error: No goal selected. Call flywheel_select first.', state.phase, 'beads', 'missing_prerequisite', {
+      requiredTool: 'flywheel_select',
     });
   }
 
@@ -185,7 +185,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
 
   if (beads.length === 0) {
     return makeApproveResult(
-      `No open beads found. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..."\n\`\`\`\n\nThen call \`orch_approve_beads\` again.`,
+      `No open beads found. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..."\n\`\`\`\n\nThen call \`flywheel_approve_beads\` again.`,
       state.phase,
       'beads',
       {
@@ -193,7 +193,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
         activeBeadIds: [],
         readyForApproval: false,
       },
-      makeNextToolStep('run_cli', 'Create at least one open bead with br create before returning to orch_approve_beads.')
+      makeNextToolStep('run_cli', 'Create at least one open bead with br create before returning to flywheel_approve_beads.')
     );
   }
 
@@ -255,7 +255,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     state.phase = 'idle';
     saveState(state);
     return makeApproveResult(
-      'Beads rejected. Orchestration stopped. Call `orch_profile` to start over.',
+      'Beads rejected. Flywheel stopped. Call `flywheel_profile` to start over.',
       state.phase,
       'beads',
       {
@@ -263,8 +263,8 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
         action: 'reject',
         activeBeadIds: [],
       },
-      makeNextToolStep('call_tool', 'Restart orchestration from profiling if you want to try again.', {
-        tool: 'orch_profile',
+      makeNextToolStep('call_tool', 'Restart flywheel from profiling if you want to try again.', {
+        tool: 'flywheel_profile',
       })
     );
   }
@@ -292,7 +292,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     plan = readFileSync(absPath, 'utf8');
   } else {
     return makeApproveError(
-      `Error: Plan document not found at \`${planPath}\`.\n\nGenerate the plan first using \`orch_plan\`, then call \`orch_approve_beads\` again.`,
+      `Error: Plan document not found at \`${planPath}\`.\n\nGenerate the plan first using \`flywheel_plan\`, then call \`flywheel_approve_beads\` again.`,
       state.phase,
       'plan',
       'not_found',
@@ -318,7 +318,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     state.phase = 'idle';
     saveState(state);
     return makeApproveResult(
-      'Plan rejected. Orchestration stopped.',
+      'Plan rejected. Flywheel stopped.',
       state.phase,
       'plan',
       {
@@ -335,9 +335,9 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     saveState(state);
 
     const reviewPrompt = planGitDiffReviewPrompt(plan);
-    const integrationHint = `After collecting the reviewer's proposed revisions, call \`orch_approve_beads\` again — the tool will then prompt you to integrate them using \`planIntegrationPrompt\`.`;
+    const integrationHint = `After collecting the reviewer's proposed revisions, call \`flywheel_approve_beads\` again — the tool will then prompt you to integrate them using \`planIntegrationPrompt\`.`;
     return makeApproveResult(
-      `**📝 Git-diff review pass (round ${planRound + 1})**\n\nSpawn a fresh reviewer agent with this prompt:\n\n---\n${reviewPrompt}\n---\n\nCollect the reviewer's proposed changes. Then spawn an integration agent with:\n\`\`\`\n${planIntegrationPrompt('<original plan from ' + planPath + '>', '<reviewer proposed revisions>')}\n\`\`\`\n\nHave the integration agent save the merged plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\n${sizeGate}\n\n${integrationHint}`,
+      `**📝 Git-diff review pass (round ${planRound + 1})**\n\nSpawn a fresh reviewer agent with this prompt:\n\n---\n${reviewPrompt}\n---\n\nCollect the reviewer's proposed changes. Then spawn an integration agent with:\n\`\`\`\n${planIntegrationPrompt('<original plan from ' + planPath + '>', '<reviewer proposed revisions>')}\n\`\`\`\n\nHave the integration agent save the merged plan back to \`${planPath}\`, then call \`flywheel_approve_beads\` again.\n\n${sizeGate}\n\n${integrationHint}`,
       state.phase,
       'plan',
       {
@@ -349,7 +349,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
         planRefinementRound: state.planRefinementRound,
         refinementModel: undefined,
       },
-      makeNextToolStep('spawn_agents', 'Run the git-diff plan review and integration cycle, then return to orch_approve_beads.')
+      makeNextToolStep('spawn_agents', 'Run the git-diff plan review and integration cycle, then return to flywheel_approve_beads.')
     );
   }
 
@@ -360,7 +360,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
 
     const refinementModel = pickRefinementModel(planRound);
     return makeApproveResult(
-      `**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`orch_approve_beads\` again.\n\nAlternatively, use \`action: "git-diff-review"\` for a git-diff style review cycle that proposes targeted changes with rationale.\n\n${sizeGate}`,
+      `**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`flywheel_approve_beads\` again.\n\nAlternatively, use \`action: "git-diff-review"\` for a git-diff style review cycle that proposes targeted changes with rationale.\n\n${sizeGate}`,
       state.phase,
       'plan',
       {
@@ -372,7 +372,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
         planRefinementRound: state.planRefinementRound,
         refinementModel,
       },
-      makeNextToolStep('generate_artifact', 'Revise the existing plan document and save it back before returning to orch_approve_beads.')
+      makeNextToolStep('generate_artifact', 'Revise the existing plan document and save it back before returning to flywheel_approve_beads.')
     );
   }
 
@@ -384,7 +384,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
   const beadPrompt = buildPlanToBeadsPrompt(plan, state.selectedGoal!, planPath);
 
   return makeApproveResult(
-    `**Plan approved!** (${lineCount} lines)${sizeGate}\n\n**NEXT: Create beads from the plan using \`br create\` and \`br dep add\`, then call \`orch_approve_beads\` with action="start" to launch implementation.**\n\n---\n\n${beadPrompt}`,
+    `**Plan approved!** (${lineCount} lines)${sizeGate}\n\n**NEXT: Create beads from the plan using \`br create\` and \`br dep add\`, then call \`flywheel_approve_beads\` with action="start" to launch implementation.**\n\n---\n\n${beadPrompt}`,
     state.phase,
     'plan',
     {
@@ -395,7 +395,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
       planRefinementRound: state.planRefinementRound,
       readyForBeadCreation: true,
     },
-    makeNextToolStep('run_cli', 'Create beads from the approved plan with br create / br dep add, then return to orch_approve_beads action="start".')
+    makeNextToolStep('run_cli', 'Create beads from the approved plan with br create / br dep add, then return to flywheel_approve_beads action="start".')
   );
 }
 
@@ -421,7 +421,7 @@ Read the full plan from \`${planPath}\`, then create one bead per implementation
 ${preview}${plan.length > 2000 ? '\n...(read full plan from file)' : ''}
 \`\`\`
 
-After creating all beads, call \`orch_approve_beads\` with action="start" to review and launch.`;
+After creating all beads, call \`flywheel_approve_beads\` with action="start" to review and launch.`;
 }
 
 async function handleStart(
@@ -480,7 +480,7 @@ async function handleStart(
           message: 'No ready beads found after approval.',
         },
       },
-      makeNextToolStep('run_cli', 'Diagnose blocked beads with br ready or br dep cycles, then return to orch_approve_beads.')
+      makeNextToolStep('run_cli', 'Diagnose blocked beads with br ready or br dep cycles, then return to flywheel_approve_beads.')
     );
   }
 
@@ -507,7 +507,7 @@ async function handleStart(
     return makeApproveResult(
       `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}
 
-**NEXT: Implement bead ${bead.id} (${bead.title}), then call \`orch_review\` when done.**
+**NEXT: Implement bead ${bead.id} (${bead.title}), then call \`flywheel_review\` when done.**
 
 ---
 
@@ -519,7 +519,7 @@ After implementing:
 1. Do a self-review of all changes
 2. Run tests if applicable
 3. Commit: \`git add <changed files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
-4. Call \`orch_review\` with beadId="${bead.id}" and a summary of what you did
+4. Call \`flywheel_review\` with beadId="${bead.id}" and a summary of what you did
 
 ${beadList}`,
       state.phase,
@@ -537,8 +537,8 @@ ${beadList}`,
         }],
         ...getBeadApprovalData(state, beads, convergenceScore),
       },
-      makeNextToolStep('call_tool', 'Implement the ready bead, then call orch_review with its summary.', {
-        tool: 'orch_review',
+      makeNextToolStep('call_tool', 'Implement the ready bead, then call flywheel_review with its summary.', {
+        tool: 'flywheel_review',
         argsSchemaHint: { beadId: 'string', action: 'looks-good | hit-me | skip' },
       })
     );
@@ -546,7 +546,7 @@ ${beadList}`,
 
   // Parallel: multiple ready beads — return agent configs for CC to spawn
   const agentConfigs = ready.map((bead) => {
-    const baseTask = `You are implementing bead ${bead.id} as part of the orchestration workflow.
+    const baseTask = `You are implementing bead ${bead.id} as part of the flywheel workflow.
 
 ## ${bead.title}
 
@@ -559,7 +559,7 @@ ${bead.description}
 4. Do a fresh-eyes self-review
 5. Commit: \`git add <files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
 
-After completing, report your summary to the orchestrator.`;
+After completing, report your summary to the agent-flywheel.`;
 
     return {
       name: `bead-${bead.id}`,
@@ -571,13 +571,13 @@ After completing, report your summary to the orchestrator.`;
   return makeApproveResult(
     `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}
 
-**NEXT: Spawn ${ready.length} parallel agents (one per ready bead), then call \`orch_review\` for each when done.**
+**NEXT: Spawn ${ready.length} parallel agents (one per ready bead), then call \`flywheel_review\` for each when done.**
 
 \`\`\`json
 ${JSON.stringify({ agents: agentConfigs }, null, 2)}
 \`\`\`
 
-After all agents complete, call \`orch_review\` for each bead with its agent's summary.
+After all agents complete, call \`flywheel_review\` for each bead with its agent's summary.
 
 ${beadList}`,
     state.phase,
@@ -595,7 +595,7 @@ ${beadList}`,
       })),
       ...getBeadApprovalData(state, beads, convergenceScore),
     },
-    makeNextToolStep('spawn_agents', 'Spawn one implementation agent per ready bead, then call orch_review for each completed bead.')
+    makeNextToolStep('spawn_agents', 'Spawn one implementation agent per ready bead, then call flywheel_review for each completed bead.')
   );
 }
 
@@ -616,7 +616,7 @@ function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boo
 
   if (fresh) {
     return makeApproveResult(
-      `**NEXT: Spawn a fresh refinement agent (round ${round + 1}), then call \`orch_approve_beads\` with action="start" or action="polish" again.**
+      `**NEXT: Spawn a fresh refinement agent (round ${round + 1}), then call \`flywheel_approve_beads\` with action="start" or action="polish" again.**
 
 Use model \`${model}\` for diverse perspective (prevents taste convergence).
 
@@ -630,12 +630,12 @@ Current beads (${beads.length} total):\n${compactList}\n\ncd ${cwd}`,
       state.phase,
       'beads',
       sharedData,
-      makeNextToolStep('spawn_agents', 'Spawn a fresh refinement agent, update the bead graph, then return to orch_approve_beads.')
+      makeNextToolStep('spawn_agents', 'Spawn a fresh refinement agent, update the bead graph, then return to flywheel_approve_beads.')
     );
   }
 
   return makeApproveResult(
-    `**NEXT: Review and refine the beads (round ${round + 1}), then call \`orch_approve_beads\` again.**
+    `**NEXT: Review and refine the beads (round ${round + 1}), then call \`flywheel_approve_beads\` again.**
 
 For each bead, check:
 - WHAT: Are implementation steps concrete and specific?
@@ -646,7 +646,7 @@ For each bead, check:
 Use \`br update <id> --description "..."\` to improve, \`br show <id>\` for details.
 Use \`br dep add/remove\` to fix dependency graph.
 
-After refining, call \`orch_approve_beads\` with action="start" or action="polish".
+After refining, call \`flywheel_approve_beads\` with action="start" or action="polish".
 
 Current beads (${beads.length} total):\n${compactList}\n\ncd ${cwd}`,
     state.phase,
@@ -655,11 +655,11 @@ Current beads (${beads.length} total):\n${compactList}\n\ncd ${cwd}`,
     makeNextToolStep('present_choices', 'Refine the bead graph, then either approve implementation or request another bead refinement pass.', {
       options: [
         makeChoiceOption('approve-beads-start', 'Approve beads and launch implementation', {
-          tool: 'orch_approve_beads',
+          tool: 'flywheel_approve_beads',
           args: { action: 'start' },
         }),
         makeChoiceOption('approve-beads-polish', 'Request another bead refinement round', {
-          tool: 'orch_approve_beads',
+          tool: 'flywheel_approve_beads',
           args: { action: 'polish' },
         }),
       ],
@@ -709,7 +709,7 @@ function handleAdvanced(
     return {
       content: [{
         type: 'text',
-        text: `**NEXT: Run 5 blunder hunt passes, then call \`orch_approve_beads\` again.**\n\n${passes}\n\ncd ${cwd}\n\nCurrent beads:\n${compactList}`,
+        text: `**NEXT: Run 5 blunder hunt passes, then call \`flywheel_approve_beads\` again.**\n\n${passes}\n\ncd ${cwd}\n\nCurrent beads:\n${compactList}`,
       }],
     };
   }
@@ -721,7 +721,7 @@ function handleAdvanced(
     return {
       content: [{
         type: 'text',
-        text: `**NEXT: Run a deduplication pass on all beads, then call \`orch_approve_beads\` again.**
+        text: `**NEXT: Run a deduplication pass on all beads, then call \`flywheel_approve_beads\` again.**
 
 Check all open beads for overlap or redundancy:
 1. \`br list --json\` — read all beads
@@ -729,7 +729,7 @@ Check all open beads for overlap or redundancy:
 3. Close duplicates: \`br update <id> --status closed\`
 4. Transfer dependencies: \`br dep add <survivor> --depends-on <deps-of-closed>\`
 
-Report what was merged. Then call \`orch_approve_beads\`.
+Report what was merged. Then call \`flywheel_approve_beads\`.
 
 cd ${cwd}
 
@@ -746,7 +746,7 @@ Current beads:\n${compactList}`,
     return {
       content: [{
         type: 'text',
-        text: `**NEXT: Spawn a cross-model review agent using \`${altModel}\`, then call \`orch_approve_beads\` again.**
+        text: `**NEXT: Spawn a cross-model review agent using \`${altModel}\`, then call \`flywheel_approve_beads\` again.**
 
 The cross-model agent should:
 1. Read all beads: \`br list --json\`
@@ -764,7 +764,7 @@ Current beads:\n${compactList}\n\ncd ${cwd}`,
     saveState(state);
 
     return makeApproveResult(
-      `**NEXT: Diagnose and fix the bead dependency graph, then call \`orch_approve_beads\` again.**
+      `**NEXT: Diagnose and fix the bead dependency graph, then call \`flywheel_approve_beads\` again.**
 
 Check for:
 1. **Cycles:** \`br dep cycles\` — if any, remove the cycle-causing dep
@@ -772,7 +772,7 @@ Check for:
 3. **Bottlenecks:** Beads that block many others — consider splitting
 4. **Missing deps:** Beads that should depend on others but don't
 
-Fix issues with \`br dep add/remove\`, then call \`orch_approve_beads\`.
+Fix issues with \`br dep add/remove\`, then call \`flywheel_approve_beads\`.
 
 cd ${cwd}
 
@@ -786,7 +786,7 @@ Current beads:\n${compactList}`,
         ...getBeadApprovalData(state, beads, state.polishConvergenceScore),
         advancedActions: [...ADVANCED_ACTIONS],
       },
-      makeNextToolStep('run_cli', 'Diagnose and repair bead dependencies with br dep commands, then return to orch_approve_beads.')
+      makeNextToolStep('run_cli', 'Diagnose and repair bead dependencies with br dep commands, then return to flywheel_approve_beads.')
     );
   }
 

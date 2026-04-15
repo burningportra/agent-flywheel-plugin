@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState, Bead } from '../../types.js';
+import type { FlywheelState, Bead } from '../../types.js';
 import type { ExecCall } from '../helpers/mocks.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -43,7 +43,7 @@ function makeExecCalls(beads: Bead[] = [makeBead()], readyBeads?: Bead[]): ExecC
 }
 
 function makeCtx(
-  stateOverrides: Partial<OrchestratorState> = {},
+  stateOverrides: Partial<FlywheelState> = {},
   execCalls: ExecCall[] = makeExecCalls(),
   cwd = '/fake/cwd',
 ) {
@@ -53,12 +53,12 @@ function makeCtx(
     phase: 'awaiting_bead_approval',
     ...stateOverrides,
   });
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec,
     cwd,
     state,
-    saveState: (s: OrchestratorState) => { saved.push(structuredClone(s)); },
+    saveState: (s: FlywheelState) => { saved.push(structuredClone(s)); },
     clearState: () => {},
   };
   return { ctx, state, saved };
@@ -101,7 +101,7 @@ describe('runApprove', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Error reading beads');
     expect(result.structuredContent).toEqual({
-      tool: 'orch_approve_beads',
+      tool: 'flywheel_approve_beads',
       version: 1,
       status: 'error',
       phase: 'awaiting_bead_approval',
@@ -163,7 +163,7 @@ describe('runApprove', () => {
     expect(state.phase).toBe('refining_beads');
     expect(result.content[0].text).toContain('Review and refine');
     expect(result.structuredContent).toEqual({
-      tool: 'orch_approve_beads',
+      tool: 'flywheel_approve_beads',
       version: 1,
       status: 'ok',
       phase: 'refining_beads',
@@ -175,13 +175,13 @@ describe('runApprove', () => {
           {
             id: 'approve-beads-start',
             label: 'Approve beads and launch implementation',
-            tool: 'orch_approve_beads',
+            tool: 'flywheel_approve_beads',
             args: { action: 'start' },
           },
           {
             id: 'approve-beads-polish',
             label: 'Request another bead refinement round',
-            tool: 'orch_approve_beads',
+            tool: 'flywheel_approve_beads',
             args: { action: 'polish' },
           },
         ],
@@ -218,15 +218,15 @@ describe('runApprove', () => {
     expect(state.currentBeadId).toBe('bead-1');
     expect(result.content[0].text).toContain('Beads approved');
     expect(result.structuredContent).toEqual({
-      tool: 'orch_approve_beads',
+      tool: 'flywheel_approve_beads',
       version: 1,
       status: 'ok',
       phase: 'implementing',
       approvalTarget: 'beads',
       nextStep: {
         type: 'call_tool',
-        message: 'Implement the ready bead, then call orch_review with its summary.',
-        tool: 'orch_review',
+        message: 'Implement the ready bead, then call flywheel_review with its summary.',
+        tool: 'flywheel_review',
         argsSchemaHint: { beadId: 'string', action: 'looks-good | hit-me | skip' },
       },
       data: {
@@ -284,14 +284,14 @@ describe('runApprove', () => {
     expect(text).toContain('bead-1');
     expect(text).toContain('bead-2');
     expect(result.structuredContent).toEqual({
-      tool: 'orch_approve_beads',
+      tool: 'flywheel_approve_beads',
       version: 1,
       status: 'ok',
       phase: 'implementing',
       approvalTarget: 'beads',
       nextStep: {
         type: 'spawn_agents',
-        message: 'Spawn one implementation agent per ready bead, then call orch_review for each completed bead.',
+        message: 'Spawn one implementation agent per ready bead, then call flywheel_review for each completed bead.',
       },
       data: {
         kind: 'beads_approved',
@@ -371,7 +371,7 @@ describe('runApprove', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('advancedAction is required');
     expect(result.structuredContent).toEqual({
-      tool: 'orch_approve_beads',
+      tool: 'flywheel_approve_beads',
       version: 1,
       status: 'error',
       phase: 'awaiting_bead_approval',
@@ -416,14 +416,14 @@ describe('runApprove', () => {
     expect(state.phase).toBe('refining_beads');
     expect(result.content[0].text).toContain('dependency graph');
     expect(result.structuredContent).toEqual({
-      tool: 'orch_approve_beads',
+      tool: 'flywheel_approve_beads',
       version: 1,
       status: 'ok',
       phase: 'refining_beads',
       approvalTarget: 'beads',
       nextStep: {
         type: 'run_cli',
-        message: 'Diagnose and repair bead dependencies with br dep commands, then return to orch_approve_beads.',
+        message: 'Diagnose and repair bead dependencies with br dep commands, then return to flywheel_approve_beads.',
       },
       data: {
         kind: 'bead_refinement_requested',
@@ -482,14 +482,14 @@ describe('runApprove', () => {
       expect(state.phase).toBe('creating_beads');
       expect(result.content[0].text).toContain('Plan approved');
       expect(result.structuredContent).toEqual({
-        tool: 'orch_approve_beads',
+        tool: 'flywheel_approve_beads',
         version: 1,
         status: 'ok',
         phase: 'creating_beads',
         approvalTarget: 'plan',
         nextStep: {
           type: 'run_cli',
-          message: 'Create beads from the approved plan with br create / br dep add, then return to orch_approve_beads action="start".',
+          message: 'Create beads from the approved plan with br create / br dep add, then return to flywheel_approve_beads action="start".',
         },
         data: {
           kind: 'plan_approved',
@@ -533,14 +533,14 @@ describe('runApprove', () => {
       expect(state.planRefinementRound).toBe(1);
       expect(result.content[0].text).toContain('Refine the plan');
       expect(result.structuredContent).toEqual({
-        tool: 'orch_approve_beads',
+        tool: 'flywheel_approve_beads',
         version: 1,
         status: 'ok',
         phase: 'planning',
         approvalTarget: 'plan',
         nextStep: {
           type: 'generate_artifact',
-          message: 'Revise the existing plan document and save it back before returning to orch_approve_beads.',
+          message: 'Revise the existing plan document and save it back before returning to flywheel_approve_beads.',
         },
         data: {
           kind: 'plan_refinement_requested',
@@ -582,14 +582,14 @@ describe('runApprove', () => {
       expect(state.planRefinementRound).toBe(1);
       expect(result.content[0].text).toContain('Git-diff review');
       expect(result.structuredContent).toEqual({
-        tool: 'orch_approve_beads',
+        tool: 'flywheel_approve_beads',
         version: 1,
         status: 'ok',
         phase: 'planning',
         approvalTarget: 'plan',
         nextStep: {
           type: 'spawn_agents',
-          message: 'Run the git-diff plan review and integration cycle, then return to orch_approve_beads.',
+          message: 'Run the git-diff plan review and integration cycle, then return to flywheel_approve_beads.',
         },
         data: {
           kind: 'plan_refinement_requested',

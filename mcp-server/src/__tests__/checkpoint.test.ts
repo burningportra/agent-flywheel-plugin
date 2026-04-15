@@ -16,15 +16,15 @@ import {
 } from '../checkpoint.js';
 import { VERSION } from '../version.js';
 import { createInitialState } from '../types.js';
-import type { OrchestratorState, CheckpointEnvelope } from '../types.js';
+import type { FlywheelState, CheckpointEnvelope } from '../types.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-function makeEnvelope(state: OrchestratorState, overrides: Partial<CheckpointEnvelope> = {}): CheckpointEnvelope {
+function makeEnvelope(state: FlywheelState, overrides: Partial<CheckpointEnvelope> = {}): CheckpointEnvelope {
   return {
     schemaVersion: 1,
     writtenAt: new Date().toISOString(),
-    orchestratorVersion: VERSION,
+    flywheelVersion: VERSION,
     state,
     stateHash: computeStateHash(state),
     ...overrides,
@@ -80,11 +80,11 @@ describe('validateCheckpoint', () => {
     expect(validateCheckpoint(envelope)).toEqual({ valid: false, reason: 'state.phase is not a string' });
   });
 
-  it('rejects missing orchestratorVersion', () => {
+  it('rejects missing flywheelVersion', () => {
     const state = createInitialState();
     const envelope = makeEnvelope(state);
-    delete (envelope as any).orchestratorVersion;
-    expect(validateCheckpoint(envelope)).toEqual({ valid: false, reason: 'missing orchestratorVersion' });
+    delete (envelope as any).flywheelVersion;
+    expect(validateCheckpoint(envelope)).toEqual({ valid: false, reason: 'missing flywheelVersion' });
   });
 });
 
@@ -181,7 +181,7 @@ describe('readCheckpoint', () => {
     const envelope: CheckpointEnvelope = {
       schemaVersion: 1,
       writtenAt: new Date().toISOString(),
-      orchestratorVersion: '1.0.0',
+      flywheelVersion: '1.0.0',
       state,
       stateHash: 'wrong-hash-value',
     };
@@ -291,7 +291,7 @@ describe('version mismatch', () => {
   it('produces a warning in ValidationResult when checkpoint version differs from current', () => {
     const state = createInitialState();
     const oldVersion = '0.0.0-old';
-    const envelope = makeEnvelope(state, { orchestratorVersion: oldVersion });
+    const envelope = makeEnvelope(state, { flywheelVersion: oldVersion });
     const result = validateCheckpoint(envelope);
     expect(result.valid).toBe(true);
     if (result.valid) {
@@ -310,8 +310,8 @@ describe('version mismatch', () => {
     const filePath = join(dir, CHECKPOINT_DIR, CHECKPOINT_FILE);
     const raw = readFileSync(filePath, 'utf8');
     const envelope = JSON.parse(raw) as CheckpointEnvelope;
-    // Patch orchestratorVersion to something old while keeping hash intact
-    (envelope as any).orchestratorVersion = '0.0.0-legacy';
+    // Patch flywheelVersion to something old while keeping hash intact
+    (envelope as any).flywheelVersion = '0.0.0-legacy';
     // Recompute hash to match the unchanged state so validation passes
     (envelope as any).stateHash = computeStateHash(envelope.state);
     writeFileSync(filePath, JSON.stringify(envelope, null, 2), 'utf8');

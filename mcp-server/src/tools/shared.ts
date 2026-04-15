@@ -1,10 +1,10 @@
 import type {
   McpToolResult,
-  OrchestrationStructuredError,
-  OrchestrationToolError,
-  OrchestrationToolName,
-  OrchestratorPhase,
-  OrchestratorState,
+  FlywheelStructuredError,
+  FlywheelToolError,
+  FlywheelToolName,
+  FlywheelPhase,
+  FlywheelState,
   ToolChoiceOption,
   ToolNextStep,
 } from '../types.js';
@@ -45,12 +45,12 @@ export function makeToolResult<TStructured>(text: string, structuredContent: TSt
 }
 
 export function makeToolError(
-  tool: OrchestrationToolName,
-  phase: OrchestratorPhase,
-  code: OrchestrationToolError['code'],
+  tool: FlywheelToolName,
+  phase: FlywheelPhase,
+  code: FlywheelToolError['code'],
   message: string,
-  options: Omit<OrchestrationToolError, 'code' | 'message'> = {}
-): McpToolResult<OrchestrationStructuredError> {
+  options: Omit<FlywheelToolError, 'code' | 'message'> = {}
+): McpToolResult<FlywheelStructuredError> {
   return {
     content: [{ type: 'text', text: message }],
     isError: true,
@@ -75,7 +75,7 @@ export function makeToolError(
  * Pick execution mode: single-branch (shared checkout) or worktree (isolated checkouts).
  */
 export function resolveExecutionMode(
-  coordinationMode: OrchestratorState['coordinationMode'],
+  coordinationMode: FlywheelState['coordinationMode'],
   hasAgentMail: boolean
 ): 'worktree' | 'single-branch' {
   if (coordinationMode === 'single-branch') return 'single-branch';
@@ -224,7 +224,7 @@ Create a set of implementation beads using the \`br\` CLI. Each bead represents 
 6. Use descriptive titles (verb phrases work well: "Add rate limiting to /api/submit")
 
 ### After creating beads
-Call \`orch_approve_beads\` to review and approve the bead graph before implementation begins.`;
+Call \`flywheel_approve_beads\` to review and approve the bead graph before implementation begins.`;
 }
 
 // ─── Bead Quality Score ──────────────────────────────────────
@@ -350,7 +350,7 @@ ${prevSummary}${memSection}${episodicSection}
 3. Run tests if applicable
 4. Do a fresh-eyes review of your changes
 5. Commit: \`git add <files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
-6. Call \`orch_review\` with beadId="${bead.id}" and your summary`;
+6. Call \`flywheel_review\` with beadId="${bead.id}" and your summary`;
 }
 
 function cwd_from_profile(profile: import('../types.js').RepoProfile): string {

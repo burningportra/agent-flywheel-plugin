@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runSelect } from '../../tools/select.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState, RepoProfile } from '../../types.js';
+import type { FlywheelState, RepoProfile } from '../../types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -22,15 +22,15 @@ function makeRepoProfile(overrides: Partial<RepoProfile> = {}): RepoProfile {
   };
 }
 
-function makeCtx(stateOverrides: Partial<OrchestratorState> = {}) {
+function makeCtx(stateOverrides: Partial<FlywheelState> = {}) {
   const exec = createMockExec();
   const state = makeState({ repoProfile: makeRepoProfile(), ...stateOverrides });
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec,
     cwd: '/fake/cwd',
     state,
-    saveState: (s: OrchestratorState) => { saved.push(structuredClone(s)); },
+    saveState: (s: FlywheelState) => { saved.push(structuredClone(s)); },
     clearState: () => {},
   };
   return { ctx, state, saved };
@@ -100,7 +100,7 @@ describe('runSelect', () => {
     expect(text).toContain('Option A');
     expect(text).toContain('Option B');
     expect(text).toContain('Option C');
-    expect(text).toContain('orch_plan');
+    expect(text).toContain('flywheel_plan');
   });
 
   it('includes the goal in the response text', async () => {
@@ -185,7 +185,7 @@ describe('runSelect', () => {
     const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Add tests' });
 
     expect(result.structuredContent).toEqual({
-      tool: 'orch_select',
+      tool: 'flywheel_select',
       version: 1,
       status: 'ok',
       phase: 'planning',
@@ -197,15 +197,15 @@ describe('runSelect', () => {
           {
             id: 'plan-first',
             label: 'Plan first',
-            description: 'Generate a single plan document with orch_plan mode="standard".',
-            tool: 'orch_plan',
+            description: 'Generate a single plan document with flywheel_plan mode="standard".',
+            tool: 'flywheel_plan',
             args: { mode: 'standard' },
           },
           {
             id: 'deep-plan',
             label: 'Deep plan',
-            description: 'Generate parallel planning perspectives with orch_plan mode="deep".',
-            tool: 'orch_plan',
+            description: 'Generate parallel planning perspectives with flywheel_plan mode="deep".',
+            tool: 'flywheel_plan',
             args: { mode: 'deep' },
           },
           {
@@ -231,7 +231,7 @@ describe('runSelect', () => {
     const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: '   ' });
 
     expect(result.structuredContent).toEqual({
-      tool: 'orch_select',
+      tool: 'flywheel_select',
       version: 1,
       status: 'error',
       phase: 'idle',

@@ -1,7 +1,7 @@
 /**
  * Checkpoint persistence for crash recovery.
  *
- * Writes orchestrator state to `<cwd>/.pi-orchestrator/checkpoint.json`
+ * Writes flywheel state to `<cwd>/.pi-flywheel/checkpoint.json`
  * using atomic write-rename semantics. All I/O is non-throwing —
  * failures degrade gracefully to current session-log-only behavior.
  */
@@ -21,11 +21,11 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
-import type { CheckpointEnvelope, OrchestratorState } from "./types.js";
+import type { CheckpointEnvelope, FlywheelState } from "./types.js";
 
 // ─── Constants ────────────────────────────────────────────────
 
-export const CHECKPOINT_DIR = ".pi-orchestrator";
+export const CHECKPOINT_DIR = ".pi-flywheel";
 export const CHECKPOINT_FILE = "checkpoint.json";
 export const CHECKPOINT_TMP = "checkpoint.json.tmp";
 export const CHECKPOINT_CORRUPT = "checkpoint.json.corrupt";
@@ -52,7 +52,7 @@ function checkpointCorruptPath(cwd: string): string {
 }
 
 /** Compute SHA-256 hash of JSON.stringify(state). */
-export function computeStateHash(state: OrchestratorState): string {
+export function computeStateHash(state: FlywheelState): string {
   return createHash("sha256").update(JSON.stringify(state)).digest("hex");
 }
 
@@ -99,8 +99,10 @@ export function validateCheckpoint(envelope: unknown): ValidationResult {
     return { valid: false, reason: "writtenAt is not a valid ISO date" };
   }
 
-  if (typeof e.orchestratorVersion !== "string") {
-    return { valid: false, reason: "missing orchestratorVersion" };
+  // Migration: accept old orchestratorVersion field during transition from v2.x
+  const version = (e as any).flywheelVersion ?? (e as any).orchestratorVersion;
+  if (typeof version !== "string") {
+    return { valid: false, reason: "missing flywheelVersion" };
   }
 
   if (typeof e.state !== "object" || e.state === null) {
@@ -112,7 +114,7 @@ export function validateCheckpoint(envelope: unknown): ValidationResult {
   }
 
   // Verify hash integrity
-  const computed = computeStateHash(e.state as OrchestratorState);
+  const computed = computeStateHash(e.state as FlywheelState);
   if (computed !== e.stateHash) {
     return {
       valid: false,
@@ -128,8 +130,8 @@ export function validateCheckpoint(envelope: unknown): ValidationResult {
 
   // Collect non-fatal warnings
   const warnings: string[] = [];
-  if (e.orchestratorVersion !== VERSION) {
-    warnings.push(`Checkpoint was written by v${String(e.orchestratorVersion)}, current is v${VERSION}`);
+  if (version !== VERSION) {
+    warnings.push(`Checkpoint was written by v${String(version)}, current is v${VERSION}`);
   }
   return warnings.length > 0 ? { valid: true, warnings } : { valid: true };
 }
@@ -147,7 +149,7 @@ const writeLocks = new Map<string, Promise<boolean>>();
  */
 function writeCheckpointInner(
   cwd: string,
-  state: OrchestratorState
+  state: FlywheelState
 ): boolean {
   try {
     const dir = checkpointDir(cwd);
@@ -156,7 +158,7 @@ function writeCheckpointInner(
     const envelope: CheckpointEnvelope = {
       schemaVersion: 1,
       writtenAt: new Date().toISOString(),
-      orchestratorVersion: VERSION,
+      flywheelVersion: VERSION,
       gitHead: getGitHead(cwd),
       state,
       stateHash: computeStateHash(state),
@@ -184,7 +186,7 @@ function writeCheckpointInner(
  */
 export async function writeCheckpoint(
   cwd: string,
-  state: OrchestratorState
+  state: FlywheelState
 ): Promise<boolean> {
   const prev = writeLocks.get(cwd) ?? Promise.resolve(true);
   const next = prev.then(() => writeCheckpointInner(cwd, state)).catch(() => false);

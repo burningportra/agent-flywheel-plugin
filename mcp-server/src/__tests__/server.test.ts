@@ -5,7 +5,7 @@ import { createInitialState } from '../types.js';
 describe('createCallToolHandler', () => {
   it('preserves structuredContent returned by tool implementations', async () => {
     const structuredContent = {
-      tool: 'orch_profile',
+      tool: 'flywheel_profile',
       version: 1,
       status: 'ok',
       phase: 'discovering',
@@ -28,13 +28,13 @@ describe('createCallToolHandler', () => {
       saveState: vi.fn(),
       clearState: vi.fn(),
       runners: {
-        orch_profile: runProfile,
+        flywheel_profile: runProfile,
       },
     });
 
     const result = await handler({
       params: {
-        name: 'orch_profile',
+        name: 'flywheel_profile',
         arguments: { cwd: '/tmp/repo' },
       },
     } as never);
@@ -55,13 +55,13 @@ describe('createCallToolHandler', () => {
       saveState: vi.fn(),
       clearState: vi.fn(),
       runners: {
-        orch_select: runSelect,
+        flywheel_select: runSelect,
       },
     });
 
     const result = await handler({
       params: {
-        name: 'orch_select',
+        name: 'flywheel_select',
         arguments: { cwd: '/tmp/repo' },
       },
     } as never);
@@ -69,9 +69,9 @@ describe('createCallToolHandler', () => {
     expect(runSelect).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       isError: true,
-      content: [{ type: 'text', text: "Error: required parameter 'goal' is missing for tool 'orch_select'." }],
+      content: [{ type: 'text', text: "Error: required parameter 'goal' is missing for tool 'flywheel_select'." }],
       structuredContent: {
-        tool: 'orch_select',
+        tool: 'flywheel_select',
         version: 1,
         status: 'error',
         phase: 'idle',
@@ -79,7 +79,7 @@ describe('createCallToolHandler', () => {
           kind: 'error',
           error: {
             code: 'invalid_input',
-            message: "Error: required parameter 'goal' is missing for tool 'orch_select'.",
+            message: "Error: required parameter 'goal' is missing for tool 'flywheel_select'.",
             retryable: false,
             details: {
               field: 'goal',
@@ -98,22 +98,22 @@ describe('createCallToolHandler', () => {
       saveState: vi.fn(),
       clearState: vi.fn(),
       runners: {
-        orch_plan: vi.fn().mockRejectedValue(new Error('boom')),
+        flywheel_plan: vi.fn().mockRejectedValue(new Error('boom')),
       },
     });
 
     const result = await handler({
       params: {
-        name: 'orch_plan',
+        name: 'flywheel_plan',
         arguments: { cwd: '/tmp/repo' },
       },
     } as never);
 
     expect(result).toMatchObject({
       isError: true,
-      content: [{ type: 'text', text: 'Error in orch_plan: boom' }],
+      content: [{ type: 'text', text: 'Error in flywheel_plan: boom' }],
       structuredContent: {
-        tool: 'orch_plan',
+        tool: 'flywheel_plan',
         version: 1,
         status: 'error',
         phase: 'planning',
@@ -121,7 +121,7 @@ describe('createCallToolHandler', () => {
           kind: 'error',
           error: {
             code: 'internal_error',
-            message: 'Error in orch_plan: boom',
+            message: 'Error in flywheel_plan: boom',
             retryable: true,
           },
         },

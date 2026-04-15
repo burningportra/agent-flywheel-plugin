@@ -18,14 +18,14 @@ const DEFAULT_RUNTIME: OpeningCeremonyRuntime = {
 const CEREMONY_FRAMES: readonly OpeningCeremonyFrame[] = [
   {
     text:
-      "░▒▓ CLAUDE // ORCHESTRATOR ▓▒░\n" +
+      "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
       "> boot sequence .......... [warm]\n" +
       "> scanning the void ...... [linking]",
     delayMs: 120,
   },
   {
     text:
-      "░▒▓ CLAUDE // ORCHESTRATOR ▓▒░\n" +
+      "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
       "> boot sequence .......... [online]\n" +
       "> scanning the void ...... [mapped]\n" +
       "> summoning bead engine .. [spinning]",
@@ -33,17 +33,17 @@ const CEREMONY_FRAMES: readonly OpeningCeremonyFrame[] = [
   },
   {
     text:
-      "░▒▓ CLAUDE // ORCHESTRATOR ▓▒░\n" +
+      "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
       "> repo sigil ............. [bound]\n" +
       "> bead engine ............ [ready]\n" +
-      "> ceremony complete ...... [ignite /orchestrate]",
+      "> ceremony complete ...... [ignite /flywheel]",
     delayMs: 220,
   },
 ] as const;
 
 const STATIC_FALLBACK_FRAME =
-  "░▒▓ CLAUDE // ORCHESTRATOR ▓▒░\n" +
-  "> ceremony complete ...... [ignite /orchestrate]";
+  "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
+  "> ceremony complete ...... [ignite /flywheel]";
 
 export function getOpeningCeremonyFrames(): OpeningCeremonyFrame[] {
   return CEREMONY_FRAMES.map((frame) => ({ ...frame }));

@@ -1,5 +1,5 @@
 /**
- * Structured stderr logger for claude-orchestrator MCP server.
+ * Structured stderr logger for agent-flywheel MCP server.
  *
  * Writes JSON lines to process.stderr (safe for MCP stdio — never touches stdout).
  * Level filtering via ORCH_LOG_LEVEL env var (default: "warn").

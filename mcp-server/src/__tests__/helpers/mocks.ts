@@ -1,5 +1,5 @@
 import { createInitialState } from '../../types.js';
-import type { OrchestratorState } from '../../types.js';
+import type { FlywheelState } from '../../types.js';
 
 export interface ExecCall {
   cmd: string;
@@ -18,6 +18,6 @@ export function createMockExec(calls: ExecCall[] = []) {
   };
 }
 
-export function makeState(overrides: Partial<OrchestratorState> = {}): OrchestratorState {
+export function makeState(overrides: Partial<FlywheelState> = {}): FlywheelState {
   return { ...createInitialState(), ...overrides };
 }

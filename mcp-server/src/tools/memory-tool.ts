@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import type { ToolContext, McpToolResult, MemoryArgs } from '../types.js';
 
 /**
- * orch_memory — Search and interact with CASS memory (cm CLI).
+ * flywheel_memory — Search and interact with CASS memory (cm CLI).
  *
  * operation="search" (default) — search CASS memory for relevant entries
  * operation="store"            — store a new memory entry
@@ -19,7 +19,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
     return {
       content: [{
         type: 'text',
-        text: `CASS memory (cm CLI) is not available.\n\nInstall it with: \`npm install -g @cass/cm\` or follow the cm installation guide.\n\nWithout CASS, the orchestrator cannot access prior session learnings.`,
+        text: `CASS memory (cm CLI) is not available.\n\nInstall it with: \`npm install -g @cass/cm\` or follow the cm installation guide.\n\nWithout CASS, the agent-flywheel cannot access prior session learnings.`,
       }],
     };
   }

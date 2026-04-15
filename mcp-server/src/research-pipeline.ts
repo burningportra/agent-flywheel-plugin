@@ -14,7 +14,7 @@
  * 7. Synthesis — merge best feedback into final proposal
  *
  * NOTE: The 7-phase research pipeline is now driven by CC Agent tool
- * invocations in the /orchestrate-research command. Phase runner
+ * invocations in the /flywheel-research command. Phase runner
  * functions return phase configs for CC to use instead of spawning
  * pi subprocess agents.
  */

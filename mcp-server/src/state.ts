@@ -1,10 +1,10 @@
 import { readCheckpoint, writeCheckpoint, clearCheckpoint } from './checkpoint.js';
-import { createInitialState, type OrchestratorState } from './types.js';
+import { createInitialState, type FlywheelState } from './types.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger("state");
 
-export function loadState(cwd: string): OrchestratorState {
+export function loadState(cwd: string): FlywheelState {
   const result = readCheckpoint(cwd);
   if (result && result.envelope.state.phase !== 'idle' && result.envelope.state.phase !== 'complete') {
     for (const w of result.warnings) log.warn(w);
@@ -13,7 +13,7 @@ export function loadState(cwd: string): OrchestratorState {
   return createInitialState();
 }
 
-export async function saveState(cwd: string, state: OrchestratorState): Promise<void> {
+export async function saveState(cwd: string, state: FlywheelState): Promise<void> {
   await writeCheckpoint(cwd, state);
 }
 

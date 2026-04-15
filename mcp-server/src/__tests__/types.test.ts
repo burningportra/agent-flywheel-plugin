@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../types.js';
-import type { OrchestrationToolName } from '../types.js';
+import type { FlywheelToolName } from '../types.js';
 
 describe('createInitialState', () => {
   it('returns an object with all required fields', () => {
@@ -46,9 +46,9 @@ describe('createInitialState', () => {
   });
 });
 
-describe('OrchestrationToolName', () => {
-  it('includes orch_memory so shared contracts cover the full orchestrator tool surface', () => {
-    const toolName: OrchestrationToolName = 'orch_memory';
-    expect(toolName).toBe('orch_memory');
+describe('FlywheelToolName', () => {
+  it('includes flywheel_memory so shared contracts cover the full flywheel tool surface', () => {
+    const toolName: FlywheelToolName = 'flywheel_memory';
+    expect(toolName).toBe('flywheel_memory');
   });
 });

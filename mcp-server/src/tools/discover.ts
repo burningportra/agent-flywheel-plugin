@@ -5,22 +5,22 @@ import type { ToolContext, McpToolResult, CandidateIdea, DiscoverArgs } from '..
 import { makeNextToolStep, makeToolError, makeToolResult } from './shared.js';
 
 /**
- * orch_discover — Accept LLM-generated ideas and store them in state.
+ * flywheel_discover — Accept LLM-generated ideas and store them in state.
  *
  * The calling Claude agent generates 5-15 ideas based on the repo profile
- * from orch_profile, then calls this tool with the structured list.
- * After storing, it instructs the agent to call orch_select.
+ * from flywheel_profile, then calls this tool with the structured list.
+ * After storing, it instructs the agent to call flywheel_select.
  */
 export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise<McpToolResult> {
   const { state, saveState } = ctx;
 
   if (!state.repoProfile) {
-    return makeToolError('orch_discover', state.phase, 'missing_prerequisite', 'Error: No repo profile found. Call orch_profile first.');
+    return makeToolError('flywheel_discover', state.phase, 'missing_prerequisite', 'Error: No repo profile found. Call flywheel_profile first.');
   }
 
   const ideas = (args.ideas || []) as CandidateIdea[];
   if (ideas.length === 0) {
-    return makeToolError('orch_discover', state.phase, 'invalid_input', 'Error: No ideas provided. Pass at least 3 ideas in the ideas array.');
+    return makeToolError('flywheel_discover', state.phase, 'invalid_input', 'Error: No ideas provided. Pass at least 3 ideas in the ideas array.');
   }
 
   state.candidateIdeas = ideas;
@@ -65,7 +65,7 @@ export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise
     }
   }
   try {
-    const artifactDir = join(tmpdir(), 'claude-orchestrator-discovery');
+    const artifactDir = join(tmpdir(), 'agent-flywheel-discovery');
     mkdirSync(artifactDir, { recursive: true });
     writeFileSync(join(artifactDir, `ideas-${Date.now()}.md`), artifactLines.join('\n'), 'utf8');
   } catch { /* best-effort */ }
@@ -84,21 +84,21 @@ export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise
     return line;
   }).join('\n\n');
 
-  const text = `**NEXT: Call \`orch_select\` with the user's chosen goal.**
+  const text = `**NEXT: Call \`flywheel_select\` with the user's chosen goal.**
 
-Present these ${ideas.length} ideas to the user (${topIdeas.length} top, ${honorableIdeas.length} honorable) and ask them to choose one. Then call \`orch_select\` with their chosen goal.
+Present these ${ideas.length} ideas to the user (${topIdeas.length} top, ${honorableIdeas.length} honorable) and ask them to choose one. Then call \`flywheel_select\` with their chosen goal.
 
 ---
 
 ${ideaList}`;
 
   return makeToolResult(text, {
-    tool: 'orch_discover',
+    tool: 'flywheel_discover',
     version: 1 as const,
     status: 'ok' as const,
     phase: state.phase,
-    nextStep: makeNextToolStep('call_tool', 'Present the ideas to the user, then call orch_select with the chosen goal.', {
-      tool: 'orch_select',
+    nextStep: makeNextToolStep('call_tool', 'Present the ideas to the user, then call flywheel_select with the chosen goal.', {
+      tool: 'flywheel_select',
       argsSchemaHint: { goal: 'string' },
     }),
     data: {

@@ -94,8 +94,8 @@ export interface SwarmTenderOptions {
   onCrossReviewDue?: (minutesSinceLastReview: number) => void;
   /** Called when commit cadence threshold is exceeded. */
   onCommitOverdue?: (minutesSinceLastCommit: number) => void;
-  /** Agent Mail orchestrator identity (for sending stuck-agent messages). */
-  orchestratorAgentName?: string;
+  /** Agent Mail flywheel identity (for sending stuck-agent messages). */
+  flywheelAgentName?: string;
   onKill?: (agent: AgentStatus) => void;
   onSwarmComplete?: (summary: SwarmCompletionSummary) => void;
 }
@@ -115,7 +115,7 @@ export class SwarmTender {
   private lastCommitCheckAt: number = Date.now();
   private onCrossReviewDue?: (minutesSinceLastReview: number) => void;
   private onCommitOverdue?: (minutesSinceLastCommit: number) => void;
-  private orchestratorAgentName?: string;
+  private flywheelAgentName?: string;
   private onKill?: (agent: AgentStatus) => void;
   private onSwarmComplete?: (summary: SwarmCompletionSummary) => void;
   private startedAt: number = Date.now();
@@ -142,7 +142,7 @@ export class SwarmTender {
     this.onCadenceCheck = options?.onCadenceCheck;
     this.onCrossReviewDue = options?.onCrossReviewDue;
     this.onCommitOverdue = options?.onCommitOverdue;
-    this.orchestratorAgentName = options?.orchestratorAgentName;
+    this.flywheelAgentName = options?.flywheelAgentName;
     this.onKill = options?.onKill;
     this.onSwarmComplete = options?.onSwarmComplete;
     this.totalRegistered = worktrees.length;
@@ -238,7 +238,7 @@ export class SwarmTender {
           agent.health = "active";
         }
 
-        if (agent.health === "stuck" && this.orchestratorAgentName) {
+        if (agent.health === "stuck" && this.flywheelAgentName) {
           const canNudge = agent.nudgesSent < this.config.maxNudges &&
             (now - agent.lastNudgedAt) >= this.config.nudgeDelayMs;
           const shouldKill = agent.nudgesSent >= this.config.maxNudges &&
@@ -268,7 +268,7 @@ export class SwarmTender {
         // Track files for conflict detection
         for (const file of files) {
           // Skip generated/ephemeral files
-          if (file.startsWith(".pi-orchestrator/")) continue;
+          if (file.startsWith(".pi-flywheel/")) continue;
           const existing = allChangedFiles.get(file) ?? [];
           existing.push(stepIndex);
           allChangedFiles.set(file, existing);
@@ -366,8 +366,8 @@ export class SwarmTender {
     stuckAgentName: string,
     threadId: string
   ): Promise<void> {
-    if (!this.orchestratorAgentName) return;
-    await sendMessage(this.exec, this.cwd, this.orchestratorAgentName, [stuckAgentName],
+    if (!this.flywheelAgentName) return;
+    await sendMessage(this.exec, this.cwd, this.flywheelAgentName, [stuckAgentName],
       `[SwarmTender] Are you stuck?`,
       `You haven't made changes in >${this.config.stuckThreshold / 1000}s. ` +
       `Please report your status:\n` +

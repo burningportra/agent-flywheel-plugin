@@ -4,7 +4,7 @@ function okResult(phase: string, text: string, data: Record<string, unknown>): M
   return {
     content: [{ type: 'text', text }],
     structuredContent: {
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'ok',
       phase,
@@ -18,7 +18,7 @@ function errorResult(phase: string, code: string, message: string, details?: Rec
     content: [{ type: 'text', text: message }],
     isError: true,
     structuredContent: {
-      tool: 'orch_review',
+      tool: 'flywheel_review',
       version: 1,
       status: 'error',
       phase,
@@ -64,7 +64,7 @@ function looksLikeBead(value: unknown): value is Bead {
 }
 
 /**
- * orch_review — Submit implementation work for review.
+ * flywheel_review — Submit implementation work for review.
  *
  * action="hit-me"    — Return parallel review agent task specs for CC to spawn
  * action="looks-good"— Mark bead done, advance to next or enter gates
@@ -116,7 +116,7 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
 
   // ── Preflight: actual bead status (handles auto-close from impl agent) ─
   // If `br show` says the bead is already closed, the impl agent (or someone
-  // else) ran `br update --status closed` without informing the orchestrator.
+  // else) ran `br update --status closed` without informing the agent-flywheel.
   // Reconcile state and route based on the requested action.
   //
   // Note: state.beadResults is only synced on the looks-good path. Setting
@@ -139,7 +139,7 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
       return errorResult(
         state.phase,
         'already_closed',
-        `Bead ${beadId} is already closed; skip is not applicable. Move to the next bead or call orch_review with action=looks-good to acknowledge.`,
+        `Bead ${beadId} is already closed; skip is not applicable. Move to the next bead or call flywheel_review with action=looks-good to acknowledge.`,
         { beadId, status: 'closed' }
       );
     }
@@ -150,7 +150,7 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
   if (alreadyCompleted) {
     return okResult(
       state.phase,
-      `Bead ${beadId} is already complete. Move to the next bead or call \`orch_review\` with beadId="__gates__" for guided review gates.`,
+      `Bead ${beadId} is already complete. Move to the next bead or call \`flywheel_review\` with beadId="__gates__" for guided review gates.`,
       {
         kind: 'review_gate',
         scope: 'already_complete',
@@ -314,7 +314,7 @@ Report what you found. Fix obvious issues directly.`,
       },
     ];
 
-    const baseInstructions = `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`orch_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
+    const baseInstructions = `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`flywheel_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
     const instructions = postClose
       ? `Bead ${beadId} is already closed; this is a post-close audit. ${baseInstructions} For looks-good, the bead stays closed (idempotent).`
       : baseInstructions;
@@ -389,7 +389,7 @@ async function nextBeadOrGates(
 
 All beads complete! Entering review gates.
 
-**NEXT: Call \`orch_review\` with beadId="__gates__" to run guided review gates.**`,
+**NEXT: Call \`flywheel_review\` with beadId="__gates__" to run guided review gates.**`,
       {
         kind: 'review_gate',
         scope: 'bead_completion',
@@ -412,7 +412,7 @@ All beads complete! Entering review gates.
       'implementing',
       `**${status}: Bead ${completedBeadId}.** Moving to bead ${nextBead.id}.
 
-**NEXT: Implement bead ${nextBead.id} (${nextBead.title}), then call \`orch_review\` when done.**
+**NEXT: Implement bead ${nextBead.id} (${nextBead.title}), then call \`flywheel_review\` when done.**
 
 ---
 
@@ -420,7 +420,7 @@ All beads complete! Entering review gates.
 
 ${nextBead.description}
 
-After implementing, commit and call \`orch_review\` with beadId="${nextBead.id}".`,
+After implementing, commit and call \`flywheel_review\` with beadId="${nextBead.id}".`,
       {
         kind: 'review_tasks',
         strategy: 'single_bead',
@@ -448,7 +448,7 @@ After implementing, commit and call \`orch_review\` with beadId="${nextBead.id}"
     'implementing',
     `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.
 
-**NEXT: Spawn ${ready.length} parallel agents, then call \`orch_review\` for each when done.**
+**NEXT: Spawn ${ready.length} parallel agents, then call \`flywheel_review\` for each when done.**
 
 \`\`\`json
 ${JSON.stringify({ agents: agentConfigs }, null, 2)}
@@ -488,15 +488,15 @@ async function runGates(ctx: ToolContext, action: 'hit-me' | 'looks-good' | 'ski
       saveState(state);
       return okResult(
         'complete',
-        `## Orchestration Complete
+        `## Flywheel Complete
 
 All gates passed for ${consecutiveClean} consecutive rounds. The implementation is done.
 
 **Summary:** All beads closed, all review gates clean.
 
-Run \`/claude-orchestrator:orchestrate-status\` for a final report.`,
+Run \`/agent-flywheel:flywheel-status\` for a final report.`,
         {
-          kind: 'orchestration_complete',
+          kind: 'flywheel_complete',
           scope: 'gates',
           consecutiveCleanRounds: consecutiveClean,
         }
@@ -514,8 +514,8 @@ Run \`/claude-orchestrator:orchestrate-status\` for a final report.`,
 ${nextGate}
 
 After checking:
-- If it **passes**: call \`orch_review\` with beadId="__gates__" and action="looks-good"
-- If it **fails**: fix it, then call \`orch_review\` with beadId="__gates__" and action="hit-me"
+- If it **passes**: call \`flywheel_review\` with beadId="__gates__" and action="looks-good"
+- If it **fails**: fix it, then call \`flywheel_review\` with beadId="__gates__" and action="hit-me"
 
 **cwd:** ${cwd}`,
       {
@@ -543,8 +543,8 @@ After checking:
 ${currentGate}
 
 After completing this gate check:
-- If it **passes**: call \`orch_review\` with beadId="__gates__" and action="looks-good" to advance
-- If it **fails**: fix the issue and call \`orch_review\` with beadId="__gates__" and action="hit-me" to spawn fixers
+- If it **passes**: call \`flywheel_review\` with beadId="__gates__" and action="looks-good" to advance
+- If it **fails**: fix the issue and call \`flywheel_review\` with beadId="__gates__" and action="hit-me" to spawn fixers
 
 **cwd:** ${cwd}`,
     {
@@ -560,7 +560,7 @@ After completing this gate check:
 
 function regressToPhase(
   ctx: ToolContext,
-  targetPhase: import('../types.js').OrchestratorPhase,
+  targetPhase: import('../types.js').FlywheelPhase,
   phaseName: string
 ): McpToolResult {
   const { state, saveState } = ctx;
@@ -570,9 +570,9 @@ function regressToPhase(
   saveState(state);
 
   const instructions: Record<string, string> = {
-    planning: `Revise the plan${state.planDocument ? ` at \`${state.planDocument}\`` : ''}, then call \`orch_approve_beads\` to re-enter the approval flow.`,
-    creating_beads: `Create/revise beads using \`br create\` and \`br update\`, then call \`orch_approve_beads\` to return to the approval menu.`,
-    implementing: `Use \`br ready\` to find the next unblocked bead and implement it, then call \`orch_review\` when done.`,
+    planning: `Revise the plan${state.planDocument ? ` at \`${state.planDocument}\`` : ''}, then call \`flywheel_approve_beads\` to re-enter the approval flow.`,
+    creating_beads: `Create/revise beads using \`br create\` and \`br update\`, then call \`flywheel_approve_beads\` to return to the approval menu.`,
+    implementing: `Use \`br ready\` to find the next unblocked bead and implement it, then call \`flywheel_review\` when done.`,
   };
 
   return {

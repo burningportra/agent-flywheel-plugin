@@ -247,13 +247,13 @@ describe('makeChoiceOption', () => {
   it('builds a choice option with optional metadata', () => {
     expect(makeChoiceOption('plan-first', 'Plan first', {
       description: 'Generate a standard plan',
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       args: { mode: 'standard' },
     })).toEqual({
       id: 'plan-first',
       label: 'Plan first',
       description: 'Generate a standard plan',
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       args: { mode: 'standard' },
     });
   });
@@ -261,22 +261,22 @@ describe('makeChoiceOption', () => {
 
 describe('makeNextToolStep', () => {
   it('creates a structured next-step payload', () => {
-    expect(makeNextToolStep('call_tool', 'Call orch_select next', {
-      tool: 'orch_select',
+    expect(makeNextToolStep('call_tool', 'Call flywheel_select next', {
+      tool: 'flywheel_select',
       argsSchemaHint: { goal: 'string' },
       options: [
-        makeChoiceOption('select-goal', 'Select a goal', { tool: 'orch_select' }),
+        makeChoiceOption('select-goal', 'Select a goal', { tool: 'flywheel_select' }),
       ],
     })).toEqual({
       type: 'call_tool',
-      message: 'Call orch_select next',
-      tool: 'orch_select',
+      message: 'Call flywheel_select next',
+      tool: 'flywheel_select',
       argsSchemaHint: { goal: 'string' },
       options: [
         {
           id: 'select-goal',
           label: 'Select a goal',
-          tool: 'orch_select',
+          tool: 'flywheel_select',
         },
       ],
     });
@@ -286,7 +286,7 @@ describe('makeNextToolStep', () => {
 describe('makeToolResult', () => {
   it('returns text content with structuredContent', () => {
     const structured = {
-      tool: 'orch_profile',
+      tool: 'flywheel_profile',
       version: 1,
       status: 'ok',
       phase: 'discovering',
@@ -302,7 +302,7 @@ describe('makeToolResult', () => {
 
 describe('makeToolError', () => {
   it('returns a standard structured error result with isError set', () => {
-    const result = makeToolError('orch_select', 'planning', 'invalid_input', 'Goal is required', {
+    const result = makeToolError('flywheel_select', 'planning', 'invalid_input', 'Goal is required', {
       retryable: false,
       details: { field: 'goal' },
     });
@@ -311,7 +311,7 @@ describe('makeToolError', () => {
       content: [{ type: 'text', text: 'Goal is required' }],
       isError: true,
       structuredContent: {
-        tool: 'orch_select',
+        tool: 'flywheel_select',
         version: 1,
         status: 'error',
         phase: 'planning',

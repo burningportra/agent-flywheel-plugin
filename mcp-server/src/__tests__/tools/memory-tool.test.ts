@@ -1,20 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { runMemory } from '../../tools/memory-tool.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState } from '../../types.js';
+import type { FlywheelState } from '../../types.js';
 import type { ExecCall } from '../helpers/mocks.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function makeCtx(execCalls: ExecCall[] = [], stateOverrides: Partial<OrchestratorState> = {}) {
+function makeCtx(execCalls: ExecCall[] = [], stateOverrides: Partial<FlywheelState> = {}) {
   const exec = createMockExec(execCalls);
   const state = makeState(stateOverrides);
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec,
     cwd: '/fake/cwd',
     state,
-    saveState: (s: OrchestratorState) => { saved.push(structuredClone(s)); },
+    saveState: (s: FlywheelState) => { saved.push(structuredClone(s)); },
     clearState: () => {},
   };
   return { ctx, state, saved };

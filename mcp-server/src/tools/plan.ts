@@ -10,7 +10,7 @@ function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', da
   return {
     content: [{ type: 'text', text }],
     structuredContent: {
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       version: 1,
       status: 'ok',
       phase,
@@ -29,7 +29,7 @@ function errorResult(
     content: [{ type: 'text', text: message }],
     isError: true,
     structuredContent: {
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       version: 1,
       status: 'error',
       phase,
@@ -46,7 +46,7 @@ function errorResult(
 }
 
 /**
- * orch_plan — Generate a plan document for the selected goal.
+ * flywheel_plan — Generate a plan document for the selected goal.
  *
  * mode="standard": Returns a prompt for the agent to generate a single plan
  * mode="deep": Returns spawn configs for 3 parallel planning agents (correctness, robustness, ergonomics)
@@ -56,7 +56,7 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
   const { state, saveState, cwd } = ctx;
 
   if (!state.selectedGoal) {
-    return errorResult('planning', 'missing_prerequisite', 'Error: No goal selected. Call orch_select first.');
+    return errorResult('planning', 'missing_prerequisite', 'Error: No goal selected. Call flywheel_select first.');
   }
 
   const goal = state.selectedGoal;
@@ -86,7 +86,7 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
     return okResult(
       `**Plan loaded from \`${args.planFile}\`.**
 
-**NEXT: Call \`orch_approve_beads\` to review the plan and proceed to bead creation.**
+**NEXT: Call \`flywheel_approve_beads\` to review the plan and proceed to bead creation.**
 
 Goal: "${goal}"${constraintsSummary}
 
@@ -122,7 +122,7 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
     return okResult(
       `**Plan received and saved to \`${relativePath}\`.**
 
-**NEXT: Call \`orch_approve_beads\` to review the plan and proceed to bead creation.**
+**NEXT: Call \`flywheel_approve_beads\` to review the plan and proceed to bead creation.**
 
 Goal: "${goal}"${constraintsSummary}
 
@@ -177,7 +177,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
 
 ### After generating the plan
 1. Save it to \`${planPath}\` using the Write tool or bash
-2. Call \`orch_approve_beads\` to review the plan and create beads from it`,
+2. Call \`flywheel_approve_beads\` to review the plan and create beads from it`,
       'planning',
       {
         kind: 'plan_prompt',
@@ -193,7 +193,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
   // If no planContent provided, return agent spawn configs
   const profileSummary = profile
     ? `Repository: ${profile.name} | Languages: ${profile.languages.join(', ')} | Frameworks: ${profile.frameworks.join(', ')}`
-    : 'Repository: (profile not loaded — call orch_profile first for best results)';
+    : 'Repository: (profile not loaded — call flywheel_profile first for best results)';
 
   // Load CASS memory for planning context (best-effort)
   let memorySection = "";
@@ -274,7 +274,7 @@ Question every architectural choice: is there a simpler way? A more standard app
     goal,
     constraints: state.constraints,
     planAgents,
-    instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call orch_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+    instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
     synthesisPrompt: `## Best-of-All-Worlds Synthesis
 
 Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:

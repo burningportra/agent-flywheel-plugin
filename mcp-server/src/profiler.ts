@@ -6,7 +6,7 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('profiler');
 
-const CACHE_DIR = ".pi-orchestrator";
+const CACHE_DIR = ".pi-flywheel";
 const CACHE_FILE = "profile-cache.json";
 
 interface ProfileCache {
@@ -225,7 +225,7 @@ async function collectTodos(
       "--exclude-dir=target",
       "--exclude-dir=__pycache__",
       "--exclude-dir=.venv",
-      "--exclude-dir=.pi-orchestrator",
+      "--exclude-dir=.pi-flywheel",
       "-E", "(TODO|FIXME|HACK|XXX):",
       ".",
     ],

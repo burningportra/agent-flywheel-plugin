@@ -40,7 +40,7 @@ export interface BuildSlotInfo {
 
 /**
  * Call an agent-mail MCP tool via its JSON-RPC HTTP endpoint.
- * Used by the orchestrator itself (not sub-agents) to manage projects/reservations.
+ * Used by the agent-flywheel itself (not sub-agents) to manage projects/reservations.
  *
  * Returns a discriminated union: `{ ok: true, data }` on success,
  * `{ ok: false, error }` with a classified error kind on failure.
@@ -178,7 +178,7 @@ export async function agentMailReadResource(exec: ExecFn, uri: string): Promise<
 }
 
 /**
- * Ensure project exists in agent-mail. Called once during orch_profile.
+ * Ensure project exists in agent-mail. Called once during flywheel_profile.
  */
 export async function ensureAgentMailProject(exec: ExecFn, cwd: string): Promise<void> {
   await agentMailRPC(exec, "ensure_project", { human_key: cwd }).then(unwrapRPC);
@@ -728,7 +728,7 @@ You are working directly on the shared branch in the main checkout.
   - \`git push\`
 - If \`git pull --rebase\`, \`git rebase --continue\`, or \`git push\` reports conflicts or a non-fast-forward error, STOP immediately.
 - Do not force-push, do not merge, and do not try to untangle another agent's changes unless explicitly instructed.
-- Report the conflict in your summary / agent-mail update so the orchestrator can decide the next step.
+- Report the conflict in your summary / agent-mail update so the agent-flywheel can decide the next step.
 `
     : "";
 
@@ -807,24 +807,24 @@ am_release
 `;
 }
 
-// ─── New helper functions (claude-orchestrator additions) ─────
+// ─── New helper functions (agent-flywheel additions) ─────
 
 /**
- * Register the orchestrator as a named agent in agent-mail.
- * Call this once during orch_profile before any sub-agent spawning.
+ * Register the agent-flywheel as a named agent in agent-mail.
+ * Call this once during flywheel_profile before any sub-agent spawning.
  */
-export async function registerOrchestratorAgent(exec: ExecFn, cwd: string, agentName: string = 'Orchestrator'): Promise<any> {
+export async function registerFlywheelAgent(exec: ExecFn, cwd: string, agentName: string = 'FlywheelAgent'): Promise<any> {
   return unwrapRPC(await agentMailRPC(exec, 'register_agent', { project_key: cwd, agent_name: agentName }));
 }
 
 /**
  * Start a full agent-mail session (register, bootstrap, set up file reservations).
- * Replaces bare ensureAgentMailProject() in orch_profile.
+ * Replaces bare ensureAgentMailProject() in flywheel_profile.
  */
-export async function agentMailStartSession(exec: ExecFn, cwd: string, agentName: string = 'Orchestrator'): Promise<any> {
+export async function agentMailStartSession(exec: ExecFn, cwd: string, agentName: string = 'FlywheelAgent'): Promise<any> {
   return unwrapRPC(await agentMailRPC(exec, 'macro_start_session', {
     human_key: cwd,
-    program: 'claude-orchestrator',
+    program: 'agent-flywheel',
     model: 'auto',
     task_description: 'Orchestrating agentic coding flywheel',
     inbox_limit: 10,
@@ -834,7 +834,7 @@ export async function agentMailStartSession(exec: ExecFn, cwd: string, agentName
 
 /**
  * Send a bead completion message to the bead's thread.
- * Call in orch_approve_beads when a bead result = success.
+ * Call in flywheel_approve_beads when a bead result = success.
  */
 export async function sendBeadCompletionMessage(exec: ExecFn, cwd: string, beadId: string, senderName: string, summary: string): Promise<any> {
   return unwrapRPC(await agentMailRPC(exec, 'send_message', {
@@ -849,15 +849,15 @@ export async function sendBeadCompletionMessage(exec: ExecFn, cwd: string, beadI
 }
 
 /**
- * Acknowledge a batch of message IDs. Called in /orchestrate-status after inbox read.
+ * Acknowledge a batch of message IDs. Called in /flywheel-status after inbox read.
  */
 export async function acknowledgeMessages(exec: ExecFn, cwd: string, agentName: string, messageIds: number[]): Promise<void> {
   await Promise.all(messageIds.map(id => acknowledgeMessage(exec, cwd, agentName, id)));
 }
 
 /**
- * Fetch inbox messages for the orchestrator agent.
+ * Fetch inbox messages for the flywheel agent.
  */
-export async function fetchInboxMessages(exec: ExecFn, cwd: string, agentName: string = 'Orchestrator'): Promise<AgentMailMessage[]> {
+export async function fetchInboxMessages(exec: ExecFn, cwd: string, agentName: string = 'FlywheelAgent'): Promise<AgentMailMessage[]> {
   return fetchInbox(exec, cwd, agentName, { limit: 20, includeBodies: true });
 }

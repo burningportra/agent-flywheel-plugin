@@ -292,7 +292,7 @@ export type IdeaCategory =
   | "testing";
 
 // ─── Session State ───────────────────────────────────────────
-export type OrchestratorPhase =
+export type FlywheelPhase =
   | "idle"
   | "profiling"
   | "discovering"
@@ -310,8 +310,8 @@ export type OrchestratorPhase =
 
 export type CoordinationMode = "worktree" | "single-branch";
 
-export interface OrchestratorState {
-  phase: OrchestratorPhase;
+export interface FlywheelState {
+  phase: FlywheelPhase;
   repoProfile?: RepoProfile;
   scanResult?: ScanResult;
   candidateIdeas?: CandidateIdea[];
@@ -339,11 +339,11 @@ export interface OrchestratorState {
   coordinationStrategy?: import("./coordination.js").CoordinationStrategy;
   /** Coordination mode: worktree isolation vs single-branch */
   coordinationMode?: CoordinationMode;
-  /** Whether agent-mail session was bootstrapped for this orchestration */
+  /** Whether agent-mail session was bootstrapped for this flywheel run */
   agentMailSessionActive?: boolean;
 
   // ─── Bead-centric state (new) ──────────────────────────────
-  /** Bead IDs created for this orchestration (ordered). */
+  /** Bead IDs created for this flywheel run (ordered). */
   activeBeadIds?: string[];
   /** Results keyed by bead ID. */
   beadResults?: Record<string, BeadResult>;
@@ -417,7 +417,7 @@ export interface OrchestratorState {
 
   // ─── Review clean-round tracking ──────────────────────────
   /**
-   * Number of consecutive review rounds where orch_review was called
+   * Number of consecutive review rounds where flywheel_review was called
    * with verdict="pass" and no revision instructions (guide §08 stop condition).
    * Reset to 0 on any fail or revision-instructions round.
    */
@@ -426,23 +426,23 @@ export interface OrchestratorState {
 
 // ─── Checkpoint Persistence ─────────────────────────────────
 
-/** On-disk checkpoint envelope — wraps OrchestratorState with crash-recovery metadata. */
+/** On-disk checkpoint envelope — wraps FlywheelState with crash-recovery metadata. */
 export interface CheckpointEnvelope {
   /** Schema version for forward compatibility. Start at 1. */
   schemaVersion: 1;
   /** ISO timestamp when this checkpoint was written. */
   writtenAt: string;
-  /** Orchestrator version that wrote this checkpoint. */
-  orchestratorVersion: string;
+  /** Flywheel version that wrote this checkpoint. */
+  flywheelVersion: string;
   /** Git HEAD hash at checkpoint time — detects branch changes between crash and resume. */
   gitHead?: string;
-  /** The full orchestrator state snapshot. */
-  state: OrchestratorState;
+  /** The full flywheel state snapshot. */
+  state: FlywheelState;
   /** SHA-256 hash of JSON.stringify(state) for integrity validation. */
   stateHash: string;
 }
 
-export function createInitialState(): OrchestratorState {
+export function createInitialState(): FlywheelState {
   return {
     phase: "idle",
     constraints: [],
@@ -464,38 +464,38 @@ export type { ExecFn } from './exec.js';
 export interface ToolContext {
   exec: import('./exec.js').ExecFn;
   cwd: string;
-  state: OrchestratorState;
-  saveState: (state: OrchestratorState) => void;
+  state: FlywheelState;
+  saveState: (state: FlywheelState) => void;
   clearState: () => void;
 }
 
-export type OrchestrationToolName =
-  | 'orch_profile'
-  | 'orch_discover'
-  | 'orch_select'
-  | 'orch_plan'
-  | 'orch_approve_beads'
-  | 'orch_review'
-  | 'orch_verify_beads'
-  | 'orch_memory';
+export type FlywheelToolName =
+  | 'flywheel_profile'
+  | 'flywheel_discover'
+  | 'flywheel_select'
+  | 'flywheel_plan'
+  | 'flywheel_approve_beads'
+  | 'flywheel_review'
+  | 'flywheel_verify_beads'
+  | 'flywheel_memory';
 
 export interface ToolChoiceOption {
   id: string;
   label: string;
   description?: string;
-  tool?: OrchestrationToolName;
+  tool?: FlywheelToolName;
   args?: Record<string, unknown>;
 }
 
 export interface ToolNextStep {
   type: 'call_tool' | 'present_choices' | 'generate_artifact' | 'spawn_agents' | 'run_cli' | 'resume_phase' | 'none';
   message: string;
-  tool?: OrchestrationToolName;
+  tool?: FlywheelToolName;
   argsSchemaHint?: Record<string, unknown>;
   options?: ToolChoiceOption[];
 }
 
-export interface OrchestrationToolError {
+export interface FlywheelToolError {
   code:
     | 'missing_prerequisite'
     | 'invalid_input'
@@ -511,14 +511,14 @@ export interface OrchestrationToolError {
   details?: Record<string, unknown>;
 }
 
-export interface OrchestrationStructuredError {
-  tool: OrchestrationToolName;
+export interface FlywheelStructuredError {
+  tool: FlywheelToolName;
   version: 1;
   status: 'error';
-  phase: OrchestratorPhase;
+  phase: FlywheelPhase;
   data: {
     kind: 'error';
-    error: OrchestrationToolError;
+    error: FlywheelToolError;
   };
 }
 

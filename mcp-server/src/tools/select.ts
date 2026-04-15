@@ -2,7 +2,7 @@ import type { ToolContext, McpToolResult, SelectArgs } from '../types.js';
 import { beadCreationPrompt, formatRepoProfile, makeChoiceOption, makeNextToolStep, makeToolError, makeToolResult } from './shared.js';
 
 /**
- * orch_select — Set the selected goal and transition to planning phase.
+ * flywheel_select — Set the selected goal and transition to planning phase.
  *
  * The calling Claude agent presents ideas to the user (via conversation),
  * then calls this tool with the user's chosen goal string.
@@ -13,7 +13,7 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
   const { state, saveState, cwd } = ctx;
 
   if (!args.goal || !args.goal.trim()) {
-    return makeToolError('orch_select', state.phase, 'invalid_input', 'Error: goal parameter is required and must be non-empty.');
+    return makeToolError('flywheel_select', state.phase, 'invalid_input', 'Error: goal parameter is required and must be non-empty.');
   }
 
   state.selectedGoal = args.goal.trim();
@@ -31,13 +31,13 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
 **NEXT: Choose a workflow and call the appropriate tool:**
 
 ### Option A: Plan first (recommended for complex goals)
-Call \`orch_plan\` with \`mode="standard"\` to generate a single plan document, then \`orch_approve_beads\` to review it before creating beads.
+Call \`flywheel_plan\` with \`mode="standard"\` to generate a single plan document, then \`flywheel_approve_beads\` to review it before creating beads.
 
 ### Option B: Deep plan (multi-model triangulation)
-Call \`orch_plan\` with \`mode="deep"\` to spawn parallel planning agents (correctness, robustness, ergonomics), synthesize their outputs, then create beads from the result.
+Call \`flywheel_plan\` with \`mode="deep"\` to spawn parallel planning agents (correctness, robustness, ergonomics), synthesize their outputs, then create beads from the result.
 
 ### Option C: Direct to beads (fastest)
-Skip planning — create beads directly using \`br create\` and \`br dep add\`, then call \`orch_approve_beads\` for approval.
+Skip planning — create beads directly using \`br create\` and \`br dep add\`, then call \`flywheel_approve_beads\` for approval.
 
 ---
 
@@ -47,7 +47,7 @@ Skip planning — create beads directly using \`br create\` and \`br dep add\`, 
 ${beadCreationPrompt(state.selectedGoal, repoContext, state.constraints)}`;
 
   return makeToolResult(text, {
-    tool: 'orch_select',
+    tool: 'flywheel_select',
     version: 1 as const,
     status: 'ok' as const,
     phase: state.phase,
@@ -55,13 +55,13 @@ ${beadCreationPrompt(state.selectedGoal, repoContext, state.constraints)}`;
     nextStep: makeNextToolStep('present_choices', 'Choose a workflow for the selected goal.', {
       options: [
         makeChoiceOption('plan-first', 'Plan first', {
-          description: 'Generate a single plan document with orch_plan mode="standard".',
-          tool: 'orch_plan',
+          description: 'Generate a single plan document with flywheel_plan mode="standard".',
+          tool: 'flywheel_plan',
           args: { mode: 'standard' },
         }),
         makeChoiceOption('deep-plan', 'Deep plan', {
-          description: 'Generate parallel planning perspectives with orch_plan mode="deep".',
-          tool: 'orch_plan',
+          description: 'Generate parallel planning perspectives with flywheel_plan mode="deep".',
+          tool: 'flywheel_plan',
           args: { mode: 'deep' },
         }),
         makeChoiceOption('direct-to-beads', 'Direct to beads', {

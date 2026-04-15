@@ -5,9 +5,9 @@ import { join } from "node:path";
 
 const MCP_ROOT = "/Volumes/1tb/Projects/claude-orchestrator/mcp-server";
 const CLI = join(MCP_ROOT, "dist", "scripts", "lint-skill.js");
-const SKILL = "../skills/orchestrate/SKILL.md";
+const SKILL = "../skills/flywheel/SKILL.md";
 
-describe("live-orchestrate canary", () => {
+describe("live-flywheel canary", () => {
   it("CLI build artifact exists", () => {
     expect(existsSync(CLI)).toBe(true);
   });

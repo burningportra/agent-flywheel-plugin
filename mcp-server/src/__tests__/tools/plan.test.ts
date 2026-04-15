@@ -4,19 +4,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPlan } from '../../tools/plan.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState } from '../../types.js';
+import type { FlywheelState } from '../../types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function makeCtx(stateOverrides: Partial<OrchestratorState> = {}, cwd = '/fake/cwd') {
+function makeCtx(stateOverrides: Partial<FlywheelState> = {}, cwd = '/fake/cwd') {
   const exec = createMockExec();
   const state = makeState({ selectedGoal: 'Add caching layer', ...stateOverrides });
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec,
     cwd,
     state,
-    saveState: (s: OrchestratorState) => { saved.push(structuredClone(s)); },
+    saveState: (s: FlywheelState) => { saved.push(structuredClone(s)); },
     clearState: () => {},
   };
   return { ctx, state, saved };
@@ -45,7 +45,7 @@ describe('runPlan', () => {
 
     const text = result.content[0].text;
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       version: 1,
       status: 'ok',
       phase: 'planning',
@@ -57,7 +57,7 @@ describe('runPlan', () => {
     });
     expect(text).toContain('Add caching layer');
     expect(text).toContain('Plan Document Requirements');
-    expect(text).toContain('orch_approve_beads');
+    expect(text).toContain('flywheel_approve_beads');
   });
 
   it('sets phase to planning in standard mode', async () => {
@@ -146,7 +146,7 @@ describe('runPlan', () => {
 
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       version: 1,
       status: 'ok',
       phase: 'awaiting_plan_approval',
@@ -206,7 +206,7 @@ describe('runPlan', () => {
 
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       version: 1,
       status: 'ok',
       phase: 'awaiting_plan_approval',
@@ -244,7 +244,7 @@ describe('runPlan', () => {
     const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
 
     expect(result.structuredContent).toMatchObject({
-      tool: 'orch_plan',
+      tool: 'flywheel_plan',
       version: 1,
       status: 'ok',
       phase: 'planning',

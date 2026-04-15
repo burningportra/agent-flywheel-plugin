@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runProfile } from '../../tools/profile.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { OrchestratorState } from '../../types.js';
+import type { FlywheelState } from '../../types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ function makeTodosArgs(stdout: string = '', code: number = 1) {
       '--exclude-dir=target',
       '--exclude-dir=__pycache__',
       '--exclude-dir=.venv',
-      '--exclude-dir=.pi-orchestrator',
+      '--exclude-dir=.pi-flywheel',
       '-E', '(TODO|FIXME|HACK|XXX):',
       '.',
     ],
@@ -129,15 +129,15 @@ function baseExecCalls() {
   ];
 }
 
-function makeCtx(execCalls = baseExecCalls(), stateOverrides: Partial<OrchestratorState> = {}) {
+function makeCtx(execCalls = baseExecCalls(), stateOverrides: Partial<FlywheelState> = {}) {
   const exec = createMockExec(execCalls);
   const state = makeState(stateOverrides);
-  const saved: OrchestratorState[] = [];
+  const saved: FlywheelState[] = [];
   const ctx = {
     exec,
     cwd: '/fake/cwd',
     state,
-    saveState: (s: OrchestratorState) => { saved.push(structuredClone(s)); },
+    saveState: (s: FlywheelState) => { saved.push(structuredClone(s)); },
     clearState: () => {},
   };
   return { ctx, state, saved };
@@ -317,7 +317,7 @@ describe('runProfile', () => {
       exec,
       cwd: '/projects/myrepo',
       state,
-      saveState: (_s: OrchestratorState) => {},
+      saveState: (_s: FlywheelState) => {},
       clearState: () => {},
     };
 
@@ -336,7 +336,7 @@ describe('runProfile', () => {
     const result = await runProfile(ctx, { cwd: '/fake/cwd', goal: 'Improve test coverage' });
 
     expect(result.content[0].text).toContain('Improve test coverage');
-    expect(result.content[0].text).toContain('orch_select');
+    expect(result.content[0].text).toContain('flywheel_select');
   });
 
   it('includes bead status when beads are open', async () => {
@@ -381,14 +381,14 @@ describe('runProfile', () => {
     const result = await runProfile(ctx, { cwd: '/fake/cwd' });
 
     expect(result.structuredContent).toEqual({
-      tool: 'orch_profile',
+      tool: 'flywheel_profile',
       version: 1,
       status: 'ok',
       phase: 'discovering',
       nextStep: {
         type: 'call_tool',
-        message: 'Call orch_discover with candidate ideas based on the repo profile.',
-        tool: 'orch_discover',
+        message: 'Call flywheel_discover with candidate ideas based on the repo profile.',
+        tool: 'flywheel_discover',
         argsSchemaHint: { ideas: 'CandidateIdea[]' },
       },
       data: {
@@ -425,26 +425,26 @@ describe('runProfile', () => {
     const result = await runProfile(ctx, { cwd: '/fake/cwd', goal: 'Improve test coverage' });
 
     expect(result.structuredContent).toEqual({
-      tool: 'orch_profile',
+      tool: 'flywheel_profile',
       version: 1,
       status: 'ok',
       phase: 'discovering',
       nextStep: {
         type: 'present_choices',
-        message: 'A goal was provided. Either proceed directly to orch_select or run orch_discover to generate alternatives.',
+        message: 'A goal was provided. Either proceed directly to flywheel_select or run flywheel_discover to generate alternatives.',
         options: [
           {
             id: 'select-provided-goal',
             label: 'Use the provided goal',
-            description: 'Skip discovery and continue with orch_select using the supplied goal.',
-            tool: 'orch_select',
+            description: 'Skip discovery and continue with flywheel_select using the supplied goal.',
+            tool: 'flywheel_select',
             args: { goal: 'Improve test coverage' },
           },
           {
             id: 'discover-alternatives',
             label: 'Discover alternatives',
-            description: 'Generate alternative goals with orch_discover before selecting one.',
-            tool: 'orch_discover',
+            description: 'Generate alternative goals with flywheel_discover before selecting one.',
+            tool: 'flywheel_discover',
             args: { ideas: 'CandidateIdea[]' },
           },
         ],
