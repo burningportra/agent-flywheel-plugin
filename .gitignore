@@ -16,3 +16,8 @@ mcp-server/dist/
 # Vitest coverage output
 mcp-server/coverage/
 mcp-server/.lintskill-baseline.json
+
+# Local runtime state
+storage.sqlite3
+storage.sqlite3-shm
+storage.sqlite3-wal

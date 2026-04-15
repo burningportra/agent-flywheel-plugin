@@ -3,7 +3,7 @@
   "description": "Multi-agent coding flywheel — deep planning, parallel execution, guided review gates. The Agentic Coding Flywheel.",
   "version": "3.0.0",
   "author": { "name": "burningportra" },
-  "homepage": "https://github.com/burningportra/agent-flywheel",
-  "repository": "https://github.com/burningportra/agent-flywheel",
+  "homepage": "https://github.com/burningportra/agent-flywheel-plugin",
+  "repository": "https://github.com/burningportra/agent-flywheel-plugin",
   "license": "MIT"
 }
