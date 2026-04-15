@@ -77,7 +77,7 @@ Options:
 
 Exit codes: `0` = clean, `1` = findings at severity ≥ error, `2` = internal/parse error (distinguishes lint failure from tool failure — CI parses this).
 
-**Secondary (deferred, out of first-bead scope):** an MCP tool `orch_lint_skill` wrapping the same library. Skipped in v1 to keep the surface small; mentioned in §10.
+**Secondary (deferred, out of first-bead scope):** an MCP tool `flywheel_lint_skill` wrapping the same library. Skipped in v1 to keep the surface small; mentioned in §10.
 
 ### 1.3 npm wiring
 
@@ -658,7 +658,7 @@ Format: each bead has `id`, `title`, `depends_on: [ids]`, `files touched`, `acce
 - **files:** property tests under `mcp-server/src/__tests__/lint/property/`.
 - **acceptance:** 1000 random inputs; parser round-trip invariant; AUQ002 count invariant.
 
-### T12 (optional, follow-up) — MCP tool `orch_lint_skill`
+### T12 (optional, follow-up) — MCP tool `flywheel_lint_skill`
 - **depends_on:** [T8]
 - **files:** `mcp-server/src/tools/orch-lint-skill.ts`, registration in `server.ts`.
 - **acceptance:** callable via MCP, returns same JSON schema as CLI.

@@ -320,7 +320,7 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 3. **TypeScript strict mode.** `tsconfig.json` enables `strict: true`. All code must pass strict type checking.
 4. **NodeNext module resolution.** Use `.js` extensions in all relative imports (e.g., `import { foo } from "./bar.js"`), even when the source file is `.ts`.
 5. **ESM only.** `"type": "module"` in `package.json`. No CommonJS `require()`.
-6. **Never write directly to `.pi-flywheel/checkpoint.json`.** Use `orch_*` MCP tools for state management.
+6. **Never write directly to `.pi-flywheel/checkpoint.json`.** Use `flywheel_*` MCP tools for state management.
 7. **All `exec` calls must include a `timeout`.** No open-ended shell commands.
 
 ## Key File Paths

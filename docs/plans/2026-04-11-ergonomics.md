@@ -1,4 +1,4 @@
-# Ergonomics Plan: Structured `structuredContent` Contracts for `orch_*` Tools
+# Ergonomics Plan: Structured `structuredContent` Contracts for `flywheel_*` Tools
 
 Date: 2026-04-11
 Perspective: Ergonomics
@@ -6,7 +6,7 @@ Scope: `flywheel_profile`, `flywheel_discover`, `flywheel_select`, `flywheel_pla
 
 ## Executive Summary
 
-The current MCP tool surface is optimized for human-readable prose, but several `orch_*` tools also smuggle machine-readable meaning inside free-form text. In practice, hosts and agents must scrape markdown, parse ad hoc JSON embedded inside text blocks, or infer workflow state from phrasing like “NEXT: Call `flywheel_select`”. That is workable for Claude-in-the-loop, but ergonomically poor for:
+The current MCP tool surface is optimized for human-readable prose, but several `flywheel_*` tools also smuggle machine-readable meaning inside free-form text. In practice, hosts and agents must scrape markdown, parse ad hoc JSON embedded inside text blocks, or infer workflow state from phrasing like “NEXT: Call `flywheel_select`”. That is workable for Claude-in-the-loop, but ergonomically poor for:
 
 - host integrations that want to render buttons, workflow status, or next-step affordances
 - Hermes and other agents that should not have to prompt-scrape prose to decide what to do next
@@ -815,7 +815,7 @@ High-priority changes:
 ### Additional test categories
 
 1. Contract shape regression tests
-   Add a small focused suite that asserts every `orch_*` tool returns:
+   Add a small focused suite that asserts every `flywheel_*` tool returns:
    - `structuredContent.tool`
    - `structuredContent.version`
    - `structuredContent.status`

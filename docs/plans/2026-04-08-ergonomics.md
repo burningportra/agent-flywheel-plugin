@@ -247,7 +247,7 @@ Only paths a sub-agent would need to find things, not an architecture diagram:
 
 **Hard Constraints:**
 This section is the most valuable part of AGENTS.md. Include:
-1. Never write directly to `.pi-flywheel/checkpoint.json` — use `orch_*` MCP tools.
+1. Never write directly to `.pi-flywheel/checkpoint.json` — use `flywheel_*` MCP tools.
 2. Never run `ccc init` in the project root unless `ccc status` returns "Not in an initialized project directory."
 3. Do not `rm -rf` worktrees — use `flywheel-cleanup` skill.
 4. Always log diagnostics to stderr, never stdout, in MCP server code.

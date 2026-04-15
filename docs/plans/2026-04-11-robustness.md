@@ -1,4 +1,4 @@
-# Robustness Plan: Structured `structuredContent` Contracts for `orch_*` Tools
+# Robustness Plan: Structured `structuredContent` Contracts for `flywheel_*` Tools
 
 Date: 2026-04-11
 Perspective: Robustness
@@ -13,7 +13,7 @@ The current MCP server returns only text content from the flywheel tools. Severa
 
 The safest rollout is not "replace text with JSON". It is:
 
-1. Introduce typed result contracts in `mcp-server/src/types.ts` for each `orch_*` tool.
+1. Introduce typed result contracts in `mcp-server/src/types.ts` for each `flywheel_*` tool.
 2. Add a small result-builder layer that returns both:
    - `content: [{ type: "text", text: ... }]` for current host compatibility
    - `structuredContent: ...` for machine-readable consumers

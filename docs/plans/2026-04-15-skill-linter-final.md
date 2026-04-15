@@ -491,7 +491,7 @@ T12: GitHub Actions CI workflow + manifest-drift guard + live canary + initial b
 - Golden-file determinism test
 - Property tests via `fast-check`
 - Memory-profile test
-- MCP wrapper (`orch_lint_skill`)
+- MCP wrapper (`flywheel_lint_skill`)
 - `docs/lint-skill-runbook.md`
 - `SKILL_LINT_EMERGENCY=1` escape hatch
 - `--reproduce-ci` flag

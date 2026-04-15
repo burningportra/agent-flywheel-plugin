@@ -1,4 +1,4 @@
-# StructuredContent contracts for orch_* tools: correctness-first deep plan
+# StructuredContent contracts for flywheel_* tools: correctness-first deep plan
 
 ## Executive summary
 
@@ -11,7 +11,7 @@ The safest implementation path is to add explicit `structuredContent` contracts 
 3. Add helper builders so every success/error path can return both:
    - human-compatible text in `content`
    - machine-readable data in `structuredContent`
-4. Register output contracts in `mcp-server/src/server.ts` for all six `orch_*` tools.
+4. Register output contracts in `mcp-server/src/server.ts` for all six `flywheel_*` tools.
 5. Update each tool incrementally, preserving existing text textually where practical and ensuring structured fields accurately mirror state transitions and branch-specific outcomes.
 6. Expand tests from “text contains string” to also assert exact structured payload shape, discriminants, and state invariants.
 
@@ -95,7 +95,7 @@ This is good news: the repo already has correctness-oriented tests for state mut
 
 ## Correctness goals
 
-1. Every `orch_*` tool returns stable `structuredContent` on all success branches.
+1. Every `flywheel_*` tool returns stable `structuredContent` on all success branches.
 2. Every error branch for those tools also returns stable `structuredContent` with a machine-readable error code/category.
 3. Text compatibility is preserved:
    - existing `content[0].text` should remain semantically equivalent
@@ -627,7 +627,7 @@ Recommended execution sequence after implementation:
 
 ## Acceptance criteria
 
-1. All six targeted `orch_*` tools return `structuredContent` on every success path.
+1. All six targeted `flywheel_*` tools return `structuredContent` on every success path.
 2. All current explicit error returns in those tools also return `structuredContent` with stable `error.code` values.
 3. Existing human-readable `content` remains present and semantically compatible.
 4. Deep-plan, review-agent, and parallel-bead payloads are available as native objects/arrays in structured content, not only JSON strings in text.

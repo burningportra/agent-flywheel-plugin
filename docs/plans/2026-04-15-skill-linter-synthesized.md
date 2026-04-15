@@ -95,7 +95,7 @@ mcp-server/
 
 **Decision (adopted from correctness §1.1):** lives under `mcp-server/` because strict-TS, Vitest, ESM NodeNext, and `createLogger` are already wired there. Adding a second `package.json` for a root-level `scripts/` would duplicate build config.
 
-**Decision (adopted from robustness §2.4):** one package, one build. The library (`src/lint/index.ts`) is importable so a future MCP tool `orch_lint_skill` can wrap it without shelling out. No second package.
+**Decision (adopted from robustness §2.4):** one package, one build. The library (`src/lint/index.ts`) is importable so a future MCP tool `flywheel_lint_skill` can wrap it without shelling out. No second package.
 
 ### 3.2 Entry points and exports
 
@@ -640,7 +640,7 @@ T21 (optional): Property tests with fast-check | depends_on: [T2, T5, T11] | fil
 
 T22 (optional): Memory profile test | depends_on: [T14] | files: [mcp-server/src/__tests__/lint/memory-profile.test.ts] | acceptance: lint 10 MiB synthetic; peak heap <100 MB; RSS <250 MB.
 
-T23 (optional, future): MCP tool orch_lint_skill wrapping lint() | depends_on: [T14] | files: [mcp-server/src/tools/orch-lint-skill.ts] | acceptance: callable via MCP; returns same JSON schema as CLI.
+T23 (optional, future): MCP tool flywheel_lint_skill wrapping lint() | depends_on: [T14] | files: [mcp-server/src/tools/orch-lint-skill.ts] | acceptance: callable via MCP; returns same JSON schema as CLI.
 ```
 
 ### 16.1 Parallelisation waves

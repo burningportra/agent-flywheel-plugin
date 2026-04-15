@@ -1,4 +1,4 @@
-# Synthesized Plan: Add `structuredContent` contracts for all `orch_*` tools
+# Synthesized Plan: Add `structuredContent` contracts for all `flywheel_*` tools
 
 Date: 2026-04-11
 Scope: `flywheel_profile`, `flywheel_discover`, `flywheel_select`, `flywheel_plan`, `flywheel_approve_beads`, `flywheel_review`
@@ -754,7 +754,7 @@ If `outputSchema` is supported by the installed MCP SDK typing/runtime, attach i
 
 ## Acceptance criteria
 
-1. All six target `orch_*` tools return `structuredContent` on all major success branches.
+1. All six target `flywheel_*` tools return `structuredContent` on all major success branches.
 2. All explicit error branches return structured errors in addition to `isError: true`.
 3. Every structured result uses the shared envelope with `tool`, `version`, `status`, `phase`, and `data.kind`.
 4. `flywheel_plan` deep mode and `flywheel_review` hit-me no longer require text scraping for machine consumers.
