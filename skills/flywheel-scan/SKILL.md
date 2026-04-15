@@ -1,6 +1,6 @@
 ---
-name: orchestrate-scan
-description: Targeted scan of specific paths or concerns without a full orchestration.
+name: flywheel-scan
+description: Targeted scan of specific paths or concerns without a full flywheel scan.
 ---
 
 Targeted repository scan. $ARGUMENTS (optional: path or focus area)
@@ -11,11 +11,11 @@ Targeted repository scan. $ARGUMENTS (optional: path or focus area)
 
 2. Use Agent(Explore) with the specified focus to perform a targeted scan.
 
-3. Call `orch_profile` via the `orchestrator` MCP tool with `cwd` and optional `goal` = the focus area.
+3. Call `flywheel_profile` via the agent-flywheel MCP server with `cwd` and optional `goal` = the focus area.
 
 4. Display the scan results:
    - Key findings for the specified area
    - Any immediate concerns
    - Suggested improvements
 
-5. Ask: "Would you like to start an orchestration targeting these findings?"
+5. Ask: "Would you like to start a flywheel cycle targeting these findings?"

@@ -1,5 +1,5 @@
 ---
-name: orchestrate-swarm-stop
+name: flywheel-swarm-stop
 description: Stop all running swarm agents and release their file reservations.
 ---
 

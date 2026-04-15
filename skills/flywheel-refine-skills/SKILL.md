@@ -1,5 +1,5 @@
 ---
-name: orchestrate-refine-skills
+name: flywheel-refine-skills
 description: Review and improve all loaded agent skills based on session patterns and feedback.
 ---
 

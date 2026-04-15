@@ -4,9 +4,9 @@ description: Launch a parallel swarm of agents to implement multiple beads simul
 
 Launch a parallel swarm of implementation agents. $ARGUMENTS
 
-1. Call `orch_approve_beads` with `action: "start"` via the `orchestrator` MCP tool. This returns the list of ready beads.
+1. Call `flywheel_approve_beads` with `action: "start"` via the agent-flywheel MCP server. This returns the list of ready beads.
 
-2. If no beads are ready, say "No beads are ready for implementation. Run /claude-orchestrator:orchestrate to create a plan first."
+2. If no beads are ready, say "No beads are ready for implementation. Run /agent-flywheel:flywheel to create a plan first."
 
 3. Ask the user: "How many agents should run in parallel? (Recommended: 2-4)"
 
@@ -57,4 +57,4 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    - Shutdown agent: `SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})`
    - Do NOT broadcast shutdown to `"*"` — send to each agent individually.
 
-8. Report: "Swarm launched: N agents working on N beads. Use `/claude-orchestrator:orchestrate-swarm-status` to monitor progress."
+8. Report: "Swarm launched: N agents working on N beads. Use `/agent-flywheel:flywheel-swarm-status` to monitor progress."

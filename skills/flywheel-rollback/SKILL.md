@@ -1,5 +1,5 @@
 ---
-name: orchestrate-rollback
+name: flywheel-rollback
 description: Roll back a completed bead implementation.
 ---
 

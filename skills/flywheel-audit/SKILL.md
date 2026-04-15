@@ -1,5 +1,5 @@
 ---
-name: orchestrate-audit
+name: flywheel-audit
 description: Audit the codebase for bugs, security issues, test gaps, and dead code.
 ---
 

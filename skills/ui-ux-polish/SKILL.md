@@ -37,7 +37,7 @@ For each selected suggestion, call `br create` with:
 
 ## Phase 4 — Implementation
 
-After bead creation, call `orch_approve_beads` to review the new beads and launch implementation via swarm.
+After bead creation, call `flywheel_approve_beads` to review the new beads and launch implementation via swarm.
 
 ## Phase 5 — De-slopification
 

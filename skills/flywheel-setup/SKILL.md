@@ -1,16 +1,16 @@
 ---
-name: orchestrate-setup
-description: Set up orchestration prerequisites for this project.
+name: flywheel-setup
+description: Set up flywheel prerequisites for this project.
 ---
 
-Set up the orchestrator for this project. $ARGUMENTS
+Set up the agent-flywheel for this project. $ARGUMENTS
 
 Check and configure all prerequisites:
 
-1. **MCP server (build)**: Locate and verify the orchestrator MCP server is built.
+1. **MCP server (build)**: Locate and verify the agent-flywheel MCP server is built.
    - The plugin's `skills/` directory is typically a symlink to the repo root's `skills/` folder. Resolve it to find `mcp-server/` as a sibling:
      ```bash
-     SKILLS_REAL=$(readlink ~/.claude/plugins/marketplaces/local-desktop-app-uploads/claude-orchestrator/skills 2>/dev/null)
+     SKILLS_REAL=$(readlink ~/.claude/plugins/marketplaces/local-desktop-app-uploads/agent-flywheel/skills 2>/dev/null)
      MCSRV="${SKILLS_REAL%/skills}/mcp-server"
      test -f "$MCSRV/dist/server.js" && echo "OK: $MCSRV" || echo "MISSING: $MCSRV"
      ```
@@ -21,9 +21,9 @@ Check and configure all prerequisites:
    - Do not proceed to other checks until this passes.
 
 2. **MCP server (registered)**: Verify the MCP server is actually loaded in this Claude Code session.
-   - Run `ToolSearch("orch_profile")` to check if orchestrator tools are available.
+   - Run `ToolSearch("flywheel_profile")` to check if flywheel tools are available.
    - If no results: the server is built but not registered. Instruct:
-     "Add the `orchestrator` server entry to your Claude Code MCP config (`.mcp.json` in the plugin dir or `claude_desktop_config.json`) and restart Claude Code."
+     "Add the `agent-flywheel` server entry to your Claude Code MCP config (`.mcp.json` in the plugin dir or `claude_desktop_config.json`) and restart Claude Code."
 
 3. **br CLI**: Run `br --version` via Bash.
    - If not found: "br is not installed. Install from https://github.com/burningportra/br"
@@ -62,7 +62,7 @@ Check and configure all prerequisites:
 9. Display a health checklist:
    ```
    ✅ MCP server built (dist/server.js exists)
-   ✅ MCP server registered (orch_profile tool available)
+   ✅ MCP server registered (flywheel_profile tool available)
    ✅ br v1.x.x — beads initialized
    ✅ bv v1.x.x
    ✅ agent-mail — healthy
@@ -72,5 +72,5 @@ Check and configure all prerequisites:
    ```
 
 10. **Gate recommendation:**
-   - If ALL checks pass: "All prerequisites met. You can now run `/orchestrate`."
-   - If ANY check failed: "**Do not run `/orchestrate` until all checks pass.** Fix the items marked ❌ above and re-run `/orchestrate-setup`."
+   - If ALL checks pass: "All prerequisites met. You can now run `/flywheel`."
+   - If ANY check failed: "**Do not run `/flywheel` until all checks pass.** Fix the items marked ❌ above and re-run `/flywheel-setup`."

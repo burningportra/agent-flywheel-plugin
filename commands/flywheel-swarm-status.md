@@ -16,4 +16,4 @@ Check swarm status.
 
 4. Show todo list status via TodoRead.
 
-5. Recommend next action: if stuck agents detected, suggest running `/claude-orchestrator:orchestrate-swarm-stop` and restarting.
+5. Recommend next action: if stuck agents detected, suggest running `/agent-flywheel:flywheel-swarm-stop` and restarting.

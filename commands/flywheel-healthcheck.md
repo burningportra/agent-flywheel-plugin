@@ -1,5 +1,5 @@
 ---
-description: Full health check of the codebase and orchestration dependencies.
+description: Full health check of the codebase and flywheel dependencies.
 ---
 
 Run a comprehensive health check. $ARGUMENTS
@@ -11,7 +11,7 @@ Check all systems and produce a health score.
 - `bv --version` — bead visualizer
 - `curl -s --max-time 3 http://127.0.0.1:8765/health/liveness` — agent-mail
 - `git status --short` — repo cleanliness
-- `ls .pi-orchestrator/checkpoint.json 2>/dev/null` — checkpoint state
+- `ls .pi-flywheel/checkpoint.json 2>/dev/null` — checkpoint state
 - `ls mcp-server/dist/server.js 2>/dev/null` — MCP server built
 
 **Codebase health** (use Agent(Explore)):

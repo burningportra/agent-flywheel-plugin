@@ -1,12 +1,12 @@
 ---
-name: orchestrate-cleanup
+name: flywheel-cleanup
 description: Clean up orphaned git worktrees from crashed or stopped sessions.
 ---
 
 Clean up orphaned git worktrees.
 
 1. Run `git worktree list --porcelain` via Bash to list all active worktrees.
-2. Compare against tracked worktrees in `.pi-orchestrator/checkpoint.json` (if any).
+2. Compare against tracked worktrees in `.pi-flywheel/checkpoint.json` (if any).
 3. Identify orphaned worktrees: exist on disk but not tracked in checkpoint, or checkpoint is gone.
 4. For each orphan:
    - Check for uncommitted changes: `git -C <path> status --short`

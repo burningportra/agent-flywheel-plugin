@@ -4,7 +4,7 @@ description: Check if the codebase has drifted from the implementation plan.
 
 Run a strategic drift check. $ARGUMENTS
 
-1. Read the plan document path from `.pi-orchestrator/checkpoint.json` (`planDocument` field). If not found, scan `docs/plans/` for the most recent plan file.
+1. Read the plan document path from `.pi-flywheel/checkpoint.json` (`planDocument` field). If not found, scan `docs/plans/` for the most recent plan file.
 
 2. Read the current bead statuses: `br list --json` via Bash.
 
@@ -25,4 +25,4 @@ Run a strategic drift check. $ARGUMENTS
 
 6. Ask: "Would you like to update the plan to address the drift? (This will trigger a polish loop)"
 
-7. If yes, call `orch_approve_beads` with `action: "polish"` via the `orchestrator` MCP tool.
+7. If yes, call `flywheel_approve_beads` with `action: "polish"` via the agent-flywheel MCP server.

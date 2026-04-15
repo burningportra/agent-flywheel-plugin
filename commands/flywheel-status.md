@@ -1,10 +1,10 @@
 ---
-description: Show current orchestration status, bead progress, and inbox messages.
+description: Show current flywheel status, bead progress, and inbox messages.
 ---
 
-Show orchestration status for this project.
+Show flywheel status for this project.
 
-1. **Checkpoint**: Read `.pi-orchestrator/checkpoint.json`. Display:
+1. **Checkpoint**: Read `.pi-flywheel/checkpoint.json`. Display:
    - Current phase
    - Selected goal
    - Bead progress (completed/total)

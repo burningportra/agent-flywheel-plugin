@@ -1,8 +1,8 @@
 ---
-description: Set up orchestration prerequisites for this project.
+description: Set up flywheel prerequisites for this project.
 ---
 
-Set up the orchestrator for this project. $ARGUMENTS
+Set up the agent-flywheel for this project. $ARGUMENTS
 
 Check and configure all prerequisites:
 

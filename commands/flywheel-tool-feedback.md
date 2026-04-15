@@ -1,10 +1,10 @@
 ---
-description: Submit structured feedback about a tool or command to improve future orchestrations.
+description: Submit structured feedback about a tool or command to improve future flywheel sessions.
 ---
 
 Submit tool feedback: $ARGUMENTS
 
-Record feedback to improve the orchestrator.
+Record feedback to improve the agent-flywheel.
 
 1. Parse $ARGUMENTS. Expected format: `<tool-name>: <feedback>` or just `<feedback>`.
 
@@ -18,7 +18,7 @@ Record feedback to improve the orchestrator.
 4. Store feedback by calling `send_message` via `agent-mail` MCP:
    - `subject: "Tool Feedback: <tool-name>"`
    - `body_md: <formatted feedback>`
-   - `thread_id: "orchestrator-feedback"`
+   - `thread_id: "agent-flywheel-feedback"`
    - `importance: "low"`
 
 5. Search existing feedback for similar patterns: `search_messages` with query `"Tool Feedback: <tool-name>"`.

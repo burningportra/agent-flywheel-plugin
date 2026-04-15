@@ -4,11 +4,11 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
 
 # Orchestrate: Full Flywheel
 
-Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
+Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
 
 ## Step 1: Check for existing session
 
-Read `.pi-orchestrator/checkpoint.json` if it exists. If a non-idle/non-complete session is found, ask the user:
+Read `.pi-flywheel/checkpoint.json` if it exists. If a non-idle/non-complete session is found, ask the user:
 
 > "I found a previous session (phase: `<phase>`, goal: `<goal>`). What would you like to do?
 > 1. Resume from where we left off
@@ -18,11 +18,11 @@ If the user chooses to start fresh, delete the checkpoint file.
 
 ## Step 2: Scan and profile the repository
 
-Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits. Then call the `orch_profile` MCP tool (from the `orchestrator` MCP server) with `cwd` set to the current working directory.
+Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits. Then call the `flywheel_profile` MCP tool (from the `agent-flywheel` MCP server) with `cwd` set to the current working directory.
 
 ## Step 3: Discover improvement ideas
 
-Call `orch_discover` with `cwd`. This returns a list of candidate improvement ideas ranked by potential impact.
+Call `flywheel_discover` with `cwd`. This returns a list of candidate improvement ideas ranked by potential impact.
 
 Present the top ideas to the user clearly. Ask:
 
@@ -30,7 +30,7 @@ Present the top ideas to the user clearly. Ask:
 
 ## Step 4: Select goal
 
-Once the user chooses, call `orch_select` with `cwd` and `goal` set to their choice.
+Once the user chooses, call `flywheel_select` with `cwd` and `goal` set to their choice.
 
 ## Step 5: Choose planning mode
 
@@ -40,7 +40,7 @@ Ask the user:
 > 1. **Standard plan** — single planning pass (faster)
 > 2. **Deep plan** — 3 AI models give competing perspectives, then synthesize (higher quality, takes longer)"
 
-**Standard plan**: Call `orch_plan` with `cwd` and `mode: "standard"`.
+**Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`.
 
 **Deep plan**:
 
@@ -101,12 +101,12 @@ Ask the user:
    Do NOT embed plan content inline in the prompt — read from disk.
    Shutdown after done: `SendMessage(to: "plan-synthesizer", message: {"type": "shutdown_request", "reason": "Synthesis complete."})`.
 
-8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
+8. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
 ## Step 5.5: Create beads from the plan
 
-Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them manually from the plan output:
+Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create them manually from the plan output:
 
 1. For each task/unit-of-work in the plan, create a bead:
    ```
@@ -121,7 +121,7 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
 
 3. Verify with `br list` — confirm all beads and dependencies look correct.
 
-> **WARNING:** Use `br list` for all read-only bead inspection. Never call `orch_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
+> **WARNING:** Use `br list` for all read-only bead inspection. Never call `flywheel_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
 
 ## Step 6: Review and approve beads
 
@@ -132,14 +132,14 @@ Use `br list` to display the current beads. Ask:
 > 2. **Polish further** — refine the beads more
 > 3. **Reject** — start over with a different goal"
 
-- "Start" → call `orch_approve_beads` with `action: "start"`
-  > **Note:** If the plan was just registered via `orch_plan`, the first `orch_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `orch_approve_beads` with `action: "start"` a second time to get the quality score and launch.
-- "Polish" → call `orch_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
-- "Reject" → call `orch_approve_beads` with `action: "reject"`, return to Step 3
+- "Start" → call `flywheel_approve_beads` with `action: "start"`
+  > **Note:** If the plan was just registered via `flywheel_plan`, the first `flywheel_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `flywheel_approve_beads` with `action: "start"` a second time to get the quality score and launch.
+- "Polish" → call `flywheel_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
+- "Reject" → call `flywheel_approve_beads` with `action: "reject"`, return to Step 3
 
-If the user asks "what's the quality score?" before choosing to start, call `orch_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
+If the user asks "what's the quality score?" before choosing to start, call `flywheel_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
 
-After calling `orch_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
+After calling `flywheel_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
 
 **Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, discuss with user before proceeding)
 
@@ -244,22 +244,22 @@ If **multiple beads** finish together:
 
 Actions:
 
-- **"Looks good" / "Looks good all"** → call `orch_review` with `action: "looks-good"` and `beadId` for each accepted bead.
+- **"Looks good" / "Looks good all"** → call `flywheel_review` with `action: "looks-good"` and `beadId` for each accepted bead.
 
 - **"Self review `<id>`"** → send the impl agent a message asking it to audit its own diff:
   ```
   SendMessage(to: "impl-<id>", message: "Self-review: run `git diff` on your changes, check for bugs, missing tests, and style issues. Report findings to <coordinator> via Agent Mail with subject '[review] <id> self-review'.")
   ```
-  After the self-review report arrives, call `orch_review` with `action: "looks-good"` and `beadId` to close it.
+  After the self-review report arrives, call `flywheel_review` with `action: "looks-good"` and `beadId` to close it.
 
-- **"Fresh-eyes `<id>`"** → call `orch_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
+- **"Fresh-eyes `<id>`"** → call `flywheel_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
   1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
   2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt
   3. If any go idle without reporting, nudge by name: `SendMessage(to: "<reviewer-name>", message: "Please send your review findings.")`
   4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
   5. Collect and summarize results.
 
-  > **Edge case — already-closed beads:** If `orch_review` errors (e.g. "Cannot read properties of undefined"), the bead was likely already closed by the impl agent before review was requested. Skip the MCP tool and spawn review agents manually. Give each reviewer the specific git commit SHA (from `git log --oneline`) and instruct them to review via `git diff <commit>~1 <commit>` directly.
+  > **Edge case — already-closed beads:** If `flywheel_review` errors (e.g. "Cannot read properties of undefined"), the bead was likely already closed by the impl agent before review was requested. Skip the MCP tool and spawn review agents manually. Give each reviewer the specific git commit SHA (from `git log --oneline`) and instruct them to review via `git diff <commit>~1 <commit>` directly.
 
   > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
 
@@ -269,7 +269,7 @@ Continue implementing and reviewing beads until all are done. Show a final summa
 
 ## Step 10: Store session learnings
 
-Call `orch_memory` with `operation: "store"` and `cwd` to distill and persist session learnings:
+Call `flywheel_memory` with `operation: "store"` and `cwd` to distill and persist session learnings:
 - What worked well (tool choices, agent configurations, planning strategies)
 - What failed or required manual intervention (agent shutdowns, file conflicts, review bottlenecks)
 - Key decisions made during this session and their outcomes
@@ -279,4 +279,4 @@ Present the stored learnings to the user for confirmation.
 
 ## Step 11: Refine this skill
 
-Run `/orchestrate-refine-skill orchestrate` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
+Run `/flywheel-refine-skill flywheel` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.

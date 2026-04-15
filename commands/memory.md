@@ -10,11 +10,11 @@ Memory operation: $ARGUMENTS
   - Run `cm stats` via Bash. Display rule count, session count, last update.
 
 - `search <query>`: Search memory for relevant rules and context.
-  - Call `orch_memory` via `orchestrator` MCP with `operation: "search"` and `query: <query>`.
+  - Call `flywheel_memory` via `agent-flywheel` MCP with `operation: "search"` and `query: <query>`.
   - Display results ranked by relevance.
 
 - `store <content>` or `remember <content>`: Store content as a memory rule.
-  - Call `orch_memory` with `operation: "store"` and `content: <content>`.
+  - Call `flywheel_memory` with `operation: "store"` and `content: <content>`.
   - Confirm: "Stored to memory."
 
 - `view`: Show recent memory entries.

@@ -1,11 +1,11 @@
 ---
-name: orchestrate
+name: flywheel
 description: "Start or resume the full agentic coding flywheel. Drives the complete workflow: scan → discover → plan → implement → review."
 ---
 
 # Orchestrate: Full Flywheel
 
-Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
+Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
 
 > ## ⚠️ UNIVERSAL RULE 1 — `AskUserQuestion` is the only way to ask the user anything
 >
@@ -23,7 +23,7 @@ Run the orchestrator for this project. $ARGUMENTS (optional: initial goal or `--
 
 ### 0.preflight — Captured user input (DO THIS FIRST)
 
-If the user's prompt contains anything beyond `/orchestrate <args>` — a goal sentence, a pasted plan, a path to a plan file, a directive like "fix X then Y" — capture it as `USER_INPUT` and treat it as a candidate goal or plan. **Do NOT act on it yet. Do NOT skip the welcome banner or Step 0b detection.** Run the full Step 0a–0d flow silently so the user sees current state (existing session, open beads, AM status) before deciding.
+If the user's prompt contains anything beyond `/flywheel <args>` — a goal sentence, a pasted plan, a path to a plan file, a directive like "fix X then Y" — capture it as `USER_INPUT` and treat it as a candidate goal or plan. **Do NOT act on it yet. Do NOT skip the welcome banner or Step 0b detection.** Run the full Step 0a–0d flow silently so the user sees current state (existing session, open beads, AM status) before deciding.
 
 Then route in Step 0e instead of showing the default main menu:
 
@@ -40,15 +40,15 @@ Then route in Step 0e instead of showing the default main menu:
     question: "I see a plan in your message ('<first 60 chars>…'). What should I do with it?",
     header: "Plan input",
     options: [
-      { label: "Use as plan", description: "Register via orch_plan and jump to bead creation (Recommended)" },
+      { label: "Use as plan", description: "Register via flywheel_plan and jump to bead creation (Recommended)" },
       { label: "Treat as goal", description: "Use the plan content as the goal description and run the full flywheel from Step 4" },
       { label: "Discard", description: "Ignore the input and show the regular start menu" }
     ],
     multiSelect: false
   }])
   ```
-  - "Use as plan" → if USER_INPUT was a file path, call `orch_plan` with `planFile`. If it was inline, write it to `docs/plans/<date>-<goal-slug>.md` first, then call `orch_plan` with `planFile`. Then jump to Step 5.5.
-  - "Treat as goal" → call `orch_select` with the input as goal, jump to Step 5.
+  - "Use as plan" → if USER_INPUT was a file path, call `flywheel_plan` with `planFile`. If it was inline, write it to `docs/plans/<date>-<goal-slug>.md` first, then call `flywheel_plan` with `planFile`. Then jump to Step 5.5.
+  - "Treat as goal" → call `flywheel_select` with the input as goal, jump to Step 5.
   - "Discard" → fall back to the default Step 0e menu.
 
 - Goal-shaped:
@@ -65,9 +65,9 @@ Then route in Step 0e instead of showing the default main menu:
     multiSelect: false
   }])
   ```
-  - "Yes, full flywheel" → call `orch_select` with USER_INPUT as goal, proceed to Step 5.
+  - "Yes, full flywheel" → call `flywheel_select` with USER_INPUT as goal, proceed to Step 5.
   - "Refine first" → invoke `/brainstorming` with the input, then return to Step 4 with the refined goal.
-  - "Plan only" → call `orch_select`, proceed through Step 5, stop after bead creation.
+  - "Plan only" → call `flywheel_select`, proceed through Step 5, stop after bead creation.
   - "Discard" → fall back to the default Step 0e menu.
 
 - Ambiguous → always run `/brainstorming` first, then route as goal-shaped after refinement.
@@ -78,7 +78,7 @@ Then route in Step 0e instead of showing the default main menu:
 
 Attempt to find `mcp-server/package.json` by searching the Claude plugins directory:
 ```bash
-find ~/.claude/plugins -path "*/claude-orchestrator/mcp-server/package.json" 2>/dev/null | head -1
+find ~/.claude/plugins -path "*/agent-flywheel/mcp-server/package.json" 2>/dev/null | head -1
 ```
 Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name).
 
@@ -86,12 +86,12 @@ Read it and extract the version. Also read the project name from `package.json` 
 
 Gather context silently (do NOT display raw output yet). Run checks 1-5 in parallel where possible:
 
-1. **MCP tools**: Call `orch_profile` directly with `cwd` — if the call succeeds, MCP is available (cache the result to avoid a redundant call in Step 1). If the tool is not found or errors, set `MCP_DEGRADED = true`. Do NOT use `ToolSearch` — MCP tools may be deferred and unavailable to ToolSearch at startup.
-2. **Existing session**: Read `.pi-orchestrator/checkpoint.json` if it exists. Note phase and goal.
+1. **MCP tools**: Call `flywheel_profile` directly with `cwd` — if the call succeeds, MCP is available (cache the result to avoid a redundant call in Step 1). If the tool is not found or errors, set `MCP_DEGRADED = true`. Do NOT use `ToolSearch` — MCP tools may be deferred and unavailable to ToolSearch at startup.
+2. **Existing session**: Read `.pi-flywheel/checkpoint.json` if it exists. Note phase and goal.
 3. **Existing beads**: Run `br list --json 2>/dev/null` and count open/in-progress/closed beads.
 4. **Git status**: Run `git log --oneline -1` to get latest commit.
-5. **CASS memory**: Call `orch_memory` with `operation: "search"` and `query: "session learnings orchestration"` to load prior session context. If CASS is unavailable, skip silently.
-6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/orchestrate-setup` — single-agent workflows work fine without it.
+5. **CASS memory**: Call `flywheel_memory` with `operation: "search"` and `query: "session learnings flywheel"` to load prior session context. If CASS is unavailable, skip silently.
+6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/flywheel-setup` — single-agent workflows work fine without it.
 
 ### 0c. Display the welcome banner
 
@@ -100,7 +100,7 @@ Display a single cohesive welcome message. Example:
 ```
  ╔══════════════════════════════════════════════════╗
  ║                                                  ║
- ║   claude-orchestrator v2.6.0                     ║
+ ║   agent-flywheel v3.0.0                     ║
  ║   The Agentic Coding Flywheel                    ║
  ║                                                  ║
  ║   Project: <project-name>                        ║
@@ -117,7 +117,7 @@ If CASS returned learnings from prior sessions, display them below the banner:
 > **From prior sessions:**
 > - <top 3-5 most relevant learnings, anti-patterns, or gotchas>
 
-This gives the user (and the orchestrator) context from past runs before making any decisions.
+This gives the user (and the agent-flywheel) context from past runs before making any decisions.
 
 ### 0d. Present the main menu
 
@@ -165,7 +165,7 @@ AskUserQuestion(questions: [{
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities" },
     { label: "Set a goal", description: "I already know what I want to build" },
     { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
-    { label: "Setup", description: "Run /orchestrate-setup to configure prerequisites" }
+    { label: "Setup", description: "Run /flywheel-setup to configure prerequisites" }
   ],
   multiSelect: false
 }])
@@ -173,29 +173,29 @@ AskUserQuestion(questions: [{
 
 ### 0e. Route the user's choice
 
-> **If `USER_INPUT` was captured in step 0.preflight, use the routing override there instead of this menu.** The default menu below applies only when the user invoked `/orchestrate` with no extra prompt content.
+> **If `USER_INPUT` was captured in step 0.preflight, use the routing override there instead of this menu.** The default menu below applies only when the user invoked `/flywheel` with no extra prompt content.
 
 | Choice | Action |
 |--------|--------|
 | **Resume session** | Run the **drift check** below before jumping to the saved phase |
-| **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `orch_approve_beads` directly |
+| **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
 | **Set a goal** | Run `/brainstorming` to refine the goal, then proceed to Step 4 |
-| **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/orchestrate-research` |
-| **Quick fix** | Invoke `/orchestrate-fix` |
-| **Audit** | Invoke `/orchestrate-audit` |
-| **Setup** | Invoke `/orchestrate-setup` |
+| **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
+| **Quick fix** | Invoke `/flywheel-fix` |
+| **Audit** | Invoke `/flywheel-audit` |
+| **Setup** | Invoke `/flywheel-setup` |
 
 #### Work on beads — sub-menu + bootstrap (MANDATORY)
 
-`orch_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, the goal is empty and the tool errors with `missing_prerequisite`. Bootstrap it before any approve call:
+`flywheel_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, the goal is empty and the tool errors with `missing_prerequisite`. Bootstrap it before any approve call:
 
 1. **Synthesize a default goal from the existing beads.** Read the top 3 open bead titles from `br list --json` and build a default like `Continue: <title-1>; <title-2>; <title-3>` (truncate at 200 chars).
 2. **Confirm or override the goal:**
    ```
    AskUserQuestion(questions: [{
-     question: "These beads need a goal label so the orchestrator can resume. Use the synthesized default?",
+     question: "These beads need a goal label so the agent-flywheel can resume. Use the synthesized default?",
      header: "Goal",
      options: [
        { label: "Use default", description: "'<synthesized goal>' (Recommended)" },
@@ -204,7 +204,7 @@ AskUserQuestion(questions: [{
      multiSelect: false
    }])
    ```
-3. **Call `orch_select` with the chosen goal.** This populates `state.selectedGoal` and unblocks every downstream tool.
+3. **Call `flywheel_select` with the chosen goal.** This populates `state.selectedGoal` and unblocks every downstream tool.
 4. **Then present the action sub-menu:**
    ```
    AskUserQuestion(questions: [{
@@ -219,7 +219,7 @@ AskUserQuestion(questions: [{
    }])
    ```
    - **"Implement"** → jump to Step 6 (full beads-approval menu; user can still pick Polish or Reject from there).
-   - **"Refine"** → jump to Step 6 but pre-select the polish path: call `orch_approve_beads(action: "polish")` first to enter `refining_beads` phase, then show Step 6's menu so the user can iterate (Polish further / Start / Reject) until satisfied.
+   - **"Refine"** → jump to Step 6 but pre-select the polish path: call `flywheel_approve_beads(action: "polish")` first to enter `refining_beads` phase, then show Step 6's menu so the user can iterate (Polish further / Start / Reject) until satisfied.
    - **"Inspect"** → run `br list` + `bv --robot-triage` (or `bv` alone if `--robot-triage` not supported), display, then re-show the action sub-menu.
 
 #### Resume session — drift check (MANDATORY)
@@ -244,7 +244,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- "Start fresh" → delete `.pi-orchestrator/checkpoint.json`, route as if user picked "New goal".
+- "Start fresh" → delete `.pi-flywheel/checkpoint.json`, route as if user picked "New goal".
 - "Inspect first" → print the diff (`git log <checkpoint.gitHead>..HEAD --oneline` + bead status table), then re-show this menu.
 - "Force resume" → load checkpoint, jump to saved phase as before.
 
@@ -267,27 +267,27 @@ AskUserQuestion(questions: [{
 ```
 
 The user pastes the URL in the "Other" field, or picks a mode first and provides the URL when prompted. Then:
-- **"Research only"** → invoke `/orchestrate-research <url>`.
-- **"Research + integrate"** → invoke `/orchestrate-research <url> --mode integrate` (the slash command's research skill reads `--mode integrate` to run Phases 8–12 / Major Feature Integration). If the slash command rejects the flag, fall back to invoking `/orchestrate-research <url>` and prepend the prompt context "After research, generate an integration plan and create implementation beads."
+- **"Research only"** → invoke `/flywheel-research <url>`.
+- **"Research + integrate"** → invoke `/flywheel-research <url> --mode integrate` (the slash command's research skill reads `--mode integrate` to run Phases 8–12 / Major Feature Integration). If the slash command rejects the flag, fall back to invoking `/flywheel-research <url>` and prepend the prompt context "After research, generate an integration plan and create implementation beads."
 
 ### 0f. Degraded modes
 
-**MCP tools missing** (orch_profile call failed or tool not found in step 0b):
+**MCP tools missing** (flywheel_profile call failed or tool not found in step 0b):
 
-- Display in the banner: `MCP: not configured — run /orchestrate-setup`
+- Display in the banner: `MCP: not configured — run /flywheel-setup`
 - Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
-  - **Step 2:** Use Explore subagent only (skip `orch_profile`).
-  - **Step 3:** Use Explore-derived ideas (skip `orch_discover`).
-  - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `orch_plan`).
+  - **Step 2:** Use Explore subagent only (skip `flywheel_profile`).
+  - **Step 3:** Use Explore-derived ideas (skip `flywheel_discover`).
+  - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `flywheel_plan`).
   - **Step 5.5:** Create beads with `br create` as normal.
   - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
-  - **Step 8:** Offer "Looks good" and "Self review" only (skip `orch_review`).
-  - **Step 10:** Skip `orch_memory` — remind user that session learnings were not auto-persisted.
+  - **Step 8:** Offer "Looks good" and "Self review" only (skip `flywheel_review`).
+  - **Step 10:** Skip `flywheel_memory` — remind user that session learnings were not auto-persisted.
 
 **Agent Mail offline** (`AGENT_MAIL_DOWN = true` from step 0b check 6):
 
 - Display in the banner: `Agent Mail: offline — parallel agents will skip file reservations`
-- Do NOT block or require `/orchestrate-setup`. All orchestration still works.
+- Do NOT block or require `/flywheel-setup`. All flywheel coordination still works.
 - Overrides for affected steps only:
   - **Step 7 (impl agents):** Skip STEP 0 (Agent Mail bootstrap) in agent prompts. Agents work without file reservations or messaging — the coordinator monitors via TaskOutput instead of inbox.
   - **Step 5 (deep plan):** Skip Agent Mail bootstrap for plan agents. Agents write plan files to disk; coordinator reads them directly.
@@ -295,13 +295,13 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
 
 ## Step 2: Scan and profile the repository
 
-Call `orch_profile` with `cwd`. The tool uses a git-HEAD-keyed cache — if the repo hasn't changed since the last scan, it returns instantly from cache.
+Call `flywheel_profile` with `cwd`. The tool uses a git-HEAD-keyed cache — if the repo hasn't changed since the last scan, it returns instantly from cache.
 
 - **Cache hit** (output says "Profile loaded from cache"): Skip the Explore agent — the profile is fresh. Proceed directly to Step 3.
 - **Cache miss** (fresh scan): Optionally spawn an Explore agent for deeper analysis if the profile reveals a complex or unfamiliar codebase. For known repos, skip it.
-- **Force re-scan**: Pass `force: true` to `orch_profile` to bypass the cache (e.g. after major restructuring).
+- **Force re-scan**: Pass `force: true` to `flywheel_profile` to bypass the cache (e.g. after major restructuring).
 
-If `MCP_DEGRADED` is true or `orch_profile` fails, fall back to an Explore agent for manual profiling.
+If `MCP_DEGRADED` is true or `flywheel_profile` fails, fall back to an Explore agent for manual profiling.
 
 After profiling completes, briefly display the key findings (languages, frameworks, test setup) then use `AskUserQuestion`:
 
@@ -320,11 +320,11 @@ AskUserQuestion(questions: [{
 
 - **"Discover ideas"** → proceed to Step 3
 - **"Set a goal"** → run `/brainstorming`, then proceed to Step 4
-- **"Re-scan"** → call `orch_profile` with `force: true`, then return to this menu
+- **"Re-scan"** → call `flywheel_profile` with `force: true`, then return to this menu
 
 ## Step 3: Discover improvement ideas
 
-Before discovering ideas, query CASS for past goal history: call `orch_memory` with `operation: "search"` and `query: "past goals success failure anti-pattern"`. If results are returned, use them to:
+Before discovering ideas, query CASS for past goal history: call `flywheel_memory` with `operation: "search"` and `query: "past goals success failure anti-pattern"`. If results are returned, use them to:
 - Deprioritize ideas that failed before (unless circumstances changed)
 - Boost ideas similar to past successes
 - Surface anti-patterns to avoid
@@ -336,7 +336,7 @@ AskUserQuestion(questions: [{
   question: "How deep should discovery go?",
   header: "Discovery depth",
   options: [
-    { label: "Fast (default)", description: "orch_discover one-shot \u2014 5-10 ranked ideas (Recommended for repeat cycles)" },
+    { label: "Fast (default)", description: "flywheel_discover one-shot \u2014 5-10 ranked ideas (Recommended for repeat cycles)" },
     { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30\u21925\u219215 pipeline \u2014 matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
     { label: "Market-validated", description: "Run /idea-wizard, then /xf to check X/Twitter signal on each top idea" },
     { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation for second-opinion scoring across Codex/Gemini/Grok" }
@@ -345,14 +345,14 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- **Fast** → continue below with `orch_discover`.
-- **Deep** → invoke `/idea-wizard`, feed its output into `orch_discover`, then continue with the standard goal-selection menu.
+- **Fast** → continue below with `flywheel_discover`.
+- **Deep** → invoke `/idea-wizard`, feed its output into `flywheel_discover`, then continue with the standard goal-selection menu.
 - **Market-validated** → run `/idea-wizard`, then for each top-3 idea invoke `/xf` with a query like `"<idea title>" site:x.com`. Annotate each candidate with real-world signal before showing the goal menu.
 - **Triangulated** → run `/idea-wizard`, then `/multi-model-triangulation` on the top-5 list to surface which ideas all models agree on vs which are one-model bets.
 
-If `MCP_DEGRADED` is false, call `orch_discover` with `cwd`.
+If `MCP_DEGRADED` is false, call `flywheel_discover` with `cwd`.
 
-If `MCP_DEGRADED` is true (or `orch_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
+If `MCP_DEGRADED` is true (or `flywheel_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
 
 Present the top ideas to the user using `AskUserQuestion`. Include up to 4 top-ranked ideas as options (the "Other" option is automatically provided for custom goals):
 
@@ -384,7 +384,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Full flywheel", description: "Deep scan, plan, implement with agents, review" },
     { label: "Plan only", description: "Generate and review a plan, stop before implementation" },
-    { label: "Quick fix", description: "Skip planning — use /orchestrate-fix for a targeted change" }
+    { label: "Quick fix", description: "Skip planning — use /flywheel-fix for a targeted change" }
   ],
   multiSelect: false
 }])
@@ -392,11 +392,11 @@ AskUserQuestion(questions: [{
 
 - **"Full flywheel"** → proceed to Step 4 with the refined goal
 - **"Plan only"** → proceed through Step 5, then stop after bead creation
-- **"Quick fix"** → invoke `/orchestrate-fix` with the refined goal instead
+- **"Quick fix"** → invoke `/flywheel-fix` with the refined goal instead
 
 ## Step 4: Select goal
 
-Once the user chooses, call `orch_select` with `cwd` and `goal` set to their choice.
+Once the user chooses, call `flywheel_select` with `cwd` and `goal` set to their choice.
 
 ## Step 5: Choose planning mode
 
@@ -424,7 +424,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**Standard plan**: Call `orch_plan` with `cwd` and `mode: "standard"`. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
+**Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
 **Deep plan**:
 
@@ -448,7 +448,7 @@ AskUserQuestion(questions: [{
    - Instructions to call `macro_start_session` first (same `human_key`, their model, their task)
    - Their focused planning perspective (correctness / ergonomics / robustness)
    - Full repo context (path, stack, goal, recent commits, known bugs)
-   - **CASS context**: Query `orch_memory` with `query: "architecture planning decisions <goal>"` and include the top learnings in the agent prompt as a "Prior Session Context" section. This prevents agents from repeating past mistakes or reinventing prior decisions.
+   - **CASS context**: Query `flywheel_memory` with `query: "architecture planning decisions <goal>"` and include the top learnings in the agent prompt as a "Prior Session Context" section. This prevents agents from repeating past mistakes or reinventing prior decisions.
    - Instruction to **write their plan to disk**: `docs/plans/<date>-<perspective>.md` (use the Write tool — do NOT send large plan text through Agent Mail message body)
    - Instruction to send YOU just the file path via `send_message` with subject `"[deep-plan] <perspective> plan"` once written
    - Instruction to message their team lead when done
@@ -507,16 +507,16 @@ AskUserQuestion(questions: [{
    Do NOT embed plan content inline in the prompt — read from disk.
    Shutdown after done: `SendMessage(to: "plan-synthesizer", message: {"type": "shutdown_request", "reason": "Synthesis complete."})`.
 
-8. Call `orch_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
+8. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
-   **Triangulated plan mode** — if the user picked "Triangulated plan" at Step 5 entry, AFTER `orch_plan` returns, invoke `/multi-model-triangulation` with the synthesized plan file as input. Capture the triangulation report (agreements, disagreements, unique insights per model). Present the report alongside the Step 5.55 alignment questions so the user sees where external models diverge from the Opus synthesis before approving.
+   **Triangulated plan mode** — if the user picked "Triangulated plan" at Step 5 entry, AFTER `flywheel_plan` returns, invoke `/multi-model-triangulation` with the synthesized plan file as input. Capture the triangulation report (agreements, disagreements, unique insights per model). Present the report alongside the Step 5.55 alignment questions so the user sees where external models diverge from the Opus synthesis before approving.
 
 9. **STOP — jump to Step 5.55 (Plan alignment check).** That step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
 ## Step 5.55: Plan alignment check (MANDATORY — both standard and deep)
 
-> **Hard rule**: After `orch_plan` returns and BEFORE showing the Step 5.6 plan-ready gate, run this alignment check. The deeper the plan, the more assumptions are baked in — the user must confirm those assumptions match intent before any bead is created. This loop mirrors the bead-refinement loop: ask, refine on disagreement, re-ask, until aligned.
+> **Hard rule**: After `flywheel_plan` returns and BEFORE showing the Step 5.6 plan-ready gate, run this alignment check. The deeper the plan, the more assumptions are baked in — the user must confirm those assumptions match intent before any bead is created. This loop mirrors the bead-refinement loop: ask, refine on disagreement, re-ask, until aligned.
 
 ### 1. Read the plan and extract qualifying questions
 
@@ -640,7 +640,7 @@ This prevents infinite loops when the plan and the user's intent are fundamental
 
 ## Step 5.6: Plan-ready gate (MANDATORY — both standard and deep)
 
-> **Hard rule**: After `orch_plan` returns successfully — regardless of `mode` — you MUST stop here and present this menu. Do NOT call `br create`, `orch_approve_beads`, or any implementation tool until the user explicitly selects "Create beads". Skipping this gate is a bug.
+> **Hard rule**: After `flywheel_plan` returns successfully — regardless of `mode` — you MUST stop here and present this menu. Do NOT call `br create`, `flywheel_approve_beads`, or any implementation tool until the user explicitly selects "Create beads". Skipping this gate is a bug.
 
 Display a brief summary of the plan (file path, line count, top-level section headers), then use `AskUserQuestion`:
 
@@ -700,7 +700,7 @@ After the refinement agent completes, return to the "Plan ready" menu above. Sto
 
 ## Step 5.5: Create beads from the plan
 
-Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them manually from the plan output:
+Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create them manually from the plan output:
 
 1. For each task/unit-of-work in the plan, create a bead:
    ```
@@ -721,7 +721,7 @@ Beads are **NOT** auto-created by `orch_plan`. The coordinator must create them 
 
 4. Verify with `br list` — confirm all beads and dependencies look correct.
 
-> **WARNING:** Use `br list` for all read-only bead inspection. Never call `orch_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
+> **WARNING:** Use `br list` for all read-only bead inspection. Never call `flywheel_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
 
 5. **Beads created — run coverage + dedup checks before Step 6.**
 
@@ -782,14 +782,14 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- "Start" → call `orch_approve_beads` with `action: "start"`
-  > **Note:** If the plan was just registered via `orch_plan`, the first `orch_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `orch_approve_beads` with `action: "start"` a second time to get the quality score and launch.
-- "Polish" → call `orch_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
-- "Reject" → call `orch_approve_beads` with `action: "reject"`, return to Step 3
+- "Start" → call `flywheel_approve_beads` with `action: "start"`
+  > **Note:** If the plan was just registered via `flywheel_plan`, the first `flywheel_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `flywheel_approve_beads` with `action: "start"` a second time to get the quality score and launch.
+- "Polish" → call `flywheel_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
+- "Reject" → call `flywheel_approve_beads` with `action: "reject"`, return to Step 3
 
-If the user asks "what's the quality score?" before choosing to start, call `orch_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
+If the user asks "what's the quality score?" before choosing to start, call `flywheel_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
 
-After calling `orch_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
+After calling `flywheel_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
 
 **Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, discuss with user before proceeding)
 
@@ -821,10 +821,10 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- "Polish beads" → call `orch_approve_beads` with `action: "polish"`, return to Step 6.
+- "Polish beads" → call `flywheel_approve_beads` with `action: "polish"`, return to Step 6.
 - "Back to plan" → return to Step 5.6 plan-ready gate menu.
 - "Launch anyway" → proceed to Step 7 (note the user accepted the risk in your end-of-turn summary).
-- "Reject" → call `orch_approve_beads` with `action: "reject"`, return to Step 3.
+- "Reject" → call `flywheel_approve_beads` with `action: "reject"`, return to Step 3.
 
 **Acceptable quality (`score >= 0.75`):**
 
@@ -842,7 +842,7 @@ AskUserQuestion(questions: [{
 ```
 
 - **"Launch"** → proceed to Step 7
-- **"Polish more"** → call `orch_approve_beads` with `action: "polish"`, then return to Step 6
+- **"Polish more"** → call `flywheel_approve_beads` with `action: "polish"`, then return to Step 6
 - **"Back to plan"** → return to the Step 5.6 plan-ready gate menu
 
 ## Step 7: Implement each bead
@@ -924,7 +924,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        Only after 0a, 0b, 0c, 0d are ALL complete may you proceed to Step 1.
 
        ## STEP 0.5 — LOAD MEMORY (if CASS available)
-       Call orch_memory with operation='search' and query='implementation gotchas <bead-title>'.
+       Call flywheel_memory with operation='search' and query='implementation gotchas <bead-title>'.
        If results returned, review them before starting — they contain lessons from past sessions.
 
        ## STEP 0.7 — DOMAIN-SKILL LOOKUP (invoke relevant skills BEFORE writing code)
@@ -1000,7 +1000,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        If you encountered anything non-obvious during implementation — unexpected API behavior,
        tricky edge cases, workarounds for tooling issues, rebase gotchas, or decisions that
        future agents would benefit from knowing — store each as a CASS memory:
-       Call orch_memory with operation='store' and content describing the learning.
+       Call flywheel_memory with operation='store' and content describing the learning.
        Prefix with the bead ID for traceability, e.g.:
        "Bead <id>: <concise learning with enough context to be useful standalone>"
        Skip this step if the implementation was straightforward with no surprises.
@@ -1012,7 +1012,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        Verify the close took effect: `br show <bead-id> --json` and confirm
        `"status": "closed"`. If the status is anything else, retry the update
        once before continuing to STEP 4. Stragglers are a known failure mode
-       and the coordinator will catch them via `orch_verify_beads`, but
+       and the coordinator will catch them via `flywheel_verify_beads`, but
        verifying here keeps the wave clean.
 
        ## STEP 4 — RELEASE + REPORT (MANDATORY)
@@ -1028,7 +1028,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
 3. **Auto-capture failures**: If an agent reports a blocker or failure via Agent Mail, automatically store it in CASS:
    ```
-   orch_memory(operation: "store", content: "Bead <id> (<title>) hit blocker: <failure description>. Resolution: <what fixed it or 'unresolved'>")
+   flywheel_memory(operation: "store", content: "Bead <id> (<title>) hit blocker: <failure description>. Resolution: <what fixed it or 'unresolved'>")
    ```
    This ensures future sessions can recall what went wrong and avoid the same pitfall.
 
@@ -1073,7 +1073,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
 5. **Store cross-cutting learnings**: When an agent's completion report mentions something non-obvious (unexpected file renames, rebase conflicts, API quirks, tooling workarounds), store it in CASS:
    ```
-   orch_memory(operation: "store", content: "Bead <id> (<title>): <learning from agent report>")
+   flywheel_memory(operation: "store", content: "Bead <id> (<title>): <learning from agent report>")
    ```
    Don't store routine completions — only surprises or gotchas that would help future sessions.
 
@@ -1138,15 +1138,15 @@ Users can also type a custom combination via "Other" (e.g. "Looks good all excep
 
 Actions:
 
-- **"Looks good" / "Looks good all"** → call `orch_review` with `action: "looks-good"` and `beadId` for each accepted bead.
+- **"Looks good" / "Looks good all"** → call `flywheel_review` with `action: "looks-good"` and `beadId` for each accepted bead.
 
 - **"Self review `<id>`"** → send the impl agent a message asking it to audit its own diff:
   ```
   SendMessage(to: "impl-<id>", message: "Self-review: run `git diff` on your changes, check for bugs, missing tests, and style issues. Report findings to <coordinator> via Agent Mail with subject '[review] <id> self-review'.")
   ```
-  After the self-review report arrives, call `orch_review` with `action: "looks-good"` and `beadId` to close it.
+  After the self-review report arrives, call `flywheel_review` with `action: "looks-good"` and `beadId` to close it.
 
-- **"Fresh-eyes `<id>`"** → call `orch_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
+- **"Fresh-eyes `<id>`"** → call `flywheel_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
   1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
   2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt. Each reviewer prompt **MUST** include:
      - Instruction to write findings to disk: `docs/reviews/<perspective>-<date>.md`
@@ -1161,13 +1161,13 @@ Actions:
   4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
   5. Collect and summarize results. If fewer than 5 reviewers delivered via inbox, synthesize from disk files + `git diff` — do NOT wait indefinitely for unresponsive reviewers.
 
-  > **Closed-bead handling:** `orch_review` now reconciles the bead state itself — `looks-good` is idempotent (advances to the next bead/gates), `hit-me` runs a post-close audit (payload tagged `postClose: true`), and `skip` returns `already_closed`. No manual workaround needed. (Prior versions required spawning reviewers from `git diff <sha>~1 <sha>`; that path is gone.)
+  > **Closed-bead handling:** `flywheel_review` now reconciles the bead state itself — `looks-good` is idempotent (advances to the next bead/gates), `hit-me` runs a post-close audit (payload tagged `postClose: true`), and `skip` returns `already_closed`. No manual workaround needed. (Prior versions required spawning reviewers from `git diff <sha>~1 <sha>`; that path is gone.)
 
   > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
 
 ## Step 9: Loop until complete
 
-> **Fixed in v2.10.1:** `orch_verify_beads` correctly unwraps the `br show --json` array shape via `unwrapBrShowValue()` in `mcp-server/src/beads.ts`. If you see `parse_failure` errors on a current install, you're on v2.9.x or older — rebuild via `cd mcp-server && npm run build`. The fallback procedure below remains valid for older installs and for cases where `br` emits an entirely new shape.
+> **Fixed in v2.10.1:** `flywheel_verify_beads` correctly unwraps the `br show --json` array shape via `unwrapBrShowValue()` in `mcp-server/src/beads.ts`. If you see `parse_failure` errors on a current install, you're on v2.9.x or older — rebuild via `cd mcp-server && npm run build`. The fallback procedure below remains valid for older installs and for cases where `br` emits an entirely new shape.
 >
 > **Manual fallback (only if verify still fails for some IDs):**
 >
@@ -1181,10 +1181,10 @@ Actions:
 >    - `status != "closed"` AND commit exists → straggler; run `br update <bead-id> --status closed` yourself (this is what `autoClosed` would have done).
 >    - `status != "closed"` AND no commit → route into the `unclosedNoCommit` menu below with the bead ID.
 
-**Reconcile the wave first.** Before showing the menu, call `orch_verify_beads` with the IDs of beads completed in this wave:
+**Reconcile the wave first.** Before showing the menu, call `flywheel_verify_beads` with the IDs of beads completed in this wave:
 
 ```
-orch_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
+flywheel_verify_beads(cwd: <cwd>, beadIds: [<bead-1>, <bead-2>, ...])
 ```
 
 The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
@@ -1199,7 +1199,7 @@ The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
       { label: "Re-run impl agent", description: "Spawn a fresh impl agent for these beads (Recommended)" },
       { label: "Mark deferred", description: "Set status=deferred and proceed without these beads" },
       { label: "Close manually", description: "I'll close them outside this session — proceed without action" },
-      { label: "Pause cycle", description: "Stop and let me investigate; resume later via /orchestrate" }
+      { label: "Pause cycle", description: "Stop and let me investigate; resume later via /flywheel" }
     ],
     multiSelect: false
   }])
@@ -1211,7 +1211,7 @@ The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
     question: "br show failed for <N> bead(s): <comma-list with first error excerpt>. How to proceed?",
     header: "br errors",
     options: [
-      { label: "Retry verify", description: "Call orch_verify_beads again on the failed IDs (Recommended)" },
+      { label: "Retry verify", description: "Call flywheel_verify_beads again on the failed IDs (Recommended)" },
       { label: "Skip and proceed", description: "Treat the unverifiable beads as still in flight; come back later" },
       { label: "Pause cycle", description: "Stop so I can debug br locally" }
     ],
@@ -1228,7 +1228,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Continue", description: "Implement the next batch of ready beads (Recommended)" },
     { label: "Check status", description: "Show detailed bead status, dependency graph, and drift check" },
-    { label: "Pause", description: "Stop here — resume later with /orchestrate" },
+    { label: "Pause", description: "Stop here — resume later with /flywheel" },
     { label: "Wrap up early", description: "Skip remaining beads and wrap up what's done" }
   ],
   multiSelect: false
@@ -1251,8 +1251,8 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Yes, on track", description: "Return to the progress menu and continue" },
     { label: "Missing pieces", description: "New beads needed to close the gap — create them before more impl" },
-    { label: "Strategic drift", description: "Remaining beads won't close the gap — invoke /orchestrate-drift-check and regress to plan refinement" },
-    { label: "Goal has changed", description: "Update selectedGoal via orch_select, then re-scope the bead graph" }
+    { label: "Strategic drift", description: "Remaining beads won't close the gap — invoke /flywheel-drift-check and regress to plan refinement" },
+    { label: "Goal has changed", description: "Update selectedGoal via flywheel_select, then re-scope the bead graph" }
   ],
   multiSelect: false
 }])
@@ -1260,15 +1260,15 @@ AskUserQuestion(questions: [{
 
 - "Yes" → return to progress menu.
 - "Missing pieces" → `br create` the gap-closers with dependencies wired to the ready frontier, then return to progress menu.
-- "Strategic drift" → invoke `/orchestrate-drift-check` for diagnostic output, then call `orch_review` with `beadId: "__regress_to_plan__"` to revisit the plan.
-- "Goal has changed" → call `orch_select` with the new goal, then return to the progress menu so the user can decide whether to keep or reject current beads.
+- "Strategic drift" → invoke `/flywheel-drift-check` for diagnostic output, then call `flywheel_review` with `beadId: "__regress_to_plan__"` to revisit the plan.
+- "Goal has changed" → call `flywheel_select` with the new goal, then return to the progress menu so the user can decide whether to keep or reject current beads.
 
 #### Pause checklist (run in order):
 
 1. **Drain in-flight agents.** For each impl agent still listed in `TaskList` from the current wave: send `SendMessage(to: "<name>", message: {"type": "shutdown_request", "reason": "Session paused"})`. Wait up to 60s for them to exit; force-stop with `TaskStop(task_id: "<id>")` if they hang.
-2. **Retire Agent Mail teammates** that won't be needed on resume (impl-* agents). Leave the coordinator session itself active (it's the orchestrator's identity and CASS will use it on resume).
-3. **Confirm checkpoint is current.** State is checkpointed by every tool call, so this is usually a no-op — but verify `.pi-orchestrator/checkpoint.json` exists and `git rev-parse HEAD` matches `checkpoint.gitHead`. If they differ, the user has uncommitted moves; surface that in the summary.
-4. **Print resume hint.** One line: `Run /orchestrate to resume from <phase> with <N> beads remaining.`
+2. **Retire Agent Mail teammates** that won't be needed on resume (impl-* agents). Leave the coordinator session itself active (it's the agent-flywheel's identity and CASS will use it on resume).
+3. **Confirm checkpoint is current.** State is checkpointed by every tool call, so this is usually a no-op — but verify `.pi-flywheel/checkpoint.json` exists and `git rev-parse HEAD` matches `checkpoint.gitHead`. If they differ, the user has uncommitted moves; surface that in the summary.
+4. **Print resume hint.** One line: `Run /flywheel to resume from <phase> with <N> beads remaining.`
 5. **End turn** with a summary of progress so far (beads closed this session, beads remaining, any blockers). Do not call further tools after the summary.
 
 When ALL beads are complete, display a completion message and proceed directly to Step 9.5:
@@ -1457,11 +1457,11 @@ git commit -m "chore: bump version to X.Y.Z — <one-line summary of what shippe
 
 ## Step 10: Store session learnings
 
-`orch_memory(operation: "store")` is the default path and wraps CASS under the hood. If the `cm` CLI is available and you want richer procedural memory semantics (tags, hierarchies, retrieval ranking), invoke `/cass-memory` directly instead — same underlying store, more control over how the learning is categorized.
+`flywheel_memory(operation: "store")` is the default path and wraps CASS under the hood. If the `cm` CLI is available and you want richer procedural memory semantics (tags, hierarchies, retrieval ranking), invoke `/cass-memory` directly instead — same underlying store, more control over how the learning is categorized.
 
-For mining *prior* sessions (not storing new ones), invoke `/cass` — it ranks past prompts, decisions, and patterns beyond what `orch_memory search` surfaces.
+For mining *prior* sessions (not storing new ones), invoke `/cass` — it ranks past prompts, decisions, and patterns beyond what `flywheel_memory search` surfaces.
 
-Call `orch_memory` with `operation: "store"` and `cwd` to distill and persist session learnings:
+Call `flywheel_memory` with `operation: "store"` and `cwd` to distill and persist session learnings:
 - What worked well (tool choices, agent configurations, planning strategies)
 - What failed or required manual intervention (agent shutdowns, file conflicts, review bottlenecks)
 - Key decisions made during this session and their outcomes
@@ -1474,7 +1474,7 @@ AskUserQuestion(questions: [{
   question: "Session learnings saved. One more step?",
   header: "Improve",
   options: [
-    { label: "Refine skills", description: "Improve the orchestrate skill based on this session's evidence" },
+    { label: "Refine skills", description: "Improve the flywheel skill based on this session's evidence" },
     { label: "Skip to finish", description: "Done — go straight to the final menu" }
   ],
   multiSelect: false
@@ -1486,9 +1486,9 @@ AskUserQuestion(questions: [{
 
 ## Step 11: Refine this skill
 
-Run `/orchestrate-refine-skill orchestrate` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
+Run `/flywheel-refine-skill flywheel` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
 
-## Step 12: Post-orchestration menu
+## Step 12: Post-flywheel menu
 
 After all steps complete, present a follow-up menu using `AskUserQuestion`:
 
@@ -1497,9 +1497,9 @@ AskUserQuestion(questions: [{
   question: "Orchestration complete. What would you like to do next?",
   header: "Next action",
   options: [
-    { label: "Run another cycle", description: "Start a new orchestrate session with a fresh goal" },
-    { label: "Audit the codebase", description: "Run /orchestrate-audit to scan for bugs, security issues, and test gaps" },
-    { label: "Check drift", description: "Run /orchestrate-drift-check to verify code matches the plan" },
+    { label: "Run another cycle", description: "Start a new flywheel session with a fresh goal" },
+    { label: "Audit the codebase", description: "Run /flywheel-audit to scan for bugs, security issues, and test gaps" },
+    { label: "Check drift", description: "Run /flywheel-drift-check to verify code matches the plan" },
     { label: "Done for now", description: "End the session — no further action needed" }
   ],
   multiSelect: false
@@ -1508,13 +1508,13 @@ AskUserQuestion(questions: [{
 
 Actions:
 - **"Run another cycle"** → run the cycle-reset checklist below, then return to Step 2.
-- **"Audit the codebase"** → invoke `/orchestrate-audit`
-- **"Check drift"** → invoke `/orchestrate-drift-check`
+- **"Audit the codebase"** → invoke `/flywheel-audit`
+- **"Check drift"** → invoke `/flywheel-drift-check`
 - **"Done for now"** → end gracefully with a summary of what shipped
 
 #### Cycle-reset checklist (run in order before re-entering Step 2):
 
-1. **Delete the checkpoint:** `rm -f .pi-orchestrator/checkpoint.json` (Bash). Without this, the next cycle inherits the prior `selectedGoal` / `activeBeadIds` / `phase` and the new "Resume session" drift check fires unnecessarily.
+1. **Delete the checkpoint:** `rm -f .pi-flywheel/checkpoint.json` (Bash). Without this, the next cycle inherits the prior `selectedGoal` / `activeBeadIds` / `phase` and the new "Resume session" drift check fires unnecessarily.
 2. **Verify no impl agents remain.** Run `TaskList`; if any impl-* tasks are still listed, retire and force-stop them per the Step 9 pause checklist before continuing.
 3. **Drain active teams (MANDATORY — prevents team leaks across sessions).** For each team this session created in `~/.claude/teams/`:
    ```bash

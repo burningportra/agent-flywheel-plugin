@@ -51,6 +51,6 @@ Fast-path implementation for small, focused changes.
 7. After completion, shutdown: `SendMessage(to: "fix-impl", message: {"type": "shutdown_request", "reason": "Fix complete."})`.
    Update task: `TaskUpdate(taskId: "<id>", status: "completed")`.
 
-8. Call `orch_review` with `action: "hit-me"` to get fresh-eyes review.
+8. Call `flywheel_review` with `action: "hit-me"` to get fresh-eyes review.
 
 9. Show the results and ask: "Looks good to commit?" If yes, mark the bead closed: `br update <id> --status closed`.
