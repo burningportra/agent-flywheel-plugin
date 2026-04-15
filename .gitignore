@@ -9,3 +9,9 @@ mcp-server/dist/
 /.claude/worktrees
 /.hermes
 /.vite
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# Vitest coverage output
+mcp-server/coverage/
