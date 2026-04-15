@@ -523,6 +523,19 @@ Read `state.planDocument` end-to-end. Identify 2-4 **load-bearing** decisions th
 
 Skip the obvious. Ask only about decisions where reasonable people would disagree.
 
+#### 1a. Empirically verify numeric claims before asking the user
+
+If the plan (or deep-plan synthesis) contains numeric claims about the actual codebase — file counts, line counts, dependency counts, test counts, package counts — and especially if multiple source plans disagree on a number, **run the command to get the real value before building an alignment question around it**. Examples:
+
+| Claim shape                         | Verification command                                              |
+|-------------------------------------|-------------------------------------------------------------------|
+| "~N AskUserQuestion calls"          | `grep -rc "AskUserQuestion" skills/ \| awk -F: '{s+=$2} END {print s}'` |
+| "~N transitive packages of <pkg>"   | `npm ls <pkg> --all --json \| jq '.. \| .dependencies? // empty \| keys' \| jq -s 'add \| unique \| length'` |
+| "N changed files since <sha>"       | `git diff --name-only <sha>..HEAD \| wc -l`                       |
+| "N test files in module"            | `find <dir> -name '*.test.*' \| wc -l`                            |
+
+Cost: one shell command, seconds. Benefit: the user arbitrates on real numbers, not competing guesses. If the two plans' numbers bracket reality (e.g. plans say "28 or 59", real=38), note which plan was closer when synthesizing the next round.
+
 ### 2. Present the questions in ONE batch
 
 Use a single `AskUserQuestion` call with up to 4 questions (the tool's max). Each question must have 2-4 distinct, mutually-exclusive options framed as user-facing choices, not yes/no validations:
@@ -567,7 +580,10 @@ Do NOT pad with low-value questions. 2 sharp questions beat 4 fuzzy ones.
 ### 3. Branch on the answers
 
 - **All answers confirm the plan** ("Scope is right" / "Agree with A" / "Defer is fine" etc.) → proceed to Step 5.6 (Plan-ready gate). Note in your end-of-turn summary that alignment was confirmed.
-- **Any answer requests a change** → run a refinement round automatically (do NOT prompt the user again first). Spawn:
+
+- **Decisive convergence** — all answers request changes AND every change is a consistent pick from a SINGLE alternative source (e.g. the user picked the Codex column on every row of a triangulation report, or picked "plan B" on every question where plans diverged): run ONE refinement round to incorporate the user's selections, then **skip the re-extract loop and proceed directly to Step 5.6**. Rationale: the user has already arbitrated every open question in a single batch; re-asking "is the revised plan aligned?" is ceremonial. Surface in your end-of-turn summary: "Decisive convergence on <source> — skipped re-alignment round."
+
+- **Mixed answers (some confirm, some change; or changes drawn from multiple sources)** → run a refinement round automatically (do NOT prompt the user again first). Spawn:
 
   ```
   Agent(model: "opus", name: "align-refine-<N>", isolation: "worktree", run_in_background: true,
@@ -844,6 +860,19 @@ Claude owns architecture / complex reasoning, Codex owns fast iteration / testin
 
 **Destructive-command coordination** — if any impl agent proposes `git reset --hard`, `git push --force`, `DROP TABLE`, `rm -rf`, `kubectl delete`, or similar, invoke `/slb` to require two-person approval. The coordinator is the second party; never let an agent self-approve destructive ops. If `/dcg` is configured as a hook, most of these are already blocked at the harness layer — still confirm via `/slb` for anything slipping through.
 
+**DCG-blocked command workarounds** — when the `/dcg` hook blocks a command, do not try to bypass it. Use the safe equivalent:
+
+| Blocked command                            | Safe alternative                                   | Why it's safer                                     |
+|--------------------------------------------|----------------------------------------------------|----------------------------------------------------|
+| `rm -rf <dir> && mkdir <dir>`              | `mkdir -p <dir>-$$` (new temp dir with PID suffix) | No deletion; caller points to the new path         |
+| `git checkout HEAD -- <path>`              | `git show HEAD:<path> > <path>`                    | Redirect is reversible; no index manipulation      |
+| `git reset --hard <sha>`                   | `git stash && git checkout <sha>`                  | Work is preserved in stash                         |
+| `git push --force <branch>`                | `git push --force-with-lease <branch>`             | Aborts if remote advanced since last fetch         |
+| `DROP TABLE <t>`                           | `ALTER TABLE <t> RENAME TO <t>_deprecated_<date>`  | Recoverable until the rename is cleaned up later   |
+| `rm -rf <dir>`                             | `mv <dir> /tmp/trash-$(date +%s)-<dir-basename>`   | Trashed, not deleted; cleaner scripts gc /tmp      |
+
+If none of these fit, escalate to `/slb` with the full command, expected outcome, and recovery plan. Never `--no-verify`, `--dangerously-skip-permissions`, or edit `/dcg` config to unblock a single action — those remove the safety net permanently.
+
 ### Implementation loop
 
 Use `TaskCreate` to create a task per bead. For each ready bead:
@@ -934,8 +963,25 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
            - Rust:       cargo check --all-targets && cargo clippy --all-targets -- -D warnings && cargo fmt --check
            - Go:         go build ./... && go vet ./...
            - TypeScript: npx tsc --noEmit (plus your eslint / biome script)
+                         **AND** run the project's full build: `npm run build` (or `pnpm build`,
+                         `yarn build`). `tsc --noEmit` only checks source types — it does NOT
+                         verify that tsconfig files, output paths, or scripts referenced from
+                         `package.json` actually exist. Running `npm run build` catches missing
+                         `tsconfig.*.json` files, missing entry points, and broken script chains.
            - Python:     python -m compileall -q . (plus ruff / mypy per project)
            Check package.json / Cargo.toml / Makefile for project-specific scripts first.
+
+       2a.1. **Reference-resolution gate** — if you added or modified any of:
+             - `package.json` scripts (commands that reference files: tsconfig paths, entry points, test runners)
+             - Shell commands in CI configs (`.github/workflows/*.yml`, `Makefile`)
+             - `import`/`require` statements with new paths
+             - Relative paths in config files (`tsconfig.json` `extends`/`references`, `vite.config`, etc.)
+             Then verify EVERY referenced path exists on disk before committing:
+             ```
+             # TypeScript example — after adding "build": "tsc && tsc -p tsconfig.scripts.json"
+             test -f tsconfig.scripts.json || echo "MISSING: tsconfig.scripts.json"
+             ```
+             A bead that wires up a new script must also create the files that script references.
 
        2b. **Test gate** — run the test suite for files you touched (not the whole suite unless fast).
 
@@ -984,10 +1030,21 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")
    ```
 
-   **Zero-output escalation**: After 2 nudges, check `git log --oneline` to confirm whether any commits appeared since spawning. If zero new commits:
+   **Idle-agent escalation**: After 2 nudges, check `git log --oneline --grep="<bead-id>"` to determine what shape of failure you're in. There are TWO common cases — diagnose first, then act:
+
+   **Case A — Commits exist but bead not closed** (MORE common): The agent did the implementation work and committed, then went idle before calling `br update --status closed`. Verify:
+   ```
+   br show <bead-id> --json | jq -r '.[0].status'
+   ```
+   If status is `open` or `in_progress` but a commit referencing the bead exists:
+   - Close the bead directly: `br update <bead-id> --status closed`. No replacement agent needed.
+   - Skip the nudge — it saves a round-trip.
+   - Optionally verify the commit's diff matches the bead's acceptance criteria before closing.
+
+   **Case B — Zero commits since spawning**: The agent stalled before producing any output.
    - Do NOT spawn a replacement agent — it will likely stall the same way.
    - Implement the bead directly as the coordinator.
-   - Close the bead: `br update <id> --status closed`.
+   - Close the bead: `br update <bead-id> --status closed`.
    - This is faster than multiple failed spawn cycles and produces the same outcome.
 
 5. **Store cross-cutting learnings**: When an agent's completion report mentions something non-obvious (unexpected file renames, rebase conflicts, API quirks, tooling workarounds), store it in CASS:
@@ -1085,6 +1142,22 @@ Actions:
   > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
 
 ## Step 9: Loop until complete
+
+> **Known limitation (v2.9.x): `orch_verify_beads` may fail with `parse_failure` on every bead.**
+> Root cause: `br show <id> --json` returns a single-element array `[{...}]` but `verifyBeadsClosed` passes the parsed value directly to `parseBead` (which expects `{...}`). Tracked as a skill-level TODO — fix the array-shape unwrap in `mcp-server/src/beads.ts` `verifyBeadsClosed()` for v1.1.
+>
+> **If all results come back as `errors: { ... parse_failure ... }`, use the manual fallback below instead of looping on "Retry verify":**
+>
+> 1. For each bead ID in the wave, run:
+>    ```bash
+>    br show <bead-id> --json | jq -r '.[0].status'
+>    git log --oneline --grep="<bead-id>" -n 5
+>    ```
+> 2. Classify manually:
+>    - `status == "closed"` → verified, move on.
+>    - `status != "closed"` AND commit exists → straggler; run `br update <bead-id> --status closed` yourself (this is what `autoClosed` would have done).
+>    - `status != "closed"` AND no commit → route into the `unclosedNoCommit` menu below with the bead ID.
+> 3. Only treat a parse-failure-free run as authoritative. If `orch_verify_beads` returns a mix of valid results and parse-failures, trust the valid ones and apply the fallback only to the failed IDs.
 
 **Reconcile the wave first.** Before showing the menu, call `orch_verify_beads` with the IDs of beads completed in this wave:
 
