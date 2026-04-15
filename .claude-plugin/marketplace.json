@@ -1,14 +1,14 @@
 {
-  "name": "claude-orchestrator",
-  "description": "Multi-agent coding orchestrator for Claude Code",
+  "name": "agent-flywheel",
+  "description": "Multi-agent coding flywheel for Claude Code",
   "owner": {
     "name": "burningportra"
   },
   "plugins": [
     {
-      "name": "claude-orchestrator",
+      "name": "agent-flywheel",
       "source": "./",
-      "description": "Multi-agent coding orchestrator for Claude Code"
+      "description": "Multi-agent coding flywheel for Claude Code"
     }
   ]
 }

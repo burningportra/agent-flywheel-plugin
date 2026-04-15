@@ -1,16 +1,16 @@
 {
-  "name": "claude-orchestrator-mcp",
-  "version": "2.11.0",
-  "description": "MCP server for claude-orchestrator — state + CLI glue for the agentic coding flywheel",
+  "name": "agent-flywheel-mcp",
+  "version": "3.0.0",
+  "description": "MCP server for agent-flywheel — state + CLI glue for the agentic coding flywheel",
   "type": "module",
   "scripts": {
     "build": "tsc && tsc -p tsconfig.scripts.json",
     "dev": "tsc --watch",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "lint:skill": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --baseline .lintskill-baseline.json",
-    "lint:skill:json": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --ci --format json",
-    "lint:skill:update-baseline": "tsx scripts/lint-skill.ts --file ../skills/orchestrate/SKILL.md --update-baseline --baseline .lintskill-baseline.json",
+    "lint:skill": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --baseline .lintskill-baseline.json",
+    "lint:skill:json": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --ci --format json",
+    "lint:skill:update-baseline": "tsx scripts/lint-skill.ts --file ../skills/flywheel/SKILL.md --update-baseline --baseline .lintskill-baseline.json",
     "lint:skill:update-manifest": "tsx scripts/lint-skill.ts --update-manifest"
   },
   "dependencies": {

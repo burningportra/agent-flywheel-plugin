@@ -71,9 +71,9 @@ jobs:
         working-directory: mcp-server
       - run: npm run build
         working-directory: mcp-server
-      - run: node dist/scripts/lint-skill.js --file ../skills/orchestrate/SKILL.md --ci --baseline .lintskill-baseline.json --format gha
+      - run: node dist/scripts/lint-skill.js --file ../skills/flywheel/SKILL.md --ci --baseline .lintskill-baseline.json --format gha
         working-directory: mcp-server
-      - run: node dist/scripts/lint-skill.js --file ../skills/orchestrate/SKILL.md --ci --format json > lint-skill-report.json
+      - run: node dist/scripts/lint-skill.js --file ../skills/flywheel/SKILL.md --ci --format json > lint-skill-report.json
         working-directory: mcp-server
         if: failure()
       - uses: actions/upload-artifact@v4

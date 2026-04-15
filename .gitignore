@@ -1,11 +1,11 @@
 node_modules/
 mcp-server/dist/
-.pi-orchestrator/checkpoint.json.tmp
-.pi-orchestrator/checkpoint.json.corrupt
+.pi-flywheel/checkpoint.json.tmp
+.pi-flywheel/checkpoint.json.corrupt
 *.log
 .DS_Store
 /.beads
-/.pi-orchestrator
+/.pi-flywheel
 /.claude/worktrees
 /.hermes
 /.vite
