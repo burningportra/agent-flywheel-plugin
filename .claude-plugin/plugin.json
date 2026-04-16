@@ -5,5 +5,11 @@
   "author": { "name": "burningportra" },
   "homepage": "https://github.com/burningportra/agent-flywheel-plugin",
   "repository": "https://github.com/burningportra/agent-flywheel-plugin",
-  "license": "MIT"
+  "license": "MIT",
+  "mcpServers": {
+    "agent-flywheel": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"]
+    }
+  }
 }

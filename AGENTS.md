@@ -14,6 +14,8 @@ cd mcp-server && npm run build
 
 Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 
+**`mcp-server/dist/` is committed** so the plugin works immediately after `/plugin install` with no Node build step on the user's machine. If you change anything in `mcp-server/src/`, run `npm run build` and commit the resulting `dist/` changes in the same PR. The `dist-drift` CI job fails any PR where `dist/` is out of sync with `src/`.
+
 ## Hard Constraints
 
 1. **No `console.log` in MCP server code.** The server uses stdin/stdout for JSON-RPC. Any stdout write corrupts the communication channel. Use `createLogger(ctx)` from `./logger.js` for all diagnostics — it writes structured JSON to stderr only.

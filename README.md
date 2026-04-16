@@ -15,56 +15,26 @@ agent-flywheel drives a complete development cycle:
 5. **Review** - fresh-eyes review by 5 parallel agents per bead
 6. **Repeat** - loops through all beads with drift checks between rounds
 
-## Prerequisites
-
-- [Claude Code](https://github.com/anthropics/claude-code) (latest)
-- [br](https://github.com/burningportra/br) - bead tracker CLI
-- [bv](https://github.com/burningportra/bv) - bead visualizer CLI
-- [agent-mail](https://github.com/burningportra/agent-mail) - multi-agent coordination server
-
-```bash
-# Install br and bv (example)
-brew install br bv
-
-# Start agent-mail
-uv run python -m mcp_agent_mail.cli serve-http
-```
-
 ## Installation
 
-```bash
-git clone https://github.com/burningportra/agent-flywheel-plugin.git agent-flywheel
-cd agent-flywheel
-claude --plugin-dir .
+Prerequisites: [Claude Code](https://github.com/anthropics/claude-code) (latest) and Node.js 18.18+.
+
+```
+/plugin marketplace add burningportra/agent-flywheel-plugin
+/plugin install agent-flywheel@agent-flywheel
+/reload-plugins
+/agent-flywheel:flywheel-setup
 ```
 
-Or install permanently:
-
-```bash
-# From the repo root
-claude settings plugins add .
-```
-
-## Build the MCP server
-
-```bash
-cd mcp-server
-npm install
-npm run build
-```
+`/agent-flywheel:flywheel-setup` detects missing dependencies ([br](https://github.com/Dicklesworthstone/beads_rust), [bv](https://github.com/Dicklesworthstone/beads_viewer), [agent-mail](https://github.com/burningportra/agent-mail)) and offers to install each one for you.
 
 ## Quick start
 
-```bash
-# 1. Set up prerequisites
-/agent-flywheel:flywheel-setup
-
-# 2. Run the full flywheel
-/agent-flywheel:start
-
-# 3. Check status
-/agent-flywheel:flywheel-status
 ```
+/agent-flywheel:start
+```
+
+That's it. The flywheel scans your repo, proposes improvements, plans, implements, and reviews.
 
 ## Command reference
 
@@ -146,6 +116,18 @@ The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names rem
 | Robustness plan agent | codex |
 | Swarm implementation agents | claude-haiku-4-5 (lightweight) |
 | Review agents | claude-sonnet-4-6 |
+
+## Install from source (contributors)
+
+```bash
+git clone https://github.com/burningportra/agent-flywheel-plugin.git
+cd agent-flywheel-plugin
+npm ci --prefix mcp-server
+npm run build --prefix mcp-server
+claude --plugin-dir .
+```
+
+After editing `mcp-server/src/`, rebuild with `npm run build --prefix mcp-server` and commit the updated `mcp-server/dist/` in the same PR. The `dist-drift` CI job enforces this.
 
 ## License
 

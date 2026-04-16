@@ -1,5 +1,6 @@
 node_modules/
-mcp-server/dist/
+# mcp-server/dist/ is committed so the plugin works immediately after /plugin install
+# (see .github/workflows/ci.yml "dist-drift" job which prevents stale artifacts).
 .pi-flywheel/checkpoint.json.tmp
 .pi-flywheel/checkpoint.json.corrupt
 *.log

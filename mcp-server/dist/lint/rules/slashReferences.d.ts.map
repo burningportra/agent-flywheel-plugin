@@ -1,0 +1,1 @@
+{"version":3,"file":"slashReferences.d.ts","sourceRoot":"","sources":["../../../src/lint/rules/slashReferences.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,IAAI,EAAW,WAAW,EAA4B,MAAM,aAAa,CAAC;AACxF,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,qBAAqB,CAAC;AAEzD,MAAM,WAAW,sBAAuB,SAAQ,WAAW;IACzD,QAAQ,EAAE,aAAa,CAAC;CACzB;AAED,eAAO,MAAM,QAAQ,EAAE,IA8BtB,CAAC;AAEF,eAAe,QAAQ,CAAC"}

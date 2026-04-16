@@ -1,0 +1,1 @@
+{"version":3,"file":"askUserQuestion.d.ts","sourceRoot":"","sources":["../../../src/lint/rules/askUserQuestion.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAMV,IAAI,EAEL,MAAM,aAAa,CAAC;AAoBrB,eAAO,MAAM,MAAM,EAAE,IA2BpB,CAAC;AAEF,eAAO,MAAM,MAAM,EAAE,IA0CpB,CAAC;AAEF,eAAO,MAAM,MAAM,EAAE,IAwCpB,CAAC;AAEF,eAAO,MAAM,MAAM,EAAE,IA0BpB,CAAC;AAEF,eAAO,MAAM,QAAQ,EAAE,IAAI,EAAqC,CAAC"}
