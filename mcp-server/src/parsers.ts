@@ -187,7 +187,18 @@ export function parseBrList(raw: string): ParseResult<Bead[]> {
   const json = tryParseJson(raw);
   if (!json.ok) return json;
 
-  const arr = z.array(BeadSchema).safeParse(json.data);
+  // br v0.1.34+ returns `{issues: [...]}`; older versions returned a bare array.
+  const candidate = Array.isArray(json.data)
+    ? json.data
+    : (json.data && typeof json.data === "object" && Array.isArray((json.data as any).issues))
+      ? (json.data as any).issues
+      : null;
+
+  if (candidate === null) {
+    return { ok: false, error: "expected array or {issues:[]} object" };
+  }
+
+  const arr = z.array(BeadSchema).safeParse(candidate);
   if (!arr.success) return { ok: false, error: formatZodError(arr.error) };
   return { ok: true, data: arr.data as Bead[] };
 }

@@ -100,7 +100,18 @@ describe('parseBrList', () => {
     if (!result.ok) expect(result.error).toContain('Invalid JSON');
   });
 
-  it('fails when input is not an array', () => {
+  it('parses {issues:[...]} shape from br v0.1.34+', () => {
+    const raw = JSON.stringify({ issues: [validBead(), validBead({ id: 'bead-2' })] });
+    const result = parseBrList(raw);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].id).toBe('bead-1');
+      expect(result.data[1].id).toBe('bead-2');
+    }
+  });
+
+  it('fails when input is neither array nor {issues:[]}', () => {
     const result = parseBrList(JSON.stringify({ id: 'bead-1' }));
     expect(result.ok).toBe(false);
   });
