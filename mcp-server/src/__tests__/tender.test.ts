@@ -2,8 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { SwarmTender, DEFAULT_TENDER_CONFIG, loadTenderConfig } from '../tender.js';
-import type { SwarmTenderOptions, AgentStatus, SwarmCompletionSummary } from '../tender.js';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { SwarmTender, DEFAULT_TENDER_CONFIG, loadTenderConfig, emitTelemetry, TELEMETRY_DIR, TELEMETRY_FILE } from '../tender.js';
+import type {
+  SwarmTenderOptions,
+  AgentStatus,
+  SwarmCompletionSummary,
+  TenderTelemetryEvent,
+} from '../tender.js';
 import type { ExecFn } from '../exec.js';
 
 // ─── Mocks ──────────────────────────────────────────────────────
@@ -350,5 +358,145 @@ describe('SwarmTender — getSummary', () => {
     const tender = makeTender([{ path: '/wt/0', stepIndex: 0 }]);
     tender.removeAgent(0);
     expect(tender.getSummary()).toBe('no agents');
+  });
+});
+
+// ─── Telemetry: emitTelemetry ─────────────────────────────────────
+
+describe('emitTelemetry', () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'tender-telemetry-'));
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(tmp, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it('creates the .pi-flywheel dir and appends valid NDJSON', () => {
+    const event: TenderTelemetryEvent = {
+      kind: 'poll_summary',
+      ts: new Date().toISOString(),
+      activeAgents: 2,
+      stuckAgents: 1,
+      nudgesThisCycle: 0,
+    };
+    emitTelemetry(event, tmp);
+
+    const logPath = join(tmp, TELEMETRY_DIR, TELEMETRY_FILE);
+    expect(existsSync(logPath)).toBe(true);
+
+    const contents = readFileSync(logPath, 'utf8');
+    expect(contents.endsWith('\n')).toBe(true);
+    const lines = contents.trim().split('\n');
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed).toEqual(event);
+  });
+
+  it('appends multiple events as separate NDJSON lines', () => {
+    const e1: TenderTelemetryEvent = {
+      kind: 'nudge_sent',
+      ts: new Date().toISOString(),
+      agent: 'agent-a',
+      reason: 'stuck',
+      nudgeCount: 1,
+      elapsedSinceActivityMs: 301_000,
+    };
+    const e2: TenderTelemetryEvent = {
+      kind: 'conflict_detected',
+      ts: new Date().toISOString(),
+      file: 'src/foo.ts',
+      worktrees: ['/wt/0', '/wt/1'],
+    };
+    emitTelemetry(e1, tmp);
+    emitTelemetry(e2, tmp);
+
+    const logPath = join(tmp, TELEMETRY_DIR, TELEMETRY_FILE);
+    const lines = readFileSync(logPath, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toEqual(e1);
+    expect(JSON.parse(lines[1])).toEqual(e2);
+  });
+
+  it('does not throw when cwd is unwritable (nonexistent parent under a file)', () => {
+    // Create a regular file and try to use it as a cwd — mkdirSync(recursive) will throw
+    // because a file exists where a directory is needed.
+    const filePath = join(tmp, 'not-a-dir');
+    // Write a file at that path
+    require('node:fs').writeFileSync(filePath, 'blocker');
+
+    const event: TenderTelemetryEvent = {
+      kind: 'poll_summary',
+      ts: new Date().toISOString(),
+      activeAgents: 0,
+      stuckAgents: 0,
+      nudgesThisCycle: 0,
+    };
+
+    expect(() => emitTelemetry(event, filePath)).not.toThrow();
+  });
+});
+
+// ─── Telemetry: SwarmTender integration ──────────────────────────
+
+describe('SwarmTender — telemetry integration', () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'tender-swarm-telemetry-'));
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    try {
+      rmSync(tmp, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it('emits at least one nudge_sent and one poll_summary event to the log', async () => {
+    const exec: ExecFn = vi.fn().mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+    const tender = new SwarmTender(
+      exec,
+      tmp,
+      [{ path: '/wt/0', stepIndex: 0 }],
+      {
+        config: {
+          stuckThreshold: 1_000,
+          idleThreshold: 500,
+          pollInterval: 999_999,
+          cadenceIntervalMs: 999_999,
+          nudgeDelayMs: 0,
+          maxNudges: 2,
+          killWaitMs: 999_999,
+        },
+        flywheelAgentName: 'Coordinator',
+      }
+    );
+
+    // Advance time past stuckThreshold before starting
+    vi.advanceTimersByTime(2_000);
+    tender.start();
+    await vi.advanceTimersByTimeAsync(0);
+    // Allow the nudgeStuckAgent promise chain to settle
+    await vi.advanceTimersByTimeAsync(10);
+    tender.stop();
+
+    const logPath = join(tmp, TELEMETRY_DIR, TELEMETRY_FILE);
+    expect(existsSync(logPath)).toBe(true);
+    const lines = readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean);
+    const events = lines.map((l) => JSON.parse(l) as TenderTelemetryEvent);
+
+    const kinds = events.map((e) => e.kind);
+    expect(kinds).toContain('poll_summary');
+    expect(kinds).toContain('nudge_sent');
   });
 });

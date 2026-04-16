@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { appendFileSync, mkdirSync } from "node:fs";
 import {
   forceReleaseFileReservation,
   checkFileReservations,
@@ -9,6 +10,65 @@ import {
 } from "./agent-mail.js";
 import type { ExecFn } from "./exec.js";
 import { createLogger } from "./logger.js";
+
+// ─── Telemetry ─────────────────────────────────────────────────
+
+export type TenderTelemetryEvent =
+  | {
+      kind: "nudge_sent";
+      ts: string;
+      agent: string;
+      reason: string;
+      nudgeCount: number;
+      elapsedSinceActivityMs: number;
+    }
+  | {
+      kind: "agent_killed";
+      ts: string;
+      agent: string;
+      reason: string;
+      totalNudges: number;
+      waitedMs: number;
+    }
+  | {
+      kind: "conflict_detected";
+      ts: string;
+      file: string;
+      worktrees: string[];
+    }
+  | {
+      kind: "poll_summary";
+      ts: string;
+      activeAgents: number;
+      stuckAgents: number;
+      nudgesThisCycle: number;
+    };
+
+export const TELEMETRY_DIR = ".pi-flywheel";
+export const TELEMETRY_FILE = "tender-events.log";
+
+const telemetryLog = createLogger("tender-telemetry");
+
+/**
+ * Append a telemetry event as NDJSON to `<cwd>/.pi-flywheel/tender-events.log`.
+ * Creates the directory if missing. Failures are logged but never throw.
+ */
+export function emitTelemetry(
+  event: TenderTelemetryEvent,
+  cwd: string
+): void {
+  try {
+    const dir = path.join(cwd, TELEMETRY_DIR);
+    mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, TELEMETRY_FILE);
+    appendFileSync(file, JSON.stringify(event) + "\n");
+  } catch (err) {
+    telemetryLog.error("Failed to emit telemetry event", {
+      kind: event.kind,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -319,11 +379,23 @@ export class SwarmTender {
           if (canNudge && nudgesThisCycle < this.config.maxNudgesPerPoll) {
             const agentName = path.basename(agent.worktreePath);
             nudgesThisCycle++; // increment synchronously before async call to enforce budget
+            const elapsedSinceActivityMs = elapsed;
             this.nudgeStuckAgent(agentName, agent.worktreePath)
               .then(() => {
                 agent.nudgesSent++;
                 agent.lastNudgedAt = now;
                 this.log.warn("Nudged stuck agent", { stepIndex: agent.stepIndex, nudgesSent: agent.nudgesSent });
+                emitTelemetry(
+                  {
+                    kind: "nudge_sent",
+                    ts: new Date().toISOString(),
+                    agent: agentName,
+                    reason: `stuck >${this.config.stuckThreshold / 1000}s`,
+                    nudgeCount: agent.nudgesSent,
+                    elapsedSinceActivityMs,
+                  },
+                  this.cwd
+                );
               })
               .catch(err => {
                 nudgesThisCycle--; // rollback on failure
@@ -332,6 +404,18 @@ export class SwarmTender {
           } else if (shouldKill) {
             this.log.warn("Killing stuck agent after max nudges", { stepIndex: agent.stepIndex });
             this.killedAgents.push(agent.worktreePath);
+            const waitedMs = now - agent.lastNudgedAt;
+            emitTelemetry(
+              {
+                kind: "agent_killed",
+                ts: new Date().toISOString(),
+                agent: path.basename(agent.worktreePath),
+                reason: `exceeded maxNudges (${this.config.maxNudges}) + killWaitMs (${this.config.killWaitMs}ms)`,
+                totalNudges: agent.nudgesSent,
+                waitedMs,
+              },
+              this.cwd
+            );
             this.onKill?.(agent);
             this.removeAgent(stepIndex);
           }
@@ -357,11 +441,33 @@ export class SwarmTender {
         const worktrees = stepIndices.map(
           (idx) => this.agents.get(idx)?.worktreePath ?? ""
         ).filter(Boolean);
+        emitTelemetry(
+          {
+            kind: "conflict_detected",
+            ts: new Date().toISOString(),
+            file,
+            worktrees,
+          },
+          this.cwd
+        );
         this.onConflict?.({ file, worktrees, stepIndices });
       }
     }
 
     this.onTick?.(this.getStatus());
+
+    // Poll-cycle summary telemetry
+    const statuses = this.getStatus();
+    emitTelemetry(
+      {
+        kind: "poll_summary",
+        ts: new Date().toISOString(),
+        activeAgents: statuses.filter((s) => s.health === "active").length,
+        stuckAgents: statuses.filter((s) => s.health === "stuck").length,
+        nudgesThisCycle,
+      },
+      this.cwd
+    );
 
     // Cadence check: fire if the interval has elapsed
     if (now - this.lastCadencePromptAt >= this.config.cadenceIntervalMs) {
