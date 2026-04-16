@@ -1040,6 +1040,11 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        Create a commit with a descriptive message referencing bead <id>.
        Then mark the bead closed: `br update <bead-id> --status closed`
        (Note: the br CLI uses `closed`, NOT `done`.)
+       **IMPORTANT:** Always use the FULL bead ID (e.g. `my-project-k67`),
+       not a short alias. The full ID is project-path-dependent — agents
+       running from symlinked or alternative paths will fail to resolve
+       short IDs. The coordinator MUST substitute the exact ID from `br list`
+       into this prompt template before dispatching.
        Verify the close took effect: `br show <bead-id> --json` and confirm
        `"status": "closed"`. If the status is anything else, retry the update
        once before continuing to STEP 4. Stragglers are a known failure mode
@@ -1129,6 +1134,10 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 | Contradictory implementations across beads | Poor coordination / stale reservations | Audit `file_reservation_paths`; revise bead boundaries so two beads never edit the same file |
 | Much code, goal still far | Strategic drift | Run the "Come to Jesus" reality check in Step 9's Check-status option |
 
+> ## ⚠️ MANDATORY POST-IMPLEMENTATION CONTINUATION
+>
+> After all impl agents in the current wave have completed (or been force-stopped), you MUST continue to Step 8. Do NOT end the turn, exit the workflow, or return control to the user. The implementation phase is the MIDDLE of the flywheel — not the end. The remaining steps (review → verify → test coverage → UI polish → wrap-up → CASS → refine → post-flywheel menu) are what make the flywheel a flywheel. Dropping out here is a bug.
+
 ## Step 8: Review completed beads
 
 > **Wave-completion gate (MANDATORY).** Before entering this step, wait until **every** impl agent spawned in the current wave has reported back via Agent Mail (or has been force-stopped per Step 7's escalation path). Track the wave's bead IDs in a local set; do NOT enter Step 8 until that set is empty. If you receive an Agent Mail completion notification mid-wave, store the result and stay in Step 7's monitor loop until the rest finish. Reviewing wave-1 while wave-2 is mid-flight produces stale state and per-bead review prompts (which the consolidation rule below explicitly forbids).
@@ -1195,6 +1204,8 @@ Actions:
   > **Closed-bead handling:** `flywheel_review` now reconciles the bead state itself — `looks-good` is idempotent (advances to the next bead/gates), `hit-me` runs a post-close audit (payload tagged `postClose: true`), and `skip` returns `already_closed`. No manual workaround needed. (Prior versions required spawning reviewers from `git diff <sha>~1 <sha>`; that path is gone.)
 
   > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
+
+After review actions are resolved for all beads in this wave, proceed immediately to Step 9. Do NOT end the turn.
 
 ## Step 9: Loop until complete
 
@@ -1302,9 +1313,17 @@ AskUserQuestion(questions: [{
 4. **Print resume hint.** One line: `Run /start to resume from <phase> with <N> beads remaining.`
 5. **End turn** with a summary of progress so far (beads closed this session, beads remaining, any blockers). Do not call further tools after the summary.
 
-When ALL beads are complete, display a completion message and proceed directly to Step 9.5:
+When ALL beads are complete, display a completion message and proceed through the remaining steps in order:
 
-> All <N> beads complete. Proceeding to wrap-up.
+> All <N> beads complete. Proceeding to post-implementation review.
+>
+> **Remaining steps (MANDATORY — do NOT skip or exit):**
+> 1. Step 9.25 — Test-coverage sweep
+> 2. Step 9.4 — UI/UX polish pass (if applicable)
+> 3. Step 9.5 — Wrap-up (commit, version bump, rebuild)
+> 4. Step 10 — Store session learnings to CASS
+> 5. Step 11 — Refine skills (optional, user-gated)
+> 6. Step 12 — Post-flywheel menu
 
 ## Step 9.25: Test-coverage sweep (MANDATORY before wrap-up)
 
@@ -1512,8 +1531,10 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- **"Refine skills"** → proceed to Step 11
-- **"Skip to finish"** → skip to Step 12
+- **"Refine skills"** → proceed to Step 11, then Step 12
+- **"Skip to finish"** → proceed to Step 12
+
+After the user responds, continue to the next step. Do NOT end the turn or exit the workflow.
 
 ## Step 11: Refine this skill
 
