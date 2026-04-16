@@ -66,7 +66,7 @@ const PHASE_META: Record<FlywheelPhase, PhaseMeta> = {
   idle: {
     label: "Idle",
     emoji: "💤",
-    nextAction: "Run /flywheel to start.",
+    nextAction: "Run /start to start.",
     buildResumePrompt: () => "Start the flywheel workflow. Call `flywheel_profile` to scan the repo.",
   },
   profiling: {
@@ -184,7 +184,7 @@ const PHASE_META: Record<FlywheelPhase, PhaseMeta> = {
   complete: {
     label: "Complete",
     emoji: "🎉",
-    nextAction: "All done! Run /flywheel to start a new session.",
+    nextAction: "All done! Run /start to start a new session.",
     buildResumePrompt: () => "Previous flywheel was complete. Starting fresh — call `flywheel_profile` to scan the repo.",
   },
 };
@@ -295,7 +295,7 @@ export function detectSessionStage(
 // ─── Formatting helpers ───────────────────────────────────────
 
 /**
- * Builds the multi-line header string shown inside the `/flywheel` select
+ * Builds the multi-line header string shown inside the `/start` select
  * prompt when an existing session is detected.
  *
  * Example output:

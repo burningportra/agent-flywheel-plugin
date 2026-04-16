@@ -23,7 +23,7 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 ### 0.preflight — Captured user input (DO THIS FIRST)
 
-If the user's prompt contains anything beyond `/flywheel <args>` — a goal sentence, a pasted plan, a path to a plan file, a directive like "fix X then Y" — capture it as `USER_INPUT` and treat it as a candidate goal or plan. **Do NOT act on it yet. Do NOT skip the welcome banner or Step 0b detection.** Run the full Step 0a–0d flow silently so the user sees current state (existing session, open beads, AM status) before deciding.
+If the user's prompt contains anything beyond `/start <args>` — a goal sentence, a pasted plan, a path to a plan file, a directive like "fix X then Y" — capture it as `USER_INPUT` and treat it as a candidate goal or plan. **Do NOT act on it yet. Do NOT skip the welcome banner or Step 0b detection.** Run the full Step 0a–0d flow silently so the user sees current state (existing session, open beads, AM status) before deciding.
 
 Then route in Step 0e instead of showing the default main menu:
 
@@ -173,7 +173,7 @@ AskUserQuestion(questions: [{
 
 ### 0e. Route the user's choice
 
-> **If `USER_INPUT` was captured in step 0.preflight, use the routing override there instead of this menu.** The default menu below applies only when the user invoked `/flywheel` with no extra prompt content.
+> **If `USER_INPUT` was captured in step 0.preflight, use the routing override there instead of this menu.** The default menu below applies only when the user invoked `/start` with no extra prompt content.
 
 | Choice | Action |
 |--------|--------|
@@ -1199,7 +1199,7 @@ The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
       { label: "Re-run impl agent", description: "Spawn a fresh impl agent for these beads (Recommended)" },
       { label: "Mark deferred", description: "Set status=deferred and proceed without these beads" },
       { label: "Close manually", description: "I'll close them outside this session — proceed without action" },
-      { label: "Pause cycle", description: "Stop and let me investigate; resume later via /flywheel" }
+      { label: "Pause cycle", description: "Stop and let me investigate; resume later via /start" }
     ],
     multiSelect: false
   }])
@@ -1228,7 +1228,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Continue", description: "Implement the next batch of ready beads (Recommended)" },
     { label: "Check status", description: "Show detailed bead status, dependency graph, and drift check" },
-    { label: "Pause", description: "Stop here — resume later with /flywheel" },
+    { label: "Pause", description: "Stop here — resume later with /start" },
     { label: "Wrap up early", description: "Skip remaining beads and wrap up what's done" }
   ],
   multiSelect: false
@@ -1268,7 +1268,7 @@ AskUserQuestion(questions: [{
 1. **Drain in-flight agents.** For each impl agent still listed in `TaskList` from the current wave: send `SendMessage(to: "<name>", message: {"type": "shutdown_request", "reason": "Session paused"})`. Wait up to 60s for them to exit; force-stop with `TaskStop(task_id: "<id>")` if they hang.
 2. **Retire Agent Mail teammates** that won't be needed on resume (impl-* agents). Leave the coordinator session itself active (it's the agent-flywheel's identity and CASS will use it on resume).
 3. **Confirm checkpoint is current.** State is checkpointed by every tool call, so this is usually a no-op — but verify `.pi-flywheel/checkpoint.json` exists and `git rev-parse HEAD` matches `checkpoint.gitHead`. If they differ, the user has uncommitted moves; surface that in the summary.
-4. **Print resume hint.** One line: `Run /flywheel to resume from <phase> with <N> beads remaining.`
+4. **Print resume hint.** One line: `Run /start to resume from <phase> with <N> beads remaining.`
 5. **End turn** with a summary of progress so far (beads closed this session, beads remaining, any blockers). Do not call further tools after the summary.
 
 When ALL beads are complete, display a completion message and proceed directly to Step 9.5:
@@ -1486,7 +1486,7 @@ AskUserQuestion(questions: [{
 
 ## Step 11: Refine this skill
 
-Run `/flywheel-refine-skill flywheel` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
+Run `/flywheel-refine-skill start` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
 
 ## Step 12: Post-flywheel menu
 

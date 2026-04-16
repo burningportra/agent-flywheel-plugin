@@ -69,6 +69,6 @@ Agent(model: "opus", name: "deepen-integration", prompt: "Read docs/research-<re
 **Phase 11 — Cross-model feedback**: Make the proposal self-contained (no external references needed), then get feedback from 2-3 different models via parallel agents. Each writes feedback to `docs/research-<repo>-feedback-<model>.md`.
 
 **Phase 12 — Final synthesis**: Blend all feedback using the Best-of-All-Worlds approach. Present the final integration proposal to the user with a recommended action:
-- Convert to beads and implement via `/flywheel`
+- Convert to beads and implement via `/start`
 - Refine further
 - Shelve for later

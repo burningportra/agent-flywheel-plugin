@@ -60,7 +60,7 @@ npm run build
 /agent-flywheel:flywheel-setup
 
 # 2. Run the full flywheel
-/agent-flywheel:flywheel
+/agent-flywheel:start
 
 # 3. Check status
 /agent-flywheel:flywheel-status
@@ -70,7 +70,7 @@ npm run build
 
 | Command | Description |
 |---|---|
-| `/agent-flywheel:flywheel` | Full flywheel: scan → plan → implement → review |
+| `/agent-flywheel:start` | Full flywheel: scan → plan → implement → review |
 | `/agent-flywheel:flywheel-stop` | Stop session and reset state |
 | `/agent-flywheel:flywheel-status` | Show bead progress, inbox messages, next steps |
 | `/agent-flywheel:flywheel-setup` | Check and install prerequisites |

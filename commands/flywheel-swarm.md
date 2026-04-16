@@ -6,7 +6,7 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 
 1. Call `flywheel_approve_beads` with `action: "start"` via the agent-flywheel MCP server. This returns the list of ready beads.
 
-2. If no beads are ready, say "No beads are ready for implementation. Run /agent-flywheel:flywheel to create a plan first."
+2. If no beads are ready, say "No beads are ready for implementation. Run /agent-flywheel:start to create a plan first."
 
 3. Ask the user: "How many agents should run in parallel? (Recommended: 2-4)"
 

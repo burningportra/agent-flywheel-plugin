@@ -36,14 +36,14 @@ const CEREMONY_FRAMES: readonly OpeningCeremonyFrame[] = [
       "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
       "> repo sigil ............. [bound]\n" +
       "> bead engine ............ [ready]\n" +
-      "> ceremony complete ...... [ignite /flywheel]",
+      "> ceremony complete ...... [ignite /start]",
     delayMs: 220,
   },
 ] as const;
 
 const STATIC_FALLBACK_FRAME =
   "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
-  "> ceremony complete ...... [ignite /flywheel]";
+  "> ceremony complete ...... [ignite /start]";
 
 export function getOpeningCeremonyFrames(): OpeningCeremonyFrame[] {
   return CEREMONY_FRAMES.map((frame) => ({ ...frame }));

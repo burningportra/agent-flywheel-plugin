@@ -72,5 +72,5 @@ Check and configure all prerequisites:
    ```
 
 10. **Gate recommendation:**
-   - If ALL checks pass: "All prerequisites met. You can now run `/flywheel`."
-   - If ANY check failed: "**Do not run `/flywheel` until all checks pass.** Fix the items marked ❌ above and re-run `/flywheel-setup`."
+   - If ALL checks pass: "All prerequisites met. You can now run `/start`."
+   - If ANY check failed: "**Do not run `/start` until all checks pass.** Fix the items marked ❌ above and re-run `/flywheel-setup`."

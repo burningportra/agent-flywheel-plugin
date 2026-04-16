@@ -11,4 +11,4 @@ Stop the active flywheel session for this project.
    - Delete `.pi-flywheel/checkpoint.json` using the Bash tool: `rm -f .pi-flywheel/checkpoint.json`
    - Call `release_file_reservations` via the `agent-mail` MCP tool with `project_key` set to the current working directory.
    - Use `TaskList` to find any active flywheel tasks, then `TaskUpdate` each to `status: "deleted"` to cancel them.
-4. Confirm: "Orchestration stopped. State cleared. Run `/agent-flywheel:flywheel` to start fresh."
+4. Confirm: "Orchestration stopped. State cleared. Run `/agent-flywheel:start` to start fresh."

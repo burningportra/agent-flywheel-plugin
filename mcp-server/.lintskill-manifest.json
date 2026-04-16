@@ -9,7 +9,6 @@
     "changelog-md-workmanship",
     "docs-de-slopify",
     "dsr",
-    "flywheel",
     "flywheel-audit",
     "flywheel-cleanup",
     "flywheel-drift-check",
@@ -33,6 +32,7 @@
     "memory",
     "multi-model-triangulation",
     "slb",
+    "start",
     "ubs-workflow",
     "ui-polish",
     "ui-ux-polish"

@@ -136,7 +136,7 @@ Test files live in `mcp-server/src/__tests__/`. Follow existing patterns — use
 
 ## SKILL.md linting
 
-Changes to `skills/flywheel/SKILL.md` (and any future SKILL.md files) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, and Universal Rule 1 enforcement.
+Changes to `skills/start/SKILL.md` (and any future SKILL.md files) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, and Universal Rule 1 enforcement.
 
 - Local: `cd mcp-server && npm run lint:skill`
 - Auto-fix safe issues (future): `npm run lint:skill -- --fix` (deferred to v1.1)

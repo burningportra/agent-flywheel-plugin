@@ -279,4 +279,4 @@ Present the stored learnings to the user for confirmation.
 
 ## Step 11: Refine this skill
 
-Run `/flywheel-refine-skill flywheel` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
+Run `/flywheel-refine-skill start` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.

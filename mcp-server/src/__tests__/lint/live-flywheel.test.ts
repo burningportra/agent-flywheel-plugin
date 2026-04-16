@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 // __tests__/lint/live-flywheel.test.ts → mcp-server/ is up 3 levels.
 const MCP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CLI = join(MCP_ROOT, "dist", "scripts", "lint-skill.js");
-const SKILL = "../skills/flywheel/SKILL.md";
+const SKILL = "../skills/start/SKILL.md";
 
 describe("live-flywheel canary", () => {
   it("CLI build artifact exists", () => {
