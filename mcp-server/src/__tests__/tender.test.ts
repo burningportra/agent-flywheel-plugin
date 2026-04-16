@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SwarmTender } from '../tender.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { SwarmTender, DEFAULT_TENDER_CONFIG, loadTenderConfig } from '../tender.js';
 import type { SwarmTenderOptions, AgentStatus, SwarmCompletionSummary } from '../tender.js';
 import type { ExecFn } from '../exec.js';
 
@@ -230,6 +233,109 @@ describe('SwarmTender — removeAgent and onSwarmComplete', () => {
 });
 
 // ─── getSummary ──────────────────────────────────────────────────
+
+// ─── loadTenderConfig ───────────────────────────────────────────
+
+describe('loadTenderConfig', () => {
+  let tmpDir: string;
+  const envKeys = [
+    'FLYWHEEL_TENDER_POLLINTERVAL',
+    'FLYWHEEL_TENDER_STUCKTHRESHOLD',
+    'FLYWHEEL_TENDER_IDLETHRESHOLD',
+    'FLYWHEEL_TENDER_CADENCEINTERVALMS',
+    'FLYWHEEL_TENDER_CROSSREVIEWINTERVALMS',
+    'FLYWHEEL_TENDER_COMMITCADENCEMS',
+    'FLYWHEEL_TENDER_NUDGEDELAYMS',
+    'FLYWHEEL_TENDER_MAXNUDGES',
+    'FLYWHEEL_TENDER_KILLWAITMS',
+    'FLYWHEEL_TENDER_MAXNUDGESPERPOLL',
+    'FLYWHEEL_TENDER_BOGUS',
+  ];
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tender-cfg-'));
+    for (const k of envKeys) delete process.env[k];
+  });
+
+  afterEach(() => {
+    for (const k of envKeys) delete process.env[k];
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns defaults when no file or env is present', () => {
+    const cfg = loadTenderConfig(tmpDir);
+    expect(cfg).toEqual(DEFAULT_TENDER_CONFIG);
+    // maxNudgesPerPoll default is 3
+    expect(cfg.maxNudgesPerPoll).toBe(3);
+  });
+
+  it('applies JSON file overrides', () => {
+    const cfgDir = path.join(tmpDir, '.pi-flywheel');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cfgDir, 'tender.config.json'),
+      JSON.stringify({ pollInterval: 1234, maxNudgesPerPoll: 7 })
+    );
+
+    const cfg = loadTenderConfig(tmpDir);
+    expect(cfg.pollInterval).toBe(1234);
+    expect(cfg.maxNudgesPerPoll).toBe(7);
+    // untouched keys keep their defaults
+    expect(cfg.stuckThreshold).toBe(DEFAULT_TENDER_CONFIG.stuckThreshold);
+  });
+
+  it('applies env var overrides', () => {
+    process.env.FLYWHEEL_TENDER_POLLINTERVAL = '5555';
+    process.env.FLYWHEEL_TENDER_MAXNUDGESPERPOLL = '9';
+
+    const cfg = loadTenderConfig(tmpDir);
+    expect(cfg.pollInterval).toBe(5555);
+    expect(cfg.maxNudgesPerPoll).toBe(9);
+  });
+
+  it('env var wins over file on conflict', () => {
+    const cfgDir = path.join(tmpDir, '.pi-flywheel');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cfgDir, 'tender.config.json'),
+      JSON.stringify({ pollInterval: 1111, maxNudges: 4 })
+    );
+    process.env.FLYWHEEL_TENDER_POLLINTERVAL = '9999';
+
+    const cfg = loadTenderConfig(tmpDir);
+    expect(cfg.pollInterval).toBe(9999); // env wins
+    expect(cfg.maxNudges).toBe(4);       // file-only key preserved
+  });
+
+  it('ignores unknown JSON keys and non-numeric values', () => {
+    const cfgDir = path.join(tmpDir, '.pi-flywheel');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cfgDir, 'tender.config.json'),
+      JSON.stringify({
+        notARealKey: 42,
+        pollInterval: 'not-a-number',
+        maxNudgesPerPoll: 11,
+      })
+    );
+
+    const cfg = loadTenderConfig(tmpDir);
+    // Unknown key doesn't leak onto the config object
+    expect((cfg as any).notARealKey).toBeUndefined();
+    // Non-numeric value is ignored, default preserved
+    expect(cfg.pollInterval).toBe(DEFAULT_TENDER_CONFIG.pollInterval);
+    // Valid entry alongside bad ones is still applied
+    expect(cfg.maxNudgesPerPoll).toBe(11);
+  });
+
+  it('ignores unknown FLYWHEEL_TENDER_* env vars', () => {
+    process.env.FLYWHEEL_TENDER_BOGUS = '123';
+    const cfg = loadTenderConfig(tmpDir);
+    expect((cfg as any).BOGUS).toBeUndefined();
+    expect((cfg as any).bogus).toBeUndefined();
+    expect(cfg).toEqual(DEFAULT_TENDER_CONFIG);
+  });
+});
 
 describe('SwarmTender — getSummary', () => {
   it('reflects active agent count', () => {
