@@ -43,7 +43,7 @@ interface CallToolHandlerDependencies {
   runners?: ToolRunnerMap;
 }
 
-export const TOOLS = [
+const PRIMARY_TOOLS = [
   {
     name: 'flywheel_profile',
     description: 'Scan the current repository to collect its tech stack, structure, commits, TODOs, and key files. Returns a structured profile and discovery instructions. Call this first before any other flywheel tool.',
@@ -223,6 +223,21 @@ export const TOOLS = [
   },
 ];
 
+/**
+ * Deprecated `orch_*` aliases for each primary `flywheel_*` tool.
+ * Kept for back-compat with legacy client installs — will be removed in v4.0.
+ */
+const DEPRECATED_ALIAS_TOOLS = PRIMARY_TOOLS.map((tool) => {
+  const aliasName = tool.name.replace(/^flywheel_/, 'orch_');
+  return {
+    ...tool,
+    name: aliasName,
+    description: `[DEPRECATED — use ${tool.name} instead; removed in v4.0] ${tool.description}`,
+  };
+});
+
+export const TOOLS = [...PRIMARY_TOOLS, ...DEPRECATED_ALIAS_TOOLS];
+
 const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   flywheel_profile: runProfile as ToolRunner,
   flywheel_discover: runDiscover as ToolRunner,
@@ -232,6 +247,15 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   flywheel_review: runReview as ToolRunner,
   flywheel_verify_beads: runVerifyBeads as ToolRunner,
   flywheel_memory: runMemory as ToolRunner,
+  // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
+  orch_profile: runProfile as ToolRunner,
+  orch_discover: runDiscover as ToolRunner,
+  orch_select: runSelect as ToolRunner,
+  orch_plan: runPlan as ToolRunner,
+  orch_approve_beads: runApprove as ToolRunner,
+  orch_review: runReview as ToolRunner,
+  orch_verify_beads: runVerifyBeads as ToolRunner,
+  orch_memory: runMemory as ToolRunner,
 };
 
 function isKnownToolName(name: string): name is FlywheelToolName {

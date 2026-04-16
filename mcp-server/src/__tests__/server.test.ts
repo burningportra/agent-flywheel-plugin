@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createCallToolHandler } from '../server.js';
+import { createCallToolHandler, TOOLS } from '../server.js';
 import { createInitialState } from '../types.js';
 
 describe('createCallToolHandler', () => {
@@ -89,6 +89,93 @@ describe('createCallToolHandler', () => {
         },
       },
     });
+  });
+
+  it('dispatches deprecated orch_profile alias to the same runner as flywheel_profile', async () => {
+    const structuredContent = {
+      tool: 'flywheel_profile',
+      version: 1,
+      status: 'ok',
+      phase: 'discovering',
+      data: { kind: 'profile_ready' },
+    };
+    const runProfile = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: 'Profile complete' }],
+      structuredContent,
+    });
+
+    const handler = createCallToolHandler({
+      makeExec: vi.fn(() => vi.fn()),
+      loadState: vi.fn(() => createInitialState()),
+      saveState: vi.fn(),
+      clearState: vi.fn(),
+      runners: {
+        flywheel_profile: runProfile,
+        orch_profile: runProfile,
+      },
+    });
+
+    const primary = await handler({
+      params: { name: 'flywheel_profile', arguments: { cwd: '/tmp/repo' } },
+    } as never);
+    const alias = await handler({
+      params: { name: 'orch_profile', arguments: { cwd: '/tmp/repo' } },
+    } as never);
+
+    expect(runProfile).toHaveBeenCalledTimes(2);
+    expect(primary.structuredContent).toBe(structuredContent);
+    expect(alias.structuredContent).toBe(structuredContent);
+    expect(alias).toEqual(primary);
+  });
+
+  it('dispatches deprecated orch_memory alias to the same runner as flywheel_memory', async () => {
+    const runMemory = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: 'Memory result' }],
+    });
+
+    const handler = createCallToolHandler({
+      makeExec: vi.fn(() => vi.fn()),
+      loadState: vi.fn(() => createInitialState()),
+      saveState: vi.fn(),
+      clearState: vi.fn(),
+      runners: {
+        flywheel_memory: runMemory,
+        orch_memory: runMemory,
+      },
+    });
+
+    const primary = await handler({
+      params: { name: 'flywheel_memory', arguments: { cwd: '/tmp/repo' } },
+    } as never);
+    const alias = await handler({
+      params: { name: 'orch_memory', arguments: { cwd: '/tmp/repo' } },
+    } as never);
+
+    expect(runMemory).toHaveBeenCalledTimes(2);
+    expect(alias).toEqual(primary);
+  });
+
+  it('exposes orch_* aliases in the TOOLS list with a DEPRECATED description prefix', () => {
+    const primaryNames = [
+      'flywheel_profile',
+      'flywheel_discover',
+      'flywheel_select',
+      'flywheel_plan',
+      'flywheel_approve_beads',
+      'flywheel_review',
+      'flywheel_verify_beads',
+      'flywheel_memory',
+    ];
+    for (const primary of primaryNames) {
+      const aliasName = primary.replace(/^flywheel_/, 'orch_');
+      const aliasTool = TOOLS.find((t) => t.name === aliasName);
+      expect(aliasTool, `missing alias ${aliasName}`).toBeDefined();
+      expect(aliasTool!.description).toMatch(
+        new RegExp(`^\\[DEPRECATED — use ${primary} instead; removed in v4\\.0\\]`)
+      );
+      const primaryTool = TOOLS.find((t) => t.name === primary)!;
+      expect(aliasTool!.inputSchema).toEqual(primaryTool.inputSchema);
+    }
   });
 
   it('returns structured internal errors when a tool runner throws', async () => {

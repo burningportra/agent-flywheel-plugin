@@ -133,6 +133,10 @@ claude --plugin-dir .
 - **Structured logging via `createLogger`** - all diagnostic output writes JSON lines to stderr (`FW_LOG_LEVEL` controls verbosity). Never touches stdout, keeping the MCP JSON-RPC channel clean.
 - **SwarmTender auto-escalation** - `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudgesPerPoll` per poll cycle, default 3), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `flywheelAgentName`; backward compatible when unset.
 
+## Tool name deprecation
+
+The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names remain registered as deprecated aliases for back-compat with legacy installs and dispatch to the same runners. They will be removed in v4.0 — prefer the `flywheel_*` names.
+
 ## Models used
 
 | Role | Model |
