@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ExecFn } from "./exec.js";
 import type { RepoProfile, TodoItem, CommitSummary } from "./types.js";
 import { createLogger } from './logger.js';
+import { selectScanners } from './todo-scanner.js';
 
 const log = createLogger('profiler');
 
@@ -210,45 +211,9 @@ async function collectTodos(
   cwd: string,
   signal?: AbortSignal
 ): Promise<TodoItem[]> {
-  const result = await exec(
-    "grep",
-    [
-      "-rn",
-      "--include=*.ts", "--include=*.js", "--include=*.tsx", "--include=*.jsx",
-      "--include=*.py", "--include=*.rs", "--include=*.go", "--include=*.rb",
-      "--include=*.java", "--include=*.kt", "--include=*.swift",
-      "--exclude-dir=node_modules",
-      "--exclude-dir=.git",
-      "--exclude-dir=dist",
-      "--exclude-dir=build",
-      "--exclude-dir=vendor",
-      "--exclude-dir=target",
-      "--exclude-dir=__pycache__",
-      "--exclude-dir=.venv",
-      "--exclude-dir=.pi-flywheel",
-      "-E", "(TODO|FIXME|HACK|XXX):",
-      ".",
-    ],
-    { timeout: 10000, cwd, signal }
-  );
-  if (result.code !== 0) return [];
-  return result.stdout
-    .split("\n")
-    .filter(Boolean)
-    .slice(0, 50)
-    .map((line) => {
-      const match = line.match(
-        /^\.\/(.+?):(\d+):\s*.*?(TODO|FIXME|HACK|XXX):\s*(.*)$/
-      );
-      if (!match) return null;
-      return {
-        file: match[1],
-        line: parseInt(match[2], 10),
-        type: match[3] as TodoItem["type"],
-        text: match[4].trim(),
-      };
-    })
-    .filter((t): t is TodoItem => t !== null);
+  const scanners = selectScanners();
+  const results = await Promise.all(scanners.map((s) => s.scan(exec, cwd, signal)));
+  return results.flat();
 }
 
 async function collectKeyFiles(
