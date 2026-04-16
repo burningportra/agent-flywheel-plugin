@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   forceReleaseFileReservation,
@@ -43,7 +44,7 @@ export interface TenderConfig {
   /** How long to wait after last nudge before kill (default 120_000). */
   killWaitMs: number;
   /** Max nudges to send across all agents in a single poll cycle (default 3). */
-  maxNudgesPerPoll?: number;
+  maxNudgesPerPoll: number;
 }
 
 export interface ConflictAlert {
@@ -60,7 +61,7 @@ export interface SwarmCompletionSummary {
   stuckAgentNames: string[];
 }
 
-const DEFAULT_CONFIG: TenderConfig = {
+export const DEFAULT_TENDER_CONFIG: TenderConfig = {
   pollInterval: 60_000,
   stuckThreshold: 300_000,
   idleThreshold: 120_000,
@@ -70,7 +71,79 @@ const DEFAULT_CONFIG: TenderConfig = {
   nudgeDelayMs: 0,
   maxNudges: 2,
   killWaitMs: 120_000,
+  maxNudgesPerPoll: 3,
 };
+
+/**
+ * Load a TenderConfig by shallow-merging (in order):
+ *   1. DEFAULT_TENDER_CONFIG
+ *   2. <cwd>/.pi-flywheel/tender.config.json (if present)
+ *   3. FLYWHEEL_TENDER_<FIELD> env vars (env wins over file)
+ *
+ * All fields are numbers; non-numeric values or unknown keys are logged
+ * (warn) and ignored.
+ *
+ * Env var field name is the uppercased config key with no separators —
+ * e.g. `pollInterval` → `FLYWHEEL_TENDER_POLLINTERVAL`,
+ *      `maxNudgesPerPoll` → `FLYWHEEL_TENDER_MAXNUDGESPERPOLL`.
+ */
+export function loadTenderConfig(cwd: string): TenderConfig {
+  const log = createLogger("tender");
+  const merged: TenderConfig = { ...DEFAULT_TENDER_CONFIG };
+  const validKeys = Object.keys(DEFAULT_TENDER_CONFIG) as (keyof TenderConfig)[];
+  const upperToKey = new Map<string, keyof TenderConfig>(
+    validKeys.map((k) => [k.toUpperCase(), k])
+  );
+
+  // 1. File overrides
+  const filePath = path.join(cwd, ".pi-flywheel", "tender.config.json");
+  if (fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        for (const [key, value] of Object.entries(parsed)) {
+          if (!validKeys.includes(key as keyof TenderConfig)) {
+            log.warn("Ignoring unknown key in tender.config.json", { key });
+            continue;
+          }
+          if (typeof value !== "number" || !Number.isFinite(value)) {
+            log.warn("Ignoring non-numeric value in tender.config.json", { key, value });
+            continue;
+          }
+          merged[key as keyof TenderConfig] = value;
+        }
+      } else {
+        log.warn("tender.config.json is not a JSON object; ignoring", { filePath });
+      }
+    } catch (err) {
+      log.warn("Failed to read/parse tender.config.json", {
+        filePath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // 2. Env var overrides (win over file)
+  const envPrefix = "FLYWHEEL_TENDER_";
+  for (const [envName, rawValue] of Object.entries(process.env)) {
+    if (!envName.startsWith(envPrefix) || rawValue === undefined) continue;
+    const suffix = envName.slice(envPrefix.length);
+    const key = upperToKey.get(suffix);
+    if (!key) {
+      log.warn("Ignoring unknown FLYWHEEL_TENDER_* env var", { envName });
+      continue;
+    }
+    const numeric = Number(rawValue);
+    if (!Number.isFinite(numeric)) {
+      log.warn("Ignoring non-numeric FLYWHEEL_TENDER_* env var", { envName, value: rawValue });
+      continue;
+    }
+    merged[key] = numeric;
+  }
+
+  return merged;
+}
 
 const CADENCE_CHECKLIST = `## Operator Cadence Check (every ~20 min (configurable via cadenceIntervalMs))
 
@@ -131,8 +204,7 @@ export class SwarmTender {
   ) {
     this.exec = exec;
     this.cwd = cwd;
-    this.config = { ...DEFAULT_CONFIG, ...options?.config };
-    this.config.maxNudgesPerPoll = this.config.maxNudgesPerPoll ?? 3;
+    this.config = { ...DEFAULT_TENDER_CONFIG, ...options?.config };
     if (this.config.nudgeDelayMs > this.config.killWaitMs) {
       process.stderr.write(`[tender] WARNING: nudgeDelayMs (${this.config.nudgeDelayMs}) > killWaitMs (${this.config.killWaitMs}) — agents will never be killed after nudging\n`);
     }
@@ -244,7 +316,7 @@ export class SwarmTender {
           const shouldKill = agent.nudgesSent >= this.config.maxNudges &&
             (now - agent.lastNudgedAt) >= this.config.killWaitMs;
 
-          if (canNudge && nudgesThisCycle < (this.config.maxNudgesPerPoll ?? 3)) {
+          if (canNudge && nudgesThisCycle < this.config.maxNudgesPerPoll) {
             const agentName = path.basename(agent.worktreePath);
             nudgesThisCycle++; // increment synchronously before async call to enforce budget
             this.nudgeStuckAgent(agentName, agent.worktreePath)
