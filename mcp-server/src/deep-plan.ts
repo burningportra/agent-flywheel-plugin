@@ -2,11 +2,41 @@ import type { ExecFn } from "./exec.js";
 import { join } from "path";
 import { writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
+import { loadCachedProfile, profileRepo, saveCachedProfile } from "./profiler.js";
 
 export interface DeepPlanAgent {
   name: string;
   task: string;
   model?: string;
+}
+
+/**
+ * Compute or load the repo profile snapshot and persist it as JSON under outputDir.
+ * Returns the absolute path to the snapshot, or null if profiling failed entirely.
+ * Exported for testability.
+ */
+export async function writeProfileSnapshot(
+  exec: ExecFn,
+  cwd: string,
+  outputDir: string,
+  signal?: AbortSignal
+): Promise<string | null> {
+  try {
+    let profile = await loadCachedProfile(exec, cwd);
+    if (!profile) {
+      profile = await profileRepo(exec, cwd, signal);
+      // Fire-and-forget cache save; don't let it block planners.
+      saveCachedProfile(exec, cwd, profile).catch(() => { /* ignore */ });
+    }
+    const snapshotPath = join(outputDir, "profile-snapshot.json");
+    writeFileSync(snapshotPath, JSON.stringify(profile, null, 2), "utf8");
+    return snapshotPath;
+  } catch (err) {
+    process.stderr.write(
+      `[deep-plan] WARNING: Could not compute profile snapshot: ${err instanceof Error ? err.message : String(err)}\n`
+    );
+    return null;
+  }
 }
 
 export interface DeepPlanResult {
@@ -44,13 +74,19 @@ export async function runDeepPlanAgents(
     process.stderr.write(`[deep-plan] WARNING: Could not create output dir ${outputDir}, falling back to ${resolvedOutputDir}\n`);
   }
 
+  // Compute/load shared profile snapshot once and hand path to each planner.
+  const snapshotPath = await writeProfileSnapshot(exec, cwd, resolvedOutputDir, signal);
+  const snapshotPreamble = snapshotPath
+    ? `Shared repo profile available at: ${snapshotPath}. Read it once with the Read tool before scanning; do NOT rerun broad grep/ls unless the snapshot is missing fields you need.\n\n`
+    : "";
+
   const promises = agents.map(async (agent) => {
     const startTime = Date.now();
     const taskFile = join(resolvedOutputDir, `${agent.name}-task.md`);
     const outputFile = join(resolvedOutputDir, `${agent.name}-output.md`);
 
     try {
-      writeFileSync(taskFile, agent.task, "utf8");
+      writeFileSync(taskFile, `${snapshotPreamble}${agent.task}`, "utf8");
 
       const args = [
         "--print",            // non-interactive, output to stdout
