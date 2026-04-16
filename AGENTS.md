@@ -134,6 +134,10 @@ cd mcp-server && npm test
 
 Test files live in `mcp-server/src/__tests__/`. Follow existing patterns — use `vi.mock` for external deps, `vi.spyOn(process.stderr, 'write')` to capture logger output, `vi.useFakeTimers()` for time-dependent tests. Always add a regression test when fixing a bug.
 
+## Tool name deprecation
+
+The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names are preserved as deprecated aliases that dispatch to the same runners, and will be removed in v4.0. Always use the `flywheel_*` names in new code and docs.
+
 ## SKILL.md linting
 
 Changes to `skills/start/SKILL.md` (and any future SKILL.md files) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, and Universal Rule 1 enforcement.

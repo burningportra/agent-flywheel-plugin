@@ -477,7 +477,16 @@ export type FlywheelToolName =
   | 'flywheel_approve_beads'
   | 'flywheel_review'
   | 'flywheel_verify_beads'
-  | 'flywheel_memory';
+  | 'flywheel_memory'
+  // Deprecated orch_* aliases — kept for back-compat, removed in v4.0.
+  | 'orch_profile'
+  | 'orch_discover'
+  | 'orch_select'
+  | 'orch_plan'
+  | 'orch_approve_beads'
+  | 'orch_review'
+  | 'orch_verify_beads'
+  | 'orch_memory';
 
 export interface ToolChoiceOption {
   id: string;
