@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ExecFn } from "./exec.js";
 import type { RepoProfile, TodoItem, CommitSummary } from "./types.js";
 import { createLogger } from './logger.js';
-import { selectScanners } from './todo-scanner.js';
+import { selectScanners, mergeAndDedup } from './todo-scanner.js';
 
 const log = createLogger('profiler');
 
@@ -213,7 +213,7 @@ async function collectTodos(
 ): Promise<TodoItem[]> {
   const scanners = selectScanners();
   const results = await Promise.all(scanners.map((s) => s.scan(exec, cwd, signal)));
-  return results.flat();
+  return mergeAndDedup(results.flat());
 }
 
 async function collectKeyFiles(
