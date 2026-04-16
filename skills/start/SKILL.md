@@ -92,6 +92,7 @@ Gather context silently (do NOT display raw output yet). Run checks 1-5 in paral
 4. **Git status**: Run `git log --oneline -1` to get latest commit.
 5. **CASS memory**: Call `flywheel_memory` with `operation: "search"` and `query: "session learnings flywheel"` to load prior session context. If CASS is unavailable, skip silently.
 6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/flywheel-setup` — single-agent workflows work fine without it.
+7. **NTM**: Run `which ntm 2>/dev/null` via Bash. If found, set `NTM_AVAILABLE = true` and display `NTM: available` in the banner. When NTM is available, it is the **preferred** mechanism for launching parallel agents (both planners and impl agents) — use `ntm spawn` + `ntm send` instead of the `Agent()` tool. This gives the user visible tmux panes they can observe and interact with directly. If NTM is unavailable, fall back to the `Agent()` tool as described in the default flow.
 
 ### 0c. Display the welcome banner
 
@@ -437,7 +438,20 @@ AskUserQuestion(questions: [{
 
 2. **Create a team** — call `TeamCreate` with a descriptive `team_name` (e.g. `"deep-plan-<slug>"`).
 
-3. **Spawn 3 plan agents IN PARALLEL** using the Agent tool with `team_name` set and `run_in_background: true` so they get task IDs (required for `TaskStop` if they become unresponsive):
+3. **Spawn 3 plan agents IN PARALLEL.**
+
+   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn planners into visible tmux panes:
+   ```bash
+   ntm spawn deep-plan-<slug> --cc=1 --cod=1 --gmi=1
+   ntm send deep-plan-<slug> --pane=cc-1 "<correctness planner prompt>"
+   ntm send deep-plan-<slug> --pane=cod-1 "<ergonomics planner prompt>"
+   ntm send deep-plan-<slug> --pane=gmi-1 "<robustness planner prompt>"
+   ```
+   Each agent's prompt MUST still include the Agent Mail bootstrap (`macro_start_session`, `send_message` to coordinator on completion). NTM handles the process lifecycle; Agent Mail handles the coordination protocol.
+
+   Monitor via `ntm status deep-plan-<slug>` and `fetch_inbox`. If a pane goes idle, nudge with `ntm send deep-plan-<slug> --pane=<pane> "Your plan is needed — please complete and send via Agent Mail."`.
+
+   **If NTM is unavailable** (fallback): Use the Agent tool with `team_name` set and `run_in_background: true` so they get task IDs (required for `TaskStop` if they become unresponsive):
    - `Agent(model: "opus", name: "correctness-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
    - `Agent(model: "sonnet", name: "ergonomics-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
    - `Agent(subagent_type: "codex:codex-rescue", name: "robustness-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
@@ -890,7 +904,24 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    ```
    > **NOTE:** If a planning team (e.g. `"deep-plan-<slug>"`) is still active from Step 5, you must delete it first via `TeamDelete(team_name: "deep-plan-<slug>")` before creating the impl team. If `TeamDelete` fails because agents are still registered, retire them via Agent Mail `retire_agent` first, then retry `TeamDelete`. Alternatively, reuse the existing planning team by passing its `team_name` to impl agents.
 
-2. Spawn an implementation agent with team membership. **Agent Mail bootstrap is only required for parallel beads** — if beads are sequential (linear dependency chain, one agent at a time), omit STEP 0 to reduce overhead. For parallel beads, include the strict bootstrap to prevent file conflicts:
+2. **Choose spawn mechanism based on NTM availability.**
+
+   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn impl agents into visible tmux panes. This lets the user observe all agents working in real-time:
+   ```bash
+   # Spawn panes for the wave (scale cc/cod/gmi per the agent ratio table above)
+   ntm spawn impl-<goal-slug> --cc=<N> --cod=<M> --gmi=<K>
+   # Dispatch each bead to a pane
+   ntm send impl-<goal-slug> --pane=cc-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
+   ntm send impl-<goal-slug> --pane=cod-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
+   ```
+   - Stagger sends by 30 seconds (thundering-herd mitigation still applies).
+   - Monitor via `ntm status impl-<goal-slug>` and `fetch_inbox` for completion messages.
+   - Nudge idle panes: `ntm send impl-<goal-slug> --pane=<pane> "Please report status and any blockers."`.
+   - The Agent Mail STEP 0 bootstrap is still MANDATORY in each pane's prompt — NTM handles process lifecycle; Agent Mail handles coordination protocol, file reservations, and audit trail.
+
+   **If NTM is unavailable** (fallback): Spawn via the `Agent()` tool as described below.
+
+3. Spawn an implementation agent with team membership. **Agent Mail bootstrap is ALWAYS required** — every impl agent must register, reserve files, and send start/done messages regardless of isolation mode or file overlap. The message trail creates a coordination audit log for debugging, session history, and CASS memory:
    ```
    Agent(
      subagent_type: "general-purpose",
