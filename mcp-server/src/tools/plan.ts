@@ -219,7 +219,9 @@ Write a comprehensive implementation plan from your designated perspective. The 
 - Risk & mitigation
 - Target: 500-2000 lines of detailed content
 
-Focus deeply on your assigned perspective lens.`;
+Focus deeply on your assigned perspective lens.
+
+Use ultrathink.`;
 
   const dynamicModels = getDeepPlanModels();
 
@@ -275,7 +277,9 @@ Question every architectural choice: is there a simpler way? A more standard app
     constraints: state.constraints,
     planAgents,
     instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
-    synthesisPrompt: `## Best-of-All-Worlds Synthesis
+    synthesisPrompt: `Use ultrathink.
+
+## Best-of-All-Worlds Synthesis
 
 Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
 
