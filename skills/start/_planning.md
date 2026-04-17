@@ -41,16 +41,19 @@ AskUserQuestion(questions: [{
 
 3. **Spawn 3 plan agents IN PARALLEL.**
 
-   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn planners into visible tmux panes:
+   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn planners into visible tmux panes. `ntm spawn` takes a project name (which must be a directory under `projects_base`) and uses `--label` for the per-purpose suffix. Use `$NTM_PROJECT` captured in Step 0b (which equals `basename $PWD`):
    ```bash
-   ntm spawn deep-plan-<slug> --cc=1 --cod=1 --gmi=1
-   ntm send deep-plan-<slug> --pane=cc-1 "<correctness planner prompt>"
-   ntm send deep-plan-<slug> --pane=cod-1 "<ergonomics planner prompt>"
-   ntm send deep-plan-<slug> --pane=gmi-1 "<robustness planner prompt>"
+   SESSION="${NTM_PROJECT}--deep-plan-<slug>"
+   ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --cc=1 --cod=1 --gmi=1
+   ntm send "$SESSION" --pane=cc-1 "<correctness planner prompt>"
+   ntm send "$SESSION" --pane=cod-1 "<ergonomics planner prompt>"
+   ntm send "$SESSION" --pane=gmi-1 "<robustness planner prompt>"
    ```
    Each agent's prompt MUST still include the Agent Mail bootstrap (`macro_start_session`, `send_message` to coordinator on completion). NTM handles the process lifecycle; Agent Mail handles the coordination protocol.
 
-   Monitor via `ntm status deep-plan-<slug>` and `fetch_inbox`. If a pane goes idle, nudge with `ntm send deep-plan-<slug> --pane=<pane> "Your plan is needed — please complete and send via Agent Mail."`.
+   Monitor via `ntm status "$SESSION"` and `fetch_inbox`. If a pane goes idle, nudge with `ntm send "$SESSION" --pane=<pane> "Your plan is needed — please complete and send via Agent Mail."`.
+
+   ⚠ Do NOT use `ntm spawn deep-plan-<slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and a `deep-plan-<slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
 
    **If NTM is unavailable** (fallback): Use the Agent tool with `team_name` set and `run_in_background: true` so they get task IDs (required for `TaskStop` if they become unresponsive):
    - `Agent(model: "opus", name: "correctness-planner", team_name: "<team>", run_in_background: true, prompt: "...")`

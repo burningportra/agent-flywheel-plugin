@@ -83,6 +83,37 @@ Run `ntm --version` via Bash.
   - On consent: `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/ntm/main/install.sh" | bash`
   - On refusal: print the install command and continue.
 
+**After ntm is installed, verify it's usable for THIS project.** Installation alone is not enough — `ntm spawn <name>` resolves to `projects_base/<name>` and fails (or lands in the wrong cwd) if the current project isn't reachable under `projects_base`. The flywheel's planning/impl phases will silently fall back to `Agent()` without this check.
+
+```bash
+NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
+PROJECT_BASENAME=$(basename "$PWD")
+echo "ntm projects_base: $NTM_BASE"
+echo "current project:   $PROJECT_BASENAME"
+[ -d "$NTM_BASE/$PROJECT_BASENAME" ] && echo "OK: $NTM_BASE/$PROJECT_BASENAME exists" || echo "MISSING: $NTM_BASE/$PROJECT_BASENAME"
+```
+
+If `MISSING`, ask the user how to resolve:
+
+```
+AskUserQuestion(questions: [{
+  question: "ntm is installed but projects_base=<NTM_BASE> doesn't contain <PROJECT_BASENAME>. How should I configure it?",
+  header: "ntm setup",
+  options: [
+    { label: "Symlink project under projects_base", description: "ln -s $PWD $NTM_BASE/$PROJECT_BASENAME — keeps ntm's default base, adds this project to it (Recommended)" },
+    { label: "Change projects_base to current parent", description: "ntm config set projects_base $(dirname $PWD) — affects all future ntm sessions" },
+    { label: "Skip ntm configuration", description: "Flywheel will use Agent() fallback for parallel work" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **Symlink**: `ln -s "$PWD" "$NTM_BASE/$PROJECT_BASENAME"` (fail softly if it already exists).
+- **Change base**: `ntm config set projects_base "$(dirname "$PWD")"` — warn the user this affects every project ntm manages.
+- **Skip**: continue without blocking.
+
+After any fix, re-run the directory check to confirm `$NTM_BASE/$PROJECT_BASENAME` now resolves.
+
 ### 7. dcg (Destructive Command Guard)
 
 Run `dcg --version` via Bash (or check if the dcg hook exists in `.claude/settings.json`).

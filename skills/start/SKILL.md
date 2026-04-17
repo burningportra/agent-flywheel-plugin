@@ -117,7 +117,23 @@ Gather context silently (do NOT display raw output yet). Run checks 1-7 in paral
 4. **Git status**: Run `git log --oneline -1` to get latest commit.
 5. **CASS memory**: Call `flywheel_memory` with `operation: "search"` and `query: "session learnings flywheel"` to load prior session context. If CASS is unavailable, skip silently.
 6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/flywheel-setup` — single-agent workflows work fine without it.
-7. **NTM**: Run `which ntm 2>/dev/null` via Bash. If found, set `NTM_AVAILABLE = true` and display `NTM: available` in the banner. When NTM is available, it is the **preferred** mechanism for launching parallel agents (both planners and impl agents) — use `ntm spawn` + `ntm send` instead of the `Agent()` tool. This gives the user visible tmux panes they can observe and interact with directly. If NTM is unavailable, fall back to the `Agent()` tool as described in the default flow.
+7. **NTM**: Run `which ntm 2>/dev/null` via Bash. If not found, set `NTM_AVAILABLE = false` and skip the rest of this check. If found, do NOT declare availability yet — `ntm spawn` requires the current project to live under `projects_base`, and failing that, it will cd into the wrong directory (or fail outright). Run these follow-up checks:
+
+   ```bash
+   NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
+   PROJECT_BASENAME=$(basename "$PWD")
+   if [ -n "$NTM_BASE" ] && [ -d "$NTM_BASE/$PROJECT_BASENAME" ]; then
+     echo "ntm-ready project=$PROJECT_BASENAME base=$NTM_BASE"
+   else
+     echo "ntm-misconfigured base=$NTM_BASE project=$PROJECT_BASENAME"
+   fi
+   ```
+
+   - `ntm-ready` → set `NTM_AVAILABLE = true`, capture `NTM_PROJECT = $PROJECT_BASENAME`, display `NTM: available` in the banner. Preferred mechanism for launching parallel agents (planners and impl agents) — use `ntm spawn <NTM_PROJECT> --label <purpose>` + `ntm send` instead of the `Agent()` tool. Gives the user visible tmux panes they can observe and interact with directly.
+   - `ntm-misconfigured` → set `NTM_AVAILABLE = false`, display `NTM: installed but not configured (projects_base=<base>, missing <base>/<PROJECT_BASENAME>)` in the banner, and mention that `/flywheel-setup` can fix it via either `ntm config set projects_base <parent>` or a symlink. Fall back to `Agent()` for this session.
+   - Bash error / `NTM_BASE` empty → set `NTM_AVAILABLE = false`, treat like ntm-misconfigured.
+
+   Never set `NTM_AVAILABLE = true` based on `which ntm` alone — the spawn step downstream will silently fail.
 
 ### 0c. Display the welcome banner
 

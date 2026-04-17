@@ -47,18 +47,21 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
 2. **Choose spawn mechanism based on NTM availability.**
 
-   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn impl agents into visible tmux panes. This lets the user observe all agents working in real-time:
+   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn impl agents into visible tmux panes. This lets the user observe all agents working in real-time. `ntm spawn` takes a project name (which must be a directory under `projects_base`) and uses `--label` for the per-purpose suffix. Use `$NTM_PROJECT` captured in Step 0b (which equals `basename $PWD`):
    ```bash
+   SESSION="${NTM_PROJECT}--impl-<goal-slug>"
    # Spawn panes for the wave (scale cc/cod/gmi per the agent ratio table above)
-   ntm spawn impl-<goal-slug> --cc=<N> --cod=<M> --gmi=<K>
+   ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --cc=<N> --cod=<M> --gmi=<K>
    # Dispatch each bead to a pane
-   ntm send impl-<goal-slug> --pane=cc-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
-   ntm send impl-<goal-slug> --pane=cod-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
+   ntm send "$SESSION" --pane=cc-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
+   ntm send "$SESSION" --pane=cod-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
    ```
    - Stagger sends by 30 seconds (thundering-herd mitigation still applies).
-   - Monitor via `ntm status impl-<goal-slug>` and `fetch_inbox` for completion messages.
-   - Nudge idle panes: `ntm send impl-<goal-slug> --pane=<pane> "Please report status and any blockers."`.
+   - Monitor via `ntm status "$SESSION"` and `fetch_inbox` for completion messages.
+   - Nudge idle panes: `ntm send "$SESSION" --pane=<pane> "Please report status and any blockers."`.
    - The Agent Mail STEP 0 bootstrap is still MANDATORY in each pane's prompt — NTM handles process lifecycle; Agent Mail handles coordination protocol, file reservations, and audit trail.
+
+   ⚠ Do NOT use `ntm spawn impl-<goal-slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and an `impl-<goal-slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
 
    **If NTM is unavailable** (fallback): Spawn via the `Agent()` tool as described below.
 
