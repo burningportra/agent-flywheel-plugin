@@ -143,7 +143,17 @@ export async function runDeepPlanAgents(
 
   // Run all in parallel, then filter to only viable results for synthesis
   const allResults = await Promise.all(promises);
-  return filterViableResults(allResults);
+  const viable = filterViableResults(allResults);
+  if (viable.length === 0) {
+    process.stderr.write(
+      `[deep-plan] WARNING: All ${allResults.length} planners failed or timed out. Synthesis will be empty.\n`
+    );
+  } else if (viable.length < allResults.length) {
+    process.stderr.write(
+      `[deep-plan] WARNING: Only ${viable.length}/${allResults.length} planners succeeded.\n`
+    );
+  }
+  return viable;
 }
 
 /**

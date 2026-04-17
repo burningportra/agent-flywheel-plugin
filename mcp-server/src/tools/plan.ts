@@ -108,6 +108,9 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
 
   // ── If planContent is provided inline, write it to disk then register ──
   if (args.planContent && args.planContent.trim()) {
+    if (args.planContent.includes("(No planner outputs provided.)")) {
+      throw new Error("Deep plan failed: all perspective planners timed out or produced no output.");
+    }
     const planDir = join(cwd, 'docs', 'plans');
     mkdirSync(planDir, { recursive: true });
     const planFilePath = join(planDir, `${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`);
