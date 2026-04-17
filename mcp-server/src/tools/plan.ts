@@ -202,7 +202,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
     if (mem) memorySection = `\n## Prior Session Context\n${mem}\n`;
   } catch { /* CASS unavailable — proceed without */ }
 
-  const basePrompt = `You are a planning agent for an agentic coding workflow.
+  const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
@@ -276,6 +276,8 @@ Question every architectural choice: is there a simpler way? A more standard app
     planAgents,
     instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
     synthesisPrompt: `## Best-of-All-Worlds Synthesis
+
+Use ultrathink.
 
 Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
 

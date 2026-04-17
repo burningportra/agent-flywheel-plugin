@@ -277,4 +277,24 @@ describe('runPlan', () => {
 
     expect(state.phase).toBe('planning');
   });
+
+  it('each planAgent task contains "Use ultrathink." in deep mode', async () => {
+    const { ctx } = makeCtx();
+
+    const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
+
+    const structured = result.structuredContent as { data: { planAgents: Array<{ task: string }> } };
+    for (const agent of structured.data.planAgents) {
+      expect(agent.task).toContain('Use ultrathink.');
+    }
+  });
+
+  it('synthesisPrompt contains "Use ultrathink." in deep mode', async () => {
+    const { ctx } = makeCtx();
+
+    const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
+
+    const structured = result.structuredContent as { data: { synthesisPrompt: string } };
+    expect(structured.data.synthesisPrompt).toContain('Use ultrathink.');
+  });
 });
