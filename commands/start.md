@@ -6,277 +6,427 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
 
 Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `--mode single-branch`)
 
-## Step 1: Check for existing session
+> ## ⚠️ UNIVERSAL RULE 1 — `AskUserQuestion` is the only way to ask the user anything
+>
+> Every user decision in this skill — phase routing, plan refinement, bead approval, launch confirmation, wrap-up choices, recovery branches — MUST be presented via the `AskUserQuestion` tool with concrete labeled options (2–4 per question). Free-text "ask the user…" prompts, "wait for confirmation", "wait for the user's next message", or implicit decision points are bugs. The "Other" field absorbs custom answers when none of the prepared options fit.
+>
+> If you find yourself about to write text like *"surface this to the user"*, *"propose this to the user"*, *"check with the user"*, or *"only do X if the user confirms"* — STOP and write an `AskUserQuestion` call instead. No exceptions.
+>
+> ## ⚠️ UNIVERSAL RULE 2 — invoke specialist skills by name when they apply
+>
+> This SKILL references many specialist skills by slash-name (`/idea-wizard`, `/ubs-workflow`, `/caam`, `/ui-polish`, `/docs-de-slopify`, testing-*, stack-specific skills, etc.). When a step names one, invoke it via the `Skill` tool rather than re-implementing its logic inline. Specialist skills carry project-tested prompts and conventions you don't have time to recreate.
+>
+> Equally important: if a step does NOT name a skill but you notice one applies to the situation (e.g. a React component bead and `/react-component-generator` exists), invoke it anyway. Skills are hints-with-authority — use them by default, skip only when they clearly don't fit.
 
-Read `.pi-flywheel/checkpoint.json` if it exists. If a non-idle/non-complete session is found, ask the user:
+> ## ⚠️ UNIVERSAL RULE 3 — load phase instructions on demand
+>
+> Steps 5–12 are stored in separate files to keep this prompt within token limits. When you reach a phase boundary, **Read** the corresponding file from `skills/start/`:
+>
+> | Phase | File | Steps |
+> |-------|------|-------|
+> | Planning | `_planning.md` | 5, 5.55, 5.6 |
+> | Bead creation & approval | `_beads.md` | 5.5, 6 |
+> | Implementation | `_implement.md` | 7 |
+> | Review & loop | `_review.md` | 8, 9, 9.25, 9.4 |
+> | Wrap-up & post-flywheel | `_wrapup.md` | 9.5, 10, 11, 12 |
+>
+> Read the file **before** executing that phase. Do NOT guess or improvise the instructions — the sub-files contain critical gates, edge-case handling, and AskUserQuestion templates.
 
-> "I found a previous session (phase: `<phase>`, goal: `<goal>`). What would you like to do?
-> 1. Resume from where we left off
-> 2. Start fresh (discards previous state)"
+## Step 0: Opening Ceremony
 
-If the user chooses to start fresh, delete the checkpoint file.
+### 0.banner — SHOW THIS FIRST, ALWAYS
+
+**Before any tool calls, before any other reads, print the banner.** This is the first visible output of the skill. Use the version from `mcp-server/package.json` (default to `3.0.0` if unreadable).
+
+```
+░▒▓ CLAUDE // AGENT-FLYWHEEL v<VERSION> ▓▒░
+```
+
+Output it as a plain code block so the user always sees the banner even if the rest of the skill fails. Then continue with 0.preflight.
+
+### 0.preflight — Captured user input
+
+If the user's prompt contains anything beyond `/start <args>` — a goal sentence, a pasted plan, a path to a plan file, a directive like "fix X then Y" — capture it as `USER_INPUT` and treat it as a candidate goal or plan. **Do NOT act on it yet. Do NOT skip the welcome banner or Step 0b detection.** Run the full Step 0a–0d flow silently so the user sees current state (existing session, open beads, AM status) before deciding.
+
+Then route in Step 0e instead of showing the default main menu:
+
+**Classification heuristics**:
+- **Plan-shaped USER_INPUT** — multi-paragraph, contains `##`/`###` headers, mentions specific files, OR is an existing path matching `docs/plans/*.md` → treat as plan.
+- **Goal-shaped USER_INPUT** — ≤300 chars, no markdown headers, reads as one or two sentences → treat as goal.
+- **Ambiguous** — long unstructured prose → treat as goal but route through `/brainstorming` to refine first.
+
+**Routing override for Step 0e** (only when USER_INPUT is non-empty):
+
+- Plan-shaped:
+  ```
+  AskUserQuestion(questions: [{
+    question: "I see a plan in your message ('<first 60 chars>…'). What should I do with it?",
+    header: "Plan input",
+    options: [
+      { label: "Use as plan", description: "Register via flywheel_plan and jump to bead creation (Recommended)" },
+      { label: "Treat as goal", description: "Use the plan content as the goal description and run the full flywheel from Step 4" },
+      { label: "Discard", description: "Ignore the input and show the regular start menu" }
+    ],
+    multiSelect: false
+  }])
+  ```
+  - "Use as plan" → if USER_INPUT was a file path, call `flywheel_plan` with `planFile`. If it was inline, write it to `docs/plans/<date>-<goal-slug>.md` first, then call `flywheel_plan` with `planFile`. Then jump to Step 5.5.
+  - "Treat as goal" → call `flywheel_select` with the input as goal, jump to Step 5.
+  - "Discard" → fall back to the default Step 0e menu.
+
+- Goal-shaped:
+  ```
+  AskUserQuestion(questions: [{
+    question: "I see a goal in your message: '<USER_INPUT>'. Run the flywheel on this?",
+    header: "Goal input",
+    options: [
+      { label: "Yes, full flywheel", description: "Skip discovery, plan and implement this goal (Recommended)" },
+      { label: "Refine first", description: "Run /brainstorming to clarify scope before planning" },
+      { label: "Plan only", description: "Generate a plan, stop before implementation" },
+      { label: "Discard", description: "Ignore the input and show the regular start menu" }
+    ],
+    multiSelect: false
+  }])
+  ```
+  - "Yes, full flywheel" → call `flywheel_select` with USER_INPUT as goal, proceed to Step 5.
+  - "Refine first" → invoke `/brainstorming` with the input, then return to Step 4 with the refined goal.
+  - "Plan only" → call `flywheel_select`, proceed through Step 5, stop after bead creation.
+  - "Discard" → fall back to the default Step 0e menu.
+
+- Ambiguous → always run `/brainstorming` first, then route as goal-shaped after refinement.
+
+**Hard rule**: never act on USER_INPUT directly without first showing the banner and getting an explicit menu choice. The flywheel's gates exist for a reason — pre-prompt content does NOT bypass them.
+
+### 0a. Detect version
+
+Attempt to find `mcp-server/package.json` by searching the Claude plugins directory:
+```bash
+find ~/.claude/plugins -path "*/agent-flywheel/mcp-server/package.json" 2>/dev/null | head -1
+```
+Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name).
+
+### 0b. Detect state
+
+Gather context silently (do NOT display raw output yet). Run checks 1-7 in parallel where possible:
+
+1. **MCP tools**: Call `flywheel_profile` directly with `cwd` — if the call succeeds, MCP is available (cache the result to avoid a redundant call in Step 2). If the tool is not found or errors, set `MCP_DEGRADED = true`. Do NOT use `ToolSearch` — MCP tools may be deferred and unavailable to ToolSearch at startup.
+2. **Existing session**: Read `.pi-flywheel/checkpoint.json` if it exists. Note phase and goal.
+3. **Existing beads**: Run `br list --json 2>/dev/null` and count open/in-progress/closed beads.
+4. **Git status**: Run `git log --oneline -1` to get latest commit.
+5. **CASS memory**: Call `flywheel_memory` with `operation: "search"` and `query: "session learnings flywheel"` to load prior session context. If CASS is unavailable, skip silently.
+6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/flywheel-setup` — single-agent workflows work fine without it.
+7. **NTM**: Run `which ntm 2>/dev/null` via Bash. If found, set `NTM_AVAILABLE = true` and display `NTM: available` in the banner. When NTM is available, it is the **preferred** mechanism for launching parallel agents (both planners and impl agents) — use `ntm spawn` + `ntm send` instead of the `Agent()` tool. This gives the user visible tmux panes they can observe and interact with directly. If NTM is unavailable, fall back to the `Agent()` tool as described in the default flow.
+
+### 0c. Display the welcome banner
+
+Display a single cohesive welcome message. Example:
+
+```
+ ╔══════════════════════════════════════════════════╗
+ ║                                                  ║
+ ║   agent-flywheel v3.0.0                          ║
+ ║   The Agentic Coding Flywheel                    ║
+ ║                                                  ║
+ ║   Project: <project-name>                        ║
+ ║   Branch:  <current-branch> @ <short-sha>        ║
+ ║   Beads:   <N open> | <M in-progress> | <K done> ║
+ ║                                                  ║
+ ╚══════════════════════════════════════════════════╝
+```
+
+If beads is zero, show `Beads: none yet`. If MCP tools are unavailable, show `MCP: not configured` in the banner.
+
+If CASS returned learnings from prior sessions, display them below the banner:
+
+> **From prior sessions:**
+> - <top 3-5 most relevant learnings, anti-patterns, or gotchas>
+
+This gives the user (and the agent-flywheel) context from past runs before making any decisions.
+
+### 0d. Present the main menu
+
+Build the menu options dynamically based on detected state:
+
+**If a previous session exists** (checkpoint found with non-idle phase):
+
+```
+AskUserQuestion(questions: [{
+  question: "What would you like to do?",
+  header: "Start",
+  options: [
+    { label: "Resume session", description: "Continue '<goal>' from <phase> phase" },
+    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect" },
+    { label: "New goal", description: "Start fresh with a new goal (discards previous session)" },
+    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" }
+  ],
+  multiSelect: false
+}])
+```
+
+**If open/in-progress beads exist** but no active session:
+
+```
+AskUserQuestion(questions: [{
+  question: "What would you like to do?",
+  header: "Start",
+  options: [
+    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect" },
+    { label: "New goal", description: "Scan the repo and discover improvement ideas" },
+    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
+    { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
+  ],
+  multiSelect: false
+}])
+```
+
+**If no beads and no session** (fresh start):
+
+```
+AskUserQuestion(questions: [{
+  question: "What would you like to do?",
+  header: "Start",
+  options: [
+    { label: "Scan & discover", description: "Profile the repo and find improvement opportunities" },
+    { label: "Set a goal", description: "I already know what I want to build" },
+    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
+    { label: "Setup", description: "Run /flywheel-setup to configure prerequisites" }
+  ],
+  multiSelect: false
+}])
+```
+
+### 0e. Route the user's choice
+
+> **If `USER_INPUT` was captured in step 0.preflight, use the routing override there instead of this menu.** The default menu below applies only when the user invoked `/start` with no extra prompt content.
+
+| Choice | Action |
+|--------|--------|
+| **Resume session** | Run the **drift check** below before jumping to the saved phase |
+| **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
+| **New goal** | Delete checkpoint if exists, proceed to Step 2 |
+| **Scan & discover** | Proceed to Step 2 |
+| **Set a goal** | Run `/brainstorming` to refine the goal, then proceed to Step 4 |
+| **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
+| **Quick fix** | Invoke `/flywheel-fix` |
+| **Audit** | Invoke `/flywheel-audit` |
+| **Setup** | Invoke `/flywheel-setup` |
+
+#### Work on beads — sub-menu + bootstrap (MANDATORY)
+
+`flywheel_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, the goal is empty and the tool errors with `missing_prerequisite`. Bootstrap it before any approve call:
+
+1. **Synthesize a default goal from the existing beads.** Read the top 3 open bead titles from `br list --json` and build a default like `Continue: <title-1>; <title-2>; <title-3>` (truncate at 200 chars).
+2. **Confirm or override the goal:**
+   ```
+   AskUserQuestion(questions: [{
+     question: "These beads need a goal label so the agent-flywheel can resume. Use the synthesized default?",
+     header: "Goal",
+     options: [
+       { label: "Use default", description: "'<synthesized goal>' (Recommended)" },
+       { label: "Custom goal", description: "Provide a one-line goal in the Other field" }
+     ],
+     multiSelect: false
+   }])
+   ```
+3. **Call `flywheel_select` with the chosen goal.** This populates `state.selectedGoal` and unblocks every downstream tool.
+4. **Then present the action sub-menu:**
+   ```
+   AskUserQuestion(questions: [{
+     question: "<N> open beads. What do you want to do with them?",
+     header: "Beads",
+     options: [
+       { label: "Implement", description: "Jump to Step 6 with launch as the default action (Recommended)" },
+       { label: "Refine", description: "Jump to Step 6 with polish as the default action — restructure beads/deps before implementing" },
+       { label: "Inspect", description: "Show br list + bv dependency graph, then re-show this menu" }
+     ],
+     multiSelect: false
+   }])
+   ```
+   - **"Implement"** → jump to Step 6 (read `_beads.md`).
+   - **"Refine"** → jump to Step 6 but pre-select the polish path: call `flywheel_approve_beads(action: "polish")` first to enter `refining_beads` phase, then show Step 6's menu so the user can iterate until satisfied.
+   - **"Inspect"** → run `br list` + `bv --robot-triage` (or `bv` alone if `--robot-triage` not supported), display, then re-show the action sub-menu.
+
+#### Resume session — drift check (MANDATORY)
+
+Before jumping to the saved phase, compare the checkpoint to reality:
+
+1. `git rev-parse HEAD` → compare to `checkpoint.gitHead`. If they differ, HEAD has moved.
+2. `br list --json` → compare bead IDs/statuses to `checkpoint.activeBeadIds` and `checkpoint.beadResults`. If beads listed in checkpoint don't exist (or are all closed when checkpoint says `phase: implementing`), state is stale.
+
+If either check shows drift, present:
+
+```
+AskUserQuestion(questions: [{
+  question: "Checkpoint drift detected: <summary, e.g. 'HEAD moved 5 commits ahead; 0/8 active beads still open'>. How should I proceed?",
+  header: "Drift",
+  options: [
+    { label: "Start fresh", description: "Discard the stale checkpoint and run the start menu (Recommended)" },
+    { label: "Inspect first", description: "Show the diff between checkpoint and reality, then re-prompt" },
+    { label: "Force resume", description: "Resume anyway — useful only if you know the checkpoint is still relevant" }
+  ],
+  multiSelect: false
+}])
+```
+
+- "Start fresh" → delete `.pi-flywheel/checkpoint.json`, route as if user picked "New goal".
+- "Inspect first" → print the diff (`git log <checkpoint.gitHead>..HEAD --oneline` + bead status table), then re-show this menu.
+- "Force resume" → load checkpoint, jump to saved phase as before.
+
+If both checks pass (no drift), resume directly without showing the menu.
+
+#### Research repo — mode selection
+
+Use `AskUserQuestion` to collect the URL and mode:
+
+```
+AskUserQuestion(questions: [{
+  question: "Paste the GitHub URL you want to research:",
+  header: "Research",
+  options: [
+    { label: "Research only", description: "Extract insights and patterns — no code changes" },
+    { label: "Research + integrate", description: "Study the repo, then create an integration plan with beads" }
+  ],
+  multiSelect: false
+}])
+```
+
+The user pastes the URL in the "Other" field, or picks a mode first and provides the URL when prompted. Then:
+- **"Research only"** → invoke `/flywheel-research <url>`.
+- **"Research + integrate"** → invoke `/flywheel-research <url> --mode integrate` (the slash command's research skill reads `--mode integrate` to run Phases 8–12 / Major Feature Integration). If the slash command rejects the flag, fall back to invoking `/flywheel-research <url>` and prepend the prompt context "After research, generate an integration plan and create implementation beads."
+
+### 0f. Degraded modes
+
+**MCP tools missing** (flywheel_profile call failed or tool not found in step 0b):
+
+- Display in the banner: `MCP: not configured — run /flywheel-setup`
+- Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
+  - **Step 2:** Use Explore subagent only (skip `flywheel_profile`).
+  - **Step 3:** Use Explore-derived ideas (skip `flywheel_discover`).
+  - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `flywheel_plan`).
+  - **Step 5.5:** Create beads with `br create` as normal.
+  - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
+  - **Step 8:** Offer "Looks good" and "Self review" only (skip `flywheel_review`).
+  - **Step 10:** Skip `flywheel_memory` — remind user that session learnings were not auto-persisted.
+
+**Agent Mail offline** (`AGENT_MAIL_DOWN = true` from step 0b check 6):
+
+- Display in the banner: `Agent Mail: offline — parallel agents will skip file reservations`
+- Do NOT block or require `/flywheel-setup`. All flywheel coordination still works.
+- Overrides for affected steps only:
+  - **Step 7 (impl agents):** Skip STEP 0 (Agent Mail bootstrap) in agent prompts. Agents work without file reservations or messaging — the coordinator monitors via TaskOutput instead of inbox.
+  - **Step 5 (deep plan):** Skip Agent Mail bootstrap for plan agents. Agents write plan files to disk; coordinator reads them directly.
+- If Agent Mail comes up mid-session, detect it on next parallel spawn and resume normal bootstrapping.
 
 ## Step 2: Scan and profile the repository
 
-Use the Agent tool with `subagent_type: "Explore"` to analyze the repo structure, languages, frameworks, key files, and recent commits. Then call the `flywheel_profile` MCP tool (from the `agent-flywheel` MCP server) with `cwd` set to the current working directory.
+Call `flywheel_profile` with `cwd`. The tool uses a git-HEAD-keyed cache — if the repo hasn't changed since the last scan, it returns instantly from cache.
+
+- **Cache hit** (output says "Profile loaded from cache"): Skip the Explore agent — the profile is fresh. Proceed directly to Step 3.
+- **Cache miss** (fresh scan): Optionally spawn an Explore agent for deeper analysis if the profile reveals a complex or unfamiliar codebase. For known repos, skip it.
+- **Force re-scan**: Pass `force: true` to `flywheel_profile` to bypass the cache (e.g. after major restructuring).
+
+If `MCP_DEGRADED` is true or `flywheel_profile` fails, fall back to an Explore agent for manual profiling.
+
+After profiling completes, briefly display the key findings (languages, frameworks, test setup) then use `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "Repository profiled. What next?",
+  header: "Profile",
+  options: [
+    { label: "Discover ideas", description: "Find improvement opportunities based on the profile (Recommended)" },
+    { label: "Set a goal", description: "I already know what I want to work on" },
+    { label: "Re-scan", description: "Force a fresh profile scan (force: true)" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Discover ideas"** → proceed to Step 3
+- **"Set a goal"** → run `/brainstorming`, then proceed to Step 4
+- **"Re-scan"** → call `flywheel_profile` with `force: true`, then return to this menu
 
 ## Step 3: Discover improvement ideas
 
-Call `flywheel_discover` with `cwd`. This returns a list of candidate improvement ideas ranked by potential impact.
+Before discovering ideas, query CASS for past goal history: call `flywheel_memory` with `operation: "search"` and `query: "past goals success failure anti-pattern"`. If results are returned, use them to:
+- Deprioritize ideas that failed before (unless circumstances changed)
+- Boost ideas similar to past successes
+- Surface anti-patterns to avoid
 
-Present the top ideas to the user clearly. Ask:
+**Choose discovery depth** via AskUserQuestion:
 
-> "Which of these goals would you like to pursue? You can pick one from the list or describe your own goal."
+```
+AskUserQuestion(questions: [{
+  question: "How deep should discovery go?",
+  header: "Discovery depth",
+  options: [
+    { label: "Fast (default)", description: "flywheel_discover one-shot — 5-10 ranked ideas (Recommended for repeat cycles)" },
+    { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30→5→15 pipeline — matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
+    { label: "Market-validated", description: "Run /idea-wizard, then /xf to check X/Twitter signal on each top idea" },
+    { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation for second-opinion scoring across Codex/Gemini/Grok" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **Fast** → continue below with `flywheel_discover`.
+- **Deep** → invoke `/idea-wizard`, feed its output into `flywheel_discover`, then continue with the standard goal-selection menu.
+- **Market-validated** → run `/idea-wizard`, then for each top-3 idea invoke `/xf` with a query like `"<idea title>" site:x.com`. Annotate each candidate with real-world signal before showing the goal menu.
+- **Triangulated** → run `/idea-wizard`, then `/multi-model-triangulation` on the top-5 list to surface which ideas all models agree on vs which are one-model bets.
+
+If `MCP_DEGRADED` is false, call `flywheel_discover` with `cwd`.
+
+If `MCP_DEGRADED` is true (or `flywheel_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
+
+Present the top ideas to the user using `AskUserQuestion`. Include up to 4 top-ranked ideas as options (the "Other" option is automatically provided for custom goals):
+
+```
+AskUserQuestion(questions: [{
+  question: "Which goal would you like to pursue?",
+  header: "Goal",
+  options: [
+    { label: "<idea 1 short title>", description: "<one-line summary>" },
+    { label: "<idea 2 short title>", description: "<one-line summary>" },
+    { label: "<idea 3 short title>", description: "<one-line summary>" },
+    { label: "<idea 4 short title>", description: "<one-line summary>" }
+  ],
+  multiSelect: false
+}])
+```
+
+If the user selects "Other" and enters a custom goal, run the `/brainstorming` skill first to explore intent, constraints, and edge cases before committing to scope. After brainstorming completes and the goal is refined, use `AskUserQuestion` to confirm scope:
+
+```
+AskUserQuestion(questions: [{
+  question: "Goal refined: '<refined goal from brainstorming>'. How should I scope this?",
+  header: "Scope",
+  options: [
+    { label: "Full flywheel", description: "Deep scan, plan, implement with agents, review" },
+    { label: "Plan only", description: "Generate and review a plan, stop before implementation" },
+    { label: "Quick fix", description: "Skip planning — use /flywheel-fix for a targeted change" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Full flywheel"** → proceed to Step 4 with the refined goal
+- **"Plan only"** → proceed through Step 5, then stop after bead creation
+- **"Quick fix"** → invoke `/flywheel-fix` with the refined goal instead
 
 ## Step 4: Select goal
 
 Once the user chooses, call `flywheel_select` with `cwd` and `goal` set to their choice.
 
-## Step 5: Choose planning mode
+## Steps 5–12: Phase execution (load instructions on demand)
 
-Ask the user:
+Each remaining phase has detailed instructions in a sub-file. **Read the file when you reach that phase.**
 
-> "How would you like to plan?
-> 1. **Standard plan** — single planning pass (faster)
-> 2. **Deep plan** — 3 AI models give competing perspectives, then synthesize (higher quality, takes longer)"
+| When you reach... | Read this file | What it covers |
+|-------------------|----------------|----------------|
+| Step 5 (planning) | `skills/start/_planning.md` | Planning mode selection, deep plan orchestration, plan alignment check (5.55), plan-ready gate (5.6) |
+| Step 5.5 (bead creation) or Step 6 (approval) | `skills/start/_beads.md` | Bead creation from plan, coverage/dedup checks, quality scoring, launch gate |
+| Step 7 (implementation) | `skills/start/_implement.md` | Swarm scaling, agent spawning, Agent Mail bootstrap, validation gates, stuck-swarm diagnostics |
+| Step 8 (review) or Step 9 (loop) | `skills/start/_review.md` | Wave-completion gate, review modes, verify beads, test-coverage sweep (9.25), UI polish pass (9.4) |
+| Step 9.5 (wrap-up) or later | `skills/start/_wrapup.md` | Commit review, docs update, version bump, rebuild, CASS learnings (10), skill refinement (11), post-flywheel menu (12) |
 
-**Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`.
-
-**Deep plan**:
-
-1. **Bootstrap Agent Mail** — call `macro_start_session` with:
-   - `human_key`: current working directory
-   - `program`: "claude-code"
-   - `model`: your model name
-   - `task_description`: "Orchestrating deep plan for: <goal>"
-   Note your assigned agent name (e.g. "CoralReef") — you are the coordinator.
-
-2. **Create a team** — call `TeamCreate` with a descriptive `team_name` (e.g. `"deep-plan-<slug>"`).
-
-3. **Spawn 3 plan agents IN PARALLEL** using the Agent tool with `team_name` set and `run_in_background: true` so they get task IDs (required for `TaskStop` if they become unresponsive):
-   - `Agent(model: "opus", name: "correctness-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
-   - `Agent(model: "sonnet", name: "ergonomics-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
-   - `Agent(subagent_type: "codex:codex-rescue", name: "robustness-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
-
-   **Save the task ID returned by each Agent call** — you'll need them to force-stop unresponsive agents via `TaskStop(task_id: "<id>")`.
-
-   Each agent's prompt MUST include:
-   - Instructions to call `macro_start_session` first (same `human_key`, their model, their task)
-   - Their focused planning perspective (correctness / ergonomics / robustness)
-   - Full repo context (path, stack, goal, recent commits, known bugs)
-   - Instruction to **write their plan to disk**: `docs/plans/<date>-<perspective>.md` (use the Write tool — do NOT send large plan text through Agent Mail message body)
-   - Instruction to send YOU just the file path via `send_message` with subject `"[deep-plan] <perspective> plan"` once written
-   - Instruction to message their team lead when done
-
-4. **Monitor and nudge** — agents go idle between turns (this is normal). If a teammate has gone idle without delivering their plan:
-   - Use `SendMessage(to: "<agent-name>", message: "Your plan is needed — please send it to <your-name> via Agent Mail and report back.")` to wake them.
-   - Check your inbox with `fetch_inbox` to see which plans have arrived.
-   - Use `TaskList` to see overall team task status.
-   - If an agent is unresponsive after nudging, force-stop it with `TaskStop(task_id: "<saved-task-id>")`. Then retire it in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`. Do not rely on shutdown_request messages alone — in-process agents may not respond to them.
-   - **If `TaskStop` fails** (e.g. no task ID found in `TaskList` for in-process agents): retire via Agent Mail `retire_agent(project_key: cwd, agent_name: "<stale-agent-name>")`, then edit `~/.claude/teams/<team>/config.json` to remove the stale member from the `"members"` array. Then retry `TeamDelete`.
-
-5. **Collect plans** — call `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: true)` to retrieve all 3 plan bodies.
-
-6. **Shutdown teammates individually** — structured shutdown messages CANNOT be broadcast to `"*"`. Send to each agent by name:
-   ```
-   SendMessage(to: "correctness-planner", message: {"type": "shutdown_request", "reason": "Planning complete."})
-   SendMessage(to: "ergonomics-planner",  message: {"type": "shutdown_request", "reason": "Planning complete."})
-   SendMessage(to: "robustness-planner",  message: {"type": "shutdown_request", "reason": "Planning complete."})
-   ```
-
-7. **Synthesize** — spawn one synthesis agent with `run_in_background: true`:
-   ```
-   Agent(model: "opus", name: "plan-synthesizer", team_name: "<team>", run_in_background: true,
-     prompt: "
-       Read the 3 plan files written by the planning agents:
-         docs/plans/<date>-correctness.md
-         docs/plans/<date>-ergonomics.md
-         docs/plans/<date>-robustness.md
-       Synthesize them into one optimal plan preserving the best insights from each perspective.
-       Write the result to: docs/plans/<date>-<goal-slug>-synthesized.md
-       Send the file path to <your-coordinator-name> via Agent Mail when done.
-     "
-   )
-   ```
-   Do NOT embed plan content inline in the prompt — read from disk.
-   Shutdown after done: `SendMessage(to: "plan-synthesizer", message: {"type": "shutdown_request", "reason": "Synthesis complete."})`.
-
-8. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
-   **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
-
-## Step 5.5: Create beads from the plan
-
-Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create them manually from the plan output:
-
-1. For each task/unit-of-work in the plan, create a bead:
-   ```
-   br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority 2 --type task
-   ```
-
-2. After all beads are created, add dependency edges:
-   ```
-   br dep add <downstream-bead-id> <upstream-bead-id>
-   ```
-   > **Syntax note:** Arguments are positional — `<downstream>` depends on `<upstream>`. The `--depends-on` flag does NOT exist. If the command fails, verify you are passing two positional IDs with no flags.
-
-3. Verify with `br list` — confirm all beads and dependencies look correct.
-
-> **WARNING:** Use `br list` for all read-only bead inspection. Never call `flywheel_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
-
-## Step 6: Review and approve beads
-
-Use `br list` to display the current beads. Ask:
-
-> "Here are the implementation beads. What would you like to do?
-> 1. **Start implementing** — launch the implementation loop
-> 2. **Polish further** — refine the beads more
-> 3. **Reject** — start over with a different goal"
-
-- "Start" → call `flywheel_approve_beads` with `action: "start"`
-  > **Note:** If the plan was just registered via `flywheel_plan`, the first `flywheel_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `flywheel_approve_beads` with `action: "start"` a second time to get the quality score and launch.
-- "Polish" → call `flywheel_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
-- "Reject" → call `flywheel_approve_beads` with `action: "reject"`, return to Step 3
-
-If the user asks "what's the quality score?" before choosing to start, call `flywheel_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
-
-After calling `flywheel_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
-
-**Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, discuss with user before proceeding)
-
-| Bead ID | Title | Wave | Effort | Risk Flags |
-|---------|-------|------|--------|------------|
-
-Populate **Wave** from the bead's dependency wave assignment, **Effort** from the plan's effort estimate, and **Risk Flags** from any warnings or risk notes in the plan output. This gives the user visibility into what is about to be implemented and in what order.
-
-Wait for user confirmation before proceeding to Step 7 — the quality score may prompt them to polish further.
-
-## Step 7: Implement each bead
-
-Use `TaskCreate` to create a task per bead. For each ready bead:
-
-1. Create a named implementation team if multiple beads are parallelizable:
-   ```
-   TeamCreate(team_name: "impl-<goal-slug>")
-   ```
-   > **NOTE:** If a planning team (e.g. `"deep-plan-<slug>"`) is still active from Step 5, you must delete it first via `TeamDelete(team_name: "deep-plan-<slug>")` before creating the impl team. If `TeamDelete` fails because agents are still registered, retire them via Agent Mail `retire_agent` first, then retry `TeamDelete`. Alternatively, reuse the existing planning team by passing its `team_name` to impl agents.
-
-2. Spawn an implementation agent with team membership. **Agent Mail bootstrap is only required for parallel beads** — if beads are sequential (linear dependency chain, one agent at a time), omit STEP 0 to reduce overhead. For parallel beads, include the strict bootstrap to prevent file conflicts:
-   ```
-   Agent(
-     subagent_type: "general-purpose",
-     isolation: "worktree",
-     name: "impl-<bead-id>",
-     team_name: "impl-<goal-slug>",
-     prompt: "
-       ## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY — DO THIS BEFORE ANYTHING ELSE)
-       Do NOT read any files or run any commands until all 3 sub-steps below are complete.
-
-       0a. Call macro_start_session(
-             human_key: '<cwd>',
-             program: 'claude-code',
-             model: '<model>',
-             task_description: 'Implementing bead <id>: <title>')
-           Note your assigned agent name.
-
-       0b. Call file_reservation_paths to reserve every file you plan to edit.
-           If any file is already reserved, wait 30 seconds and retry up to 3 times.
-           If still blocked after 3 retries, send a message to '<coordinator-agent-name>'
-           reporting the conflict, then STOP.
-
-       0c. Send a 'started' message to '<coordinator-agent-name>' via send_message
-           with subject '[impl] <bead-id> started'.
-
-       Only after 0a, 0b, 0c are ALL complete may you proceed to Step 1.
-
-       ## STEP 1 — IMPLEMENT
-       <bead title>
-       <bead description>
-       Acceptance criteria: <criteria>
-
-       ## STEP 2 — VALIDATE
-       Run tests and linting relevant to your changes. Fix any failures.
-
-       ## STEP 3 — COMMIT & CLOSE BEAD
-       Create a commit with a descriptive message referencing bead <id>.
-       Then mark the bead closed: `br update <bead-id> --status closed`
-       (Note: the br CLI uses `closed`, NOT `done`.)
-
-       ## STEP 4 — RELEASE + REPORT (MANDATORY)
-       4a. Release all file reservations via release_file_reservations.
-       4b. Send a completion summary to '<coordinator-agent-name>' via send_message
-           with subject '[impl] <bead-id> done' including:
-           - Files changed
-           - Tests added/modified
-           - Any open concerns or follow-ups
-     "
-   )
-   ```
-
-3. Mark the bead's task as `in_progress`. If the agent goes idle before reporting back, nudge it:
-   ```
-   SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")
-   ```
-
-4. When the agent completes, mark task as `completed`. Send shutdown:
-   ```
-   SendMessage(to: "impl-<bead-id>", message: {"type": "shutdown_request", "reason": "Bead complete."})
-   ```
-
-## Step 8: Review completed beads
-
-When one or more beads complete, present a consolidated review prompt. Never ask per-bead if multiple are ready.
-
-If a **single bead** finishes:
-
-> "Bead `<id>` is done. How would you like to review?
-> 1. **Looks good** — accept and move on
-> 2. **Self review** — send the impl agent back to audit its own diff
-> 3. **Fresh-eyes** — 5 parallel review agents give independent feedback"
-
-If **multiple beads** finish together:
-
-> "Beads `<id1>`, `<id2>`, `<id3>` are done. How would you like to review?
-> 1. **Looks good all** — accept all and move on
-> 2. **Self review `<id>`** — send that bead's impl agent back to audit its own diff
-> 3. **Fresh-eyes `<id>`** — 5 parallel review agents give independent feedback on that bead
->
-> You can combine: e.g. 'Looks good all except fresh-eyes `<id2>`'"
-
-Actions:
-
-- **"Looks good" / "Looks good all"** → call `flywheel_review` with `action: "looks-good"` and `beadId` for each accepted bead.
-
-- **"Self review `<id>`"** → send the impl agent a message asking it to audit its own diff:
-  ```
-  SendMessage(to: "impl-<id>", message: "Self-review: run `git diff` on your changes, check for bugs, missing tests, and style issues. Report findings to <coordinator> via Agent Mail with subject '[review] <id> self-review'.")
-  ```
-  After the self-review report arrives, call `flywheel_review` with `action: "looks-good"` and `beadId` to close it.
-
-- **"Fresh-eyes `<id>`"** → call `flywheel_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
-  1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
-  2. Spawn all 5 with `run_in_background: true`, each with `team_name` set and the strict STEP 0 Agent Mail bootstrap in their prompt
-  3. If any go idle without reporting, nudge by name: `SendMessage(to: "<reviewer-name>", message: "Please send your review findings.")`
-  4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
-  5. Collect and summarize results.
-
-  > **Edge case — already-closed beads:** If `flywheel_review` errors (e.g. "Cannot read properties of undefined"), the bead was likely already closed by the impl agent before review was requested. Skip the MCP tool and spawn review agents manually. Give each reviewer the specific git commit SHA (from `git log --oneline`) and instruct them to review via `git diff <commit>~1 <commit>` directly.
-
-  > **Edge case — team already active:** `TeamCreate` for a review team fails with "already leading a team" if an impl team is still running. Reuse the existing team by passing `team_name: "impl-<goal-slug>"` to the review agents instead of creating a new one.
-
-## Step 9: Loop until complete
-
-Continue implementing and reviewing beads until all are done. Show a final summary of what was accomplished.
-
-## Step 10: Store session learnings
-
-Call `flywheel_memory` with `operation: "store"` and `cwd` to distill and persist session learnings:
-- What worked well (tool choices, agent configurations, planning strategies)
-- What failed or required manual intervention (agent shutdowns, file conflicts, review bottlenecks)
-- Key decisions made during this session and their outcomes
-- Any patterns worth replicating or avoiding in future sessions
-
-Present the stored learnings to the user for confirmation.
-
-## Step 11: Refine this skill
-
-Run `/flywheel-refine-skill start` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.
+**Do NOT skip phases or exit the workflow early.** The flywheel's value comes from completing the full cycle: scan → discover → plan → implement → review → verify → wrap-up → learn → refine.

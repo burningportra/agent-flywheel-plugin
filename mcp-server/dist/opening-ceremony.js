@@ -1,35 +1,40 @@
+import { VERSION } from "./version.js";
 const DEFAULT_MAX_DURATION_MS = 900;
 const MIN_TERMINAL_WIDTH_FOR_ANIMATION = 56;
 const DEFAULT_RUNTIME = {
     now: () => Date.now(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
-const CEREMONY_FRAMES = [
-    {
-        text: "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
-            "> boot sequence .......... [warm]\n" +
-            "> scanning the void ...... [linking]",
-        delayMs: 120,
-    },
-    {
-        text: "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
-            "> boot sequence .......... [online]\n" +
-            "> scanning the void ...... [mapped]\n" +
-            "> summoning bead engine .. [spinning]",
-        delayMs: 180,
-    },
-    {
-        text: "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
-            "> repo sigil ............. [bound]\n" +
-            "> bead engine ............ [ready]\n" +
-            "> ceremony complete ...... [ignite /start]",
-        delayMs: 220,
-    },
-];
-const STATIC_FALLBACK_FRAME = "░▒▓ CLAUDE // AGENT-FLYWHEEL ▓▒░\n" +
-    "> ceremony complete ...... [ignite /start]";
+function buildCeremonyFrames() {
+    return [
+        {
+            text: `░▒▓ CLAUDE // AGENT-FLYWHEEL v${VERSION} ▓▒░\n` +
+                "> boot sequence .......... [warm]\n" +
+                "> scanning the void ...... [linking]",
+            delayMs: 120,
+        },
+        {
+            text: `░▒▓ CLAUDE // AGENT-FLYWHEEL v${VERSION} ▓▒░\n` +
+                "> boot sequence .......... [online]\n" +
+                "> scanning the void ...... [mapped]\n" +
+                "> summoning bead engine .. [spinning]",
+            delayMs: 180,
+        },
+        {
+            text: `░▒▓ CLAUDE // AGENT-FLYWHEEL v${VERSION} ▓▒░\n` +
+                "> repo sigil ............. [bound]\n" +
+                "> bead engine ............ [ready]\n" +
+                "> ceremony complete ...... [ignite /start]",
+            delayMs: 220,
+        },
+    ];
+}
+function buildStaticFallback() {
+    return (`░▒▓ CLAUDE // AGENT-FLYWHEEL v${VERSION} ▓▒░\n` +
+        "> ceremony complete ...... [ignite /start]");
+}
 export function getOpeningCeremonyFrames() {
-    return CEREMONY_FRAMES.map((frame) => ({ ...frame }));
+    return buildCeremonyFrames().map((frame) => ({ ...frame }));
 }
 export function resolveOpeningCeremonyMode(options = {}) {
     if (options.enabled === false || options.quiet === true) {
@@ -74,7 +79,7 @@ export async function runOpeningCeremony(writer, options = {}) {
             };
         }
         if (mode === "static") {
-            await writeFrame(writer, STATIC_FALLBACK_FRAME);
+            await writeFrame(writer, buildStaticFallback());
             return {
                 rendered: true,
                 mode,

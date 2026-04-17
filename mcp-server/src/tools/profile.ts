@@ -3,6 +3,8 @@ import { formatRepoProfile, makeNextToolStep, makeToolResult } from './shared.js
 import { profileRepo, loadCachedProfile, saveCachedProfile } from '../profiler.js';
 import { parseBrList } from '../parsers.js';
 import { createLogger } from '../logger.js';
+import { runOpeningCeremony } from '../opening-ceremony.js';
+import { VERSION } from '../version.js';
 
 const log = createLogger('profile');
 
@@ -19,6 +21,11 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   const { exec, cwd, state, saveState } = ctx;
 
   state.phase = 'profiling';
+
+  // ── Opening ceremony (shows version banner) ──────────────────
+  const ceremonyWriter = { write: async (text: string) => { log.info(text); } };
+  const ceremonyResult = await runOpeningCeremony(ceremonyWriter, { interactive: false });
+  const ceremonyBanner = `░▒▓ CLAUDE // AGENT-FLYWHEEL v${VERSION} ▓▒░`;
 
   // ── Try cache first (unless forced) ──────────────────────────
   let profile: RepoProfile;
@@ -110,7 +117,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
     ? `\n\n> Profile loaded from cache (git HEAD unchanged). Pass \`force: true\` to re-scan.`
     : '';
 
-  const text = `${roadmap}\n\n${coordLine}${cacheNote}${foundationWarning}${beadStatus}${goalSection}\n\n---\n\n${formatted}`;
+  const text = `${ceremonyBanner}\n\n${roadmap}\n\n${coordLine}${cacheNote}${foundationWarning}${beadStatus}${goalSection}\n\n---\n\n${formatted}`;
 
   const nextStep = args.goal
     ? makeNextToolStep('present_choices', 'A goal was provided. Either proceed directly to flywheel_select or run flywheel_discover to generate alternatives.', {

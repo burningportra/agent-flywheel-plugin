@@ -45,3 +45,29 @@ Shutdown each individually after collecting results.
 **Phase 7 — Synthesis**: Combine all findings into a structured research proposal.
 
 Write the proposal to disk first: `docs/research-<repo-name>-<date>.md`. Then present key takeaways.
+
+---
+
+## Major Feature Integration Mode
+
+If the user's goal is to integrate a major feature inspired by the researched repo (not just extract insights), extend with these post-research phases:
+
+**Phase 8 — Integration proposal**: Write a dedicated integration document at `docs/research-<repo>-integration.md`:
+- What specific capabilities to adopt
+- How they map to our architecture
+- What we can do that the researched repo cannot (inversion analysis)
+- Estimated scope and effort
+
+**Phase 9 — Iterative deepening**: Push past conservative initial suggestions. Spawn an agent to deepen the proposal:
+```
+Agent(model: "opus", name: "deepen-integration", prompt: "Read docs/research-<repo>-integration.md. The initial proposal is too conservative. Push further: what ambitious integration would create the most value? What non-obvious synergies exist? Expand the proposal and write back to the same file.")
+```
+
+**Phase 10 — 5x blunder hunt**: Run 5 sequential blunder-hunt passes on the integration proposal. Each pass reads the proposal and asks: "What will go wrong if we build this? What are we missing? What assumptions are wrong?"
+
+**Phase 11 — Cross-model feedback**: Make the proposal self-contained (no external references needed), then get feedback from 2-3 different models via parallel agents. Each writes feedback to `docs/research-<repo>-feedback-<model>.md`.
+
+**Phase 12 — Final synthesis**: Blend all feedback using the Best-of-All-Worlds approach. Present the final integration proposal to the user with a recommended action:
+- Convert to beads and implement via `/start`
+- Refine further
+- Shelve for later
