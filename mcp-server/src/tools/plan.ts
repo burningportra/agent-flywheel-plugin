@@ -205,7 +205,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
     if (mem) memorySection = `\n## Prior Session Context\n${mem}\n`;
   } catch { /* CASS unavailable — proceed without */ }
 
-  const basePrompt = `You are a planning agent for an agentic coding workflow.
+  const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
@@ -283,6 +283,8 @@ Question every architectural choice: is there a simpler way? A more standard app
     synthesisPrompt: `Use ultrathink.
 
 ## Best-of-All-Worlds Synthesis
+
+Use ultrathink.
 
 Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
 
