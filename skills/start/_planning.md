@@ -101,6 +101,8 @@ AskUserQuestion(questions: [{
          docs/plans/<date>-robustness.md
          (and docs/plans/<date>-fresh-perspective.md if it exists)
 
+       Use ultrathink.
+
        ## Best-of-All-Worlds Synthesis
 
        For EACH plan, BEFORE proposing any changes:
