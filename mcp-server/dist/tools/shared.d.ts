@@ -19,10 +19,10 @@ export declare function computeConvergenceScore(polishChanges: number[], outputS
 export declare function pickRefinementModel(round: number): string;
 /** Default deep plan model assignments. */
 export declare const DEEP_PLAN_MODELS: {
-    readonly correctness: "claude-opus-4-6";
+    readonly correctness: "claude-opus-4-7";
     readonly robustness: "claude-sonnet-4-6";
     readonly ergonomics: "claude-sonnet-4-6";
-    readonly synthesis: "claude-opus-4-6";
+    readonly synthesis: "claude-opus-4-7";
 };
 export declare const SWARM_STAGGER_DELAY_MS = 30000;
 /**

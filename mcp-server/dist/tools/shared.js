@@ -83,9 +83,9 @@ export function computeConvergenceScore(polishChanges, outputSizes) {
 }
 /** Model rotation list for refinement rounds (prevents taste convergence). */
 const REFINEMENT_MODELS = [
-    'claude-opus-4-6',
+    'claude-opus-4-7',
     'claude-sonnet-4-6',
-    'claude-opus-4-6',
+    'claude-opus-4-7',
     'claude-sonnet-4-6',
 ];
 export function pickRefinementModel(round) {
@@ -93,10 +93,10 @@ export function pickRefinementModel(round) {
 }
 /** Default deep plan model assignments. */
 export const DEEP_PLAN_MODELS = {
-    correctness: 'claude-opus-4-6',
+    correctness: 'claude-opus-4-7',
     robustness: 'claude-sonnet-4-6',
     ergonomics: 'claude-sonnet-4-6',
-    synthesis: 'claude-opus-4-6',
+    synthesis: 'claude-opus-4-7',
 };
 export const SWARM_STAGGER_DELAY_MS = 30_000;
 /**

@@ -930,14 +930,14 @@ export const CODEX_SUBAGENT_TYPE = "codex:codex-rescue";
  * Note: the robustness perspective is handled via CODEX_SUBAGENT_TYPE in plan.ts.
  * This constant is the fallback for callers that only support model strings. */
 export const DEEP_PLAN_MODELS = {
-    correctness: "anthropic/claude-opus-4-6",
-    robustness: "anthropic/claude-opus-4-6",
+    correctness: "anthropic/claude-opus-4-7",
+    robustness: "anthropic/claude-opus-4-7",
     ergonomics: "anthropic/claude-sonnet-4-6",
-    synthesis: "anthropic/claude-opus-4-6",
+    synthesis: "anthropic/claude-opus-4-7",
 };
 /** Models used by the swarm launcher. */
 export const SWARM_MODELS = {
-    opus: "anthropic/claude-opus-4-6",
+    opus: "anthropic/claude-opus-4-7",
     codex: "codex",
     haiku: "anthropic/claude-haiku-4-5",
 };
@@ -948,12 +948,12 @@ export const MODEL_ROUTING_TIERS = {
         review: "anthropic/claude-sonnet-4-6",
     },
     medium: {
-        implementation: "anthropic/claude-opus-4-6",
+        implementation: "anthropic/claude-opus-4-7",
         review: "anthropic/claude-sonnet-4-6",
     },
     complex: {
-        implementation: "anthropic/claude-opus-4-6",
-        review: "anthropic/claude-opus-4-6",
+        implementation: "anthropic/claude-opus-4-7",
+        review: "anthropic/claude-opus-4-7",
     },
 };
 /**
@@ -961,9 +961,9 @@ export const MODEL_ROUTING_TIERS = {
  * Different models have different blind spots; rotating prevents anchoring.
  */
 export const REFINEMENT_MODELS = [
-    "anthropic/claude-opus-4-6",
+    "anthropic/claude-opus-4-7",
     "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-opus-4-6",
+    "anthropic/claude-opus-4-7",
 ];
 /** Pick a refinement model based on round number (rotates through available models). */
 export function pickRefinementModel(round) {

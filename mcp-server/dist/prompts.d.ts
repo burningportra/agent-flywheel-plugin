@@ -62,14 +62,14 @@ export declare const CODEX_SUBAGENT_TYPE: "codex:codex-rescue";
  * Note: the robustness perspective is handled via CODEX_SUBAGENT_TYPE in plan.ts.
  * This constant is the fallback for callers that only support model strings. */
 export declare const DEEP_PLAN_MODELS: {
-    readonly correctness: "anthropic/claude-opus-4-6";
-    readonly robustness: "anthropic/claude-opus-4-6";
+    readonly correctness: "anthropic/claude-opus-4-7";
+    readonly robustness: "anthropic/claude-opus-4-7";
     readonly ergonomics: "anthropic/claude-sonnet-4-6";
-    readonly synthesis: "anthropic/claude-opus-4-6";
+    readonly synthesis: "anthropic/claude-opus-4-7";
 };
 /** Models used by the swarm launcher. */
 export declare const SWARM_MODELS: {
-    readonly opus: "anthropic/claude-opus-4-6";
+    readonly opus: "anthropic/claude-opus-4-7";
     readonly codex: "codex";
     readonly haiku: "anthropic/claude-haiku-4-5";
 };
@@ -80,19 +80,19 @@ export declare const MODEL_ROUTING_TIERS: {
         readonly review: "anthropic/claude-sonnet-4-6";
     };
     readonly medium: {
-        readonly implementation: "anthropic/claude-opus-4-6";
+        readonly implementation: "anthropic/claude-opus-4-7";
         readonly review: "anthropic/claude-sonnet-4-6";
     };
     readonly complex: {
-        readonly implementation: "anthropic/claude-opus-4-6";
-        readonly review: "anthropic/claude-opus-4-6";
+        readonly implementation: "anthropic/claude-opus-4-7";
+        readonly review: "anthropic/claude-opus-4-7";
     };
 };
 /**
  * Model rotation for refinement rounds.
  * Different models have different blind spots; rotating prevents anchoring.
  */
-export declare const REFINEMENT_MODELS: readonly ["anthropic/claude-opus-4-6", "anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-6"];
+export declare const REFINEMENT_MODELS: readonly ["anthropic/claude-opus-4-7", "anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-7"];
 /** Pick a refinement model based on round number (rotates through available models). */
 export declare function pickRefinementModel(round: number): string;
 /**

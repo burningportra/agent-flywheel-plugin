@@ -115,7 +115,7 @@ The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names rem
 
 | Role | Model |
 |---|---|
-| Correctness plan agent | claude-opus-4-6 |
+| Correctness plan agent | claude-opus-4-7 |
 | Ergonomics plan agent | claude-sonnet-4-6 |
 | Robustness plan agent | codex |
 | Swarm implementation agents | claude-haiku-4-5 (lightweight) |

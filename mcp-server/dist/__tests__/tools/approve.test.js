@@ -451,7 +451,7 @@ describe('runApprove', () => {
                     lineCount: 2,
                     sizeAssessment: 'too_short',
                     planRefinementRound: 1,
-                    refinementModel: 'claude-opus-4-6',
+                    refinementModel: 'claude-opus-4-7',
                 },
             });
         });

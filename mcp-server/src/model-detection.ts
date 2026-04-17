@@ -41,7 +41,7 @@ export interface DetectedModels {
  */
 const PROVIDER_BEST_MODELS: Record<string, string[]> = {
   anthropic: [
-    "claude-opus-4-6",
+    "claude-opus-4-7",
     "claude-opus-4-5",
     "claude-opus-4-1",
     "claude-sonnet-4-6",
@@ -63,11 +63,11 @@ const PROVIDER_BEST_MODELS: Record<string, string[]> = {
   opencode: [
     "gpt-5.4",
     "gpt-5.3-codex",
-    "claude-opus-4-6",
+    "claude-opus-4-7",
     "claude-sonnet-4-6",
   ],
   openrouter: [
-    "anthropic/claude-opus-4-6",
+    "anthropic/claude-opus-4-7",
     "anthropic/claude-sonnet-4-6",
   ],
   groq: [], // Groq models are typically smaller/faster, not for planning
@@ -94,7 +94,7 @@ function buildRefinementRotation(providerMap: Map<string, Set<string>>): string[
 
   // Fallback if we don't have enough diversity
   if (rotation.length === 0) {
-    rotation.push("anthropic/claude-opus-4-6");
+    rotation.push("anthropic/claude-opus-4-7");
   }
   if (rotation.length === 1) {
     rotation.push("codex");
@@ -169,10 +169,10 @@ export function detectAvailableModels(availableModelIds?: string[]): DetectedMod
   // Select best models for each planning role
   const correctnessModel = selectBestModel(providerMap, ["openai-codex", "opencode", "openai"], PROVIDER_BEST_MODELS)
     ?? selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
-    ?? "anthropic/claude-opus-4-6";
+    ?? "anthropic/claude-opus-4-7";
 
   const robustnessModel = selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
-    ?? "anthropic/claude-opus-4-6";
+    ?? "anthropic/claude-opus-4-7";
 
   // Ergonomics prefers openai-codex (Codex 5.4) for a different architectural lens
   const ergonomicsModel = selectBestModel(providerMap, ["openai-codex", "opencode"], PROVIDER_BEST_MODELS)
@@ -181,7 +181,7 @@ export function detectAvailableModels(availableModelIds?: string[]): DetectedMod
 
   const synthesisModel = selectBestModel(providerMap, ["openai-codex", "opencode", "openai"], PROVIDER_BEST_MODELS)
     ?? selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
-    ?? "anthropic/claude-opus-4-6";
+    ?? "anthropic/claude-opus-4-7";
 
   // Fresh perspective uses Google/Gemini when available; null otherwise (4th optional planner)
   const googleBestModel = selectBestModel(providerMap, ["google-antigravity", "google"], PROVIDER_BEST_MODELS);
@@ -232,10 +232,10 @@ export function getDeepPlanModels(availableModelIds?: string[]): {
   } catch {
     // Fallback to hardcoded defaults
     return {
-      correctness: "anthropic/claude-opus-4-6",
-      robustness: "anthropic/claude-opus-4-6",
+      correctness: "anthropic/claude-opus-4-7",
+      robustness: "anthropic/claude-opus-4-7",
       ergonomics: "anthropic/claude-sonnet-4-6",
-      synthesis: "anthropic/claude-opus-4-6",
+      synthesis: "anthropic/claude-opus-4-7",
       freshPerspective: null,
     };
   }
@@ -248,13 +248,13 @@ export function getRefinementModel(round: number, availableModelIds?: string[]):
   try {
     const detected = detectAvailableModels(availableModelIds);
     const models = detected.refinementModels;
-    return models[round % models.length] ?? "anthropic/claude-opus-4-6";
+    return models[round % models.length] ?? "anthropic/claude-opus-4-7";
   } catch {
     // Fallback to hardcoded rotation
     const fallbacks = [
-      "anthropic/claude-opus-4-6",
+      "anthropic/claude-opus-4-7",
       "anthropic/claude-sonnet-4-6",
-      "anthropic/claude-opus-4-6",
+      "anthropic/claude-opus-4-7",
     ];
     return fallbacks[round % fallbacks.length];
   }
