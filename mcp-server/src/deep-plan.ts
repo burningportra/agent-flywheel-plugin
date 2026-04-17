@@ -100,7 +100,7 @@ export async function runDeepPlanAgents(
       args.push(`@${taskFile}`);
 
       const result = await exec("claude", args, {
-        timeout: 180000, // 3 min timeout per planner
+        timeout: Number(process.env.DEEP_PLAN_TIMEOUT_MS ?? 420000), // 7 min default; override via DEEP_PLAN_TIMEOUT_MS env var
         cwd,
         signal,
       });
