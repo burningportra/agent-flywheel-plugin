@@ -37,7 +37,7 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 ### 0.banner — SHOW THIS FIRST, ALWAYS
 
-**Before any tool calls, before any other reads, print the banner.** This is the first visible output of the skill. Use the version from `mcp-server/package.json` (default to `3.0.0` if unreadable).
+**Before any tool calls, before any other reads, print the banner.** This is the first visible output of the skill. Use the version from `mcp-server/package.json` (resolve `CLAUDE_PLUGIN_ROOT` or use the find command in Step 0a; default to `unknown` if unreadable — never substitute a stale hardcoded version).
 
 ```
 ░▒▓ CLAUDE // AGENT-FLYWHEEL v<VERSION> ▓▒░
@@ -100,11 +100,12 @@ Then route in Step 0e instead of showing the default main menu:
 
 ### 0a. Detect version
 
-Attempt to find `mcp-server/package.json` by searching the Claude plugins directory:
+Prefer `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json` if the env var is set — that's the canonical plugin root. Otherwise, find it under the plugins cache. The install path is `.../agent-flywheel/agent-flywheel/<VERSION>/mcp-server/package.json`, so use a pattern that matches the interposed version directory and pick the most-recently-modified match:
 ```bash
-find ~/.claude/plugins -path "*/agent-flywheel/mcp-server/package.json" 2>/dev/null | head -1
+{ [ -n "$CLAUDE_PLUGIN_ROOT" ] && cat "$CLAUDE_PLUGIN_ROOT/mcp-server/package.json"; } \
+  || ls -t ~/.claude/plugins/cache/agent-flywheel/agent-flywheel/*/mcp-server/package.json 2>/dev/null | head -1 | xargs cat 2>/dev/null
 ```
-Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name).
+Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name). If no version can be resolved, render the banner with `v?` rather than inventing a number.
 
 ### 0b. Detect state
 
@@ -125,7 +126,7 @@ Display a single cohesive welcome message. Example:
 ```
  ╔══════════════════════════════════════════════════╗
  ║                                                  ║
- ║   agent-flywheel v3.0.0                          ║
+ ║   agent-flywheel v<VERSION>                      ║
  ║   The Agentic Coding Flywheel                    ║
  ║                                                  ║
  ║   Project: <project-name>                        ║
