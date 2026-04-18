@@ -4,6 +4,8 @@
 
 > **Wave-completion gate (MANDATORY).** Before entering this step, wait until **every** impl agent spawned in the current wave has reported back via Agent Mail (or has been force-stopped per Step 7's escalation path). Track the wave's bead IDs in a local set; do NOT enter Step 8 until that set is empty. If you receive an Agent Mail completion notification mid-wave, store the result and stay in Step 7's monitor loop until the rest finish. Reviewing wave-1 while wave-2 is mid-flight produces stale state and per-bead review prompts (which the consolidation rule below explicitly forbids).
 
+> **NTM does NOT bypass this gate.** If impl ran via NTM panes, the coordinator STILL owes the user the `AskUserQuestion` review prompt below — watching a pane print "done" is not review. Fresh-eyes review agents spawn via `Agent()` (they're short-lived and benefit from subagent isolation), NOT via NTM.
+
 Once the full wave is in, present a consolidated review prompt. Never ask per-bead if multiple beads finished together.
 
 If a **single bead** finishes, use `AskUserQuestion`:

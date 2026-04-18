@@ -51,7 +51,27 @@ AskUserQuestion(questions: [{
    ```
    Each agent's prompt MUST still include the Agent Mail bootstrap (`macro_start_session`, `send_message` to coordinator on completion). NTM handles the process lifecycle; Agent Mail handles the coordination protocol.
 
-   Monitor via `ntm status "$SESSION"` and `fetch_inbox`. If a pane goes idle, nudge with `ntm send "$SESSION" --pane=<pane> "Your plan is needed — please complete and send via Agent Mail."`.
+   **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM launches panes asynchronously; a pane process can live while the agent inside is idle, crashed, or skipping Agent Mail. Run this loop at ~60-90s cadence (use the `Monitor` tool) until all 3 plans arrive in your inbox:
+
+   ```bash
+   ntm status   "$SESSION"   # pane health and last-activity timestamps
+   ntm activity "$SESSION"   # per-pane agent state (working/idle/crashed)
+   ```
+   Plus: `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` to see which planners have delivered their plan-file path.
+
+   **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
+   1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per planner pane. A missing identity means the agent skipped `macro_start_session`.
+   2. On any missing identity, nudge immediately:
+      ```bash
+      ntm send "$SESSION" --pane=<pane> "Before anything else, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot collect your plan otherwise."
+      ```
+   3. If the agent has an identity but hasn't sent a message in >3 min, treat as idle and start the nudge escalation below.
+
+   **Nudge escalation per idle pane.** "Idle" = `ntm activity` reports idle OR no Agent Mail traffic in 3 min.
+   - Nudge 1: `ntm send "$SESSION" --pane=<pane> "Your plan is needed — deliver the file path to <coordinator> via Agent Mail."`
+   - Nudge 2 (2 min later): `ntm send "$SESSION" --pane=<pane> "Still waiting on your <perspective> plan. Report status and any blockers."`
+   - Nudge 3 (2 min later): `ntm send "$SESSION" --pane=<pane> "Final nudge — deliver now or I proceed to synthesis without you."`
+   - After 3 nudges with no progress: mark the planner as failed, continue to synthesis with the plans you have (2 is usable; 1 is a degraded-warning case). Do NOT block the flywheel indefinitely on a stuck planner.
 
    ⚠ Do NOT use `ntm spawn deep-plan-<slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and a `deep-plan-<slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
 

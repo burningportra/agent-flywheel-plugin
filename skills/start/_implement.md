@@ -57,11 +57,35 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    ntm send "$SESSION" --pane=cod-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
    ```
    - Stagger sends by 30 seconds (thundering-herd mitigation still applies).
-   - Monitor via `ntm status "$SESSION"` and `fetch_inbox` for completion messages.
-   - Nudge idle panes: `ntm send "$SESSION" --pane=<pane> "Please report status and any blockers."`.
    - The Agent Mail STEP 0 bootstrap is still MANDATORY in each pane's prompt — NTM handles process lifecycle; Agent Mail handles coordination protocol, file reservations, and audit trail.
 
+   **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM spawns agents asynchronously; a pane process can live while the agent inside it is idle, crashed, or skipping Agent Mail. You MUST actively monitor until every bead in the wave is closed or force-stopped. Run this loop at ~60-90s cadence (use the `Monitor` tool for best results):
+
+   ```bash
+   ntm status   "$SESSION"   # pane health and last-activity timestamps
+   ntm activity "$SESSION"   # per-pane agent state (working/idle/crashed)
+   ```
+   Plus, on each tick:
+   - `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` — see which agents sent `started` / `bead-closed` / status messages.
+   - `git log --oneline --grep="<bead-id>"` per in-flight bead — catches the "agent committed but forgot `br update`" failure mode (see Step 7's proactive-close rule).
+
+   **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
+   1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per pane you spawned. A missing identity means the agent skipped `macro_start_session`.
+   2. On any missing identity, nudge immediately:
+      ```bash
+      ntm send "$SESSION" --pane=<pane> "Before any other work, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot track you otherwise."
+      ```
+   3. If the agent has an identity but hasn't sent a message in >2 min while its bead is still open, it's silently stuck. Treat as idle (escalation below).
+
+   **Nudge escalation per idle pane.** "Idle" = `ntm activity` reports idle OR no Agent Mail traffic in 2 min while bead is open.
+   - Nudge 1: `ntm send "$SESSION" --pane=<pane> "Status check — report progress on <bead-id> and any blockers via Agent Mail."`
+   - Nudge 2 (2 min later): `ntm send "$SESSION" --pane=<pane> "Still waiting on <bead-id>. If blocked, message <coordinator> with the blocker. If done, run 'br update <bead-id> --status closed'."`
+   - Nudge 3 (2 min later): `ntm send "$SESSION" --pane=<pane> "Final nudge. Delivering now or I reassign/close on your behalf."`
+   - After 3 nudges with no progress: apply Step 7's idle-agent escalation (verify commit on disk, close bead yourself if commit matches acceptance, otherwise reassign the bead or force-stop the pane via `ntm kill-pane "$SESSION" --pane=<pane>`).
+
    ⚠ Do NOT use `ntm spawn impl-<goal-slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and an `impl-<goal-slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
+
+   **Post-wave bridge to Step 8.** When every bead in the wave is closed (via Agent Mail completion OR proactive close OR force-stop), leave the tmux session alive (user may want to inspect panes) but transition the coordinator to the Step 8 review gate. **Do not skip the AskUserQuestion review prompt just because you watched the panes succeed** — the user still gets "Looks good / Self review / Fresh-eyes" and fresh-eyes review is still run via `Agent()` (NOT NTM — reviewers are short-lived). See `_review.md`.
 
    **If NTM is unavailable** (fallback): Spawn via the `Agent()` tool as described below.
 
