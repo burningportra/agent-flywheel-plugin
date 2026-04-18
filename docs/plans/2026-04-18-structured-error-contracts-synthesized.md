@@ -15,7 +15,7 @@
 
 ### Correctness plan — what it does best
 - **Definitive code justification.** Each proposed code includes a one-line justification + "retryable?" + "primary tools" column. No other plan ties codes to tool call graphs this tightly.
-- **Honesty about rejected codes.** It calls out `agent_mail_unreachable`, `cache_stale`, `bead_state_drift`, `transient_exec_failure` and explains *why they are out of scope*. This saves future authors from re-litigating.
+- **Honesty about rejected codes.** It calls out `cache_stale`, `bead_state_drift`, `transient_exec_failure`, `git_dirty` and explains *why they are out of scope*. (Note: `agent_mail_unreachable` was initially rejected here; alignment-check feedback reversed that — the code now appears in the canonical enum per §2.)
 - **Per-tool audit with line numbers.** Sections 3.1–3.8 list exact line numbers for every error site in every tool. This is the only plan that maps "what exists today" to "what needs to change" at source-level fidelity.
 - **Backward-compat proof.** Section 4 explicitly argues `orch_*` aliases inherit changes for free and tells you the one grep to run to verify.
 - **Unique insight the others miss:** *tools that degrade gracefully should not return errors.* Section 3.1 argues `flywheel_profile`'s `br list` and `br --version` calls should stay warnings, not errors — only `profileRepo()` failure is fatal. This prevents code inflation of the error surface.
@@ -51,7 +51,7 @@ Robustness proposes 16 codes. Correctness proposes 12 and rejects 4 (`agent_mail
 | `concurrent_write` | **Keep.** This *will* be returned by tools (`flywheel_review`, `flywheel_approve_beads` action=start) when the per-bead or per-cwd mutex is held. |
 | `bead_cycle` | **Reject.** Beads dependency cycle is detected by `br` CLI itself, not by MCP tools. If `br ready` surfaces a cycle, it's a `cli_failure` with `details.reason = "bead_cycle"`. |
 | `empty_plan` | **Keep.** Pattern B from robustness — a non-empty string that is semantically empty (the sentinel). Distinct from `invalid_input` because the input *looked* valid to the type system. This is the bug from commit 40be5db. Separating it enables a discrete test and a discrete SKILL.md branch ("re-run deep plan"). |
-| `agent_mail_unreachable` | **Reject** (agrees with correctness). Agent Mail is probed at SKILL.md Step 0b, not inside MCP tools. |
+| `agent_mail_unreachable` | **Keep** (reversed on alignment-check feedback 2026-04-18). Rationale: while AM is probed at SKILL.md Step 0b, implementation agents call AM directly during the implement phase (file reservations, inter-agent messaging), and a future tool that wraps those calls should emit this code consistently rather than letting each tool invent its own string. Retryable by default with short backoff; SKILL.md can degrade gracefully. |
 | `git_dirty` | **Reject.** Not raised by any of the 8 tools today. Future tools (e.g., a hypothetical `flywheel_release`) can add it then. |
 | `deep_plan_all_failed` | **Keep.** Robustness Section 1 argues this must be a hard error surfaced to the LLM, not a degraded empty result. Correctness lumps this into `internal_error`; that's wrong because SKILL.md wants to branch ("retry mode=standard"). |
 | `retry_storm` | **Reject.** This is an attribute of `cli_failure` (exceeded `maxRetries`), not a separate category. Surface via `details.retryCount`. |
@@ -59,7 +59,7 @@ Robustness proposes 16 codes. Correctness proposes 12 and rejects 4 (`agent_mail
 | `cli_timeout` / `exec_timeout` | **Final name: `exec_timeout`** (correctness's term). The subject is the exec layer, not the CLI contract. |
 | `cli_aborted` / `exec_aborted` | **Final name: `exec_aborted`**. Same rationale. |
 
-### Definitive 13-code enum
+### Definitive 16-code enum
 
 ```typescript
 export const FLYWHEEL_ERROR_CODES = [
@@ -78,6 +78,8 @@ export const FLYWHEEL_ERROR_CODES = [
   // State (session / concurrency)
   'blocked_state',          // Phase allowlist rejected this action
   'concurrent_write',       // Per-bead / per-cwd mutex held by another in-flight call
+  // Coordination (agent-mail dependency surfacing into tools)
+  'agent_mail_unreachable', // AM HTTP endpoint unreachable from a tool that called it
   // Orchestration (multi-subprocess outcomes)
   'deep_plan_all_failed',   // All parallel planners produced no viable output
   'empty_plan',             // planContent is empty / whitespace / a known sentinel
@@ -92,9 +94,9 @@ export const FLYWHEEL_ERROR_CODES = [
 export type FlywheelErrorCode = typeof FLYWHEEL_ERROR_CODES[number];
 ```
 
-That is **15 codes** (the four "keep"s + correctness's 11 = 15 after removing the duplicates). Let me re-count:
+That is **16 codes**:
 
-`missing_prerequisite`, `invalid_input`, `not_found`, `cli_failure`, `cli_not_available`, `parse_failure`, `exec_timeout`, `exec_aborted`, `blocked_state`, `concurrent_write`, `deep_plan_all_failed`, `empty_plan`, `already_closed`, `unsupported_action`, `internal_error` = **15 codes**.
+`missing_prerequisite`, `invalid_input`, `not_found`, `cli_failure`, `cli_not_available`, `parse_failure`, `exec_timeout`, `exec_aborted`, `blocked_state`, `concurrent_write`, `agent_mail_unreachable`, `deep_plan_all_failed`, `empty_plan`, `already_closed`, `unsupported_action`, `internal_error`.
 
 Robustness's `checkpoint_corrupt` and `partial_state` are logging-only and do not appear in the tool return surface. They live as literal string tags in `log.warn({ code: 'checkpoint_corrupt', ... })` but are intentionally **excluded from `FlywheelErrorCode`** to keep the tool-return type minimal. SKILL.md never sees them; operator logs do.
 
@@ -112,6 +114,7 @@ Robustness's `checkpoint_corrupt` and `partial_state` are logging-only and do no
 | `exec_aborted` | `false` | Client explicitly cancelled — do not retry. |
 | `blocked_state` | `true` | After backoff. |
 | `concurrent_write` | `true` | After short backoff (`250ms`, `1000ms`). |
+| `agent_mail_unreachable` | `true` | Backoff `500ms`, `2000ms`; after 2 failed retries, SKILL.md degrades to AM-off mode per §0f. |
 | `deep_plan_all_failed` | `true` | With `hint: "Retry with mode=standard as fallback."` |
 | `empty_plan` | `false` | Upstream produced a sentinel — re-running same call reproduces same sentinel. |
 | `already_closed` | `false` | Never. |
@@ -136,6 +139,7 @@ export const FLYWHEEL_ERROR_CODES = [
   'cli_failure', 'cli_not_available', 'parse_failure',
   'exec_timeout', 'exec_aborted',
   'blocked_state', 'concurrent_write',
+  'agent_mail_unreachable',
   'deep_plan_all_failed', 'empty_plan',
   'already_closed', 'unsupported_action', 'internal_error',
 ] as const;
@@ -751,7 +755,7 @@ node -e "
 
 ### Tension 2 — 12 vs 16 error codes (correctness vs robustness)
 
-**Decision:** 15 codes, justified per-code in §2. Reject `schema_drift` (subtype of `parse_failure`), `bead_cycle` (subtype of `cli_failure`), `retry_storm` (attribute of `cli_failure`), `agent_mail_unreachable` (out of MCP scope), `git_dirty` (no tool raises it today). Keep `checkpoint_corrupt` and `partial_state` as *logging-only* tags — not part of `FlywheelErrorCode`.
+**Decision:** 16 codes, justified per-code in §2. Reject `schema_drift` (subtype of `parse_failure`), `bead_cycle` (subtype of `cli_failure`), `retry_storm` (attribute of `cli_failure`), `git_dirty` (no tool raises it today). Keep `agent_mail_unreachable` per alignment-check override so any tool that calls AM directly can emit a consistent code. Keep `checkpoint_corrupt` and `partial_state` as *logging-only* tags — not part of `FlywheelErrorCode`.
 
 ### Tension 3 — `cli_failure` + `retryable: true` vs separate `transient_exec_failure` code
 
