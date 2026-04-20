@@ -23,7 +23,7 @@ The `FlywheelToolError['code']` union in `types.ts` already defines 9 codes. Thi
 | `blocked_state` | Operation blocked by current flywheel state (e.g., bead reserved by another agent). | Yes (retry after delay) | approve |
 | `unsupported_action` | Unknown action parameter value. | No | approve, review |
 | `already_closed` | Bead is closed; requested operation is inapplicable. | No | review |
-| `internal_error` | Catch-all for unexpected failures. Should be rare. | No | any |
+| `internal_error` | Catch-all for unexpected failures. Should be rare. | Yes (1 retry cap — see synthesized plan §2) | any |
 
 ### New codes proposed
 
@@ -611,7 +611,7 @@ Which tools can throw which codes, mapped to the phase they're called in:
 | `flywheel_discover` | discovering | `missing_prerequisite`, `invalid_input` |
 | `flywheel_select` | awaiting_selection, any | `invalid_input` |
 | `flywheel_plan` | planning | `missing_prerequisite`, `invalid_input`, `not_found`, `internal_error` |
-| `flywheel_approve_beads` | planning thru awaiting_bead_approval | `missing_prerequisite`, `invalid_input`, `not_found`, `cli_failure`, `parse_failure`, `unsupported_action` |
+| `flywheel_approve_beads` | planning through awaiting_bead_approval | `missing_prerequisite`, `invalid_input`, `not_found`, `cli_failure`, `parse_failure`, `unsupported_action` |
 | `flywheel_review` | implementing, reviewing, iterating | `invalid_input`, `not_found`, `parse_failure`, `already_closed`, `unsupported_action` |
 | `flywheel_verify_beads` | implementing, reviewing | `invalid_input`, `cli_failure` |
 | `flywheel_memory` | any | `cli_not_available`, `invalid_input`, `cli_failure` |

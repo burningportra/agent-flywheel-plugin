@@ -13,7 +13,7 @@
 ### The Standard Prompt
 
 ```
-I still think there are strong opportunities to enhance the UI/UX look and feel and to make everything work better and be more intuitive, user-friendly, visually appealing, polished, slick, and world class in terms of following UI/UX best practices like those used by Stripe, don't you agree? And I want you to carefully consider desktop UI/UX and mobile UI/UX separately while doing this and hyper-optimize for both separately to play to the specifics of each modality. I'm looking for true world-class visual appeal, polish, slickness, etc. that makes people gasp at how stunning and perfect it is in every way.  Use ultrathink.
+I still think there are strong opportunities to enhance the UI/UX look and feel and to make everything work better and be more intuitive, user-friendly, visually appealing, polished, slick, and world-class in terms of following UI/UX best practices like those used by Stripe, don't you agree? And I want you to carefully consider desktop UI/UX and mobile UI/UX separately while doing this and hyper-optimize for both separately to play to the specifics of each modality. I'm looking for true world-class visual appeal, polish, slickness, etc. that makes people gasp at how stunning and perfect it is in every way.  Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ### General Scrutiny Alternative
@@ -36,7 +36,7 @@ Focus specifically on the desktop experience of [PAGE/COMPONENT]. Consider:
 - Whitespace usage
 - Power user affordances
 
-Make it feel like a premium desktop application. Use ultrathink.
+Make it feel like a premium desktop application. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ### Mobile-Only Focus
@@ -49,7 +49,7 @@ Focus specifically on the mobile experience of [PAGE/COMPONENT]. Consider:
 - Bottom sheet patterns
 - Mobile-first responsive design
 
-Make it feel like a premium mobile app. Use ultrathink.
+Make it feel like a premium mobile app. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ### Animation/Transition Focus
@@ -62,7 +62,7 @@ Review all animations and transitions in the application. Consider:
 - Page transitions
 - Micro-interactions
 
-Ensure they're subtle, purposeful, and consistent with premium apps like Stripe. Use ultrathink.
+Ensure they're subtle, purposeful, and consistent with premium apps like Stripe. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ### Typography Focus
@@ -75,7 +75,7 @@ Review typography across the application. Consider:
 - Font weights
 - Responsive font sizes
 
-Achieve a premium, readable typographic system. Use ultrathink.
+Achieve a premium, readable typographic system. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ### Spacing/Layout Focus
@@ -88,7 +88,7 @@ Review spacing and layout across the application. Consider:
 - Component spacing
 - Grid alignment
 
-Achieve pixel-perfect consistency. Use ultrathink.
+Achieve pixel-perfect consistency. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ### Color/Contrast Focus
@@ -101,7 +101,7 @@ Review color usage and contrast across the application. Consider:
 - Dark/light mode consistency
 - Color for meaning (error, success, warning)
 
-Achieve both beauty and accessibility. Use ultrathink.
+Achieve both beauty and accessibility. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ---

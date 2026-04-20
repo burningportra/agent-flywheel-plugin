@@ -224,14 +224,28 @@ for (const bead of ready) {
   if (r.code === 0) {
     updated.push(bead.id);
   } else {
-    // Rollback already-updated beads
+    // Rollback already-updated beads. Track any rollback failures so operators
+    // can manually recover any beads left in a mixed state.
+    const rollbackFailures: string[] = [];
     for (const rollbackId of updated) {
-      await exec('br', ['update', rollbackId, '--status', 'open'], { cwd, timeout: 5000 });
+      try {
+        const rb = await exec('br', ['update', rollbackId, '--status', 'open'], { cwd, timeout: 5000 });
+        if (rb.code !== 0) {
+          rollbackFailures.push(`${rollbackId}: ${rb.stderr?.trim() || `exit ${rb.code}`}`);
+        }
+      } catch (err) {
+        rollbackFailures.push(`${rollbackId}: ${(err as Error).message}`);
+      }
     }
-    return makeApproveError(`Failed to mark bead ${bead.id} in_progress: ${r.stderr}`, ...);
+    return makeApproveError(
+      `Failed to mark bead ${bead.id} in_progress: ${r.stderr}`,
+      { rollbackFailures }, // surfaced in FlywheelErrorEnvelope.details
+    );
   }
 }
 ```
+
+**Rollback-of-rollback semantics:** Individual rollback `br update` calls may themselves fail (e.g., the br CLI crashes mid-loop, or a concurrent writer holds a reservation). We MUST attempt every rollback rather than bailing on the first failure — partial rollback is still better than no rollback. Failed rollbacks are collected into `details.rollbackFailures: string[]` so operators can see exactly which beads need manual reset.
 
 ---
 

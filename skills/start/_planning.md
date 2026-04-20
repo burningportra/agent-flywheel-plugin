@@ -133,7 +133,9 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
          docs/plans/<date>-robustness.md
          (and docs/plans/<date>-fresh-perspective.md if it exists)
 
-       Use ultrathink.
+       Think carefully and step-by-step before responding; this synthesis
+       is harder than it looks — subtle tradeoffs between the three plans
+       propagate to every downstream bead.
 
        ## Best-of-All-Worlds Synthesis
 
@@ -260,7 +262,9 @@ Do NOT pad with low-value questions. 2 sharp questions beat 4 fuzzy ones.
 
       Preserve the structure (sections, task table, verification block).
       For each change, add a one-line rationale at the change site so future
-      reviewers see the user's intent. Use ultrathink.
+      reviewers see the user's intent.
+      Think carefully and step-by-step before responding; ripple effects
+      are harder to trace than they look.
       Write the revised plan to the same file path when done.
     "
   )
@@ -339,7 +343,9 @@ Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_bac
     isn't airtight. Do not accept the plan at face value. The goal is
     exhaustive critique, not polite commentary.
     For each change, give detailed analysis and rationale.
-    Provide changes in git-diff format. Use ultrathink.
+    Provide changes in git-diff format.
+    Think carefully and step-by-step before responding; this critique is
+    harder than it looks — surface assumptions other reviewers missed.
     Write your revised plan to the same file path when done.
   "
 )

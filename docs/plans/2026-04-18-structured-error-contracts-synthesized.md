@@ -46,8 +46,8 @@ Robustness proposes 16 codes. Correctness proposes 12 and rejects 4 (`agent_mail
 | Robustness extra code | Decision | Rationale |
 |---|---|---|
 | `schema_drift` | **Merge into `parse_failure`** with `details.reason = "schema_drift"`. Schema drift is a subtype of parse failure; callers branching on it is premature. |
-| `checkpoint_corrupt` | **Keep as a discrete code.** This is *not* a tool-surface error — checkpoint corruption is a session-startup concern surfaced by the server, not a tool return. But adding it to the enum lets `log.warn` in `checkpoint.ts` emit a structured `code`. It will never appear in a tool's `FlywheelStructuredError` return, only in stderr logs. |
-| `partial_state` | **Keep as a discrete code.** Same rationale as `checkpoint_corrupt`: logging-only. Fires when `saveState` returns `false` after a phase transition. |
+| `checkpoint_corrupt` | **Keep as a discrete string tag, but NOT in `FlywheelErrorCode`.** This is *not* a tool-surface error — checkpoint corruption is a session-startup concern surfaced by the server, not a tool return. It lives only as a literal string in `log.warn({ code: 'checkpoint_corrupt', ... })` inside `checkpoint.ts` — a logging-only registry, intentionally excluded from the exported `FlywheelErrorCode` type (see §2 for the authoritative 16-code enum). It will never appear in a tool's `FlywheelStructuredError` return. SKILL.md never sees it; operator logs do. |
+| `partial_state` | **Keep as a discrete string tag, but NOT in `FlywheelErrorCode`.** Same rationale as `checkpoint_corrupt`: logging-only literal string in `log.warn`, excluded from the exported enum. Fires when `saveState` returns `false` after a phase transition. |
 | `concurrent_write` | **Keep.** This *will* be returned by tools (`flywheel_review`, `flywheel_approve_beads` action=start) when the per-bead or per-cwd mutex is held. |
 | `bead_cycle` | **Reject.** Beads dependency cycle is detected by `br` CLI itself, not by MCP tools. If `br ready` surfaces a cycle, it's a `cli_failure` with `details.reason = "bead_cycle"`. |
 | `empty_plan` | **Keep.** Pattern B from robustness — a non-empty string that is semantically empty (the sentinel). Distinct from `invalid_input` because the input *looked* valid to the type system. This is the bug from commit 40be5db. Separating it enables a discrete test and a discrete SKILL.md branch ("re-run deep plan"). |
@@ -254,7 +254,27 @@ export function makeFlywheelErrorResult(
   };
 }
 
-const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = { /* per §2 table */ };
+// Must cover all 16 codes from §2. Keep this in sync with the retryability
+// table at §2 (lines 104-122). Implementation beads MUST add a unit test that
+// asserts every `FlywheelErrorCode` enum member has a corresponding entry.
+const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
+  missing_prerequisite: false,
+  invalid_input: false,
+  not_found: false,
+  cli_failure: true,
+  cli_not_available: false,
+  parse_failure: false,
+  exec_timeout: true,
+  exec_aborted: false,
+  blocked_state: true,
+  concurrent_write: true,
+  agent_mail_unreachable: true,
+  deep_plan_all_failed: true,
+  empty_plan: false,
+  already_closed: false,
+  unsupported_action: false,
+  internal_error: true, // with 1 retry cap at the call site
+};
 ```
 
 ### Compatibility with existing `makeToolError`
@@ -339,6 +359,12 @@ if (sc?.status === 'error') {
     case 'internal_error':
       // Retry policy per §6 (max 2, 250ms/1000ms backoff)
       return await withRetry(() => flywheel_approve_beads({ cwd, action: 'start' }));
+    case 'agent_mail_unreachable':
+      // Backoff 500ms, 2000ms; after 2 failed retries, degrade to AM-off mode per §0f
+      return await withRetryAndDegradation(
+        () => flywheel_approve_beads({ cwd, action: 'start' }),
+        { backoffs: [500, 2000], onExhausted: () => degradeToAgentMailOff() },
+      );
     case 'exec_aborted':
       // Client cancelled — exit cleanly
       return;
@@ -349,7 +375,7 @@ if (sc?.status === 'error') {
 }
 ```
 
-The key change: `SKILL.md` has a **finite list of codes to branch on** (15), and every one has a deterministic recovery. Adding a new tool never requires an SKILL.md update unless the tool introduces a new code (at which point the enum grows by one).
+The key change: `SKILL.md` has a **finite list of codes to branch on** (16), and every one has a deterministic recovery. Adding a new tool never requires an SKILL.md update unless the tool introduces a new code (at which point the enum grows by one).
 
 ---
 
@@ -599,7 +625,7 @@ Target files and what each covers:
 
 From correctness §7.1 + robustness §7:
 - `makeFlywheelErrorResult` returns a valid `FlywheelStructuredError` envelope.
-- `FLYWHEEL_ERROR_CODES` has exactly 15 entries.
+- `FLYWHEEL_ERROR_CODES` has exactly 16 entries (matches the enum in §2 — see `errors.ts` declaration at lines 137-145).
 - `timestamp` is auto-populated and ISO-8601.
 - `retryable` defaults match `DEFAULT_RETRYABLE` table.
 - All `FLYWHEEL_ERROR_CODES` round-trip through Zod `FlywheelToolErrorSchema.parse`.
@@ -794,5 +820,5 @@ When authoring beads from this plan:
 1. Each phase in §7 maps to 1–2 beads (atomic, PR-sized).
 2. Every bead must declare its acceptance criteria using the verification commands in §14.
 3. No bead may break the tests enumerated in §12 — each phase's test additions must land in the same bead as the code change.
-4. Any new error code proposed outside the 15 in §2 must first update §2 (reopen the synthesis decision).
+4. Any new error code proposed outside the 16 in §2 must first update §2 (reopen the synthesis decision).
 5. The SKILL.md pseudocode in §5 is the north star — if a code change would require a new `case` the SKILL.md can't handle deterministically, push back.

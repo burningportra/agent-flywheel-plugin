@@ -28,7 +28,7 @@ inauthentic/cringe.
 
 And you can't do this sort of thing using regex or a script, you MUST manually
 read each line of the text and revise it manually in a systematic, methodical,
-diligent way. Use ultrathink.
+diligent way. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ---
@@ -38,7 +38,7 @@ diligent way. Use ultrathink.
 ```
 Review this text and remove any AI slop patterns: excessive emdashes, "Here's why"
 constructions, "It's not X, it's Y" formulas, and other LLM writing tells. Recast
-sentences to sound more naturally human. Use ultrathink.
+sentences to sound more naturally human. Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ---
