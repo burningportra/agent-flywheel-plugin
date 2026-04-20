@@ -1,5 +1,8 @@
 import { verifyBeadsClosed } from '../beads.js';
 import { makeToolError } from './shared.js';
+import { classifyExecError } from '../errors.js';
+import { createLogger } from '../logger.js';
+const log = createLogger('verify-beads');
 function okResult(phase, text, data) {
     return {
         content: [{ type: 'text', text }],
@@ -31,7 +34,19 @@ export async function runVerifyBeads(ctx, args) {
     if (!Array.isArray(args.beadIds) || args.beadIds.length === 0) {
         return makeToolError('flywheel_verify_beads', state.phase, 'invalid_input', 'Error: beadIds must be a non-empty array of bead IDs.');
     }
-    const report = await verifyBeadsClosed(exec, cwd, args.beadIds);
+    let report;
+    try {
+        report = await verifyBeadsClosed(exec, cwd, args.beadIds);
+    }
+    catch (err) {
+        const classified = classifyExecError(err);
+        log.error('verifyBeadsClosed threw', { err: String(err), code: classified.code });
+        return makeToolError('flywheel_verify_beads', state.phase, classified.code, `Error verifying beads: ${classified.cause}`, {
+            retryable: classified.retryable,
+            hint: 'Check that br CLI is installed and beadIds are valid, then retry.',
+            details: { beadIds: args.beadIds },
+        });
+    }
     const verified = [...report.closed];
     const autoClosed = [];
     const unclosedNoCommit = [];

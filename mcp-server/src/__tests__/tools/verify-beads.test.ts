@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runVerifyBeads } from '../../tools/verify-beads.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 import type { FlywheelState, Bead } from '../../types.js';
@@ -205,6 +205,25 @@ describe('runVerifyBeads', () => {
     expect(data.verified).toEqual(['ok-1']);
     expect(Object.keys(data.errors)).toContain('missing-1');
     expect(data.errors['missing-1']).toContain('bead not found');
+  });
+
+  it('returns cli_failure error when verifyBeadsClosed throws', async () => {
+    const beadsModule = await import('../../beads.js');
+    const spy = vi.spyOn(beadsModule, 'verifyBeadsClosed').mockRejectedValueOnce(
+      new Error('Timed out after 8000ms: br show tb-1 --json')
+    );
+
+    const { ctx } = makeCtx({}, []);
+
+    const result = await runVerifyBeads(ctx, { cwd: '/fake/cwd', beadIds: ['tb-1'] });
+
+    expect(result.isError).toBe(true);
+    const sc = result.structuredContent as any;
+    expect(sc.status).toBe('error');
+    expect(sc.data.error.code).toBe('exec_timeout');
+    expect(sc.data.error.retryable).toBe(true);
+    expect(result.content[0].text).toContain('Error verifying beads');
+    spy.mockRestore();
   });
 
   it('records auto-close failure under errors and leaves bead in unclosedNoCommit', async () => {

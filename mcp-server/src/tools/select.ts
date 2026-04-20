@@ -13,7 +13,9 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
   const { state, saveState, cwd } = ctx;
 
   if (!args.goal || !args.goal.trim()) {
-    return makeToolError('flywheel_select', state.phase, 'invalid_input', 'Error: goal parameter is required and must be non-empty.');
+    return makeToolError('flywheel_select', state.phase, 'invalid_input', 'Error: goal parameter is required and must be non-empty.', {
+      hint: 'Pass a non-empty goal string describing the selected idea to implement.',
+    });
   }
 
   state.selectedGoal = args.goal.trim();

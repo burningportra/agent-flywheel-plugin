@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, Bead, ApproveArgs, FlywheelPhase, ToolNextStep } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
@@ -76,24 +77,17 @@ function makeApproveError(
   code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'internal_error',
   details?: Record<string, unknown>
 ): McpToolResult<ApproveStructuredContent> {
+  const base = makeFlywheelErrorResult('flywheel_approve_beads', phase, {
+    code,
+    message,
+    ...(details ? { details } : {}),
+  });
   return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
+    ...base,
     structuredContent: {
-      tool: 'flywheel_approve_beads',
-      version: 1,
-      status: 'error',
-      phase,
+      ...base.structuredContent,
       approvalTarget,
-      data: {
-        kind: 'error',
-        error: {
-          code,
-          message,
-          ...(details ? { details } : {}),
-        },
-      },
-    },
+    } as ApproveStructuredContent,
   };
 }
 
@@ -790,13 +784,16 @@ Current beads:\n${compactList}`,
     );
   }
 
-  return {
-    content: [{
-      type: 'text',
-      text: `Unknown advancedAction: ${advancedAction}. Valid options: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix`,
-    }],
-    isError: true,
-  };
+  return makeApproveError(
+    `Unknown advancedAction: "${advancedAction}". Valid options: ${ADVANCED_ACTIONS.join(', ')}.`,
+    state.phase,
+    'beads',
+    'unsupported_action',
+    {
+      advancedAction,
+      validAdvancedActions: [...ADVANCED_ACTIONS],
+    }
+  );
 }
 
 function formatBeadList(beads: Bead[]): string {

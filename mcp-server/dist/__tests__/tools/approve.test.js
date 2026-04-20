@@ -79,7 +79,7 @@ describe('runApprove', () => {
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('Error reading beads');
-        expect(result.structuredContent).toEqual({
+        expect(result.structuredContent).toMatchObject({
             tool: 'flywheel_approve_beads',
             version: 1,
             status: 'error',
@@ -90,6 +90,7 @@ describe('runApprove', () => {
                 error: {
                     code: 'cli_failure',
                     message: expect.stringContaining('Error reading beads'),
+                    retryable: true,
                     details: {
                         command: 'br list --json',
                         stderr: 'br not found',
@@ -312,7 +313,7 @@ describe('runApprove', () => {
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced' });
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('advancedAction is required');
-        expect(result.structuredContent).toEqual({
+        expect(result.structuredContent).toMatchObject({
             tool: 'flywheel_approve_beads',
             version: 1,
             status: 'error',
@@ -323,6 +324,7 @@ describe('runApprove', () => {
                 error: {
                     code: 'invalid_input',
                     message: expect.stringContaining('advancedAction is required'),
+                    retryable: false,
                     details: {
                         action: 'advanced',
                         validAdvancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
@@ -377,11 +379,18 @@ describe('runApprove', () => {
             },
         });
     });
-    it('returns error for unknown advancedAction', async () => {
+    it('returns unsupported_action error for unknown advancedAction', async () => {
         const { ctx } = makeCtx();
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced', advancedAction: 'nope' });
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('Unknown advancedAction');
+        const sc = result.structuredContent;
+        expect(sc.status).toBe('error');
+        expect(sc.data.error.code).toBe('unsupported_action');
+        expect(sc.data.error.details).toEqual({
+            advancedAction: 'nope',
+            validAdvancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
+        });
     });
     // ── Plan approval mode ───────────────────────────────────────
     describe('plan approval mode', () => {

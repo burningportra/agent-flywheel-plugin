@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
@@ -45,23 +46,16 @@ function makeApproveResult(text, phase, approvalTarget, data, nextStep) {
     });
 }
 function makeApproveError(message, phase, approvalTarget, code, details) {
+    const base = makeFlywheelErrorResult('flywheel_approve_beads', phase, {
+        code,
+        message,
+        ...(details ? { details } : {}),
+    });
     return {
-        content: [{ type: 'text', text: message }],
-        isError: true,
+        ...base,
         structuredContent: {
-            tool: 'flywheel_approve_beads',
-            version: 1,
-            status: 'error',
-            phase,
+            ...base.structuredContent,
             approvalTarget,
-            data: {
-                kind: 'error',
-                error: {
-                    code,
-                    message,
-                    ...(details ? { details } : {}),
-                },
-            },
         },
     };
 }
@@ -593,13 +587,10 @@ Current beads:\n${compactList}`, state.phase, 'beads', {
             advancedActions: [...ADVANCED_ACTIONS],
         }, makeNextToolStep('run_cli', 'Diagnose and repair bead dependencies with br dep commands, then return to flywheel_approve_beads.'));
     }
-    return {
-        content: [{
-                type: 'text',
-                text: `Unknown advancedAction: ${advancedAction}. Valid options: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix`,
-            }],
-        isError: true,
-    };
+    return makeApproveError(`Unknown advancedAction: "${advancedAction}". Valid options: ${ADVANCED_ACTIONS.join(', ')}.`, state.phase, 'beads', 'unsupported_action', {
+        advancedAction,
+        validAdvancedActions: [...ADVANCED_ACTIONS],
+    });
 }
 function formatBeadList(beads) {
     const childIds = new Set(beads.filter(b => b.parent).map(b => b.id));
