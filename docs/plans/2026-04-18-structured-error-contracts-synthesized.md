@@ -625,7 +625,7 @@ Target files and what each covers:
 
 From correctness §7.1 + robustness §7:
 - `makeFlywheelErrorResult` returns a valid `FlywheelStructuredError` envelope.
-- `FLYWHEEL_ERROR_CODES` has exactly 15 entries.
+- `FLYWHEEL_ERROR_CODES` has exactly 16 entries (matches the enum in §2 — see `errors.ts` declaration at lines 137-145).
 - `timestamp` is auto-populated and ISO-8601.
 - `retryable` defaults match `DEFAULT_RETRYABLE` table.
 - All `FLYWHEEL_ERROR_CODES` round-trip through Zod `FlywheelToolErrorSchema.parse`.

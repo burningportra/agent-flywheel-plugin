@@ -95,11 +95,22 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    | Placeholder | How to compute |
    |-------------|----------------|
-   | `<complexity>` | Matches the runtime `BeadComplexity` type in `mcp-server/src/model-routing.ts` (`simple` \| `medium` \| `complex`). Heuristic from `br show <bead-id> --json`: 1 file + ≤3 acceptance items + 0 deps → `simple`; 2-4 files OR 1 dep → `medium`; 5+ files OR multiple deps OR vague acceptance → `complex`. Prefer calling `classifyBeadComplexity()` directly when available |
-   | `<relevant-files>` | Paths the agent will likely edit/read, derived from bead description + dep traversal. List 3-10; the agent can still discover more |
-   | `<prior-art-beads>` | Up to 3 closed bead IDs with similar titles: `br list --status closed --json \| jq -r '.[] \| select(.title \| test("<keyword>"; "i")) \| .id' \| head -3` |
-   | `<thinking-directive>` | `simple`/`medium` → `Respond quickly; don't overthink — this bead is well-scoped.` `complex` → `Think carefully and step-by-step before writing code; this bead is harder than it looks.` |
-   | `<completion-length>` | `simple` → `≤5 bullets`; `medium` → `≤10 bullets`; `complex` → `≤20 bullets` |
+   | `<complexity>` | One of `simple` / `medium` / `complex` — must match the runtime `BeadComplexity` type in `mcp-server/src/model-routing.ts`. Prefer calling `classifyBeadComplexity()` directly when available; otherwise use the heuristic in the note below. |
+   | `<relevant-files>` | Paths the agent will likely edit/read, derived from bead description + dep traversal. List 3-10; the agent can still discover more. |
+   | `<prior-art-beads>` | Up to 3 closed bead IDs with similar titles. Use the shell snippet in the note below. |
+   | `<thinking-directive>` | `simple` / `medium` → `Respond quickly; don't overthink — this bead is well-scoped.` `complex` → `Think carefully and step-by-step before writing code; this bead is harder than it looks.` |
+   | `<completion-length>` | `simple` → `≤5 bullets`; `medium` → `≤10 bullets`; `complex` → `≤20 bullets`. |
+
+   **Complexity heuristic** (when `classifyBeadComplexity()` isn't available): from `br show <bead-id> --json`:
+   - 1 file + ≤3 acceptance items + 0 deps → `simple`
+   - 2–4 files OR 1 dep → `medium`
+   - 5+ files OR multiple deps OR vague acceptance → `complex`
+
+   **Prior-art lookup** (copy-paste-safe, substitute `<keyword>` with a term from the bead title):
+
+   ```bash
+   br list --status closed --json | jq -r '.[] | select(.title | test("<keyword>"; "i")) | .id' | head -3
+   ```
 
    Spawn call:
    ```
