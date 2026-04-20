@@ -6,13 +6,13 @@ import { makeFlywheelErrorResult } from '../errors.js';
  * operation="store"            — store a new memory entry
  */
 export async function runMemory(ctx, args) {
-    const { exec, cwd, state } = ctx;
+    const { exec, cwd, state, signal } = ctx;
     const operation = args.operation || 'search';
     const phase = state.phase;
     // Check if cm is available
     let cmCheck;
     try {
-        cmCheck = await exec('cm', ['--version'], { cwd, timeout: 5000 });
+        cmCheck = await exec('cm', ['--version'], { cwd, timeout: 5000, signal });
     }
     catch (err) {
         return makeFlywheelErrorResult('flywheel_memory', phase, {
@@ -48,7 +48,7 @@ export async function runMemory(ctx, args) {
         }
         let storeResult;
         try {
-            storeResult = await exec('cm', ['add', args.content.trim()], { cwd, timeout: 10000 });
+            storeResult = await exec('cm', ['add', args.content.trim()], { cwd, timeout: 10000, signal });
         }
         catch (err) {
             return makeFlywheelErrorResult('flywheel_memory', phase, {
@@ -80,7 +80,7 @@ export async function runMemory(ctx, args) {
         // No query — list recent entries
         let listResult;
         try {
-            listResult = await exec('cm', ['ls', '--limit', '10'], { cwd, timeout: 10000 });
+            listResult = await exec('cm', ['ls', '--limit', '10'], { cwd, timeout: 10000, signal });
         }
         catch (err) {
             return makeFlywheelErrorResult('flywheel_memory', phase, {
@@ -117,7 +117,7 @@ export async function runMemory(ctx, args) {
     // `cm similar` uses keyword mode and returns empty for most queries.
     let searchResult;
     try {
-        searchResult = await exec('cm', ['context', args.query.trim(), '--json'], { cwd, timeout: 10000 });
+        searchResult = await exec('cm', ['context', args.query.trim(), '--json'], { cwd, timeout: 10000, signal });
     }
     catch (err) {
         return makeFlywheelErrorResult('flywheel_memory', phase, {

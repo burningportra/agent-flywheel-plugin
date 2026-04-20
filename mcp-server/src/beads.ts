@@ -546,8 +546,11 @@ export async function validateBeads(
           }
         }
       }
-    } catch {
-      // Non-fatal
+    } catch (err: unknown) {
+      log.warn('dependency detection failed', {
+        code: 'parse_failure',
+        cause: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -624,8 +627,11 @@ export async function validateBeads(
         });
       }
     }
-  } catch {
-    // Non-fatal
+  } catch (err: unknown) {
+    log.warn('template hygiene detection failed', {
+      code: 'parse_failure',
+      cause: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return { ok: !cycles && orphaned.length === 0 && templateIssues.length === 0, orphaned, cycles, warnings, shallowBeads, templateIssues };

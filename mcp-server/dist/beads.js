@@ -451,8 +451,11 @@ export async function validateBeads(exec, cwd) {
                 }
             }
         }
-        catch {
-            // Non-fatal
+        catch (err) {
+            log.warn('dependency detection failed', {
+                code: 'parse_failure',
+                cause: err instanceof Error ? err.message : String(err),
+            });
         }
     }
     // Warn about non-standard bead IDs (may break Agent Mail thread_id conventions)
@@ -525,8 +528,11 @@ export async function validateBeads(exec, cwd) {
             }
         }
     }
-    catch {
-        // Non-fatal
+    catch (err) {
+        log.warn('template hygiene detection failed', {
+            code: 'parse_failure',
+            cause: err instanceof Error ? err.message : String(err),
+        });
     }
     return { ok: !cycles && orphaned.length === 0 && templateIssues.length === 0, orphaned, cycles, warnings, shallowBeads, templateIssues };
 }

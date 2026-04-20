@@ -30,7 +30,7 @@ function okResult(phase, text, data) {
  * `flywheel_review` calls short-circuit cleanly.
  */
 export async function runVerifyBeads(ctx, args) {
-    const { exec, cwd, state, saveState } = ctx;
+    const { exec, cwd, state, saveState, signal } = ctx;
     if (!Array.isArray(args.beadIds) || args.beadIds.length === 0) {
         return makeToolError('flywheel_verify_beads', state.phase, 'invalid_input', 'Error: beadIds must be a non-empty array of bead IDs.');
     }
@@ -51,11 +51,11 @@ export async function runVerifyBeads(ctx, args) {
     const autoClosed = [];
     const unclosedNoCommit = [];
     for (const straggler of report.stragglers) {
-        const grepResult = await exec('git', ['log', `--grep=${straggler.id}`, '--oneline', '-1'], { cwd, timeout: 5000 });
+        const grepResult = await exec('git', ['log', `--grep=${straggler.id}`, '--oneline', '-1'], { cwd, timeout: 5000, signal });
         const commitLine = grepResult.code === 0 ? grepResult.stdout.trim() : '';
         const commitSha = commitLine.split(/\s+/)[0] ?? '';
         if (commitSha && /^[0-9a-f]{4,40}$/i.test(commitSha)) {
-            const updateResult = await exec('br', ['update', straggler.id, '--status', 'closed'], { cwd, timeout: 5000 });
+            const updateResult = await exec('br', ['update', straggler.id, '--status', 'closed'], { cwd, timeout: 5000, signal });
             if (updateResult.code === 0) {
                 autoClosed.push({ beadId: straggler.id, commit: commitSha });
                 verified.push(straggler.id);

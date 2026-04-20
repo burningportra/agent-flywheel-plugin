@@ -341,12 +341,14 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
     const cwd = normalizedArgs.cwd as string;
     const exec = dependencies.makeExec(cwd);
     const state = dependencies.loadState(cwd);
+    const ac = new AbortController();
     const ctx: ToolContext = {
       exec,
       cwd,
       state,
       saveState: (nextState) => dependencies.saveState(cwd, nextState),
       clearState: () => dependencies.clearState(cwd),
+      signal: ac.signal,
     };
 
     try {

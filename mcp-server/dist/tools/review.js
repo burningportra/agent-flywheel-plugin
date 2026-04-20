@@ -1,4 +1,6 @@
 import { makeFlywheelErrorResult } from '../errors.js';
+import { createLogger } from '../logger.js';
+const log = createLogger('review');
 function okResult(phase, text, data) {
     return {
         content: [{ type: 'text', text }],
@@ -51,7 +53,7 @@ function looksLikeBead(value) {
  * action="skip"      — Skip this bead (mark deferred), move to next
  */
 export async function runReview(ctx, args) {
-    const { exec, cwd, state, saveState } = ctx;
+    const { exec, cwd, state, saveState, signal } = ctx;
     if (!args.beadId) {
         return errorResult('reviewing', 'invalid_input', 'Error: beadId is required.');
     }
@@ -70,7 +72,7 @@ export async function runReview(ctx, args) {
         return regressToPhase(ctx, 'implementing', 'implementation');
     }
     // ── Look up bead ──────────────────────────────────────────────
-    const brShowResult = await exec('br', ['show', beadId, '--json'], { cwd, timeout: 8000 });
+    const brShowResult = await exec('br', ['show', beadId, '--json'], { cwd, timeout: 8000, signal });
     if (brShowResult.code !== 0) {
         return errorResult(state.phase, 'not_found', `Bead ${beadId} not found. Run \`br list\` to see available beads.\n\nError: ${brShowResult.stderr}`, { beadId, stderr: brShowResult.stderr });
     }
@@ -115,7 +117,7 @@ export async function runReview(ctx, args) {
     }
     // ── action: skip ──────────────────────────────────────────────
     if (args.action === 'skip') {
-        await exec('br', ['update', beadId, '--status', 'deferred'], { cwd, timeout: 5000 });
+        await exec('br', ['update', beadId, '--status', 'deferred'], { cwd, timeout: 5000, signal });
         if (!state.beadResults)
             state.beadResults = {};
         state.beadResults[beadId] = {
@@ -129,7 +131,7 @@ export async function runReview(ctx, args) {
     // ── action: looks-good ────────────────────────────────────────
     if (args.action === 'looks-good') {
         // Mark bead closed
-        await exec('br', ['update', beadId, '--status', 'closed'], { cwd, timeout: 5000 });
+        await exec('br', ['update', beadId, '--status', 'closed'], { cwd, timeout: 5000, signal });
         if (!state.beadResults)
             state.beadResults = {};
         state.beadResults[beadId] = {
@@ -143,20 +145,26 @@ export async function runReview(ctx, args) {
         state.beadReviewPassCounts[beadId] = (state.beadReviewPassCounts[beadId] ?? 0) + 1;
         // Auto-close parent if all siblings are done
         if (bead.parent) {
-            const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 8000 });
+            const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 8000, signal });
             if (brListResult.code === 0) {
                 try {
                     const allBeads = JSON.parse(brListResult.stdout);
                     const siblings = allBeads.filter(b => b.parent === bead.parent);
                     const allDone = siblings.every(b => b.status === 'closed' || b.id === beadId);
                     if (allDone && bead.parent) {
-                        await exec('br', ['update', bead.parent, '--status', 'closed'], { cwd, timeout: 5000 });
+                        await exec('br', ['update', bead.parent, '--status', 'closed'], { cwd, timeout: 5000, signal });
                         if (!state.beadResults)
                             state.beadResults = {};
                         state.beadResults[bead.parent] = { beadId: bead.parent, status: 'success', summary: 'All subtasks complete' };
                     }
                 }
-                catch { /* parse failure ok */ }
+                catch (err) {
+                    log.warn('Failed to parse sibling beads for parent auto-close', {
+                        code: 'parse_failure', tool: 'flywheel_review', phase: state.phase,
+                        cause: err instanceof Error ? err.message : String(err),
+                        parentId: bead.parent,
+                    });
+                }
             }
         }
         saveState(state);
@@ -291,9 +299,9 @@ Report what you found. Fix obvious issues directly.`,
     });
 }
 async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
-    const { exec, cwd, state, saveState } = ctx;
+    const { exec, cwd, state, saveState, signal } = ctx;
     // Get next ready beads
-    const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 8000 });
+    const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 8000, signal });
     let ready = [];
     if (brReadyResult.code === 0) {
         try {
@@ -328,7 +336,7 @@ All beads complete! Entering review gates.
     }
     if (ready.length === 1) {
         const nextBead = ready[0];
-        await exec('br', ['update', nextBead.id, '--status', 'in_progress'], { cwd, timeout: 5000 });
+        await exec('br', ['update', nextBead.id, '--status', 'in_progress'], { cwd, timeout: 5000, signal });
         state.currentBeadId = nextBead.id;
         state.retryCount = 0;
         state.phase = 'implementing';
@@ -353,7 +361,7 @@ After implementing, commit and call \`flywheel_review\` with beadId="${nextBead.
     }
     // Multiple ready — spawn parallel agents
     for (const bead of ready) {
-        await exec('br', ['update', bead.id, '--status', 'in_progress'], { cwd, timeout: 5000 });
+        await exec('br', ['update', bead.id, '--status', 'in_progress'], { cwd, timeout: 5000, signal });
     }
     state.phase = 'implementing';
     saveState(state);

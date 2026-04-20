@@ -465,8 +465,9 @@ export interface ToolContext {
   exec: import('./exec.js').ExecFn;
   cwd: string;
   state: FlywheelState;
-  saveState: (state: FlywheelState) => void;
+  saveState: (state: FlywheelState) => Promise<boolean> | void;
   clearState: () => void;
+  signal?: AbortSignal;
 }
 
 export type FlywheelToolName =

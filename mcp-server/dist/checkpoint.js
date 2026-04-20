@@ -43,7 +43,8 @@ function getGitHead(cwd) {
             .toString()
             .trim();
     }
-    catch {
+    catch (err) {
+        log.warn("git HEAD detection failed", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
         return undefined;
     }
 }
@@ -166,8 +167,8 @@ export function readCheckpoint(cwd) {
         try {
             parsed = JSON.parse(raw);
         }
-        catch {
-            // Corrupt JSON — move to .corrupt
+        catch (err) {
+            log.warn("corrupt checkpoint JSON", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
             moveToCorrupt(cwd, mainFile);
             return null;
         }
@@ -217,13 +218,13 @@ function moveToCorrupt(cwd, filePath) {
         renameSync(filePath, corruptPath);
         log.warn("corrupt checkpoint moved", { dest: CHECKPOINT_CORRUPT });
     }
-    catch {
-        // If we can't even rename, just try to delete
+    catch (err) {
+        log.warn("checkpoint rename failed, attempting delete", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
         try {
             unlinkSync(filePath);
         }
-        catch {
-            // Give up silently
+        catch (delErr) {
+            log.warn("checkpoint delete also failed", { code: "cli_failure", cause: delErr instanceof Error ? delErr.message : String(delErr) });
         }
     }
 }
@@ -235,8 +236,8 @@ export function cleanupOrphanedTmp(cwd) {
             unlinkSync(tmpFile);
         }
     }
-    catch {
-        // Silently ignore
+    catch (err) {
+        log.warn("orphaned tmp cleanup failed", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
     }
 }
 //# sourceMappingURL=checkpoint.js.map

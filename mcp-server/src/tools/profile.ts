@@ -19,7 +19,7 @@ const log = createLogger('profile');
  * Uses a git-HEAD-keyed cache to skip redundant scans. Pass force=true to bypass.
  */
 export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<McpToolResult> {
-  const { exec, cwd, state, saveState } = ctx;
+  const { exec, cwd, state, saveState, signal } = ctx;
 
   state.phase = 'profiling';
 
@@ -78,7 +78,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   }
 
   // ── Detect coordination backends ──────────────────────────────
-  const brResult = await exec('br', ['--version'], { cwd, timeout: 5000 });
+  const brResult = await exec('br', ['--version'], { cwd, timeout: 5000, signal });
   const hasBeads = brResult.code === 0;
 
   const coordinationBackend = {
@@ -112,7 +112,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   let openBeadCount = 0;
   let deferredBeadCount = 0;
   if (hasBeads) {
-    const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
+    const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000, signal });
     if (brListResult.code === 0) {
       const parsed = parseBrList(brListResult.stdout);
       if (parsed.ok) {

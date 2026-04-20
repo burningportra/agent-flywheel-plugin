@@ -228,5 +228,24 @@ describe('createCallToolHandler', () => {
             },
         });
     });
+    it('passes an AbortSignal through ctx to tool runners', async () => {
+        let capturedSignal;
+        const runProfile = vi.fn().mockImplementation(async (ctx) => {
+            capturedSignal = ctx.signal;
+            return { content: [{ type: 'text', text: 'ok' }] };
+        });
+        const handler = createCallToolHandler({
+            makeExec: vi.fn(() => vi.fn()),
+            loadState: vi.fn(() => createInitialState()),
+            saveState: vi.fn(),
+            clearState: vi.fn(),
+            runners: { flywheel_profile: runProfile },
+        });
+        await handler({
+            params: { name: 'flywheel_profile', arguments: { cwd: '/tmp/repo' } },
+        });
+        expect(capturedSignal).toBeInstanceOf(AbortSignal);
+        expect(capturedSignal.aborted).toBe(false);
+    });
 });
 //# sourceMappingURL=server.test.js.map

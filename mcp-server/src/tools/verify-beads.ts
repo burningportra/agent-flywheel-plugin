@@ -48,7 +48,7 @@ export async function runVerifyBeads(
   ctx: ToolContext,
   args: VerifyBeadsArgs
 ): Promise<McpToolResult> {
-  const { exec, cwd, state, saveState } = ctx;
+  const { exec, cwd, state, saveState, signal } = ctx;
 
   if (!Array.isArray(args.beadIds) || args.beadIds.length === 0) {
     return makeToolError(
@@ -86,7 +86,7 @@ export async function runVerifyBeads(
     const grepResult = await exec(
       'git',
       ['log', `--grep=${straggler.id}`, '--oneline', '-1'],
-      { cwd, timeout: 5000 }
+      { cwd, timeout: 5000, signal }
     );
     const commitLine = grepResult.code === 0 ? grepResult.stdout.trim() : '';
     const commitSha = commitLine.split(/\s+/)[0] ?? '';
@@ -95,7 +95,7 @@ export async function runVerifyBeads(
       const updateResult = await exec(
         'br',
         ['update', straggler.id, '--status', 'closed'],
-        { cwd, timeout: 5000 }
+        { cwd, timeout: 5000, signal }
       );
       if (updateResult.code === 0) {
         autoClosed.push({ beadId: straggler.id, commit: commitSha });

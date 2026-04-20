@@ -16,7 +16,7 @@ const log = createLogger('profile');
  * Uses a git-HEAD-keyed cache to skip redundant scans. Pass force=true to bypass.
  */
 export async function runProfile(ctx, args) {
-    const { exec, cwd, state, saveState } = ctx;
+    const { exec, cwd, state, saveState, signal } = ctx;
     state.phase = 'profiling';
     // ── Opening ceremony (shows version banner) ──────────────────
     const ceremonyWriter = { write: async (text) => { log.info(text); } };
@@ -74,7 +74,7 @@ export async function runProfile(ctx, args) {
         saveCachedProfile(exec, cwd, profile).catch(() => { });
     }
     // ── Detect coordination backends ──────────────────────────────
-    const brResult = await exec('br', ['--version'], { cwd, timeout: 5000 });
+    const brResult = await exec('br', ['--version'], { cwd, timeout: 5000, signal });
     const hasBeads = brResult.code === 0;
     const coordinationBackend = {
         beads: hasBeads,
@@ -109,7 +109,7 @@ export async function runProfile(ctx, args) {
     let openBeadCount = 0;
     let deferredBeadCount = 0;
     if (hasBeads) {
-        const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
+        const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000, signal });
         if (brListResult.code === 0) {
             const parsed = parseBrList(brListResult.stdout);
             if (parsed.ok) {

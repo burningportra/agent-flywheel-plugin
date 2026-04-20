@@ -372,8 +372,9 @@ export interface ToolContext {
     exec: import('./exec.js').ExecFn;
     cwd: string;
     state: FlywheelState;
-    saveState: (state: FlywheelState) => void;
+    saveState: (state: FlywheelState) => Promise<boolean> | void;
     clearState: () => void;
+    signal?: AbortSignal;
 }
 export type FlywheelToolName = 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review' | 'flywheel_verify_beads' | 'flywheel_memory' | 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review' | 'orch_verify_beads' | 'orch_memory';
 export interface ToolChoiceOption {
