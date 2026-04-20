@@ -307,24 +307,23 @@ describe('makeToolError', () => {
       details: { field: 'goal' },
     });
 
-    expect(result).toEqual({
-      content: [{ type: 'text', text: 'Goal is required' }],
-      isError: true,
-      structuredContent: {
-        tool: 'flywheel_select',
-        version: 1,
-        status: 'error',
-        phase: 'planning',
-        data: {
-          kind: 'error',
-          error: {
-            code: 'invalid_input',
-            message: 'Goal is required',
-            retryable: false,
-            details: { field: 'goal' },
-          },
+    expect(result.content).toEqual([{ type: 'text', text: 'Goal is required' }]);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      tool: 'flywheel_select',
+      version: 1,
+      status: 'error',
+      phase: 'planning',
+      data: {
+        kind: 'error',
+        error: {
+          code: 'invalid_input',
+          message: 'Goal is required',
+          retryable: false,
+          details: { field: 'goal' },
         },
       },
     });
+    expect(result.structuredContent!.data.error.timestamp).toBeDefined();
   });
 });

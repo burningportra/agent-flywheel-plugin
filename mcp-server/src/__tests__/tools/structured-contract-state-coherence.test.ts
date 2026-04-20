@@ -261,7 +261,7 @@ describe('structured contract and state coherence', () => {
     const result = await runDiscover(ctx, { cwd: '/fake/cwd', ideas: [] });
 
     expect(result.isError).toBe(true);
-    expect(result.structuredContent).toEqual({
+    expect(result.structuredContent).toMatchObject({
       tool: 'flywheel_discover',
       version: 1,
       status: 'error',
@@ -311,7 +311,7 @@ describe('structured contract and state coherence', () => {
 
     expect(result.isError).toBe(true);
     expect(state.planDocument).toBeUndefined();
-    expect(result.structuredContent).toEqual({
+    expect(result.structuredContent).toMatchObject({
       tool: 'flywheel_plan',
       version: 1,
       status: 'error',
@@ -403,7 +403,7 @@ describe('structured contract and state coherence', () => {
     expect(result.isError).toBe(true);
     expect(state.phase).toBe('reviewing');
     expect(saved).toHaveLength(0);
-    expect(result.structuredContent).toEqual({
+    expect(result.structuredContent).toMatchObject({
       tool: 'flywheel_review',
       version: 1,
       status: 'error',

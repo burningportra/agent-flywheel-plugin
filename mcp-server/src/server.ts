@@ -16,6 +16,7 @@ import { runReview } from './tools/review.js';
 import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
 import { makeToolError } from './tools/shared.js';
+import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import type {
   McpToolResult,
   FlywheelToolName,
@@ -351,14 +352,23 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
     try {
       return await runners[name](ctx, normalizedArgs);
     } catch (err: unknown) {
+      if (err instanceof FlywheelError) {
+        return makeFlywheelErrorResult(name, state.phase, {
+          code: err.code,
+          message: err.message,
+          retryable: err.retryable,
+          hint: err.hint,
+          cause: err.cause,
+          details: err.details,
+        });
+      }
       log.error('Tool error', { tool: name, err: String(err) });
-      return makeToolError(
-        name,
-        state.phase,
-        'internal_error',
-        `Error in ${name}: ${(err as Error)?.message ?? String(err)}`,
-        { retryable: true }
-      );
+      return makeFlywheelErrorResult(name, state.phase, {
+        code: 'internal_error',
+        message: `Error in ${name}: ${(err as Error)?.message ?? String(err)}`,
+        retryable: true,
+        cause: String(err),
+      });
     }
   };
 }

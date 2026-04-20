@@ -129,4 +129,110 @@ describe('runDeepPlanAgents profile snapshot', () => {
         expect(result).toBeNull();
     });
 });
+describe('runDeepPlanAgents failure handling', () => {
+    const createdDirs = [];
+    afterEach(() => {
+        for (const d of createdDirs.splice(0)) {
+            try {
+                rmSync(d, { recursive: true, force: true });
+            }
+            catch { /* ignore */ }
+        }
+    });
+    it('timed-out agent is excluded and successful agent output is returned', async () => {
+        // One agent succeeds, one throws (simulating timeout)
+        let callCount = 0;
+        const exec = async (cmd, args) => {
+            if (cmd === 'git' && args[0] === 'rev-parse')
+                return { code: 0, stdout: 'deadbeef\n', stderr: '' };
+            if (cmd === 'git' && args[0] === 'log')
+                return { code: 0, stdout: '', stderr: '' };
+            if (cmd === 'find')
+                return { code: 0, stdout: './src/index.ts\n', stderr: '' };
+            if (cmd === 'grep')
+                return { code: 1, stdout: '', stderr: '' };
+            if (cmd === 'head')
+                return { code: 0, stdout: '', stderr: '' };
+            if (cmd === 'claude') {
+                callCount += 1;
+                if (callCount === 1)
+                    return { code: 0, stdout: 'successful plan output\n', stderr: '' };
+                throw new Error('timeout');
+            }
+            return { code: 1, stdout: '', stderr: 'not mocked' };
+        };
+        const agents = [
+            { name: 'correctness', task: 'Focus on correctness.' },
+            { name: 'robustness', task: 'Focus on robustness.' },
+        ];
+        const results = await runDeepPlanAgents(exec, '/fake/cwd', agents);
+        const outDir = findLatestOutputDir();
+        if (outDir)
+            createdDirs.push(outDir);
+        // Only the successful agent should be in the results
+        expect(results.length).toBe(1);
+        expect(results[0].name).toBe('correctness');
+        expect(results[0].plan).toContain('successful plan output');
+    });
+    it('all-timeout returns empty array without throwing', async () => {
+        const exec = async (cmd, args) => {
+            if (cmd === 'git' && args[0] === 'rev-parse')
+                return { code: 0, stdout: 'deadbeef\n', stderr: '' };
+            if (cmd === 'git' && args[0] === 'log')
+                return { code: 0, stdout: '', stderr: '' };
+            if (cmd === 'find')
+                return { code: 0, stdout: './src/index.ts\n', stderr: '' };
+            if (cmd === 'grep')
+                return { code: 1, stdout: '', stderr: '' };
+            if (cmd === 'head')
+                return { code: 0, stdout: '', stderr: '' };
+            if (cmd === 'claude')
+                throw new Error('timeout');
+            return { code: 1, stdout: '', stderr: 'not mocked' };
+        };
+        const agents = [
+            { name: 'agent-a', task: 'Plan A.' },
+            { name: 'agent-b', task: 'Plan B.' },
+        ];
+        // Must not throw; returns empty array
+        const results = await runDeepPlanAgents(exec, '/fake/cwd', agents);
+        const outDir = findLatestOutputDir();
+        if (outDir)
+            createdDirs.push(outDir);
+        expect(results).toEqual([]);
+    });
+    it('1-of-2 failure returns only the successful result', async () => {
+        let claudeCallCount = 0;
+        const exec = async (cmd, args) => {
+            if (cmd === 'git' && args[0] === 'rev-parse')
+                return { code: 0, stdout: 'deadbeef\n', stderr: '' };
+            if (cmd === 'git' && args[0] === 'log')
+                return { code: 0, stdout: '', stderr: '' };
+            if (cmd === 'find')
+                return { code: 0, stdout: './src/index.ts\n', stderr: '' };
+            if (cmd === 'grep')
+                return { code: 1, stdout: '', stderr: '' };
+            if (cmd === 'head')
+                return { code: 0, stdout: '', stderr: '' };
+            if (cmd === 'claude') {
+                claudeCallCount += 1;
+                if (claudeCallCount === 1)
+                    return { code: 0, stdout: 'viable plan\n', stderr: '' };
+                return { code: 1, stdout: '', stderr: 'agent failed' };
+            }
+            return { code: 1, stdout: '', stderr: 'not mocked' };
+        };
+        const agents = [
+            { name: 'winner', task: 'Plan winner.' },
+            { name: 'loser', task: 'Plan loser.' },
+        ];
+        const results = await runDeepPlanAgents(exec, '/fake/cwd', agents);
+        const outDir = findLatestOutputDir();
+        if (outDir)
+            createdDirs.push(outDir);
+        expect(results.length).toBe(1);
+        expect(results[0].name).toBe('winner');
+        expect(results[0].plan).toBe('viable plan');
+    });
+});
 //# sourceMappingURL=deep-plan.test.js.map

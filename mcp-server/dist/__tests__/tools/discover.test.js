@@ -179,7 +179,7 @@ describe('runDiscover', () => {
         const { ctx } = makeCtx({ repoProfile: undefined });
         ctx.state.repoProfile = undefined;
         const result = await runDiscover(ctx, { cwd: '/fake/cwd', ideas: [makeIdea()] });
-        expect(result.structuredContent).toEqual({
+        expect(result.structuredContent).toMatchObject({
             tool: 'flywheel_discover',
             version: 1,
             status: 'error',

@@ -174,7 +174,7 @@ describe('runSelect', () => {
     it('returns structuredContent for invalid goal errors', async () => {
         const { ctx } = makeCtx();
         const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: '   ' });
-        expect(result.structuredContent).toEqual({
+        expect(result.structuredContent).toMatchObject({
             tool: 'flywheel_select',
             version: 1,
             status: 'error',

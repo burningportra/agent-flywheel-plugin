@@ -390,22 +390,8 @@ export interface ToolNextStep {
     argsSchemaHint?: Record<string, unknown>;
     options?: ToolChoiceOption[];
 }
-export interface FlywheelToolError {
-    code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'already_closed' | 'internal_error';
-    message: string;
-    retryable?: boolean;
-    details?: Record<string, unknown>;
-}
-export interface FlywheelStructuredError {
-    tool: FlywheelToolName;
-    version: 1;
-    status: 'error';
-    phase: FlywheelPhase;
-    data: {
-        kind: 'error';
-        error: FlywheelToolError;
-    };
-}
+export type { FlywheelErrorCode, FlywheelToolError, FlywheelStructuredError } from './errors.js';
+export { FLYWHEEL_ERROR_CODES, FlywheelStructuredErrorSchema } from './errors.js';
 export type McpToolResult<TStructured = unknown> = {
     content: Array<{
         type: "text";

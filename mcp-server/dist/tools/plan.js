@@ -90,6 +90,9 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
     }
     // ── If planContent is provided inline, write it to disk then register ──
     if (args.planContent && args.planContent.trim()) {
+        if (args.planContent.includes("(No planner outputs provided.)")) {
+            throw new Error("Deep plan failed: all perspective planners timed out or produced no output.");
+        }
         const planDir = join(cwd, 'docs', 'plans');
         mkdirSync(planDir, { recursive: true });
         const planFilePath = join(planDir, `${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`);
@@ -169,7 +172,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
             memorySection = `\n## Prior Session Context\n${mem}\n`;
     }
     catch { /* CASS unavailable — proceed without */ }
-    const basePrompt = `You are a planning agent for an agentic coding workflow.
+    const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
@@ -186,7 +189,9 @@ Write a comprehensive implementation plan from your designated perspective. The 
 - Risk & mitigation
 - Target: 500-2000 lines of detailed content
 
-Focus deeply on your assigned perspective lens.`;
+Focus deeply on your assigned perspective lens.
+
+Use ultrathink.`;
     const dynamicModels = getDeepPlanModels();
     const planAgents = [
         {
@@ -238,7 +243,11 @@ Question every architectural choice: is there a simpler way? A more standard app
         constraints: state.constraints,
         planAgents,
         instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
-        synthesisPrompt: `## Best-of-All-Worlds Synthesis
+        synthesisPrompt: `Use ultrathink.
+
+## Best-of-All-Worlds Synthesis
+
+Use ultrathink.
 
 Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
 
