@@ -28,6 +28,15 @@ AskUserQuestion(questions: [{
 
 **Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
+**Structured error branching (mandatory).** When `flywheel_plan` returns `status: "error"`, branch on `result.structuredContent?.data?.error?.code` (a `FlywheelErrorCode`) instead of matching message text:
+
+```ts
+const code = planResult.structuredContent?.data?.error?.code;
+if (code === "deep_plan_all_failed") return await flywheel_plan({ cwd, mode: "standard" });
+if (code === "empty_plan" || code === "parse_failure") return requestPlanRegeneration();
+if (code === "cli_not_available") return showInstallGuide(planResult.structuredContent?.data?.error?.hint);
+```
+
 **Deep plan**:
 
 1. **Bootstrap Agent Mail** — call `macro_start_session` with:

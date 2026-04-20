@@ -231,7 +231,21 @@ AskUserQuestion(questions: [{
 
 #### Work on beads — sub-menu + bootstrap (MANDATORY)
 
-`flywheel_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, the goal is empty and the tool errors with `missing_prerequisite`. Bootstrap it before any approve call:
+`flywheel_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, branch on `result.structuredContent?.data?.error?.code`; if it is `missing_prerequisite`, bootstrap first and only then retry approve.
+
+Use structured code branches (`FlywheelErrorCode`) for this and all other tool failures:
+
+```ts
+const code = result.structuredContent?.data?.error?.code;
+if (code === "missing_prerequisite") {
+  await synthesizeGoalAndCallSelect(cwd);
+  return await flywheel_approve_beads({ cwd, action: "start" });
+}
+```
+
+Never parse human-readable error text to route control flow. Route only on structured `data.error.code`.
+
+Bootstrap it before any approve call:
 
 1. **Synthesize a default goal from the existing beads.** Read the top 3 open bead titles from `br list --json` and build a default like `Continue: <title-1>; <title-2>; <title-3>` (truncate at 200 chars).
 2. **Confirm or override the goal:**

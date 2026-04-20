@@ -71,6 +71,15 @@ Actions:
 
 After review actions are resolved for all beads in this wave, proceed immediately to Step 9. Do NOT end the turn.
 
+**Structured error branching (mandatory).** For `flywheel_review` and `flywheel_verify_beads`, branch on `result.structuredContent?.data?.error?.code` (a `FlywheelErrorCode`) rather than matching error strings:
+
+```ts
+const code = result.structuredContent?.data?.error?.code;
+if (code === "already_closed") return continueToNextBeadOrGate();
+if (code === "parse_failure") return runManualVerifyFallback();
+if (code === "not_found") return promptForRetryOrPause();
+```
+
 ## Step 9: Loop until complete
 
 > **Fixed in v2.10.1:** `flywheel_verify_beads` correctly unwraps the `br show --json` array shape via `unwrapBrShowValue()` in `mcp-server/src/beads.ts`. If you see `parse_failure` errors on a current install, you're on v2.9.x or older — rebuild via `cd mcp-server && npm run build`. The fallback procedure below remains valid for older installs and for cases where `br` emits an entirely new shape.

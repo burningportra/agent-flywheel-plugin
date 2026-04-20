@@ -91,6 +91,15 @@ AskUserQuestion(questions: [{
 
 If the user asks "what's the quality score?" before choosing to start, call `flywheel_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
 
+**Structured error branching (mandatory).** For `flywheel_approve_beads` failures, branch on `result.structuredContent?.data?.error?.code` (typed as `FlywheelErrorCode`) and never parse `error.message` text:
+
+```ts
+const code = approveResult.structuredContent?.data?.error?.code;
+if (code === "missing_prerequisite") await bootstrapGoalThenRetry();
+if (code === "unsupported_action") return returnToStep6Menu();
+if (code === "already_closed") return continueToNextBeadOrGate();
+```
+
 After calling `flywheel_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
 
 **Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, discuss with user before proceeding)
