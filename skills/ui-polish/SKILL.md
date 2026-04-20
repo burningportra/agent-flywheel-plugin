@@ -23,14 +23,15 @@ description: >-
 This prompt is used so frequently it's worth putting on a Stream Deck button:
 
 ```
-I still think there are strong opportunities to enhance the UI/UX look and feel and to make everything work better and be more intuitive, user-friendly, visually appealing, polished, slick, and world class in terms of following UI/UX best practices like those used by Stripe, don't you agree? And I want you to carefully consider desktop UI/UX and mobile UI/UX separately while doing this and hyper-optimize for both separately to play to the specifics of each modality. I'm looking for true world-class visual appeal, polish, slickness, etc. that makes people gasp at how stunning and perfect it is in every way.  Use ultrathink.
+I still think there are strong opportunities to enhance the UI/UX look and feel and to make everything work better and be more intuitive, user-friendly, visually appealing, polished, slick, and world class in terms of following UI/UX best practices like those used by Stripe, don't you agree? And I want you to carefully consider desktop UI/UX and mobile UI/UX separately while doing this and hyper-optimize for both separately to play to the specifics of each modality. I'm looking for true world-class visual appeal, polish, slickness, etc. that makes people gasp at how stunning and perfect it is in every way.  Think carefully and step-by-step; this is harder than it looks.
 ```
 
 ### Best Models
 
 | Model | Configuration |
 |-------|---------------|
-| **Claude Code + Opus 4.5** | Use ultrathink |
+| **Claude Code + Opus 4.7** | Append "Think carefully and step-by-step; this is harder than it looks." (triggers adaptive thinking). Fixed-budget keywords like `ultrathink` are no-ops on 4.7 |
+| **Claude Code + Opus 4.5/4.6** | Append "Use ultrathink" (fixed extended-thinking budget) |
 | **Codex + GPT 5.2** | High/Extra-High reasoning |
 | **Gemini CLI** | Good |
 
@@ -44,7 +45,7 @@ I still think there are strong opportunities to enhance the UI/UX look and feel 
 | "desktop and mobile separately" | Prevents compromise solutions that are mediocre on both |
 | "world class", "Stripe" | Sets high anchor point |
 | "makes people gasp" | Pushes toward exceptional quality |
-| "ultrathink" | Extended thinking for thorough analysis |
+| "Think carefully and step-by-step" | Triggers Opus 4.7 adaptive thinking for thorough analysis (pre-4.7, "ultrathink" was the equivalent fixed-budget keyword) |
 
 ---
 

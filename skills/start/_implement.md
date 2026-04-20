@@ -89,7 +89,19 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    **If NTM is unavailable** (fallback): Spawn via the `Agent()` tool as described below.
 
-3. Spawn an implementation agent with team membership. **Agent Mail bootstrap is ALWAYS required** — every impl agent must register, reserve files, and send start/done messages regardless of isolation mode or file overlap. The message trail creates a coordination audit log for debugging, session history, and CASS memory:
+3. Spawn an implementation agent with team membership. **Agent Mail bootstrap is ALWAYS required** — every impl agent must register, reserve files, and send start/done messages regardless of isolation mode or file overlap. The message trail creates a coordination audit log for debugging, session history, and CASS memory.
+
+   **Before spawning — pre-flight (populate template placeholders).** Fill these in from the bead before dispatch so the agent doesn't spend turns hunting for context. This matches Opus 4.7's "delegate with full upfront context" guidance — the agent is a capable engineer, not a pair programmer to guide line-by-line.
+
+   | Placeholder | How to compute |
+   |-------------|----------------|
+   | `<complexity>` | From `br show <bead-id> --json`: 1 file + ≤3 acceptance items + 0 deps → `low`; 2-4 files OR 1 dep → `med`; 5+ files OR multiple deps OR vague acceptance → `high` |
+   | `<relevant-files>` | Paths the agent will likely edit/read, derived from bead description + dep traversal. List 3-10; the agent can still discover more |
+   | `<prior-art-beads>` | Up to 3 closed bead IDs with similar titles: `br list --status closed --json \| jq -r '.[] \| select(.title \| test("<keyword>"; "i")) \| .id' \| head -3` |
+   | `<thinking-directive>` | `low`/`med` → `Respond quickly; don't overthink — this bead is well-scoped.` `high` → `Think carefully and step-by-step before writing code; this bead is harder than it looks.` |
+   | `<completion-length>` | `low` → `≤5 bullets`; `med` → `≤10 bullets`; `high` → `≤20 bullets` |
+
+   Spawn call:
    ```
    Agent(
      subagent_type: "general-purpose",
@@ -157,10 +169,32 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        If no keywords match, skip and proceed to STEP 1. Never force a skill invocation on
        an unrelated bead — the lookup is hints, not mandates.
 
+       ## STEP 0.8 — DELEGATION POLICY (Opus 4.7 guidance — read before STEP 1)
+       From Anthropic's Opus 4.7 best-practices guide, verbatim:
+       > "Do not spawn a subagent for work you can complete directly in a
+       > single response (e.g., refactoring a function you can already see).
+       > Spawn multiple subagents in the same turn when fanning out across
+       > items or reading multiple files."
+
+       Concrete rubric for THIS bead:
+       - Scoped to 1 file you can see → do the work in place; do NOT spawn
+       - Need to read 5+ files → spawn parallel Explore subagents in ONE turn
+       - Ambiguous bug / unclear root cause → spawn ONE codex-rescue for second diagnosis
+       - Everything else → in-turn work, no subagents
+
        ## STEP 1 — IMPLEMENT
-       <bead title>
-       <bead description>
+       <thinking-directive>
+
+       Title: <bead title>
+       Description: <bead description>
+       Complexity (coordinator-assigned): <complexity>
        Acceptance criteria: <criteria>
+
+       Likely-relevant files (pre-resolved by coordinator — start here, discover more as needed):
+       <relevant-files>
+
+       Prior art (closed beads with similar scope — diff them for patterns before writing new code):
+       <prior-art-beads>
 
        ## STEP 2 — VALIDATE (MANDATORY GATES — all must pass before STEP 3)
        Run in order; fix failures before proceeding. Do NOT commit until all pass.
@@ -222,7 +256,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        ## STEP 4 — RELEASE + REPORT (MANDATORY)
        4a. Release all file reservations via release_file_reservations.
        4b. Send a completion summary to '<coordinator-agent-name>' via send_message
-           with subject '[impl] <bead-id> done' including:
+           with subject '[impl] <bead-id> done' (target <completion-length>) including:
            - Files changed
            - Tests added/modified
            - Any open concerns or follow-ups
