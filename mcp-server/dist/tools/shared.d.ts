@@ -6,7 +6,7 @@ export declare function formatModelRef(model: {
 export declare function makeChoiceOption(id: string, label: string, options?: Omit<ToolChoiceOption, 'id' | 'label'>): ToolChoiceOption;
 export declare function makeNextToolStep(type: ToolNextStep['type'], message: string, options?: Omit<ToolNextStep, 'type' | 'message'>): ToolNextStep;
 export declare function makeToolResult<TStructured>(text: string, structuredContent: TStructured): McpToolResult<TStructured>;
-export declare function makeToolError(tool: FlywheelToolName, phase: FlywheelPhase, code: FlywheelErrorCode, message: string, options?: Omit<FlywheelToolError, 'code' | 'message'>): McpToolResult<FlywheelStructuredError>;
+export declare function makeToolError(tool: FlywheelToolName, phase: FlywheelPhase, code: FlywheelErrorCode, message: string, options?: Omit<FlywheelToolError, 'code' | 'message' | 'tool' | 'phase' | 'timestamp'>): McpToolResult<FlywheelStructuredError>;
 /**
  * Pick execution mode: single-branch (shared checkout) or worktree (isolated checkouts).
  */

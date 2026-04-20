@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { FlywheelToolName, FlywheelPhase } from './types.js';
 export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error"];
 export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     missing_prerequisite: "missing_prerequisite";
@@ -111,7 +112,12 @@ export declare function throwFlywheelError(input: {
     cause?: string;
     details?: Record<string, unknown>;
 }): never;
-export declare function makeFlywheelErrorResult(tool: string, phase: string, input: Omit<FlywheelToolError, 'timestamp' | 'tool' | 'phase'>): {
+export declare function classifyExecError(err: unknown): {
+    code: 'exec_timeout' | 'exec_aborted' | 'cli_failure';
+    retryable: boolean;
+    cause: string;
+};
+export declare function makeFlywheelErrorResult(tool: FlywheelToolName, phase: FlywheelPhase, input: Omit<FlywheelToolError, 'timestamp' | 'tool' | 'phase'>): {
     content: Array<{
         type: 'text';
         text: string;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FLYWHEEL_ERROR_CODES, FlywheelErrorCodeSchema, FlywheelToolErrorSchema, FlywheelStructuredErrorSchema, DEFAULT_RETRYABLE, FlywheelError, throwFlywheelError, makeFlywheelErrorResult, } from '../errors.js';
+import { FLYWHEEL_ERROR_CODES, FlywheelErrorCodeSchema, FlywheelToolErrorSchema, FlywheelStructuredErrorSchema, DEFAULT_RETRYABLE, FlywheelError, throwFlywheelError, makeFlywheelErrorResult, classifyExecError, } from '../errors.js';
 describe('FLYWHEEL_ERROR_CODES', () => {
     it('has exactly 16 codes', () => {
         expect(FLYWHEEL_ERROR_CODES).toHaveLength(16);
@@ -54,14 +54,36 @@ describe('makeFlywheelErrorResult', () => {
         });
         expect(result.structuredContent.data.error.retryable).toBe(false);
     });
-    it('round-trips every error code through FlywheelStructuredErrorSchema', () => {
+    it('round-trips every error code through FlywheelStructuredErrorSchema with structural equality', () => {
         for (const code of FLYWHEEL_ERROR_CODES) {
             const result = makeFlywheelErrorResult('flywheel_profile', 'idle', {
                 code,
                 message: `test ${code}`,
             });
-            expect(() => FlywheelStructuredErrorSchema.parse(result.structuredContent)).not.toThrow();
+            const parsed = FlywheelStructuredErrorSchema.parse(result.structuredContent);
+            expect(parsed).toEqual(result.structuredContent);
         }
+    });
+    it('defaults empty_plan to retryable=false', () => {
+        const result = makeFlywheelErrorResult('flywheel_plan', 'planning', {
+            code: 'empty_plan',
+            message: 'plan is empty',
+        });
+        expect(result.structuredContent.data.error.retryable).toBe(false);
+    });
+    it('defaults exec_aborted to retryable=false', () => {
+        const result = makeFlywheelErrorResult('flywheel_review', 'reviewing', {
+            code: 'exec_aborted',
+            message: 'aborted',
+        });
+        expect(result.structuredContent.data.error.retryable).toBe(false);
+    });
+    it('defaults deep_plan_all_failed to retryable=true', () => {
+        const result = makeFlywheelErrorResult('flywheel_plan', 'planning', {
+            code: 'deep_plan_all_failed',
+            message: 'all planners failed',
+        });
+        expect(result.structuredContent.data.error.retryable).toBe(true);
     });
 });
 describe('FlywheelError', () => {
@@ -125,6 +147,27 @@ describe('FlywheelErrorCodeSchema', () => {
     });
     it('rejects unknown codes', () => {
         expect(() => FlywheelErrorCodeSchema.parse('bogus_code')).toThrow();
+    });
+});
+describe('classifyExecError', () => {
+    it('classifies timeout errors', () => {
+        const result = classifyExecError(new Error('Timed out after 8000ms: br show br-5 --json'));
+        expect(result).toEqual({ code: 'exec_timeout', retryable: true, cause: 'Timed out after 8000ms: br show br-5 --json' });
+    });
+    it('classifies abort errors', () => {
+        const result = classifyExecError(new Error('Aborted'));
+        expect(result).toEqual({ code: 'exec_aborted', retryable: false, cause: 'Aborted' });
+        const result2 = classifyExecError(new DOMException('signal is aborted', 'AbortError'));
+        expect(result2.code).toBe('exec_aborted');
+        expect(result2.retryable).toBe(false);
+    });
+    it('classifies generic errors as cli_failure', () => {
+        const result = classifyExecError(new Error('spawn ENOENT'));
+        expect(result).toEqual({ code: 'cli_failure', retryable: true, cause: 'spawn ENOENT' });
+    });
+    it('handles non-Error values', () => {
+        const result = classifyExecError('string error');
+        expect(result).toEqual({ code: 'cli_failure', retryable: true, cause: 'string error' });
     });
 });
 //# sourceMappingURL=error-contract.test.js.map

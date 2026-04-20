@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCallToolHandler, TOOLS } from '../server.js';
 import { createInitialState } from '../types.js';
+import { FlywheelError } from '../errors.js';
 describe('createCallToolHandler', () => {
     it('preserves structuredContent returned by tool implementations', async () => {
         const structuredContent = {
@@ -153,6 +154,44 @@ describe('createCallToolHandler', () => {
             const primaryTool = TOOLS.find((t) => t.name === primary);
             expect(aliasTool.inputSchema).toEqual(primaryTool.inputSchema);
         }
+    });
+    it('converts thrown FlywheelError to structured response preserving code and fields', async () => {
+        const handler = createCallToolHandler({
+            makeExec: vi.fn(() => vi.fn()),
+            loadState: vi.fn(() => ({ ...createInitialState(), phase: 'implementing' })),
+            saveState: vi.fn(),
+            clearState: vi.fn(),
+            runners: {
+                flywheel_review: vi.fn().mockRejectedValue(new FlywheelError({ code: 'blocked_state', message: 'wrong phase', hint: 'Wait for reviewing phase.', retryable: false })),
+            },
+        });
+        const result = await handler({
+            params: {
+                name: 'flywheel_review',
+                arguments: { cwd: '/tmp/repo', beadId: 'b-1', action: 'looks-good' },
+            },
+        });
+        expect(result).toMatchObject({
+            isError: true,
+            content: [{ type: 'text', text: 'wrong phase' }],
+            structuredContent: {
+                tool: 'flywheel_review',
+                version: 1,
+                status: 'error',
+                phase: 'implementing',
+                data: {
+                    kind: 'error',
+                    error: {
+                        code: 'blocked_state',
+                        message: 'wrong phase',
+                        hint: 'Wait for reviewing phase.',
+                        retryable: false,
+                    },
+                },
+            },
+        });
+        const sc = result.structuredContent;
+        expect(sc.data.error.code).not.toBe('internal_error');
     });
     it('returns structured internal errors when a tool runner throws', async () => {
         const handler = createCallToolHandler({

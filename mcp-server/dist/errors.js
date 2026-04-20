@@ -86,6 +86,14 @@ export class FlywheelError extends Error {
 export function throwFlywheelError(input) {
     throw new FlywheelError(input);
 }
+export function classifyExecError(err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/Timed out after \d+ms/.test(msg))
+        return { code: 'exec_timeout', retryable: true, cause: msg };
+    if (/aborted|AbortError/i.test(msg))
+        return { code: 'exec_aborted', retryable: false, cause: msg };
+    return { code: 'cli_failure', retryable: true, cause: msg };
+}
 export function makeFlywheelErrorResult(tool, phase, input) {
     const error = {
         ...input,

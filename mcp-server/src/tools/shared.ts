@@ -51,7 +51,7 @@ export function makeToolError(
   phase: FlywheelPhase,
   code: FlywheelErrorCode,
   message: string,
-  options: Omit<FlywheelToolError, 'code' | 'message'> = {}
+  options: Omit<FlywheelToolError, 'code' | 'message' | 'tool' | 'phase' | 'timestamp'> = {}
 ): McpToolResult<FlywheelStructuredError> {
   return makeFlywheelErrorResult(tool, phase, { code, message, ...options });
 }

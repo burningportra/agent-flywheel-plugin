@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { FlywheelToolName, FlywheelPhase } from './types.js';
 
 export const FLYWHEEL_ERROR_CODES = [
   'missing_prerequisite',
@@ -99,9 +100,20 @@ export function throwFlywheelError(input: { code: FlywheelErrorCode; message: st
   throw new FlywheelError(input);
 }
 
+export function classifyExecError(err: unknown): {
+  code: 'exec_timeout' | 'exec_aborted' | 'cli_failure';
+  retryable: boolean;
+  cause: string;
+} {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/Timed out after \d+ms/.test(msg)) return { code: 'exec_timeout', retryable: true, cause: msg };
+  if (/aborted|AbortError/i.test(msg)) return { code: 'exec_aborted', retryable: false, cause: msg };
+  return { code: 'cli_failure', retryable: true, cause: msg };
+}
+
 export function makeFlywheelErrorResult(
-  tool: string,
-  phase: string,
+  tool: FlywheelToolName,
+  phase: FlywheelPhase,
   input: Omit<FlywheelToolError, 'timestamp' | 'tool' | 'phase'>
 ): { content: Array<{ type: 'text'; text: string }>; isError: true; structuredContent: FlywheelStructuredError } {
   const error: FlywheelToolError = {
