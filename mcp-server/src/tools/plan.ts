@@ -5,6 +5,8 @@ import { slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
+import type { FlywheelErrorCode } from '../errors.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 
 function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', data: Record<string, unknown>): McpToolResult {
   return {
@@ -21,28 +23,13 @@ function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', da
 
 function errorResult(
   phase: 'planning' | 'awaiting_plan_approval',
-  code: 'missing_prerequisite' | 'invalid_input' | 'not_found',
+  code: FlywheelErrorCode,
   message: string,
   details?: Record<string, unknown>
 ): McpToolResult {
-  return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
-    structuredContent: {
-      tool: 'flywheel_plan',
-      version: 1,
-      status: 'error',
-      phase,
-      data: {
-        kind: 'error',
-        error: {
-          code,
-          message,
-          ...(details ? { details } : {}),
-        },
-      },
-    },
-  };
+  return makeFlywheelErrorResult('flywheel_plan', phase, {
+    code, message, ...(details ? { details } : {}),
+  });
 }
 
 /**
@@ -107,9 +94,23 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
   }
 
   // ── If planContent is provided inline, write it to disk then register ──
-  if (args.planContent && args.planContent.trim()) {
-    if (args.planContent.includes("(No planner outputs provided.)")) {
-      throw new Error("Deep plan failed: all perspective planners timed out or produced no output.");
+  if (args.planContent) {
+    const trimmed = args.planContent.trim();
+    if (trimmed.length === 0) {
+      return errorResult('planning', 'empty_plan', 'planContent is empty or whitespace.');
+    }
+    if (trimmed.includes('(No planner outputs provided.)')) {
+      return makeFlywheelErrorResult('flywheel_plan', 'planning', {
+        code: 'deep_plan_all_failed',
+        message: 'Deep plan failed: all perspective planners timed out or produced no output.',
+        hint: 'Retry with mode=standard as fallback.',
+      });
+    }
+    if (trimmed.startsWith('(AGENT')) {
+      return errorResult('planning', 'empty_plan',
+        `planContent is an agent failure sentinel: ${trimmed.slice(0, 80)}`,
+        { sentinelPrefix: '(AGENT' },
+      );
     }
     const planDir = join(cwd, 'docs', 'plans');
     mkdirSync(planDir, { recursive: true });

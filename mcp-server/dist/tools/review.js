@@ -1,3 +1,4 @@
+import { makeFlywheelErrorResult } from '../errors.js';
 function okResult(phase, text, data) {
     return {
         content: [{ type: 'text', text }],
@@ -11,24 +12,9 @@ function okResult(phase, text, data) {
     };
 }
 function errorResult(phase, code, message, details) {
-    return {
-        content: [{ type: 'text', text: message }],
-        isError: true,
-        structuredContent: {
-            tool: 'flywheel_review',
-            version: 1,
-            status: 'error',
-            phase,
-            data: {
-                kind: 'error',
-                error: {
-                    code,
-                    message,
-                    ...(details ? { details } : {}),
-                },
-            },
-        },
-    };
+    return makeFlywheelErrorResult('flywheel_review', phase, {
+        code, message, ...(details ? { details } : {}),
+    });
 }
 function parseBrShowBead(raw) {
     try {
@@ -314,7 +300,7 @@ async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
             ready = JSON.parse(brReadyResult.stdout);
         }
         catch {
-            ready = [];
+            return errorResult(state.phase, 'parse_failure', 'br ready produced malformed JSON — fall back to manual bead selection.', { command: 'br ready --json', stdout: brReadyResult.stdout.slice(0, 200) });
         }
     }
     // Filter out already-completed beads

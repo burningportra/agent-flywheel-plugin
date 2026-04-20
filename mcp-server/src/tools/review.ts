@@ -1,4 +1,6 @@
-import type { ToolContext, McpToolResult, Bead, ReviewArgs } from '../types.js';
+import type { ToolContext, McpToolResult, Bead, ReviewArgs, FlywheelPhase } from '../types.js';
+import type { FlywheelErrorCode } from '../errors.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 
 function okResult(phase: string, text: string, data: Record<string, unknown>): McpToolResult {
   return {
@@ -13,25 +15,10 @@ function okResult(phase: string, text: string, data: Record<string, unknown>): M
   };
 }
 
-function errorResult(phase: string, code: string, message: string, details?: Record<string, unknown>): McpToolResult {
-  return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
-    structuredContent: {
-      tool: 'flywheel_review',
-      version: 1,
-      status: 'error',
-      phase,
-      data: {
-        kind: 'error',
-        error: {
-          code,
-          message,
-          ...(details ? { details } : {}),
-        },
-      },
-    },
-  };
+function errorResult(phase: FlywheelPhase, code: FlywheelErrorCode, message: string, details?: Record<string, unknown>): McpToolResult {
+  return makeFlywheelErrorResult('flywheel_review', phase, {
+    code, message, ...(details ? { details } : {}),
+  });
 }
 
 function parseBrShowBead(raw: string): Bead | null {
@@ -365,7 +352,12 @@ async function nextBeadOrGates(
   if (brReadyResult.code === 0) {
     try {
       ready = JSON.parse(brReadyResult.stdout);
-    } catch { ready = []; }
+    } catch {
+      return errorResult(state.phase, 'parse_failure',
+        'br ready produced malformed JSON — fall back to manual bead selection.',
+        { command: 'br ready --json', stdout: brReadyResult.stdout.slice(0, 200) },
+      );
+    }
   }
 
   // Filter out already-completed beads

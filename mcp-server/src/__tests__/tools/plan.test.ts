@@ -222,13 +222,49 @@ describe('runPlan', () => {
     expect(result.content[0].text).toContain('Plan received and saved');
     });
 
-    it('ignores empty/whitespace planContent', async () => {
+    it('returns empty_plan error for whitespace-only planContent', async () => {
       const { ctx } = makeCtx({}, tmpDir);
 
       const result = await runPlan(ctx, { cwd: tmpDir, planContent: '   ' });
 
-      // Should fall through to standard mode prompt
-      expect(result.content[0].text).toContain('Plan Document Requirements');
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        tool: 'flywheel_plan',
+        status: 'error',
+        data: { kind: 'error', error: { code: 'empty_plan' } },
+      });
+    });
+
+    it('returns deep_plan_all_failed when planContent contains the failure sentinel', async () => {
+      const { ctx } = makeCtx({}, tmpDir);
+
+      const result = await runPlan(ctx, { cwd: tmpDir, planContent: '(No planner outputs provided.)' });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        tool: 'flywheel_plan',
+        status: 'error',
+        data: {
+          kind: 'error',
+          error: {
+            code: 'deep_plan_all_failed',
+            hint: 'Retry with mode=standard as fallback.',
+          },
+        },
+      });
+    });
+
+    it('returns empty_plan when planContent is an agent failure sentinel', async () => {
+      const { ctx } = makeCtx({}, tmpDir);
+
+      const result = await runPlan(ctx, { cwd: tmpDir, planContent: '(AGENT RETURNED EMPTY — correctness planner)' });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        tool: 'flywheel_plan',
+        status: 'error',
+        data: { kind: 'error', error: { code: 'empty_plan' } },
+      });
     });
 
     afterEach(() => {
