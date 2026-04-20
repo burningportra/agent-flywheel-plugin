@@ -13,8 +13,16 @@ export function loadState(cwd: string): FlywheelState {
   return createInitialState();
 }
 
-export async function saveState(cwd: string, state: FlywheelState): Promise<void> {
-  await writeCheckpoint(cwd, state);
+export async function saveState(cwd: string, state: FlywheelState): Promise<boolean> {
+  const ok = await writeCheckpoint(cwd, state);
+  if (!ok) {
+    log.warn('saveState failed — checkpoint not persisted', {
+      code: 'partial_state',
+      phase: state.phase,
+      cwd,
+    });
+  }
+  return ok;
 }
 
 export function clearState(cwd: string): void {

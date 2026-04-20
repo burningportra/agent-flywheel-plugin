@@ -267,6 +267,23 @@ describe('runPlan', () => {
       });
     });
 
+    it('restores planDocument when saveState returns false', async () => {
+      const exec = createMockExec();
+      const state = makeState({ selectedGoal: 'Add caching layer', planDocument: 'old-plan.md', phase: 'planning' });
+      const ctx = {
+        exec,
+        cwd: tmpDir,
+        state,
+        saveState: (_s: FlywheelState) => Promise.resolve(false),
+        clearState: () => {},
+      };
+
+      await runPlan(ctx, { cwd: tmpDir, planContent: '# Plan\n\nContent here' });
+
+      expect(state.planDocument).toBe('old-plan.md');
+      expect(state.phase).toBe('planning');
+    });
+
     afterEach(() => {
       rmSync(tmpDir, { recursive: true, force: true });
     });

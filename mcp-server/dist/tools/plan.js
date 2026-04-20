@@ -91,14 +91,27 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
             return errorResult('planning', 'empty_plan', `planContent is an agent failure sentinel: ${trimmed.slice(0, 80)}`, { sentinelPrefix: '(AGENT' });
         }
         const planDir = join(cwd, 'docs', 'plans');
-        mkdirSync(planDir, { recursive: true });
-        const planFilePath = join(planDir, `${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`);
-        writeFileSync(planFilePath, args.planContent, 'utf8');
         const relativePath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`;
+        const planFilePath = join(planDir, relativePath.split('/').pop());
+        const prevPlanDocument = state.planDocument;
+        const prevPhase = state.phase;
+        const prevRound = state.planRefinementRound;
+        try {
+            mkdirSync(planDir, { recursive: true });
+            writeFileSync(planFilePath, args.planContent, 'utf8');
+        }
+        catch (err) {
+            return errorResult('planning', 'cli_failure', `Failed to write plan file: ${err instanceof Error ? err.message : String(err)}`, { planFilePath });
+        }
         state.planDocument = relativePath;
         state.planRefinementRound = 0;
         state.phase = 'awaiting_plan_approval';
-        saveState(state);
+        const saved = await saveState(state);
+        if (saved === false) {
+            state.planDocument = prevPlanDocument;
+            state.phase = prevPhase;
+            state.planRefinementRound = prevRound ?? 0;
+        }
         return okResult(`**Plan received and saved to \`${relativePath}\`.**
 
 **NEXT: Call \`flywheel_approve_beads\` to review the plan and proceed to bead creation.**

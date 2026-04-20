@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
 import { makeFlywheelErrorResult } from '../errors.js';
+import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
@@ -97,7 +98,7 @@ function getBeadApprovalData(state, beads, score) {
  * action="advanced" — Advanced refinement (requires advancedAction param)
  */
 export async function runApprove(ctx, args) {
-    const { exec, cwd, state, saveState } = ctx;
+    const { exec, cwd, state, saveState, signal } = ctx;
     if (!state.selectedGoal) {
         return makeApproveError('Error: No goal selected. Call flywheel_select first.', state.phase, 'beads', 'missing_prerequisite', {
             requiredTool: 'flywheel_select',
@@ -110,7 +111,7 @@ export async function runApprove(ctx, args) {
     }
     // ── Bead approval mode ─────────────────────────────────────────
     // Read current beads from br CLI
-    const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
+    const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000, signal });
     if (brListResult.code !== 0) {
         return makeApproveError(`Error reading beads: ${brListResult.stderr}\n\nEnsure \`br\` CLI is installed and \`br init\` has been run in this directory.`, state.phase, 'beads', 'cli_failure', {
             command: 'br list --json',
@@ -309,7 +310,7 @@ ${preview}${plan.length > 2000 ? '\n...(read full plan from file)' : ''}
 After creating all beads, call \`flywheel_approve_beads\` with action="start" to review and launch.`;
 }
 async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore) {
-    const { exec, cwd, state, saveState } = ctx;
+    const { exec, cwd, state, saveState, signal } = ctx;
     // Reset and move to implementing
     _lastBeadSnapshot = undefined;
     state.beadResults = {};
@@ -321,7 +322,7 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore) 
     state.currentGateIndex = 0;
     state.phase = 'implementing';
     // Get ready beads (unblocked by dependencies)
-    const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 10000 });
+    const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 10000, signal });
     let ready = [];
     if (brReadyResult.code === 0) {
         const readyParsed = parseBrList(brReadyResult.stdout);
@@ -351,12 +352,36 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore) 
             },
         }, makeNextToolStep('run_cli', 'Diagnose blocked beads with br ready or br dep cycles, then return to flywheel_approve_beads.'));
     }
-    // Mark ready beads as in_progress
-    for (const bead of ready) {
-        await exec('br', ['update', bead.id, '--status', 'in_progress'], { cwd, timeout: 5000 });
+    // Acquire per-cwd mutex for the start action
+    const mutexKey = `approve-start:${cwd}`;
+    if (!acquireBeadMutex(mutexKey)) {
+        return makeConcurrentWriteError('flywheel_approve_beads', state.phase, mutexKey);
     }
-    state.currentBeadId = ready[0].id;
-    saveState(state);
+    try {
+        // Mark ready beads as in_progress with partial rollback on failure
+        const transitioned = [];
+        for (const bead of ready) {
+            const updateResult = await exec('br', ['update', bead.id, '--status', 'in_progress'], { cwd, timeout: 5000, signal });
+            if (updateResult.code !== 0) {
+                // Rollback already-transitioned beads
+                for (const id of transitioned) {
+                    await exec('br', ['update', id, '--status', 'open'], { cwd, timeout: 5000, signal });
+                }
+                releaseBeadMutex(mutexKey);
+                return makeApproveError(`Failed to mark bead ${bead.id} as in_progress: ${updateResult.stderr || `exit ${updateResult.code}`}. Rolled back ${transitioned.length} bead(s).`, state.phase, 'beads', 'cli_failure', {
+                    failedBeadId: bead.id,
+                    rolledBack: transitioned,
+                    stderr: updateResult.stderr,
+                });
+            }
+            transitioned.push(bead.id);
+        }
+        state.currentBeadId = ready[0].id;
+        saveState(state);
+    }
+    finally {
+        releaseBeadMutex(mutexKey);
+    }
     const convergenceNote = convergenceScore !== undefined
         ? `\n📈 Convergence: ${(convergenceScore * 100).toFixed(0)}%${convergenceScore >= 0.75 ? ' ✅' : convergenceScore >= 0.50 ? ' (converging)' : ' (low)'}`
         : '';
