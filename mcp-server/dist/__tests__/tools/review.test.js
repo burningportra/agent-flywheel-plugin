@@ -244,6 +244,28 @@ describe('runReview', () => {
             expect(result.isError).toBeUndefined();
         });
     });
+    it('returns parse_failure when br ready produces malformed JSON', async () => {
+        const bead = makeBead();
+        const { ctx } = makeCtx({}, [
+            brShowCall(bead),
+            brUpdateCall('test-bead-1', 'closed'),
+            { cmd: 'br', args: ['ready', '--json'], result: { code: 0, stdout: 'not-valid-json{', stderr: '' } },
+        ]);
+        const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'looks-good' });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toMatchObject({
+            tool: 'flywheel_review',
+            version: 1,
+            status: 'error',
+            data: {
+                kind: 'error',
+                error: {
+                    code: 'parse_failure',
+                },
+            },
+        });
+        expect(result.content[0].text).toContain('malformed JSON');
+    });
     it('spawns parallel agents when multiple beads are ready', async () => {
         const bead = makeBead();
         const nextBeads = [

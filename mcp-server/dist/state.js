@@ -12,7 +12,15 @@ export function loadState(cwd) {
     return createInitialState();
 }
 export async function saveState(cwd, state) {
-    await writeCheckpoint(cwd, state);
+    const ok = await writeCheckpoint(cwd, state);
+    if (!ok) {
+        log.warn('saveState failed — checkpoint not persisted', {
+            code: 'partial_state',
+            phase: state.phase,
+            cwd,
+        });
+    }
+    return ok;
 }
 export function clearState(cwd) {
     clearCheckpoint(cwd);

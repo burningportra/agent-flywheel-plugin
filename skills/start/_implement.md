@@ -20,6 +20,15 @@ Claude owns architecture / complex reasoning, Codex owns fast iteration / testin
 
 **Rate-limit management** — if any impl agent reports a rate-limit error (429, "usage limit reached", etc.), invoke `/caam` to switch that model's account. `caam activate <model> <backup-account>` takes <100ms and keeps the wave moving. Don't kill and restart the agent; the wrapper just re-authenticates the current session.
 
+**Structured error branching for monitoring/tool failures.** When a flywheel tool or monitor wrapper returns a structured error, branch on `result.structuredContent?.data?.error?.code` (typed `FlywheelErrorCode`) instead of parsing `error.message` strings:
+
+```ts
+const code = monitorResult.structuredContent?.data?.error?.code;
+if (code === "exec_timeout") return retryMonitorTick();
+if (code === "exec_aborted") return stopWaveCleanly();
+if (code === "cli_failure") return escalateWithHint(monitorResult.structuredContent?.data?.error?.hint);
+```
+
 **Destructive-command coordination** — if any impl agent proposes `git reset --hard`, `git push --force`, `DROP TABLE`, `rm -rf`, `kubectl delete`, or similar, invoke `/slb` to require two-person approval. The coordinator is the second party; never let an agent self-approve destructive ops. If `/dcg` is configured as a hook, most of these are already blocked at the harness layer — still confirm via `/slb` for anything slipping through.
 
 **DCG-blocked command workarounds** — when the `/dcg` hook blocks a command, do not try to bypass it. Use the safe equivalent:

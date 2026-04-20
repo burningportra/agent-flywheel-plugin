@@ -15,12 +15,16 @@ export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise
   const { state, saveState } = ctx;
 
   if (!state.repoProfile) {
-    return makeToolError('flywheel_discover', state.phase, 'missing_prerequisite', 'Error: No repo profile found. Call flywheel_profile first.');
+    return makeToolError('flywheel_discover', state.phase, 'missing_prerequisite', 'Error: No repo profile found. Call flywheel_profile first.', {
+      hint: 'Call flywheel_profile to generate a repo profile before calling flywheel_discover.',
+    });
   }
 
   const ideas = (args.ideas || []) as CandidateIdea[];
   if (ideas.length === 0) {
-    return makeToolError('flywheel_discover', state.phase, 'invalid_input', 'Error: No ideas provided. Pass at least 3 ideas in the ideas array.');
+    return makeToolError('flywheel_discover', state.phase, 'invalid_input', 'Error: No ideas provided. Pass at least 3 ideas in the ideas array.', {
+      hint: 'Generate 5-15 ideas from the repo profile and pass them in the ideas array.',
+    });
   }
 
   state.candidateIdeas = ideas;

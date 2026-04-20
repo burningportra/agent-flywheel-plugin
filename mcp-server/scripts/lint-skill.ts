@@ -89,8 +89,9 @@ async function loadLintModules(): Promise<{
   const slashMod = (await import(`${lintBase}/rules/slashReferences.js`)) as unknown as { slash001: unknown };
   const placeMod = (await import(`${lintBase}/rules/placeholders.js`)) as unknown as { place001: unknown };
   const implMod = (await import(`${lintBase}/rules/implicitDecisions.js`)) as unknown as { impl001: unknown };
+  const errMod = (await import(`${lintBase}/rules/errorCodeReferences.js`)) as unknown as { err001: unknown };
   const rules: RulesModule = {
-    rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001],
+    rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001],
   };
   return { lintMod, registryMod, baselineMod, manifestMod, reportersMod, rules };
 }
@@ -237,6 +238,7 @@ function helpText(version: string): string {
     "  SLASH001 Slash references must resolve to an installed skill.",
     "  PLACE001 Placeholder tags must have a referent in the same step.",
     "  IMPL001  Implicit-decision phrases that should be AskUserQuestion calls.",
+    "  ERR001   String-matching on error text; branch on data.error.code instead.",
     "",
     "Exit codes:",
     "  0  Clean (no error-severity findings).",

@@ -9,6 +9,9 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync } from "fs";
 import { join } from "path";
 import { parseFeedbackFile } from "./parsers.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("feedback");
 
 // ─── A. Post-Orchestration Feedback ─────────────────────────
 
@@ -88,12 +91,14 @@ export function loadAllFeedback(cwd: string): FlywheelFeedback[] {
           const raw = readFileSync(join(dir, f), "utf8");
           const parsed = parseFeedbackFile(raw);
           return parsed.ok ? parsed.data : null;
-        } catch {
+        } catch (err: unknown) {
+          log.warn("failed to read feedback file", { code: "parse_failure", file: f, cause: err instanceof Error ? err.message : String(err) });
           return null;
         }
       })
       .filter((f): f is FlywheelFeedback => f != null);
-  } catch {
+  } catch (err: unknown) {
+    log.warn("failed to read feedback directory", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
     return [];
   }
 }
@@ -175,7 +180,8 @@ export function withCassContext(prompt: string, cwd: string, taskDescription?: s
     if (!memory) return prompt;
 
     return `## Context from Prior Flywheel Runs\n${memory}\n\n---\n\n${prompt}`;
-  } catch {
+  } catch (err: unknown) {
+    log.warn("CASS context injection failed", { code: "cli_not_available", cause: err instanceof Error ? err.message : String(err) });
     return prompt;
   }
 }
@@ -293,7 +299,10 @@ export function parseToolFeedback(output: string, toolName: string): ToolFeedbac
       weaknesses: Array.isArray(p.weaknesses) ? p.weaknesses : [],
       suggestions: Array.isArray(p.suggestions) ? p.suggestions : [],
     };
-  } catch { return null; }
+  } catch (err: unknown) {
+    log.warn("failed to parse tool feedback", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
 }
 
 /** Save tool feedback to .pi-flywheel-feedback/tools/<toolName>.jsonl */
@@ -303,5 +312,7 @@ export function saveToolFeedback(cwd: string, feedback: ToolFeedback): void {
     mkdirSync(dir, { recursive: true });
     const file = join(dir, `${feedback.toolName}.jsonl`);
     appendFileSync(file, JSON.stringify(feedback) + "\n", "utf8");
-  } catch { /* best-effort */ }
+  } catch (err: unknown) {
+    log.warn("failed to save tool feedback", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
+  }
 }

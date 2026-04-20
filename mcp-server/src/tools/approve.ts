@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, Bead, ApproveArgs, FlywheelPhase, ToolNextStep } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
+import { makeFlywheelErrorResult } from '../errors.js';
+import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
@@ -76,24 +78,17 @@ function makeApproveError(
   code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'internal_error',
   details?: Record<string, unknown>
 ): McpToolResult<ApproveStructuredContent> {
+  const base = makeFlywheelErrorResult('flywheel_approve_beads', phase, {
+    code,
+    message,
+    ...(details ? { details } : {}),
+  });
   return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
+    ...base,
     structuredContent: {
-      tool: 'flywheel_approve_beads',
-      version: 1,
-      status: 'error',
-      phase,
+      ...base.structuredContent,
       approvalTarget,
-      data: {
-        kind: 'error',
-        error: {
-          code,
-          message,
-          ...(details ? { details } : {}),
-        },
-      },
-    },
+    } as ApproveStructuredContent,
   };
 }
 
@@ -137,7 +132,7 @@ function getBeadApprovalData(state: ToolContext['state'], beads: Bead[], score: 
  * action="advanced" — Advanced refinement (requires advancedAction param)
  */
 export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<McpToolResult> {
-  const { exec, cwd, state, saveState } = ctx;
+  const { exec, cwd, state, saveState, signal } = ctx;
 
   if (!state.selectedGoal) {
     return makeApproveError('Error: No goal selected. Call flywheel_select first.', state.phase, 'beads', 'missing_prerequisite', {
@@ -155,7 +150,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
 
   // ── Bead approval mode ─────────────────────────────────────────
   // Read current beads from br CLI
-  const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
+  const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000, signal });
   if (brListResult.code !== 0) {
     return makeApproveError(
       `Error reading beads: ${brListResult.stderr}\n\nEnsure \`br\` CLI is installed and \`br init\` has been run in this directory.`,
@@ -431,7 +426,7 @@ async function handleStart(
   beadList: string,
   convergenceScore: number | undefined
 ): Promise<McpToolResult> {
-  const { exec, cwd, state, saveState } = ctx;
+  const { exec, cwd, state, saveState, signal } = ctx;
 
   // Reset and move to implementing
   _lastBeadSnapshot = undefined;
@@ -445,7 +440,7 @@ async function handleStart(
   state.phase = 'implementing';
 
   // Get ready beads (unblocked by dependencies)
-  const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 10000 });
+  const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 10000, signal });
   let ready: Bead[] = [];
 
   if (brReadyResult.code === 0) {
@@ -484,12 +479,42 @@ async function handleStart(
     );
   }
 
-  // Mark ready beads as in_progress
-  for (const bead of ready) {
-    await exec('br', ['update', bead.id, '--status', 'in_progress'], { cwd, timeout: 5000 });
+  // Acquire per-cwd mutex for the start action
+  const mutexKey = `approve-start:${cwd}`;
+  if (!acquireBeadMutex(mutexKey)) {
+    return makeConcurrentWriteError('flywheel_approve_beads', state.phase, mutexKey);
   }
-  state.currentBeadId = ready[0].id;
-  saveState(state);
+
+  try {
+    // Mark ready beads as in_progress with partial rollback on failure
+    const transitioned: string[] = [];
+    for (const bead of ready) {
+      const updateResult = await exec('br', ['update', bead.id, '--status', 'in_progress'], { cwd, timeout: 5000, signal });
+      if (updateResult.code !== 0) {
+        // Rollback already-transitioned beads
+        for (const id of transitioned) {
+          await exec('br', ['update', id, '--status', 'open'], { cwd, timeout: 5000, signal });
+        }
+        releaseBeadMutex(mutexKey);
+        return makeApproveError(
+          `Failed to mark bead ${bead.id} as in_progress: ${updateResult.stderr || `exit ${updateResult.code}`}. Rolled back ${transitioned.length} bead(s).`,
+          state.phase,
+          'beads',
+          'cli_failure',
+          {
+            failedBeadId: bead.id,
+            rolledBack: transitioned,
+            stderr: updateResult.stderr,
+          },
+        );
+      }
+      transitioned.push(bead.id);
+    }
+    state.currentBeadId = ready[0].id;
+    saveState(state);
+  } finally {
+    releaseBeadMutex(mutexKey);
+  }
 
   const convergenceNote = convergenceScore !== undefined
     ? `\n📈 Convergence: ${(convergenceScore * 100).toFixed(0)}%${
@@ -790,13 +815,16 @@ Current beads:\n${compactList}`,
     );
   }
 
-  return {
-    content: [{
-      type: 'text',
-      text: `Unknown advancedAction: ${advancedAction}. Valid options: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix`,
-    }],
-    isError: true,
-  };
+  return makeApproveError(
+    `Unknown advancedAction: "${advancedAction}". Valid options: ${ADVANCED_ACTIONS.join(', ')}.`,
+    state.phase,
+    'beads',
+    'unsupported_action',
+    {
+      advancedAction,
+      validAdvancedActions: [...ADVANCED_ACTIONS],
+    }
+  );
 }
 
 function formatBeadList(beads: Bead[]): string {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -108,12 +108,21 @@ describe('clearState', () => {
 
 describe('saveState edge cases', () => {
   it('does not throw when checkpoint dir does not exist yet', async () => {
-    const nested = join(testDir, 'deep', 'nested');
-    // The nested dir itself doesn't exist, but saveState's writeCheckpoint
-    // creates .pi-flywheel inside it — so the parent must exist.
-    // Actually saveState calls mkdirSync with { recursive: true } on the
-    // checkpoint dir, so this should work as long as 'nested' doesn't need
-    // to exist. Let's test with the testDir which does exist.
     await expect(saveState(testDir, createInitialState())).resolves.not.toThrow();
+  });
+
+  it('returns true on successful write', async () => {
+    const result = await saveState(testDir, createInitialState());
+    expect(result).toBe(true);
+  });
+
+  it('returns false when checkpoint write fails', async () => {
+    const checkpoint = await import('../checkpoint.js');
+    const spy = vi.spyOn(checkpoint, 'writeCheckpoint').mockResolvedValueOnce(false);
+
+    const result = await saveState(testDir, createInitialState());
+    expect(result).toBe(false);
+
+    spy.mockRestore();
   });
 });

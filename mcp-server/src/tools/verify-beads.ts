@@ -1,6 +1,10 @@
 import type { McpToolResult, ToolContext, VerifyBeadsArgs } from '../types.js';
 import { verifyBeadsClosed, type BeadStraggler } from '../beads.js';
 import { makeToolError } from './shared.js';
+import { classifyExecError } from '../errors.js';
+import { createLogger } from '../logger.js';
+
+const log = createLogger('verify-beads');
 
 export interface VerifyBeadsOutcome {
   /** Bead IDs that `br show` confirms as closed. */
@@ -44,7 +48,7 @@ export async function runVerifyBeads(
   ctx: ToolContext,
   args: VerifyBeadsArgs
 ): Promise<McpToolResult> {
-  const { exec, cwd, state, saveState } = ctx;
+  const { exec, cwd, state, saveState, signal } = ctx;
 
   if (!Array.isArray(args.beadIds) || args.beadIds.length === 0) {
     return makeToolError(
@@ -55,7 +59,24 @@ export async function runVerifyBeads(
     );
   }
 
-  const report = await verifyBeadsClosed(exec, cwd, args.beadIds);
+  let report;
+  try {
+    report = await verifyBeadsClosed(exec, cwd, args.beadIds);
+  } catch (err: unknown) {
+    const classified = classifyExecError(err);
+    log.error('verifyBeadsClosed threw', { err: String(err), code: classified.code });
+    return makeToolError(
+      'flywheel_verify_beads',
+      state.phase,
+      classified.code,
+      `Error verifying beads: ${classified.cause}`,
+      {
+        retryable: classified.retryable,
+        hint: 'Check that br CLI is installed and beadIds are valid, then retry.',
+        details: { beadIds: args.beadIds },
+      }
+    );
+  }
 
   const verified: string[] = [...report.closed];
   const autoClosed: Array<{ beadId: string; commit: string }> = [];
@@ -65,7 +86,7 @@ export async function runVerifyBeads(
     const grepResult = await exec(
       'git',
       ['log', `--grep=${straggler.id}`, '--oneline', '-1'],
-      { cwd, timeout: 5000 }
+      { cwd, timeout: 5000, signal }
     );
     const commitLine = grepResult.code === 0 ? grepResult.stdout.trim() : '';
     const commitSha = commitLine.split(/\s+/)[0] ?? '';
@@ -74,7 +95,7 @@ export async function runVerifyBeads(
       const updateResult = await exec(
         'br',
         ['update', straggler.id, '--status', 'closed'],
-        { cwd, timeout: 5000 }
+        { cwd, timeout: 5000, signal }
       );
       if (updateResult.code === 0) {
         autoClosed.push({ beadId: straggler.id, commit: commitSha });

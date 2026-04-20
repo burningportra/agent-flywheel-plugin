@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runMemory } from '../../tools/memory-tool.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 // ─── Helpers ──────────────────────────────────────────────────
@@ -30,8 +30,40 @@ describe('runMemory', () => {
     it('returns guidance when cm is not available', async () => {
         const { ctx } = makeCtx([cmVersionCall(false)]);
         const result = await runMemory(ctx, { cwd: '/fake/cwd' });
+        expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('not available');
-        expect(result.content[0].text).toContain('npm install');
+        expect(result.structuredContent?.data?.error?.code).toBe('cli_not_available');
+        expect(result.structuredContent?.data?.error?.hint).toContain('npm install -g @cass/cm');
+    });
+    it('returns cli_not_available when cm version check throws', async () => {
+        const exec = vi.fn().mockRejectedValueOnce(new Error('spawn cm ENOENT'));
+        const state = makeState();
+        const ctx = {
+            exec,
+            cwd: '/fake/cwd',
+            state,
+            saveState: (_s) => { },
+            clearState: () => { },
+        };
+        const result = await runMemory(ctx, { cwd: '/fake/cwd' });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent?.data?.error?.code).toBe('cli_not_available');
+    });
+    it('returns cli_failure when search exec throws', async () => {
+        const exec = vi.fn()
+            .mockResolvedValueOnce({ code: 0, stdout: 'cm 1.0.0', stderr: '' })
+            .mockRejectedValueOnce(new Error('context crashed'));
+        const state = makeState();
+        const ctx = {
+            exec,
+            cwd: '/fake/cwd',
+            state,
+            saveState: (_s) => { },
+            clearState: () => { },
+        };
+        const result = await runMemory(ctx, { cwd: '/fake/cwd', query: 'test' });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent?.data?.error?.code).toBe('cli_failure');
     });
     // ── search operation (default, no query → cm ls) ─────────────
     it('lists recent entries when no query given', async () => {

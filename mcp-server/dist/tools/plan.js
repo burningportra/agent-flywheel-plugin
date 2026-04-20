@@ -4,6 +4,7 @@ import { slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 function okResult(text, phase, data) {
     return {
         content: [{ type: 'text', text }],
@@ -17,24 +18,9 @@ function okResult(text, phase, data) {
     };
 }
 function errorResult(phase, code, message, details) {
-    return {
-        content: [{ type: 'text', text: message }],
-        isError: true,
-        structuredContent: {
-            tool: 'flywheel_plan',
-            version: 1,
-            status: 'error',
-            phase,
-            data: {
-                kind: 'error',
-                error: {
-                    code,
-                    message,
-                    ...(details ? { details } : {}),
-                },
-            },
-        },
-    };
+    return makeFlywheelErrorResult('flywheel_plan', phase, {
+        code, message, ...(details ? { details } : {}),
+    });
 }
 /**
  * flywheel_plan — Generate a plan document for the selected goal.
@@ -89,16 +75,43 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
         });
     }
     // ── If planContent is provided inline, write it to disk then register ──
-    if (args.planContent && args.planContent.trim()) {
+    if (args.planContent) {
+        const trimmed = args.planContent.trim();
+        if (trimmed.length === 0) {
+            return errorResult('planning', 'empty_plan', 'planContent is empty or whitespace.');
+        }
+        if (trimmed.includes('(No planner outputs provided.)')) {
+            return makeFlywheelErrorResult('flywheel_plan', 'planning', {
+                code: 'deep_plan_all_failed',
+                message: 'Deep plan failed: all perspective planners timed out or produced no output.',
+                hint: 'Retry with mode=standard as fallback.',
+            });
+        }
+        if (trimmed.startsWith('(AGENT')) {
+            return errorResult('planning', 'empty_plan', `planContent is an agent failure sentinel: ${trimmed.slice(0, 80)}`, { sentinelPrefix: '(AGENT' });
+        }
         const planDir = join(cwd, 'docs', 'plans');
-        mkdirSync(planDir, { recursive: true });
-        const planFilePath = join(planDir, `${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`);
-        writeFileSync(planFilePath, args.planContent, 'utf8');
         const relativePath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`;
+        const planFilePath = join(planDir, relativePath.split('/').pop());
+        const prevPlanDocument = state.planDocument;
+        const prevPhase = state.phase;
+        const prevRound = state.planRefinementRound;
+        try {
+            mkdirSync(planDir, { recursive: true });
+            writeFileSync(planFilePath, args.planContent, 'utf8');
+        }
+        catch (err) {
+            return errorResult('planning', 'cli_failure', `Failed to write plan file: ${err instanceof Error ? err.message : String(err)}`, { planFilePath });
+        }
         state.planDocument = relativePath;
         state.planRefinementRound = 0;
         state.phase = 'awaiting_plan_approval';
-        saveState(state);
+        const saved = await saveState(state);
+        if (saved === false) {
+            state.planDocument = prevPlanDocument;
+            state.phase = prevPhase;
+            state.planRefinementRound = prevRound ?? 0;
+        }
         return okResult(`**Plan received and saved to \`${relativePath}\`.**
 
 **NEXT: Call \`flywheel_approve_beads\` to review the plan and proceed to bead creation.**
@@ -169,7 +182,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
             memorySection = `\n## Prior Session Context\n${mem}\n`;
     }
     catch { /* CASS unavailable — proceed without */ }
-    const basePrompt = `You are a planning agent for an agentic coding workflow.
+    const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
@@ -186,7 +199,9 @@ Write a comprehensive implementation plan from your designated perspective. The 
 - Risk & mitigation
 - Target: 500-2000 lines of detailed content
 
-Focus deeply on your assigned perspective lens.`;
+Focus deeply on your assigned perspective lens.
+
+Use ultrathink.`;
     const dynamicModels = getDeepPlanModels();
     const planAgents = [
         {
@@ -238,7 +253,11 @@ Question every architectural choice: is there a simpler way? A more standard app
         constraints: state.constraints,
         planAgents,
         instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
-        synthesisPrompt: `## Best-of-All-Worlds Synthesis
+        synthesisPrompt: `Use ultrathink.
+
+## Best-of-All-Worlds Synthesis
+
+Use ultrathink.
 
 Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
 

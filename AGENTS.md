@@ -107,7 +107,8 @@ The result is cached for the session on success. On failure, the cache expires a
 - Named exports only (no default exports).
 - Types live in `mcp-server/src/types.ts`. Import with `import type { ... }`.
 - `ExecFn` type (`mcp-server/src/exec.ts`) wraps all shell command execution. It accepts `{ timeout, cwd, signal? }` — always pass `signal` when available. Import `ExecFn` only from `exec.ts`; do not redefine it locally.
-- Errors throw `new Error(message)` — no custom error classes.
+- Errors: by default, throw `new Error(message)` and return structured envelopes at tool boundaries via `makeFlywheelErrorResult` from `mcp-server/src/errors.ts`. The one permitted custom error class is **`FlywheelError`** (also in `errors.ts`) — it is framework-internal, threads tagged error codes through nested helpers back to the tool boundary, and MUST NOT be subclassed. Do not introduce ad-hoc error classes in feature code.
+- Use `FlywheelError` when a tagged error must propagate through 4+ call frames before reaching the tool-return boundary (e.g., deep in `deep-plan.ts` synthesis). For top-level tool handlers in `mcp-server/src/tools/*.ts`, use `return makeFlywheelErrorResult(...)` — it builds the structured envelope the SKILL.md orchestrator branches on via `data.error.code`.
 - Use `Promise.allSettled` for parallel operations where partial results are acceptable.
 - Async functions preferred over callbacks.
 

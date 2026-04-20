@@ -7,7 +7,9 @@ import type {
   FlywheelState,
   ToolChoiceOption,
   ToolNextStep,
+  FlywheelErrorCode,
 } from '../types.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 
 export function formatModelRef(model: { provider?: string; id: string }): string {
   return model.provider ? `${model.provider}/${model.id}` : model.id;
@@ -47,28 +49,11 @@ export function makeToolResult<TStructured>(text: string, structuredContent: TSt
 export function makeToolError(
   tool: FlywheelToolName,
   phase: FlywheelPhase,
-  code: FlywheelToolError['code'],
+  code: FlywheelErrorCode,
   message: string,
-  options: Omit<FlywheelToolError, 'code' | 'message'> = {}
+  options: Omit<FlywheelToolError, 'code' | 'message' | 'tool' | 'phase' | 'timestamp'> = {}
 ): McpToolResult<FlywheelStructuredError> {
-  return {
-    content: [{ type: 'text', text: message }],
-    isError: true,
-    structuredContent: {
-      tool,
-      version: 1,
-      status: 'error',
-      phase,
-      data: {
-        kind: 'error',
-        error: {
-          code,
-          message,
-          ...options,
-        },
-      },
-    },
-  };
+  return makeFlywheelErrorResult(tool, phase, { code, message, ...options });
 }
 
 /**

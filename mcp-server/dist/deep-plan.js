@@ -66,7 +66,7 @@ export async function runDeepPlanAgents(exec, cwd, agents, signal) {
             }
             args.push(`@${taskFile}`);
             const result = await exec("claude", args, {
-                timeout: 180000, // 3 min timeout per planner
+                timeout: Number(process.env.DEEP_PLAN_TIMEOUT_MS ?? 420000), // 7 min default; override via DEEP_PLAN_TIMEOUT_MS env var
                 cwd,
                 signal,
             });
@@ -107,7 +107,14 @@ export async function runDeepPlanAgents(exec, cwd, agents, signal) {
     });
     // Run all in parallel, then filter to only viable results for synthesis
     const allResults = await Promise.all(promises);
-    return filterViableResults(allResults);
+    const viable = filterViableResults(allResults);
+    if (viable.length === 0) {
+        process.stderr.write(`[deep-plan] WARNING: All ${allResults.length} planners failed or timed out. Synthesis will be empty.\n`);
+    }
+    else if (viable.length < allResults.length) {
+        process.stderr.write(`[deep-plan] WARNING: Only ${viable.length}/${allResults.length} planners succeeded.\n`);
+    }
+    return viable;
 }
 /**
  * Filter deep-plan results to only those that are viable for synthesis.

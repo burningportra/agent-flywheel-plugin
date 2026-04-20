@@ -1,5 +1,5 @@
-import { execSync } from 'node:child_process';
 import type { ToolContext, McpToolResult, MemoryArgs } from '../types.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 
 /**
  * flywheel_memory — Search and interact with CASS memory (cm CLI).
@@ -8,37 +8,72 @@ import type { ToolContext, McpToolResult, MemoryArgs } from '../types.js';
  * operation="store"            — store a new memory entry
  */
 export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<McpToolResult> {
-  const { exec, cwd } = ctx;
+  const { exec, cwd, state, signal } = ctx;
   const operation = args.operation || 'search';
+  const phase = state.phase;
 
   // Check if cm is available
-  const cmCheck = await exec('cm', ['--version'], { cwd, timeout: 5000 });
+  let cmCheck;
+  try {
+    cmCheck = await exec('cm', ['--version'], { cwd, timeout: 5000, signal });
+  } catch (err: unknown) {
+    return makeFlywheelErrorResult('flywheel_memory', phase, {
+      code: 'cli_not_available',
+      message: 'CASS memory (cm CLI) is not available.',
+      hint: 'Install cm with `npm install -g @cass/cm` (or your team-approved installer), then retry `flywheel_memory`.',
+      cause: err instanceof Error ? err.message : String(err),
+      details: { command: 'cm --version' },
+    });
+  }
   const cmAvailable = cmCheck.code === 0;
 
   if (!cmAvailable) {
-    return {
-      content: [{
-        type: 'text',
-        text: `CASS memory (cm CLI) is not available.\n\nInstall it with: \`npm install -g @cass/cm\` or follow the cm installation guide.\n\nWithout CASS, the agent-flywheel cannot access prior session learnings.`,
-      }],
-    };
+    return makeFlywheelErrorResult('flywheel_memory', phase, {
+      code: 'cli_not_available',
+      message: 'CASS memory (cm CLI) is not available.',
+      hint: 'Install cm with `npm install -g @cass/cm` (or your team-approved installer), then retry `flywheel_memory`.',
+      cause: cmCheck.stderr.trim() || `cm --version exited with code ${cmCheck.code}`,
+      details: {
+        command: 'cm --version',
+        exitCode: cmCheck.code,
+        ...(cmCheck.stderr.trim() && { stderr: cmCheck.stderr.trim() }),
+      },
+    });
   }
 
   // ── store ─────────────────────────────────────────────────────
   if (operation === 'store') {
     if (!args.content || !args.content.trim()) {
-      return {
-        content: [{ type: 'text', text: 'Error: content is required for store operation.' }],
-        isError: true,
-      };
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: 'invalid_input',
+        message: 'content is required for store operation.',
+        hint: 'Provide non-empty content, for example: `{ operation: "store", content: "decision: ..." }`.',
+      });
     }
 
-    const storeResult = await exec('cm', ['add', args.content.trim()], { cwd, timeout: 10000 });
+    let storeResult;
+    try {
+      storeResult = await exec('cm', ['add', args.content.trim()], { cwd, timeout: 10000, signal });
+    } catch (err: unknown) {
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: 'cli_failure',
+        message: 'Failed to store memory.',
+        hint: 'Run `cm add "<content>"` manually to inspect the CLI failure, then retry.',
+        cause: err instanceof Error ? err.message : String(err),
+        details: { command: 'cm add' },
+      });
+    }
     if (storeResult.code !== 0) {
-      return {
-        content: [{ type: 'text', text: `Failed to store memory: ${storeResult.stderr}` }],
-        isError: true,
-      };
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: 'cli_failure',
+        message: `Failed to store memory: ${storeResult.stderr.trim() || `exit code ${storeResult.code}`}`,
+        hint: 'Run `cm add "<content>"` manually to inspect the CLI failure, then retry.',
+        details: {
+          command: 'cm add',
+          exitCode: storeResult.code,
+          ...(storeResult.stderr.trim() && { stderr: storeResult.stderr.trim() }),
+        },
+      });
     }
 
     return {
@@ -49,12 +84,29 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
   // ── search (default) ─────────────────────────────────────────
   if (!args.query || !args.query.trim()) {
     // No query — list recent entries
-    const listResult = await exec('cm', ['ls', '--limit', '10'], { cwd, timeout: 10000 });
+    let listResult;
+    try {
+      listResult = await exec('cm', ['ls', '--limit', '10'], { cwd, timeout: 10000, signal });
+    } catch (err: unknown) {
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: 'cli_failure',
+        message: 'Failed to list memory.',
+        hint: 'Run `cm ls --limit 10` manually to verify CASS storage health, then retry.',
+        cause: err instanceof Error ? err.message : String(err),
+        details: { command: 'cm ls --limit 10' },
+      });
+    }
     if (listResult.code !== 0) {
-      return {
-        content: [{ type: 'text', text: `Failed to list memory: ${listResult.stderr}` }],
-        isError: true,
-      };
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: 'cli_failure',
+        message: `Failed to list memory: ${listResult.stderr.trim() || `exit code ${listResult.code}`}`,
+        hint: 'Run `cm ls --limit 10` manually to verify CASS storage health, then retry.',
+        details: {
+          command: 'cm ls --limit 10',
+          exitCode: listResult.code,
+          ...(listResult.stderr.trim() && { stderr: listResult.stderr.trim() }),
+        },
+      });
     }
 
     const output = listResult.stdout.trim();
@@ -71,12 +123,33 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
 
   // Search with query — use `cm context` for task-aware semantic matching.
   // `cm similar` uses keyword mode and returns empty for most queries.
-  const searchResult = await exec('cm', ['context', args.query.trim(), '--json'], { cwd, timeout: 10000 });
+  let searchResult;
+  try {
+    searchResult = await exec('cm', ['context', args.query.trim(), '--json'], { cwd, timeout: 10000, signal });
+  } catch (err: unknown) {
+    return makeFlywheelErrorResult('flywheel_memory', phase, {
+      code: 'cli_failure',
+      message: 'Search failed.',
+      hint: 'Run `cm context "<query>" --json` manually to inspect the failure, then retry.',
+      cause: err instanceof Error ? err.message : String(err),
+      details: {
+        command: 'cm context --json',
+        query: args.query.trim(),
+      },
+    });
+  }
   if (searchResult.code !== 0) {
-    return {
-      content: [{ type: 'text', text: `Search failed: ${searchResult.stderr}` }],
-      isError: true,
-    };
+    return makeFlywheelErrorResult('flywheel_memory', phase, {
+      code: 'cli_failure',
+      message: `Search failed: ${searchResult.stderr.trim() || `exit code ${searchResult.code}`}`,
+      hint: 'Run `cm context "<query>" --json` manually to inspect the failure, then retry.',
+      details: {
+        command: 'cm context --json',
+        query: args.query.trim(),
+        exitCode: searchResult.code,
+        ...(searchResult.stderr.trim() && { stderr: searchResult.stderr.trim() }),
+      },
+    });
   }
 
   const output = searchResult.stdout.trim();

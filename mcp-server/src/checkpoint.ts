@@ -62,7 +62,8 @@ function getGitHead(cwd: string): string | undefined {
     return execSync("git rev-parse HEAD", { cwd, stdio: "pipe" })
       .toString()
       .trim();
-  } catch {
+  } catch (err: unknown) {
+    log.warn("git HEAD detection failed", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
     return undefined;
   }
 }
@@ -225,8 +226,8 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
 
     try {
       parsed = JSON.parse(raw);
-    } catch {
-      // Corrupt JSON — move to .corrupt
+    } catch (err: unknown) {
+      log.warn("corrupt checkpoint JSON", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
       moveToCorrupt(cwd, mainFile);
       return null;
     }
@@ -283,12 +284,12 @@ function moveToCorrupt(cwd: string, filePath: string): void {
     const corruptPath = checkpointCorruptPath(cwd);
     renameSync(filePath, corruptPath);
     log.warn("corrupt checkpoint moved", { dest: CHECKPOINT_CORRUPT });
-  } catch {
-    // If we can't even rename, just try to delete
+  } catch (err: unknown) {
+    log.warn("checkpoint rename failed, attempting delete", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
     try {
       unlinkSync(filePath);
-    } catch {
-      // Give up silently
+    } catch (delErr: unknown) {
+      log.warn("checkpoint delete also failed", { code: "cli_failure", cause: delErr instanceof Error ? delErr.message : String(delErr) });
     }
   }
 }
@@ -300,7 +301,7 @@ export function cleanupOrphanedTmp(cwd: string): void {
     if (existsSync(tmpFile)) {
       unlinkSync(tmpFile);
     }
-  } catch {
-    // Silently ignore
+  } catch (err: unknown) {
+    log.warn("orphaned tmp cleanup failed", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
   }
 }

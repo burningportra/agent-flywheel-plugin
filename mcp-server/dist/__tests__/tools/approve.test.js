@@ -79,7 +79,7 @@ describe('runApprove', () => {
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('Error reading beads');
-        expect(result.structuredContent).toEqual({
+        expect(result.structuredContent).toMatchObject({
             tool: 'flywheel_approve_beads',
             version: 1,
             status: 'error',
@@ -90,6 +90,7 @@ describe('runApprove', () => {
                 error: {
                     code: 'cli_failure',
                     message: expect.stringContaining('Error reading beads'),
+                    retryable: true,
                     details: {
                         command: 'br list --json',
                         stderr: 'br not found',
@@ -312,7 +313,7 @@ describe('runApprove', () => {
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced' });
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('advancedAction is required');
-        expect(result.structuredContent).toEqual({
+        expect(result.structuredContent).toMatchObject({
             tool: 'flywheel_approve_beads',
             version: 1,
             status: 'error',
@@ -323,6 +324,7 @@ describe('runApprove', () => {
                 error: {
                     code: 'invalid_input',
                     message: expect.stringContaining('advancedAction is required'),
+                    retryable: false,
                     details: {
                         action: 'advanced',
                         validAdvancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
@@ -377,11 +379,18 @@ describe('runApprove', () => {
             },
         });
     });
-    it('returns error for unknown advancedAction', async () => {
+    it('returns unsupported_action error for unknown advancedAction', async () => {
         const { ctx } = makeCtx();
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced', advancedAction: 'nope' });
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('Unknown advancedAction');
+        const sc = result.structuredContent;
+        expect(sc.status).toBe('error');
+        expect(sc.data.error.code).toBe('unsupported_action');
+        expect(sc.data.error.details).toEqual({
+            advancedAction: 'nope',
+            validAdvancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
+        });
     });
     // ── Plan approval mode ───────────────────────────────────────
     describe('plan approval mode', () => {
@@ -539,6 +548,57 @@ describe('runApprove', () => {
         const { ctx, state } = makeCtx({}, makeExecCalls(beads));
         await runApprove(ctx, { cwd: '/fake/cwd', action: 'polish' });
         expect(state.activeBeadIds).toEqual(['bead-1', 'bead-2']);
+    });
+    // ── Rollback on mid-loop failure ─────────────────────────────
+    it('rolls back transitioned beads when br update fails mid-loop', async () => {
+        const beads = [
+            makeBead({ id: 'bead-1', title: 'First task' }),
+            makeBead({ id: 'bead-2', title: 'Second task' }),
+            makeBead({ id: 'bead-3', title: 'Third task' }),
+        ];
+        const execCalls = [
+            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
+            { cmd: 'br', args: ['ready', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
+            // bead-1 succeeds
+            { cmd: 'br', args: ['update', 'bead-1', '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
+            // bead-2 fails
+            { cmd: 'br', args: ['update', 'bead-2', '--status', 'in_progress'], result: { code: 1, stdout: '', stderr: 'db locked' } },
+            // rollback: bead-1 back to open
+            { cmd: 'br', args: ['update', 'bead-1', '--status', 'open'], result: { code: 0, stdout: '', stderr: '' } },
+        ];
+        const { ctx } = makeCtx({}, execCalls);
+        const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+        expect(result.isError).toBe(true);
+        const sc = result.structuredContent;
+        expect(sc.data.error.code).toBe('cli_failure');
+        expect(sc.data.error.details.rolledBack).toEqual(['bead-1']);
+        expect(sc.data.error.details.failedBeadId).toBe('bead-2');
+    });
+    // ── Concurrent invocation ────────────────────────────────────
+    it('returns concurrent_write when two start actions for same cwd overlap', async () => {
+        const { _resetForTest } = await import('../../mutex.js');
+        _resetForTest();
+        const bead = makeBead();
+        const execCalls = [
+            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify([bead]), stderr: '' } },
+            { cmd: 'br', args: ['ready', '--json'], result: { code: 0, stdout: JSON.stringify([bead]), stderr: '' } },
+            { cmd: 'br', args: ['update', bead.id, '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
+        ];
+        // Use a specific cwd so the mutex key is deterministic
+        const testCwd = '/test/concurrent';
+        const { ctx: ctx1 } = makeCtx({}, execCalls, testCwd);
+        const { ctx: ctx2 } = makeCtx({}, execCalls, testCwd);
+        // Acquire the mutex manually to simulate an in-flight operation
+        const { acquireBeadMutex, releaseBeadMutex } = await import('../../mutex.js');
+        const key = `approve-start:${testCwd}`;
+        acquireBeadMutex(key);
+        const result = await runApprove(ctx2, { cwd: testCwd, action: 'start' });
+        expect(result.isError).toBe(true);
+        const sc = result.structuredContent;
+        expect(sc.data.error.code).toBe('concurrent_write');
+        expect(sc.data.error.retryable).toBe(true);
+        releaseBeadMutex(key);
+        _resetForTest();
     });
 });
 //# sourceMappingURL=approve.test.js.map

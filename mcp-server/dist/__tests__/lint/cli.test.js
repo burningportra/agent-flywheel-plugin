@@ -41,6 +41,7 @@ describe("lint-skill CLI", () => {
         expect(r.stdout).toContain("SLASH001");
         expect(r.stdout).toContain("PLACE001");
         expect(r.stdout).toContain("IMPL001");
+        expect(r.stdout).toContain("ERR001");
         expect(r.stdout).toContain("Exit codes:");
     });
     it("--version prints semver and exits 0", async () => {

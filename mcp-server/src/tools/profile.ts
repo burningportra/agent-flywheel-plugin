@@ -5,6 +5,7 @@ import { parseBrList } from '../parsers.js';
 import { createLogger } from '../logger.js';
 import { runOpeningCeremony } from '../opening-ceremony.js';
 import { VERSION } from '../version.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 
 const log = createLogger('profile');
 
@@ -18,7 +19,7 @@ const log = createLogger('profile');
  * Uses a git-HEAD-keyed cache to skip redundant scans. Pass force=true to bypass.
  */
 export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<McpToolResult> {
-  const { exec, cwd, state, saveState } = ctx;
+  const { exec, cwd, state, saveState, signal } = ctx;
 
   state.phase = 'profiling';
 
@@ -32,22 +33,52 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   let fromCache = false;
 
   if (!args.force) {
-    const cached = await loadCachedProfile(exec, cwd);
+    let cached: RepoProfile | null;
+    try {
+      cached = await loadCachedProfile(exec, cwd);
+    } catch (err: unknown) {
+      return makeFlywheelErrorResult('flywheel_profile', state.phase, {
+        code: 'parse_failure',
+        message: 'Failed to load cached profile.',
+        retryable: true,
+        hint: 'Pass force:true to bypass cache',
+        cause: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     if (cached) {
       profile = cached;
       fromCache = true;
     } else {
-      profile = await profileRepo(exec, cwd);
+      try {
+        profile = await profileRepo(exec, cwd);
+      } catch (err: unknown) {
+        return makeFlywheelErrorResult('flywheel_profile', state.phase, {
+          code: 'cli_failure',
+          message: 'Failed to profile repository.',
+          hint: 'Verify required CLIs (`git`, `find`, `grep`, `head`) are available, then retry.',
+          cause: err instanceof Error ? err.message : String(err),
+        });
+      }
       // Fire-and-forget: don't block return on cache write
       saveCachedProfile(exec, cwd, profile).catch(() => {});
     }
   } else {
-    profile = await profileRepo(exec, cwd);
+    try {
+      profile = await profileRepo(exec, cwd);
+    } catch (err: unknown) {
+      return makeFlywheelErrorResult('flywheel_profile', state.phase, {
+        code: 'cli_failure',
+        message: 'Failed to profile repository.',
+        hint: 'Verify required CLIs (`git`, `find`, `grep`, `head`) are available, then retry.',
+        cause: err instanceof Error ? err.message : String(err),
+      });
+    }
     saveCachedProfile(exec, cwd, profile).catch(() => {});
   }
 
   // ── Detect coordination backends ──────────────────────────────
-  const brResult = await exec('br', ['--version'], { cwd, timeout: 5000 });
+  const brResult = await exec('br', ['--version'], { cwd, timeout: 5000, signal });
   const hasBeads = brResult.code === 0;
 
   const coordinationBackend = {
@@ -81,7 +112,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   let openBeadCount = 0;
   let deferredBeadCount = 0;
   if (hasBeads) {
-    const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000 });
+    const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000, signal });
     if (brListResult.code === 0) {
       const parsed = parseBrList(brListResult.stdout);
       if (parsed.ok) {

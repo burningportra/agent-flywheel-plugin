@@ -1,3 +1,4 @@
+import { makeFlywheelErrorResult } from '../errors.js';
 export function formatModelRef(model) {
     return model.provider ? `${model.provider}/${model.id}` : model.id;
 }
@@ -22,24 +23,7 @@ export function makeToolResult(text, structuredContent) {
     };
 }
 export function makeToolError(tool, phase, code, message, options = {}) {
-    return {
-        content: [{ type: 'text', text: message }],
-        isError: true,
-        structuredContent: {
-            tool,
-            version: 1,
-            status: 'error',
-            phase,
-            data: {
-                kind: 'error',
-                error: {
-                    code,
-                    message,
-                    ...options,
-                },
-            },
-        },
-    };
+    return makeFlywheelErrorResult(tool, phase, { code, message, ...options });
 }
 /**
  * Pick execution mode: single-branch (shared checkout) or worktree (isolated checkouts).

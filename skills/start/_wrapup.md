@@ -132,6 +132,15 @@ Call `flywheel_memory` with `operation: "store"` and `cwd` to distill and persis
 - Key decisions made during this session and their outcomes
 - Any patterns worth replicating or avoiding in future sessions
 
+**Structured error branching (mandatory).** For wrap-up tool failures (including `flywheel_memory`), route using `result.structuredContent?.data?.error?.code` (`FlywheelErrorCode`) instead of string matching on error text:
+
+```ts
+const code = memoryResult.structuredContent?.data?.error?.code;
+if (code === "cli_failure") return retryOnceWithBackoff();
+if (code === "parse_failure") return requestManualSummaryFallback();
+if (code === "blocked_state") return surfaceHintAndPause(memoryResult.structuredContent?.data?.error?.hint);
+```
+
 Present the stored learnings to the user, then use `AskUserQuestion`:
 
 ```
