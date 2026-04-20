@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runProfile } from '../../tools/profile.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
+import * as profiler from '../../profiler.js';
 // ─── Helpers ──────────────────────────────────────────────────
 /**
  * profileRepo uses:
@@ -395,6 +396,40 @@ describe('runProfile', () => {
                 },
             },
         });
+    });
+    it('returns parse_failure when loadCachedProfile throws', async () => {
+        const loadSpy = vi.spyOn(profiler, 'loadCachedProfile').mockRejectedValueOnce(new Error('cache decode failed'));
+        const repoSpy = vi.spyOn(profiler, 'profileRepo');
+        const { ctx } = makeCtx();
+        try {
+            const result = await runProfile(ctx, { cwd: '/fake/cwd' });
+            expect(result.isError).toBe(true);
+            const error = result.structuredContent?.data?.error;
+            expect(error?.code).toBe('parse_failure');
+            expect(error?.retryable).toBe(true);
+            expect(error?.hint).toBe('Pass force:true to bypass cache');
+            expect(repoSpy).not.toHaveBeenCalled();
+        }
+        finally {
+            loadSpy.mockRestore();
+            repoSpy.mockRestore();
+        }
+    });
+    it('returns cli_failure when profileRepo throws', async () => {
+        const loadSpy = vi.spyOn(profiler, 'loadCachedProfile').mockResolvedValueOnce(null);
+        const repoSpy = vi.spyOn(profiler, 'profileRepo').mockRejectedValueOnce(new Error('scan failed'));
+        const { ctx } = makeCtx();
+        try {
+            const result = await runProfile(ctx, { cwd: '/fake/cwd' });
+            expect(result.isError).toBe(true);
+            const error = result.structuredContent?.data?.error;
+            expect(error?.code).toBe('cli_failure');
+            expect(error?.message).toContain('Failed to profile repository');
+        }
+        finally {
+            loadSpy.mockRestore();
+            repoSpy.mockRestore();
+        }
     });
 });
 //# sourceMappingURL=profile.test.js.map

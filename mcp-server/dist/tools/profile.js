@@ -4,6 +4,7 @@ import { parseBrList } from '../parsers.js';
 import { createLogger } from '../logger.js';
 import { runOpeningCeremony } from '../opening-ceremony.js';
 import { VERSION } from '../version.js';
+import { makeFlywheelErrorResult } from '../errors.js';
 const log = createLogger('profile');
 /**
  * flywheel_profile — Scan the current repo and build a profile.
@@ -25,19 +26,51 @@ export async function runProfile(ctx, args) {
     let profile;
     let fromCache = false;
     if (!args.force) {
-        const cached = await loadCachedProfile(exec, cwd);
+        let cached;
+        try {
+            cached = await loadCachedProfile(exec, cwd);
+        }
+        catch (err) {
+            return makeFlywheelErrorResult('flywheel_profile', state.phase, {
+                code: 'parse_failure',
+                message: 'Failed to load cached profile.',
+                retryable: true,
+                hint: 'Pass force:true to bypass cache',
+                cause: err instanceof Error ? err.message : String(err),
+            });
+        }
         if (cached) {
             profile = cached;
             fromCache = true;
         }
         else {
-            profile = await profileRepo(exec, cwd);
+            try {
+                profile = await profileRepo(exec, cwd);
+            }
+            catch (err) {
+                return makeFlywheelErrorResult('flywheel_profile', state.phase, {
+                    code: 'cli_failure',
+                    message: 'Failed to profile repository.',
+                    hint: 'Verify required CLIs (`git`, `find`, `grep`, `head`) are available, then retry.',
+                    cause: err instanceof Error ? err.message : String(err),
+                });
+            }
             // Fire-and-forget: don't block return on cache write
             saveCachedProfile(exec, cwd, profile).catch(() => { });
         }
     }
     else {
-        profile = await profileRepo(exec, cwd);
+        try {
+            profile = await profileRepo(exec, cwd);
+        }
+        catch (err) {
+            return makeFlywheelErrorResult('flywheel_profile', state.phase, {
+                code: 'cli_failure',
+                message: 'Failed to profile repository.',
+                hint: 'Verify required CLIs (`git`, `find`, `grep`, `head`) are available, then retry.',
+                cause: err instanceof Error ? err.message : String(err),
+            });
+        }
         saveCachedProfile(exec, cwd, profile).catch(() => { });
     }
     // ── Detect coordination backends ──────────────────────────────
