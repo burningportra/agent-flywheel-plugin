@@ -6,6 +6,7 @@
  */
 import type { ExecFn } from "./exec.js";
 import type { ParseResult } from "./parsers.js";
+export declare function registerCliExecTelemetryHook(hook: (code: string) => void): void;
 export interface BrStructuredError {
     code?: string;
     message?: string;

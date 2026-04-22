@@ -1,6 +1,16 @@
 import { createLogger } from "./logger.js";
 import { BrStructuredErrorSchema } from "./parsers.js";
+import { classifyExecError } from "./errors.js";
 const log = createLogger("cli-exec");
+/**
+ * Side-channel telemetry hook for cli-exec failure recording.
+ * telemetry.ts registers itself here so resilientExec can fire
+ * recordErrorCode without a direct dependency on telemetry.ts.
+ */
+let _cliExecTelemetryHook = null;
+export function registerCliExecTelemetryHook(hook) {
+    _cliExecTelemetryHook = hook;
+}
 // ─── Transient detection ──────────────────────────────────────
 /** Default transient detection for generic CLI calls. */
 function isTransientDefault(_exitCode, _stderr, err) {
@@ -145,6 +155,17 @@ function buildWarning(error) {
     return (`[cli-exec] ${classification} failure after ${error.attempts} attempt(s): ` +
         `${error.command} → exit=${error.exitCode ?? "null"} stderr=${formatErrorDetail(error)}`);
 }
+/** Fire telemetry for the final (non-retried) failure. Never throws. */
+function fireTelemetryForError(error) {
+    try {
+        if (_cliExecTelemetryHook == null)
+            return;
+        const raw = error.lastError ?? (error.stderr ? new Error(error.stderr) : new Error("cli failure"));
+        const classified = classifyExecError(raw);
+        _cliExecTelemetryHook(classified.code);
+    }
+    catch { /* never throw from telemetry path */ }
+}
 // ─── Core wrapper ─────────────────────────────────────────────
 /**
  * Retry-aware wrapper around `exec()`.
@@ -205,6 +226,7 @@ export async function resilientExec(exec, cmd, args, opts) {
                 // Permanent or exhausted retries
                 if (logWarnings)
                     log.warn(buildWarning(lastError));
+                fireTelemetryForError(lastError);
                 return { ok: false, error: lastError };
             }
             // Success
@@ -247,6 +269,7 @@ export async function resilientExec(exec, cmd, args, opts) {
             }
             if (logWarnings)
                 log.warn(buildWarning(lastError));
+            fireTelemetryForError(lastError);
             return { ok: false, error: lastError };
         }
     }
@@ -254,6 +277,9 @@ export async function resilientExec(exec, cmd, args, opts) {
     /* istanbul ignore next */
     if (logWarnings && lastError)
         log.warn(buildWarning(lastError));
+    /* istanbul ignore next */
+    if (lastError)
+        fireTelemetryForError(lastError);
     return { ok: false, error: lastError };
 }
 // ─── br-specific wrappers ─────────────────────────────────────

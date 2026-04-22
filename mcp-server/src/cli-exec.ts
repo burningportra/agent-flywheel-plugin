@@ -8,8 +8,20 @@ import type { ExecFn } from "./exec.js";
 import { createLogger } from "./logger.js";
 import { BrStructuredErrorSchema } from "./parsers.js";
 import type { ParseResult } from "./parsers.js";
+import { classifyExecError } from "./errors.js";
 
 const log = createLogger("cli-exec");
+
+/**
+ * Side-channel telemetry hook for cli-exec failure recording.
+ * telemetry.ts registers itself here so resilientExec can fire
+ * recordErrorCode without a direct dependency on telemetry.ts.
+ */
+let _cliExecTelemetryHook: ((code: string) => void) | null = null;
+
+export function registerCliExecTelemetryHook(hook: (code: string) => void): void {
+  _cliExecTelemetryHook = hook;
+}
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -231,6 +243,16 @@ function buildWarning(error: CliExecError): string {
   );
 }
 
+/** Fire telemetry for the final (non-retried) failure. Never throws. */
+function fireTelemetryForError(error: CliExecError): void {
+  try {
+    if (_cliExecTelemetryHook == null) return;
+    const raw = error.lastError ?? (error.stderr ? new Error(error.stderr) : new Error("cli failure"));
+    const classified = classifyExecError(raw);
+    _cliExecTelemetryHook(classified.code);
+  } catch { /* never throw from telemetry path */ }
+}
+
 // ─── Core wrapper ─────────────────────────────────────────────
 
 /**
@@ -296,6 +318,7 @@ export async function resilientExec(
         }
         // Permanent or exhausted retries
         if (logWarnings) log.warn(buildWarning(lastError));
+        fireTelemetryForError(lastError);
         return { ok: false, error: lastError };
       }
 
@@ -334,6 +357,7 @@ export async function resilientExec(
         continue;
       }
       if (logWarnings) log.warn(buildWarning(lastError));
+      fireTelemetryForError(lastError);
       return { ok: false, error: lastError };
     }
   }
@@ -341,6 +365,8 @@ export async function resilientExec(
   // Should not reach here, but safety net
   /* istanbul ignore next */
   if (logWarnings && lastError) log.warn(buildWarning(lastError));
+  /* istanbul ignore next */
+  if (lastError) fireTelemetryForError(lastError);
   return { ok: false, error: lastError! };
 }
 

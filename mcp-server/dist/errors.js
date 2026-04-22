@@ -1,4 +1,13 @@
 import { z } from 'zod';
+/**
+ * Side-channel telemetry hook. telemetry.ts registers itself here on first
+ * import so that makeFlywheelErrorResult can fire recordErrorCode without
+ * creating a circular ESM dependency (errors ← telemetry ← errors).
+ */
+let _telemetryHook = null;
+export function registerTelemetryHook(hook) {
+    _telemetryHook = hook;
+}
 export const FLYWHEEL_ERROR_CODES = [
     'missing_prerequisite',
     'invalid_input',
@@ -139,6 +148,11 @@ export function makeFlywheelErrorResult(tool, phase, input) {
         tool,
         timestamp: new Date().toISOString(),
     };
+    // Fire-and-forget telemetry hook (no-op if telemetry module not yet registered)
+    try {
+        _telemetryHook?.(input.code, input.cause != null ? { hashable: input.cause } : undefined);
+    }
+    catch { /* never throw from error result builder */ }
     return {
         content: [{ type: 'text', text: input.message }],
         isError: true,
