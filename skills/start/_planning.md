@@ -60,13 +60,31 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
    ```
    Each agent's prompt MUST still include the Agent Mail bootstrap (`macro_start_session`, `send_message` to coordinator on completion). NTM handles the process lifecycle; Agent Mail handles the coordination protocol.
 
-   **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM launches panes asynchronously; a pane process can live while the agent inside is idle, crashed, or skipping Agent Mail. Run this loop at ~60-90s cadence (use the `Monitor` tool) until all 3 plans arrive in your inbox:
+   **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM launches panes asynchronously; a pane process can live while the agent inside is idle, crashed, or skipping Agent Mail.
 
+   ⚠ **Do NOT use `ntm status` / `ntm activity` / `ntm health` for monitoring.** They read cached timestamps and silently return stale signals (sometimes dated to the epoch / "56 years ago"), so panes appear dead while they're working (or vice versa). Use the `--robot-*` surfaces below — they sample live pane buffers and the provider's actual OAuth/quota state.
+
+   **Bootstrap once** (capture the event cursor):
    ```bash
-   ntm status   "$SESSION"   # pane health and last-activity timestamps
-   ntm activity "$SESSION"   # per-pane agent state (working/idle/crashed)
+   ntm --robot-snapshot --robot-format=toon      # note the returned `cursor`
+   ```
+
+   **Tend — event-driven, not timer-driven.** Block on the attention feed until all 3 plans arrive in your inbox. It wakes on real state changes instead of burning cycles on fixed 60-90s polling:
+   ```bash
+   ntm --robot-wait "$SESSION" \
+       --wait-until=attention,action_required,mail_ack_required \
+       --timeout=90s
+   ```
+
+   **On each wake, read the live per-pane truth:**
+   ```bash
+   ntm --robot-is-working="$SESSION"             # working | idle | rate_limited | error | context_low
+   ntm --robot-agent-health="$SESSION"           # OAuth, quota, context-window, account state
+   ntm --robot-tail="$SESSION" --panes=<N> --lines=50   # sample the actual pane buffer for any pane flagged idle/error
    ```
    Plus: `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` to see which planners have delivered their plan-file path.
+
+   If the event cursor expires, re-run `ntm --robot-snapshot` and continue.
 
    **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
    1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per planner pane. A missing identity means the agent skipped `macro_start_session`.
@@ -76,11 +94,15 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
       ```
    3. If the agent has an identity but hasn't sent a message in >3 min, treat as idle and start the nudge escalation below.
 
-   **Nudge escalation per idle pane.** "Idle" = `ntm activity` reports idle OR no Agent Mail traffic in 3 min.
+   **Nudge escalation per idle pane.** "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 3 min. Treat `rate_limited` and `context_low` as separate paths, NOT idle:
+   - `rate_limited` → probe reality (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`.
+   - `context_low` → restart the pane on a fresh account: `ntm --robot-restart-pane="$SESSION" --panes=<N>` with a re-dispatch prompt.
+
+   For a genuinely idle pane:
    - Nudge 1: `ntm send "$SESSION" --pane=<pane> "Your plan is needed — deliver the file path to <coordinator> via Agent Mail."`
    - Nudge 2 (2 min later): `ntm send "$SESSION" --pane=<pane> "Still waiting on your <perspective> plan. Report status and any blockers."`
    - Nudge 3 (2 min later): `ntm send "$SESSION" --pane=<pane> "Final nudge — deliver now or I proceed to synthesis without you."`
-   - After 3 nudges with no progress: mark the planner as failed, continue to synthesis with the plans you have (2 is usable; 1 is a degraded-warning case). Do NOT block the flywheel indefinitely on a stuck planner.
+   - After 3 nudges AND identical `--robot-tail` for ≥3 ticks, the pane is wedged. Climb the stuck-pane ladder: `--robot-smart-restart` → `--robot-smart-restart --hard-kill` → `--robot-restart-pane`. If the restart doesn't recover the planner within one more tick, mark it as failed and continue to synthesis with the plans you have (2 is usable; 1 is a degraded-warning case). Do NOT block the flywheel indefinitely on a stuck planner.
 
    ⚠ Do NOT use `ntm spawn deep-plan-<slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and a `deep-plan-<slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
 

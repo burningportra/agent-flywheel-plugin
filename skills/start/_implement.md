@@ -68,15 +68,33 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    - Stagger sends by 30 seconds (thundering-herd mitigation still applies).
    - The Agent Mail STEP 0 bootstrap is still MANDATORY in each pane's prompt — NTM handles process lifecycle; Agent Mail handles coordination protocol, file reservations, and audit trail.
 
-   **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM spawns agents asynchronously; a pane process can live while the agent inside it is idle, crashed, or skipping Agent Mail. You MUST actively monitor until every bead in the wave is closed or force-stopped. Run this loop at ~60-90s cadence (use the `Monitor` tool for best results):
+   **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM spawns agents asynchronously; a pane process can live while the agent inside it is idle, crashed, or skipping Agent Mail. You MUST actively monitor until every bead in the wave is closed or force-stopped.
 
+   ⚠ **Do NOT use `ntm status` / `ntm activity` / `ntm health` for monitoring.** They read cached timestamps and silently return stale signals (sometimes dated to the epoch / "56 years ago"), so panes appear dead while they're working (or vice versa). Use the `--robot-*` surfaces below — they sample live pane buffers and the provider's actual OAuth/quota state.
+
+   **Bootstrap once** (capture the event cursor):
    ```bash
-   ntm status   "$SESSION"   # pane health and last-activity timestamps
-   ntm activity "$SESSION"   # per-pane agent state (working/idle/crashed)
+   ntm --robot-snapshot --robot-format=toon      # note the returned `cursor`
+   ```
+
+   **Tend — event-driven, not timer-driven.** Block on the attention feed instead of polling every 60-90s; it wakes on real state changes (attention, action_required, mail_ack_required, rate_limited-cleared):
+   ```bash
+   ntm --robot-wait "$SESSION" \
+       --wait-until=attention,action_required,mail_ack_required \
+       --timeout=90s                               # returns sooner if an event fires
+   ```
+
+   **On each wake, read the live per-pane truth:**
+   ```bash
+   ntm --robot-is-working="$SESSION"             # working | idle | rate_limited | error | context_low
+   ntm --robot-agent-health="$SESSION"           # OAuth, quota, context-window, account state
+   ntm --robot-tail="$SESSION" --panes=<N> --lines=50   # sample the actual pane buffer for any pane flagged idle/error
    ```
    Plus, on each tick:
-   - `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` — see which agents sent `started` / `bead-closed` / status messages.
+   - `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` — which agents sent `started` / `bead-closed` / status messages.
    - `git log --oneline --grep="<bead-id>"` per in-flight bead — catches the "agent committed but forgot `br update`" failure mode (see Step 7's proactive-close rule).
+
+   If the event cursor expires, re-run `ntm --robot-snapshot` and continue.
 
    **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
    1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per pane you spawned. A missing identity means the agent skipped `macro_start_session`.
@@ -86,11 +104,20 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
       ```
    3. If the agent has an identity but hasn't sent a message in >2 min while its bead is still open, it's silently stuck. Treat as idle (escalation below).
 
-   **Nudge escalation per idle pane.** "Idle" = `ntm activity` reports idle OR no Agent Mail traffic in 2 min while bead is open.
+   **Nudge escalation per idle pane.** "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 2 min while bead is open. Treat `rate_limited` and `context_low` as separate recovery paths, NOT idle:
+   - `rate_limited` → probe reality first (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`. Do not nudge.
+   - `context_low` → dispatch handoff-then-restart: save state via Agent Mail, then `ntm --robot-restart-pane="$SESSION" --panes=<N> --restart-bead=<bead-id>` on a fresh pane.
+
+   For a genuinely idle pane:
    - Nudge 1: `ntm send "$SESSION" --pane=<pane> "Status check — report progress on <bead-id> and any blockers via Agent Mail."`
    - Nudge 2 (2 min later): `ntm send "$SESSION" --pane=<pane> "Still waiting on <bead-id>. If blocked, message <coordinator> with the blocker. If done, run 'br update <bead-id> --status closed'."`
    - Nudge 3 (2 min later): `ntm send "$SESSION" --pane=<pane> "Final nudge. Delivering now or I reassign/close on your behalf."`
-   - After 3 nudges with no progress: apply Step 7's idle-agent escalation (verify commit on disk, close bead yourself if commit matches acceptance, otherwise reassign the bead or force-stop the pane via `ntm kill-pane "$SESSION" --pane=<pane>`).
+   - After 3 nudges AND identical `--robot-tail` output for ≥3 ticks, the pane is wedged (CLI likely hung on `/usage`, `/rate-limit-options`, or a confirm dialog). Climb the stuck-pane ladder instead of blind nudging:
+     1. `ntm --robot-health-restart-stuck="$SESSION" --stuck-threshold=10m --dry-run` — surfaces which panes are actually stuck.
+     2. `ntm --robot-smart-restart="$SESSION" --panes=<N> --prompt="<re-dispatch prompt>"` — graceful; refuses if pane is actually working.
+     3. `ntm --robot-smart-restart="$SESSION" --panes=<N> --hard-kill --prompt="..."` — when the CLI is wedged on a dialog.
+     4. `ntm --robot-restart-pane="$SESSION" --panes=<N> --restart-bead=<bead-id>` — nuclear (`tmux respawn-pane -k`); works even when the CLI refuses to cooperate.
+     Then apply Step 7's idle-agent escalation (verify commit on disk, close bead yourself if commit matches acceptance, otherwise reassign the bead).
 
    ⚠ Do NOT use `ntm spawn impl-<goal-slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and an `impl-<goal-slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
 
