@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "rulesetVersion": 1,
-  "generated": "2026-04-22T00:43:52.800Z",
+  "generated": "2026-04-22T02:06:17.466Z",
   "entries": [
     {
       "ruleId": "AUQ003",
       "rulesetVersion": 1,
       "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
-      "line": 391,
+      "line": 417,
       "fingerprint": "sha256:87d0ed90a3e9897b0262469fbf073725c62470b619a418f329aef3196fc12c9c",
       "reason": ""
     },
@@ -15,8 +15,40 @@
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
       "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
-      "line": 397,
+      "line": 423,
       "fingerprint": "sha256:d12e9e6791b585d9b544b6fe622cb1161580255b7fe182cf319ae5369ba014b1",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "line": 169,
+      "fingerprint": "sha256:e32bf24eb509870236863352cecbc6b71320f0be98cae8ba7c97e65239269ac4",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "line": 182,
+      "fingerprint": "sha256:1b6f029ddbb28a2218dcddc84bde793baa643e99ebb91def269e8bddb78f5602",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "line": 183,
+      "fingerprint": "sha256:551cf7b35a3ddf1f027754deaeb977ea65c0b5f9930ace5a3f294f3e3dca3280",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "line": 184,
+      "fingerprint": "sha256:b0fa0c49e6965ded39e7226ee9e0cc31a53d67ee7a3ce44e2228f3ffba2fe99d",
       "reason": ""
     }
   ]

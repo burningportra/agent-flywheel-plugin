@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generated": "2026-04-15T14:26:14.891Z",
+  "generated": "2026-04-22T02:06:17.761Z",
   "skills": [
     "brainstorming",
     "caam",
@@ -11,6 +11,7 @@
     "dsr",
     "flywheel-audit",
     "flywheel-cleanup",
+    "flywheel-doctor",
     "flywheel-drift-check",
     "flywheel-fix",
     "flywheel-healthcheck",
