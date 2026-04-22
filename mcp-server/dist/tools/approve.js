@@ -8,6 +8,8 @@ import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
 import { computeHotspotMatrix } from '../plan-simulation.js';
 import { createLogger } from '../logger.js';
+import { expandTemplate } from '../bead-templates.js';
+import { parseTemplateHint } from '../deep-plan.js';
 const log = createLogger('approve');
 let _lastBeadSnapshot;
 function descFingerprint(desc) {
@@ -132,6 +134,104 @@ export function formatHotspotSummary(matrix) {
  */
 export function shouldOfferCoordinatorSerial(matrix) {
     return matrix.recommendation === 'coordinator-serial' || matrix.maxContention >= 2;
+}
+/**
+ * Map a `BeadPlanSpec` to the placeholder record `expandTemplate` expects.
+ *
+ * I8 synthesizer-emitted templates use UPPERCASE placeholder names
+ * (`{{TITLE}}`, `{{SCOPE}}`, `{{ACCEPTANCE}}`, `{{TEST_PLAN}}`), while the
+ * wire-flat `TemplateExpansionInput` uses lowercase keys (`title`, `scope`, …)
+ * so the MCP boundary stays ergonomic for agents. This adapter emits both
+ * cases — every lowercase canonical key is also exposed as its uppercase
+ * sibling so both v3.4.0 I8 templates and any future lowercase-keyed
+ * templates can consume the same spec without bespoke mapping.
+ *
+ * Extra placeholders (`PARENT_WAVE_BEADS`, `TARGET_FILE`, …) pass through
+ * their original casing — the synthesizer controls those names.
+ */
+function buildTemplateInput(spec) {
+    const input = {};
+    const canonicalPairs = [
+        ['title', spec.title],
+        ['scope', spec.scope],
+        ['acceptance', spec.acceptance],
+        ['test_plan', spec.test_plan],
+    ];
+    for (const [lowerKey, value] of canonicalPairs) {
+        if (typeof value !== 'string')
+            continue;
+        input[lowerKey] = value;
+        input[lowerKey.toUpperCase()] = value;
+    }
+    if (spec.extraPlaceholders) {
+        for (const [k, v] of Object.entries(spec.extraPlaceholders)) {
+            if (typeof v === 'string')
+                input[k] = v;
+        }
+    }
+    return input;
+}
+/**
+ * Expand a single bead spec at approve time. Pure function — safe to call
+ * in tests and in the bead-creation path without touching br CLI state.
+ *
+ * @param phase Caller's current `FlywheelPhase`, threaded onto any error
+ *              envelope so the SKILL.md orchestrator branches correctly.
+ */
+export function expandBeadPlanSpec(spec, phase) {
+    const parsed = parseTemplateHint(spec.template);
+    if (!parsed) {
+        // No hint, empty hint, or malformed hint → legacy free-form passthrough.
+        // `parseTemplateHint` already logs a warn for malformed hints.
+        return {
+            status: 'passthrough',
+            title: spec.title,
+            description: spec.description ?? '',
+        };
+    }
+    const result = expandTemplate(parsed.id, parsed.version, buildTemplateInput(spec));
+    if (result.success) {
+        return {
+            status: 'expanded',
+            title: spec.title,
+            description: result.description,
+            usedTemplate: parsed,
+        };
+    }
+    const hintText = `template hint "${parsed.id}@${parsed.version}"`;
+    const remediation = result.error === 'template_not_found'
+        ? 'Pick a template id@version that exists in the library, or omit the hint to create a free-form bead.'
+        : result.error === 'template_placeholder_missing'
+            ? 'Supply the missing placeholders in the bead spec (title/scope/acceptance/test_plan/extraPlaceholders).'
+            : 'Inspect the template body for unresolved markers or invalid placeholder values.';
+    const errorResult = makeFlywheelErrorResult('flywheel_approve_beads', phase, {
+        code: result.error,
+        message: `Failed to expand ${hintText}: ${result.detail}`,
+        hint: remediation,
+        details: {
+            templateId: parsed.id,
+            templateVersion: parsed.version,
+            beadTitle: spec.title,
+        },
+    });
+    return {
+        status: 'error',
+        title: spec.title,
+        code: result.error,
+        detail: result.detail,
+        errorResult,
+    };
+}
+/**
+ * Expand every bead spec at approve time, returning ordered outcomes.
+ *
+ * Callers iterate results: `expanded` + `passthrough` beads proceed to
+ * `br create`; the first `error` outcome's `errorResult` should be returned
+ * from the tool handler to surface the FlywheelErrorCode envelope to the
+ * SKILL.md orchestrator.
+ */
+export function expandBeadPlanSpecs(specs, phase) {
+    return specs.map((spec) => expandBeadPlanSpec(spec, phase));
 }
 /**
  * flywheel_approve_beads — Review and approve bead graph before implementation.
