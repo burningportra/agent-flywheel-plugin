@@ -5,7 +5,7 @@
  * with execution ordering, parallel group computation, file conflict detection,
  * and missing file validation.
  */
-import type { Bead } from './types.js';
+import type { Bead, HotspotMatrix } from './types.js';
 export interface SimulatedBead {
     id: string;
     title: string;
@@ -68,4 +68,34 @@ export declare function simulateExecutionPaths(beads: SimulatedBead[], repoFiles
  * Format a SimulationResult as a human-readable markdown report.
  */
 export declare function formatSimulationReport(result: SimulationResult): string;
+/**
+ * Input bead for hotspot computation. Intentionally minimal — callers
+ * don't need to produce a full Bead object.
+ */
+export interface HotspotInputBead {
+    id: string;
+    title: string;
+    body?: string;
+}
+/**
+ * Pure function: compute a HotspotMatrix from a list of beads.
+ *
+ * Heuristic: exact path-string match after normalization (no basename collapse).
+ * Provenance-aware severity:
+ *   - high  → contentionCount >= 3 AND at least one bead mentions the file via a
+ *             `### Files:` / `## Files` section.
+ *   - med   → contentionCount >= 2 (any provenance), OR contentionCount >= 3
+ *             with only prose provenance.
+ *   - low   → contentionCount == 1.
+ *
+ * Output is Zod-validated before returning.
+ *
+ * Deterministic: beads are sorted by id ascending before processing; output
+ * rows are sorted by file ascending, then contentionCount descending; beadIds
+ * within each row are sorted ascending.
+ *
+ * Bounded: when beads.length > 150, returns summaryOnly:true with the top 10
+ * highest-contention rows (sorted by contentionCount desc then file asc).
+ */
+export declare function computeHotspotMatrix(beads: HotspotInputBead[]): HotspotMatrix;
 //# sourceMappingURL=plan-simulation.d.ts.map
