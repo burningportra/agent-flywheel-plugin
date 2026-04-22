@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 // ─── Repo Profile ────────────────────────────────────────────
 export interface RepoProfile {
   name: string;
@@ -422,6 +424,21 @@ export interface FlywheelState {
    * Reset to 0 on any fail or revision-instructions round.
    */
   consecutiveCleanRounds?: number;
+
+  // ─── v3.4.0 additions — telemetry + post-mortem reconstruction ──
+  /**
+   * Populated at session end with error-code frequency + recent events.
+   * Persisted through checkpoint for post-session analysis. Optional for
+   * backward-compatibility with v3.3.0 checkpoints.
+   */
+  errorCodeTelemetry?: ErrorCodeTelemetry;
+
+  /**
+   * Git SHA captured at session start. Used by post-mortem reconstruction
+   * to compute the diff boundary without consulting reflog. Optional for
+   * backward-compatibility with v3.3.0 checkpoints.
+   */
+  sessionStartSha?: string;
 }
 
 // ─── Checkpoint Persistence ─────────────────────────────────
@@ -544,3 +561,88 @@ export interface AgentMailError {
   code?: number;
   stderr?: string;
 }
+
+// ─── v3.4.0 Shared Contracts (doctor / hotspot / postmortem / template / telemetry) ──
+
+export const DoctorCheckSeveritySchema = z.enum(['green', 'yellow', 'red']);
+export type DoctorCheckSeverity = z.infer<typeof DoctorCheckSeveritySchema>;
+
+export const DoctorCheckSchema = z.object({
+  name: z.string(),
+  severity: DoctorCheckSeveritySchema,
+  message: z.string(),
+  hint: z.string().optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+});
+export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
+
+export const DoctorReportSchema = z.object({
+  version: z.literal(1),
+  cwd: z.string(),
+  overall: DoctorCheckSeveritySchema,
+  partial: z.boolean().default(false),
+  checks: z.array(DoctorCheckSchema),
+  elapsedMs: z.number().int().nonnegative(),
+  timestamp: z.string(),
+});
+export type DoctorReport = z.infer<typeof DoctorReportSchema>;
+
+export const HotspotSeveritySchema = z.enum(['low', 'med', 'high']);
+export type HotspotSeverity = z.infer<typeof HotspotSeveritySchema>;
+
+export const HotspotRowSchema = z.object({
+  file: z.string(),
+  beadIds: z.array(z.string()),
+  contentionCount: z.number().int().nonnegative(),
+  severity: HotspotSeveritySchema,
+  provenance: z.enum(['files-section', 'prose']),
+});
+export type HotspotRow = z.infer<typeof HotspotRowSchema>;
+
+export const HotspotMatrixSchema = z.object({
+  version: z.literal(1),
+  rows: z.array(HotspotRowSchema),
+  maxContention: z.number().int().nonnegative(),
+  recommendation: z.enum(['swarm', 'coordinator-serial']),
+  summaryOnly: z.boolean().default(false),
+});
+export type HotspotMatrix = z.infer<typeof HotspotMatrixSchema>;
+
+export const PostmortemDraftSchema = z.object({
+  version: z.literal(1),
+  sessionStartSha: z.string().optional(),
+  goal: z.string(),
+  phase: z.string(),
+  markdown: z.string(),
+  hasWarnings: z.boolean().default(false),
+  warnings: z.array(z.string()).default([]),
+});
+export type PostmortemDraft = z.infer<typeof PostmortemDraftSchema>;
+
+/**
+ * v3.4.0 Bead template contract used by the `expand_bead_template` tool and
+ * template library (`bead-templates.ts`). Distinct from the richer legacy
+ * `BeadTemplate` interface above, which models in-repo template fixtures
+ * with placeholders-as-objects.
+ */
+export const BeadTemplateContractSchema = z.object({
+  id: z.string(),
+  version: z.number().int().positive(),
+  body: z.string(),
+  placeholders: z.array(z.string()),
+  dependenciesHint: z.string().optional(),
+  testStrategy: z.string().optional(),
+});
+export type BeadTemplateContract = z.infer<typeof BeadTemplateContractSchema>;
+
+export const ErrorCodeTelemetrySchema = z.object({
+  version: z.literal(1),
+  sessionStartIso: z.string(),
+  counts: z.record(z.string(), z.number().int().nonnegative()),
+  recentEvents: z.array(z.object({
+    code: z.string(),
+    ts: z.string(),
+    ctxHash: z.string().optional(),
+  })),
+});
+export type ErrorCodeTelemetry = z.infer<typeof ErrorCodeTelemetrySchema>;

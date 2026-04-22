@@ -61,6 +61,12 @@ export interface ResilientExecOptions {
     isTransient?: (exitCode: number | null, stderr: string, err: unknown) => boolean;
     /** Log structured warnings on failure. Default: true */
     logWarnings?: boolean;
+    /**
+     * Optional cancellation signal. Forwarded to every `exec` attempt; also used
+     * to short-circuit retry sleeps and the retry loop itself so that aborting
+     * stops the wrapper within one retry-delay window.
+     */
+    signal?: AbortSignal;
 }
 /**
  * br-specific transient classification.

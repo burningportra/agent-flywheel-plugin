@@ -16,6 +16,17 @@ export const FLYWHEEL_ERROR_CODES = [
     'already_closed',
     'unsupported_action',
     'internal_error',
+    // v3.4.0 — doctor/hotspot/postmortem/template/telemetry
+    'doctor_check_failed',
+    'doctor_partial_result',
+    'hotspot_parse_failure',
+    'hotspot_input_unreliable',
+    'postmortem_empty_session',
+    'postmortem_checkpoint_stale',
+    'template_not_found',
+    'template_placeholder_missing',
+    'template_expansion_failed',
+    'telemetry_store_failed',
 ];
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
 export const FlywheelToolErrorSchema = z.object({
@@ -56,6 +67,17 @@ export const DEFAULT_RETRYABLE = {
     already_closed: false,
     unsupported_action: false,
     internal_error: true,
+    // v3.4.0 additions
+    doctor_check_failed: false,
+    doctor_partial_result: false,
+    hotspot_parse_failure: false,
+    hotspot_input_unreliable: false,
+    postmortem_empty_session: false,
+    postmortem_checkpoint_stale: false,
+    template_not_found: false,
+    template_placeholder_missing: false,
+    template_expansion_failed: true, // may be transient if template library is mid-reload
+    telemetry_store_failed: true, // disk contention is transient
 };
 export class FlywheelError extends Error {
     code;

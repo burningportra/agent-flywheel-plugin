@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { FlywheelToolName, FlywheelPhase } from './types.js';
-export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error"];
+export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error", "doctor_check_failed", "doctor_partial_result", "hotspot_parse_failure", "hotspot_input_unreliable", "postmortem_empty_session", "postmortem_checkpoint_stale", "template_not_found", "template_placeholder_missing", "template_expansion_failed", "telemetry_store_failed"];
 export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     missing_prerequisite: "missing_prerequisite";
     invalid_input: "invalid_input";
@@ -18,6 +18,16 @@ export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     already_closed: "already_closed";
     unsupported_action: "unsupported_action";
     internal_error: "internal_error";
+    doctor_check_failed: "doctor_check_failed";
+    doctor_partial_result: "doctor_partial_result";
+    hotspot_parse_failure: "hotspot_parse_failure";
+    hotspot_input_unreliable: "hotspot_input_unreliable";
+    postmortem_empty_session: "postmortem_empty_session";
+    postmortem_checkpoint_stale: "postmortem_checkpoint_stale";
+    template_not_found: "template_not_found";
+    template_placeholder_missing: "template_placeholder_missing";
+    template_expansion_failed: "template_expansion_failed";
+    telemetry_store_failed: "telemetry_store_failed";
 }>;
 export type FlywheelErrorCode = z.infer<typeof FlywheelErrorCodeSchema>;
 export declare const FlywheelToolErrorSchema: z.ZodObject<{
@@ -38,6 +48,16 @@ export declare const FlywheelToolErrorSchema: z.ZodObject<{
         already_closed: "already_closed";
         unsupported_action: "unsupported_action";
         internal_error: "internal_error";
+        doctor_check_failed: "doctor_check_failed";
+        doctor_partial_result: "doctor_partial_result";
+        hotspot_parse_failure: "hotspot_parse_failure";
+        hotspot_input_unreliable: "hotspot_input_unreliable";
+        postmortem_empty_session: "postmortem_empty_session";
+        postmortem_checkpoint_stale: "postmortem_checkpoint_stale";
+        template_not_found: "template_not_found";
+        template_placeholder_missing: "template_placeholder_missing";
+        template_expansion_failed: "template_expansion_failed";
+        telemetry_store_failed: "telemetry_store_failed";
     }>;
     message: z.ZodString;
     retryable: z.ZodOptional<z.ZodBoolean>;
@@ -74,6 +94,16 @@ export declare const FlywheelStructuredErrorSchema: z.ZodObject<{
                 already_closed: "already_closed";
                 unsupported_action: "unsupported_action";
                 internal_error: "internal_error";
+                doctor_check_failed: "doctor_check_failed";
+                doctor_partial_result: "doctor_partial_result";
+                hotspot_parse_failure: "hotspot_parse_failure";
+                hotspot_input_unreliable: "hotspot_input_unreliable";
+                postmortem_empty_session: "postmortem_empty_session";
+                postmortem_checkpoint_stale: "postmortem_checkpoint_stale";
+                template_not_found: "template_not_found";
+                template_placeholder_missing: "template_placeholder_missing";
+                template_expansion_failed: "template_expansion_failed";
+                telemetry_store_failed: "telemetry_store_failed";
             }>;
             message: z.ZodString;
             retryable: z.ZodOptional<z.ZodBoolean>;

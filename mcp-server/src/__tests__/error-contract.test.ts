@@ -12,8 +12,8 @@ import {
 } from '../errors.js';
 
 describe('FLYWHEEL_ERROR_CODES', () => {
-  it('has exactly 16 codes', () => {
-    expect(FLYWHEEL_ERROR_CODES).toHaveLength(16);
+  it('has exactly 26 codes (16 legacy + 10 v3.4.0 additions)', () => {
+    expect(FLYWHEEL_ERROR_CODES).toHaveLength(26);
   });
 
   it('DEFAULT_RETRYABLE covers every code', () => {

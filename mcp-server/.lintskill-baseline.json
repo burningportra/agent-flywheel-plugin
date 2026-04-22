@@ -1,102 +1,22 @@
 {
   "schemaVersion": 1,
   "rulesetVersion": 1,
-  "generated": "2026-04-16T01:52:06.213Z",
+  "generated": "2026-04-22T00:43:52.800Z",
   "entries": [
-    {
-      "ruleId": "SKILL-010",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 1187,
-      "fingerprint": "sha256:5c50853d085862b8c76584c8cb54798c0fdc111a831cf79e727d795273b9df93",
-      "reason": ""
-    },
-    {
-      "ruleId": "SKILL-010",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 1206,
-      "fingerprint": "sha256:9d0a34f10a88be8fc6a4d28a2bdde64d1c02a31957291e4755075cd2997cc19d",
-      "reason": ""
-    },
     {
       "ruleId": "AUQ003",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 336,
+      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "line": 391,
       "fingerprint": "sha256:87d0ed90a3e9897b0262469fbf073725c62470b619a418f329aef3196fc12c9c",
       "reason": ""
     },
     {
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 893,
-      "fingerprint": "sha256:f126ac1236778142f7a7e5db770c11e3ce9de6aacdc1b96fe4937a87c322a0c9",
-      "reason": ""
-    },
-    {
-      "ruleId": "SLASH001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 342,
-      "fingerprint": "sha256:bffdcc6912c642efaef4e7bc0100d6f220ee2f606be7e34b11ecbb2e688736e3",
-      "reason": ""
-    },
-    {
-      "ruleId": "PLACE001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 436,
-      "fingerprint": "sha256:ab5a048ef132a0790fc9bed6889c34dc7c161df2204353b74514356c40c1445a",
-      "reason": ""
-    },
-    {
-      "ruleId": "PLACE001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 554,
-      "fingerprint": "sha256:691c287c0aab7635eeb8cc5c733f8e8e1898d29fd89f687b6dcbaa562fb629f4",
-      "reason": ""
-    },
-    {
-      "ruleId": "PLACE001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 555,
-      "fingerprint": "sha256:1046e31a6d57f27fea3f0c6ffd3e8eadd0d0c673b5624b90ac8ce13a5f1083a1",
-      "reason": ""
-    },
-    {
-      "ruleId": "PLACE001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 605,
-      "fingerprint": "sha256:8859f60dde0df87e3731a8b5a99e0c04c7cd49f4868fc21f89be3d535daf9c8a",
-      "reason": ""
-    },
-    {
-      "ruleId": "PLACE001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 1307,
-      "fingerprint": "sha256:f7aa22448908c43d8ffe00739cfc9aa730b69d57bbefac8870190165545c112c",
-      "reason": ""
-    },
-    {
-      "ruleId": "IMPL001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 607,
-      "fingerprint": "sha256:44449a2ce5add152db93cbbd280febb1a028d0742ebb7026f5afeb113c0f3b77",
-      "reason": ""
-    },
-    {
-      "ruleId": "IMPL001",
-      "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/skills/start/SKILL.md",
-      "line": 804,
-      "fingerprint": "sha256:c88159ddbeee1fa239f426683450e205b5785d028f095bf81610b1ebfeb87c94",
+      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "line": 397,
+      "fingerprint": "sha256:d12e9e6791b585d9b544b6fe622cb1161580255b7fe182cf319ae5369ba014b1",
       "reason": ""
     }
   ]

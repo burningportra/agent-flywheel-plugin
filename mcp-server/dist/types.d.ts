@@ -1,3 +1,4 @@
+import { z } from 'zod';
 export interface RepoProfile {
     name: string;
     languages: string[];
@@ -350,6 +351,18 @@ export interface FlywheelState {
      * Reset to 0 on any fail or revision-instructions round.
      */
     consecutiveCleanRounds?: number;
+    /**
+     * Populated at session end with error-code frequency + recent events.
+     * Persisted through checkpoint for post-session analysis. Optional for
+     * backward-compatibility with v3.3.0 checkpoints.
+     */
+    errorCodeTelemetry?: ErrorCodeTelemetry;
+    /**
+     * Git SHA captured at session start. Used by post-mortem reconstruction
+     * to compute the diff boundary without consulting reflog. Optional for
+     * backward-compatibility with v3.3.0 checkpoints.
+     */
+    sessionStartSha?: string;
 }
 /** On-disk checkpoint envelope — wraps FlywheelState with crash-recovery metadata. */
 export interface CheckpointEnvelope {
@@ -457,4 +470,127 @@ export interface AgentMailError {
     code?: number;
     stderr?: string;
 }
+export declare const DoctorCheckSeveritySchema: z.ZodEnum<{
+    green: "green";
+    yellow: "yellow";
+    red: "red";
+}>;
+export type DoctorCheckSeverity = z.infer<typeof DoctorCheckSeveritySchema>;
+export declare const DoctorCheckSchema: z.ZodObject<{
+    name: z.ZodString;
+    severity: z.ZodEnum<{
+        green: "green";
+        yellow: "yellow";
+        red: "red";
+    }>;
+    message: z.ZodString;
+    hint: z.ZodOptional<z.ZodString>;
+    durationMs: z.ZodOptional<z.ZodNumber>;
+}, z.core.$strip>;
+export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
+export declare const DoctorReportSchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    cwd: z.ZodString;
+    overall: z.ZodEnum<{
+        green: "green";
+        yellow: "yellow";
+        red: "red";
+    }>;
+    partial: z.ZodDefault<z.ZodBoolean>;
+    checks: z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        severity: z.ZodEnum<{
+            green: "green";
+            yellow: "yellow";
+            red: "red";
+        }>;
+        message: z.ZodString;
+        hint: z.ZodOptional<z.ZodString>;
+        durationMs: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strip>>;
+    elapsedMs: z.ZodNumber;
+    timestamp: z.ZodString;
+}, z.core.$strip>;
+export type DoctorReport = z.infer<typeof DoctorReportSchema>;
+export declare const HotspotSeveritySchema: z.ZodEnum<{
+    low: "low";
+    high: "high";
+    med: "med";
+}>;
+export type HotspotSeverity = z.infer<typeof HotspotSeveritySchema>;
+export declare const HotspotRowSchema: z.ZodObject<{
+    file: z.ZodString;
+    beadIds: z.ZodArray<z.ZodString>;
+    contentionCount: z.ZodNumber;
+    severity: z.ZodEnum<{
+        low: "low";
+        high: "high";
+        med: "med";
+    }>;
+    provenance: z.ZodEnum<{
+        "files-section": "files-section";
+        prose: "prose";
+    }>;
+}, z.core.$strip>;
+export type HotspotRow = z.infer<typeof HotspotRowSchema>;
+export declare const HotspotMatrixSchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    rows: z.ZodArray<z.ZodObject<{
+        file: z.ZodString;
+        beadIds: z.ZodArray<z.ZodString>;
+        contentionCount: z.ZodNumber;
+        severity: z.ZodEnum<{
+            low: "low";
+            high: "high";
+            med: "med";
+        }>;
+        provenance: z.ZodEnum<{
+            "files-section": "files-section";
+            prose: "prose";
+        }>;
+    }, z.core.$strip>>;
+    maxContention: z.ZodNumber;
+    recommendation: z.ZodEnum<{
+        swarm: "swarm";
+        "coordinator-serial": "coordinator-serial";
+    }>;
+    summaryOnly: z.ZodDefault<z.ZodBoolean>;
+}, z.core.$strip>;
+export type HotspotMatrix = z.infer<typeof HotspotMatrixSchema>;
+export declare const PostmortemDraftSchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    sessionStartSha: z.ZodOptional<z.ZodString>;
+    goal: z.ZodString;
+    phase: z.ZodString;
+    markdown: z.ZodString;
+    hasWarnings: z.ZodDefault<z.ZodBoolean>;
+    warnings: z.ZodDefault<z.ZodArray<z.ZodString>>;
+}, z.core.$strip>;
+export type PostmortemDraft = z.infer<typeof PostmortemDraftSchema>;
+/**
+ * v3.4.0 Bead template contract used by the `expand_bead_template` tool and
+ * template library (`bead-templates.ts`). Distinct from the richer legacy
+ * `BeadTemplate` interface above, which models in-repo template fixtures
+ * with placeholders-as-objects.
+ */
+export declare const BeadTemplateContractSchema: z.ZodObject<{
+    id: z.ZodString;
+    version: z.ZodNumber;
+    body: z.ZodString;
+    placeholders: z.ZodArray<z.ZodString>;
+    dependenciesHint: z.ZodOptional<z.ZodString>;
+    testStrategy: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export type BeadTemplateContract = z.infer<typeof BeadTemplateContractSchema>;
+export declare const ErrorCodeTelemetrySchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    sessionStartIso: z.ZodString;
+    counts: z.ZodRecord<z.ZodString, z.ZodNumber>;
+    recentEvents: z.ZodArray<z.ZodObject<{
+        code: z.ZodString;
+        ts: z.ZodString;
+        ctxHash: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export type ErrorCodeTelemetry = z.infer<typeof ErrorCodeTelemetrySchema>;
 //# sourceMappingURL=types.d.ts.map
