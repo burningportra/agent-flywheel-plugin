@@ -127,6 +127,12 @@ const PHASE_META = {
         nextAction: "All done! Run /start to start a new session.",
         buildResumePrompt: () => "Previous flywheel was complete. Starting fresh — call `flywheel_profile` to scan the repo.",
     },
+    doctor: {
+        label: "Running doctor checks",
+        emoji: "🩺",
+        nextAction: "Call `flywheel_doctor` for a health sweep.",
+        buildResumePrompt: () => "Doctor sweep in progress — rerun `flywheel_doctor` if you need fresh results.",
+    },
 };
 // ─── Core detection logic ─────────────────────────────────────
 /**

@@ -9,6 +9,7 @@ import { createLogger } from './logger.js';
 import { clearState, loadState, saveState } from './state.js';
 import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
+import { runDoctor } from './tools/doctor-tool.js';
 import { runMemory } from './tools/memory-tool.js';
 import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
@@ -222,6 +223,17 @@ const PRIMARY_TOOLS = [
       required: ['cwd'],
     },
   },
+  {
+    name: 'flywheel_doctor',
+    description: 'Run an 11-check health sweep of the flywheel environment: MCP connectivity, agent-mail liveness, required/optional CLIs (br/bv/ntm/cm), node version, git status, dist drift, orphaned worktrees, and checkpoint validity. Read-only — never mutates checkpoint or state. Returns a DoctorReport with per-check severity (green/yellow/red).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+      },
+      required: ['cwd'],
+    },
+  },
 ];
 
 /**
@@ -248,6 +260,7 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   flywheel_review: runReview as ToolRunner,
   flywheel_verify_beads: runVerifyBeads as ToolRunner,
   flywheel_memory: runMemory as ToolRunner,
+  flywheel_doctor: runDoctor as ToolRunner,
   // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
   orch_profile: runProfile as ToolRunner,
   orch_discover: runDiscover as ToolRunner,

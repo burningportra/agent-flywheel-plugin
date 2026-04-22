@@ -358,6 +358,32 @@ export declare const TOOLS: ({
         };
         required: string[];
     };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            beadId?: undefined;
+            beadIds?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+        };
+        required: string[];
+    };
 })[];
 export declare function validateToolArgs(toolName: string, args: Record<string, unknown>): ToolValidationError | null;
 export declare function createCallToolHandler(dependencies: CallToolHandlerDependencies): (request: {

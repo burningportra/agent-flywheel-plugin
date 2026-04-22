@@ -250,7 +250,7 @@ export interface CandidateIdea {
     scores?: IdeaScores;
 }
 export type IdeaCategory = "feature" | "refactor" | "docs" | "dx" | "performance" | "reliability" | "security" | "testing";
-export type FlywheelPhase = "idle" | "profiling" | "discovering" | "awaiting_selection" | "planning" | "researching" | "awaiting_plan_approval" | "creating_beads" | "refining_beads" | "awaiting_bead_approval" | "implementing" | "reviewing" | "iterating" | "complete";
+export type FlywheelPhase = "idle" | "profiling" | "discovering" | "awaiting_selection" | "planning" | "researching" | "awaiting_plan_approval" | "creating_beads" | "refining_beads" | "awaiting_bead_approval" | "implementing" | "reviewing" | "iterating" | "complete" | "doctor";
 export type CoordinationMode = "worktree" | "single-branch";
 export interface FlywheelState {
     phase: FlywheelPhase;
@@ -389,7 +389,7 @@ export interface ToolContext {
     clearState: () => void;
     signal?: AbortSignal;
 }
-export type FlywheelToolName = 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review' | 'flywheel_verify_beads' | 'flywheel_memory' | 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review' | 'orch_verify_beads' | 'orch_memory';
+export type FlywheelToolName = 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review' | 'flywheel_verify_beads' | 'flywheel_memory' | 'flywheel_doctor' | 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review' | 'orch_verify_beads' | 'orch_memory';
 export interface ToolChoiceOption {
     id: string;
     label: string;
@@ -452,6 +452,9 @@ export interface MemoryArgs {
     query?: string;
     operation?: "search" | "store";
     content?: string;
+}
+export interface DoctorArgs {
+    cwd: string;
 }
 export interface HitMeResult {
     text: string;

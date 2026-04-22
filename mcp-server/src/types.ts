@@ -308,7 +308,8 @@ export type FlywheelPhase =
   | "implementing"
   | "reviewing"
   | "iterating"
-  | "complete";
+  | "complete"
+  | "doctor";
 
 export type CoordinationMode = "worktree" | "single-branch";
 
@@ -496,6 +497,7 @@ export type FlywheelToolName =
   | 'flywheel_review'
   | 'flywheel_verify_beads'
   | 'flywheel_memory'
+  | 'flywheel_doctor'
   // Deprecated orch_* aliases — kept for back-compat, removed in v4.0.
   | 'orch_profile'
   | 'orch_discover'
@@ -541,6 +543,7 @@ export interface ApproveArgs { cwd: string; action: "start" | "polish" | "reject
 export interface ReviewArgs { cwd: string; beadId: string; action: "hit-me" | "looks-good" | "skip" }
 export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
 export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store"; content?: string }
+export interface DoctorArgs { cwd: string }
 
 // ─── Orchestrator Context (shared runtime for extracted modules) ──
 
