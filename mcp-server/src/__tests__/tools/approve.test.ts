@@ -202,6 +202,10 @@ describe('runApprove', () => {
           score: expect.any(Number),
           summary: expect.stringContaining('Bead quality'),
         },
+        matrix: expect.objectContaining({
+          version: 1,
+          recommendation: expect.stringMatching(/^(swarm|coordinator-serial)$/),
+        }),
         advancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
       },
     });
@@ -246,6 +250,10 @@ describe('runApprove', () => {
           score: expect.any(Number),
           summary: expect.stringContaining('Bead quality'),
         },
+        matrix: expect.objectContaining({
+          version: 1,
+          recommendation: expect.stringMatching(/^(swarm|coordinator-serial)$/),
+        }),
         readyBeads: [
           {
             id: 'bead-1',
@@ -272,9 +280,12 @@ describe('runApprove', () => {
   });
 
   it('returns agent configs when multiple beads are ready', async () => {
+    // Use distinct descriptions so hotspot matrix stays in swarm mode (no
+    // coordinator-serial override). Without this, the shared 'HOW: src/core.test.ts'
+    // in the default bead body would trigger the 4-option menu.
     const beads = [
-      makeBead({ id: 'bead-1', title: 'First task' }),
-      makeBead({ id: 'bead-2', title: 'Second task' }),
+      makeBead({ id: 'bead-1', title: 'First task', description: 'WHAT: task 1\nWHY: reliability\nHOW: src/first.ts' }),
+      makeBead({ id: 'bead-2', title: 'Second task', description: 'WHAT: task 2\nWHY: reliability\nHOW: src/second.ts' }),
     ];
     const { ctx } = makeCtx({}, makeExecCalls(beads));
 
@@ -310,6 +321,10 @@ describe('runApprove', () => {
           score: expect.any(Number),
           summary: expect.stringContaining('Bead quality'),
         },
+        matrix: expect.objectContaining({
+          version: 1,
+          recommendation: 'swarm',
+        }),
         readyBeads: [
           {
             id: 'bead-1',
@@ -442,6 +457,10 @@ describe('runApprove', () => {
           score: expect.any(Number),
           summary: expect.stringContaining('Bead quality'),
         },
+        matrix: expect.objectContaining({
+          version: 1,
+          recommendation: expect.stringMatching(/^(swarm|coordinator-serial)$/),
+        }),
         advancedActions: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
       },
     });

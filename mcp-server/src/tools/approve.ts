@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ToolContext, McpToolResult, Bead, ApproveArgs, FlywheelPhase, ToolNextStep } from '../types.js';
+import type { ToolContext, McpToolResult, Bead, ApproveArgs, FlywheelPhase, ToolNextStep, HotspotMatrix } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
+import { computeHotspotMatrix, type HotspotInputBead } from '../plan-simulation.js';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('approve');
@@ -115,12 +116,65 @@ function getSizeAssessment(lineCount: number): SizeAssessment {
   return 'detailed';
 }
 
-function getBeadApprovalData(state: ToolContext['state'], beads: Bead[], score: number | undefined): Record<string, unknown> {
+function getBeadApprovalData(
+  state: ToolContext['state'],
+  beads: Bead[],
+  score: number | undefined,
+  matrix?: HotspotMatrix,
+): Record<string, unknown> {
   return {
     activeBeadIds: [...(state.activeBeadIds ?? [])],
     convergence: getConvergenceData(state, score),
     quality: getQualityData(beads),
+    ...(matrix ? { matrix } : {}),
   };
+}
+
+/**
+ * Map br CLI beads (which carry a `description` field) into the input shape
+ * expected by `computeHotspotMatrix` (which expects `body`).
+ *
+ * **Gate 1 finding:** without this mapping, every bead enters
+ * `computeHotspotMatrix` with `body: undefined` and the matrix silently
+ * returns empty rows, causing the coordinator-serial recommendation to be
+ * missed. Do not remove this adapter.
+ */
+export function beadsToHotspotInput(beads: Bead[]): HotspotInputBead[] {
+  return beads.map((b) => ({
+    id: b.id,
+    title: b.title,
+    body: b.description, // CRITICAL: description → body (Gate 1)
+  }));
+}
+
+/**
+ * Render a compact text summary of the hotspot matrix — top 3 hot files by
+ * contention count. Used in the MCP `content[]` block to surface contention
+ * to the user before they pick start/polish/reject.
+ */
+export function formatHotspotSummary(matrix: HotspotMatrix): string {
+  if (matrix.rows.length === 0) {
+    return 'No shared-file contention detected across beads.';
+  }
+  const top = [...matrix.rows]
+    .sort((a, b) => b.contentionCount - a.contentionCount || (a.file < b.file ? -1 : 1))
+    .slice(0, 3);
+  const lines = ['Shared-write contention detected:'];
+  for (const row of top) {
+    lines.push(
+      `  ${row.file} (${row.contentionCount} bead${row.contentionCount === 1 ? '' : 's'}: ${row.beadIds.join(', ')}) — ${row.severity}`,
+    );
+  }
+  lines.push(`Recommendation: ${matrix.recommendation}.`);
+  return lines.join('\n');
+}
+
+/**
+ * Is the hotspot matrix severe enough to warrant the 4-option menu
+ * (med/high rows) per the I5 plan spec?
+ */
+export function shouldOfferCoordinatorSerial(matrix: HotspotMatrix): boolean {
+  return matrix.recommendation === 'coordinator-serial' || matrix.maxContention >= 2;
 }
 
 /**
@@ -216,6 +270,10 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   state.phase = 'awaiting_bead_approval';
   saveState(state);
 
+  // Compute hotspot matrix (I5). Bead.description → HotspotInputBead.body
+  // adapter is REQUIRED — see beadsToHotspotInput docstring / Gate 1 finding.
+  const matrix = computeHotspotMatrix(beadsToHotspotInput(beads));
+
   const round = state.polishRound;
   const convergenceScore = state.polishChanges.length >= 3
     ? computeConvergenceScore(state.polishChanges, state.polishOutputSizes)
@@ -265,15 +323,15 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   }
 
   if (args.action === 'polish') {
-    return handlePolish(ctx, beads, round, false);
+    return handlePolish(ctx, beads, round, false, matrix);
   }
 
   if (args.action === 'advanced') {
-    return handleAdvanced(ctx, beads, round, args.advancedAction);
+    return handleAdvanced(ctx, beads, round, args.advancedAction, matrix);
   }
 
   // action === 'start' — launch implementation
-  return handleStart(ctx, beads, roundHeader, beadList, convergenceScore);
+  return handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix);
 }
 
 async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<McpToolResult> {
@@ -424,7 +482,8 @@ async function handleStart(
   beads: Bead[],
   roundHeader: string,
   beadList: string,
-  convergenceScore: number | undefined
+  convergenceScore: number | undefined,
+  matrix: HotspotMatrix,
 ): Promise<McpToolResult> {
   const { exec, cwd, state, saveState, signal } = ctx;
 
@@ -469,7 +528,7 @@ async function handleStart(
         readyCount: 0,
         currentBeadId: undefined,
         readyBeads: [],
-        ...getBeadApprovalData(state, beads, convergenceScore),
+        ...getBeadApprovalData(state, beads, convergenceScore, matrix),
         readiness: {
           blocked: true,
           message: 'No ready beads found after approval.',
@@ -526,8 +585,14 @@ async function handleStart(
   const beadQuality = computeBeadQualityScore(beads);
   const qualityNote = `\n${formatBeadQualityScore(beadQuality)}`;
 
+  // Hotspot matrix summary (I5). Shown when contention is med/high; otherwise
+  // the line is omitted so the legacy-friendly output stays compact.
+  const offerCoordinatorSerial = shouldOfferCoordinatorSerial(matrix);
+  const hotspotNote = offerCoordinatorSerial ? `\n\n${formatHotspotSummary(matrix)}` : '';
+
   if (ready.length === 1) {
-    // Sequential: single bead
+    // Sequential: single bead — contention can't matter here, but surface
+    // matrix in structuredContent for observability.
     const bead = ready[0];
     return makeApproveResult(
       `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}
@@ -560,7 +625,7 @@ ${beadList}`,
           launchInstruction: 'implement',
           agentName: undefined,
         }],
-        ...getBeadApprovalData(state, beads, convergenceScore),
+        ...getBeadApprovalData(state, beads, convergenceScore, matrix),
       },
       makeNextToolStep('call_tool', 'Implement the ready bead, then call flywheel_review with its summary.', {
         tool: 'flywheel_review',
@@ -593,8 +658,47 @@ After completing, report your summary to the agent-flywheel.`;
     };
   });
 
+  // 4-option menu when contention warrants it; otherwise legacy spawn-parallel nextStep.
+  const nextStep = offerCoordinatorSerial
+    ? makeNextToolStep(
+        'present_choices',
+        'Shared-file contention detected across ready beads — pick a launch mode.',
+        {
+          options: [
+            makeChoiceOption(
+              'approve-beads-coordinator-serial',
+              'Coordinator-serial launch (one bead at a time, contention-safe)',
+              {
+                tool: 'flywheel_approve_beads',
+                args: { action: 'start' },
+              },
+            ),
+            makeChoiceOption(
+              'approve-beads-swarm',
+              'Swarm (parallel — ignore contention)',
+              {
+                tool: 'flywheel_approve_beads',
+                args: { action: 'start' },
+              },
+            ),
+            makeChoiceOption('approve-beads-polish', 'Polish (refine beads to remove overlap)', {
+              tool: 'flywheel_approve_beads',
+              args: { action: 'polish' },
+            }),
+            makeChoiceOption('approve-beads-reject', 'Reject (stop flywheel)', {
+              tool: 'flywheel_approve_beads',
+              args: { action: 'reject' },
+            }),
+          ],
+        },
+      )
+    : makeNextToolStep(
+        'spawn_agents',
+        'Spawn one implementation agent per ready bead, then call flywheel_review for each completed bead.',
+      );
+
   return makeApproveResult(
-    `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}
+    `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}${hotspotNote}
 
 **NEXT: Spawn ${ready.length} parallel agents (one per ready bead), then call \`flywheel_review\` for each when done.**
 
@@ -618,13 +722,13 @@ ${beadList}`,
         launchInstruction: 'spawn-agent',
         agentName: `bead-${bead.id}`,
       })),
-      ...getBeadApprovalData(state, beads, convergenceScore),
+      ...getBeadApprovalData(state, beads, convergenceScore, matrix),
     },
-    makeNextToolStep('spawn_agents', 'Spawn one implementation agent per ready bead, then call flywheel_review for each completed bead.')
+    nextStep,
   );
 }
 
-function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boolean): McpToolResult {
+function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boolean, matrix?: HotspotMatrix): McpToolResult {
   const { cwd, state, saveState } = ctx;
   state.phase = 'refining_beads';
   saveState(state);
@@ -635,7 +739,7 @@ function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boo
     kind: 'bead_refinement_requested',
     action: 'polish',
     refinementMode: fresh ? 'fresh-agent' : 'same-agent',
-    ...getBeadApprovalData(state, beads, state.polishConvergenceScore),
+    ...getBeadApprovalData(state, beads, state.polishConvergenceScore, matrix),
     advancedActions: [...ADVANCED_ACTIONS],
   };
 
@@ -696,7 +800,8 @@ function handleAdvanced(
   ctx: ToolContext,
   beads: Bead[],
   round: number,
-  advancedAction?: string
+  advancedAction?: string,
+  matrix?: HotspotMatrix,
 ): McpToolResult {
   const { cwd, state, saveState } = ctx;
 
@@ -716,11 +821,11 @@ function handleAdvanced(
   const compactList = beads.map(b => `• ${b.id}: ${b.title}`).join('\n');
 
   if (advancedAction === 'fresh-agent') {
-    return handlePolish(ctx, beads, round, true);
+    return handlePolish(ctx, beads, round, true, matrix);
   }
 
   if (advancedAction === 'same-agent') {
-    return handlePolish(ctx, beads, round, false);
+    return handlePolish(ctx, beads, round, false, matrix);
   }
 
   if (advancedAction === 'blunder-hunt') {
@@ -808,7 +913,7 @@ Current beads:\n${compactList}`,
         kind: 'bead_refinement_requested',
         action: 'advanced',
         refinementMode: 'graph-fix',
-        ...getBeadApprovalData(state, beads, state.polishConvergenceScore),
+        ...getBeadApprovalData(state, beads, state.polishConvergenceScore, matrix),
         advancedActions: [...ADVANCED_ACTIONS],
       },
       makeNextToolStep('run_cli', 'Diagnose and repair bead dependencies with br dep commands, then return to flywheel_approve_beads.')
