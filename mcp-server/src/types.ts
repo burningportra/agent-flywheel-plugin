@@ -542,7 +542,7 @@ export interface PlanArgs { cwd: string; mode?: "standard" | "deep"; planContent
 export interface ApproveArgs { cwd: string; action: "start" | "polish" | "reject" | "advanced" | "git-diff-review"; advancedAction?: string }
 export interface ReviewArgs { cwd: string; beadId: string; action: "hit-me" | "looks-good" | "skip" }
 export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
-export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store"; content?: string }
+export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store" | "draft_postmortem"; content?: string }
 export interface DoctorArgs { cwd: string }
 
 // ─── Orchestrator Context (shared runtime for extracted modules) ──

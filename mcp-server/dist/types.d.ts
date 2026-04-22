@@ -450,7 +450,7 @@ export interface VerifyBeadsArgs {
 export interface MemoryArgs {
     cwd: string;
     query?: string;
-    operation?: "search" | "store";
+    operation?: "search" | "store" | "draft_postmortem";
     content?: string;
 }
 export interface DoctorArgs {

@@ -211,9 +211,9 @@ const PRIMARY_TOOLS = [
         query: { type: 'string', description: 'Search query for CASS memory' },
         operation: {
           type: 'string',
-          enum: ['search', 'store'],
+          enum: ['search', 'store', 'draft_postmortem'],
           default: 'search',
-          description: 'search=find entries, store=add new entry',
+          description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits)',
         },
         content: {
           type: 'string',
