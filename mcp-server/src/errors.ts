@@ -20,9 +20,9 @@ export const FLYWHEEL_ERROR_CODES = [
   'internal_error',
   // v3.4.0 — doctor/hotspot/postmortem/template/telemetry
   'doctor_check_failed',
-  'doctor_partial_result',
+  'doctor_partial_report',
   'hotspot_parse_failure',
-  'hotspot_input_unreliable',
+  'hotspot_bead_body_unparseable',
   'postmortem_empty_session',
   'postmortem_checkpoint_stale',
   'template_not_found',
@@ -78,9 +78,9 @@ export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
   internal_error: true,
   // v3.4.0 additions
   doctor_check_failed: false,
-  doctor_partial_result: false,
+  doctor_partial_report: false,
   hotspot_parse_failure: false,
-  hotspot_input_unreliable: false,
+  hotspot_bead_body_unparseable: false,
   postmortem_empty_session: false,
   postmortem_checkpoint_stale: false,
   template_not_found: false,
@@ -122,15 +122,30 @@ export function throwFlywheelError(input: { code: FlywheelErrorCode; message: st
   throw new FlywheelError(input);
 }
 
+/**
+ * Redact absolute filesystem paths and cap length before embedding raw error
+ * messages in MCP-visible structured output. Prevents local-path leakage via
+ * FlywheelToolError.cause without losing signal value for debugging.
+ */
+export function sanitizeCause(raw: string, maxLen = 200): string {
+  const homeRedacted = raw.replace(/\/Users\/[^/\s:'"]+/g, '~');
+  const unixRedacted = homeRedacted.replace(/\/(?:home|var|tmp|opt|private)\/[^\s:'"]*/g, (m) => {
+    const base = m.split('/').slice(-1)[0] ?? '';
+    return base ? `<path>/${base}` : '<path>';
+  });
+  return unixRedacted.length > maxLen ? `${unixRedacted.slice(0, maxLen - 1)}…` : unixRedacted;
+}
+
 export function classifyExecError(err: unknown): {
   code: 'exec_timeout' | 'exec_aborted' | 'cli_failure';
   retryable: boolean;
   cause: string;
 } {
   const msg = err instanceof Error ? err.message : String(err);
-  if (/Timed out after \d+ms/.test(msg)) return { code: 'exec_timeout', retryable: true, cause: msg };
-  if (/aborted|AbortError/i.test(msg)) return { code: 'exec_aborted', retryable: false, cause: msg };
-  return { code: 'cli_failure', retryable: true, cause: msg };
+  const cause = sanitizeCause(msg);
+  if (/Timed out after \d+ms/.test(msg)) return { code: 'exec_timeout', retryable: true, cause };
+  if (/aborted|AbortError/i.test(msg)) return { code: 'exec_aborted', retryable: false, cause };
+  return { code: 'cli_failure', retryable: true, cause };
 }
 
 export function makeFlywheelErrorResult(
@@ -141,6 +156,7 @@ export function makeFlywheelErrorResult(
   const error: FlywheelToolError = {
     ...input,
     retryable: input.retryable ?? DEFAULT_RETRYABLE[input.code],
+    ...(input.cause != null && { cause: sanitizeCause(input.cause) }),
     phase,
     tool,
     timestamp: new Date().toISOString(),

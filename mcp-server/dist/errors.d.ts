@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { FlywheelToolName, FlywheelPhase } from './types.js';
-export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error", "doctor_check_failed", "doctor_partial_result", "hotspot_parse_failure", "hotspot_input_unreliable", "postmortem_empty_session", "postmortem_checkpoint_stale", "template_not_found", "template_placeholder_missing", "template_expansion_failed", "telemetry_store_failed"];
+export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error", "doctor_check_failed", "doctor_partial_report", "hotspot_parse_failure", "hotspot_bead_body_unparseable", "postmortem_empty_session", "postmortem_checkpoint_stale", "template_not_found", "template_placeholder_missing", "template_expansion_failed", "telemetry_store_failed"];
 export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     missing_prerequisite: "missing_prerequisite";
     invalid_input: "invalid_input";
@@ -19,9 +19,9 @@ export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     unsupported_action: "unsupported_action";
     internal_error: "internal_error";
     doctor_check_failed: "doctor_check_failed";
-    doctor_partial_result: "doctor_partial_result";
+    doctor_partial_report: "doctor_partial_report";
     hotspot_parse_failure: "hotspot_parse_failure";
-    hotspot_input_unreliable: "hotspot_input_unreliable";
+    hotspot_bead_body_unparseable: "hotspot_bead_body_unparseable";
     postmortem_empty_session: "postmortem_empty_session";
     postmortem_checkpoint_stale: "postmortem_checkpoint_stale";
     template_not_found: "template_not_found";
@@ -49,9 +49,9 @@ export declare const FlywheelToolErrorSchema: z.ZodObject<{
         unsupported_action: "unsupported_action";
         internal_error: "internal_error";
         doctor_check_failed: "doctor_check_failed";
-        doctor_partial_result: "doctor_partial_result";
+        doctor_partial_report: "doctor_partial_report";
         hotspot_parse_failure: "hotspot_parse_failure";
-        hotspot_input_unreliable: "hotspot_input_unreliable";
+        hotspot_bead_body_unparseable: "hotspot_bead_body_unparseable";
         postmortem_empty_session: "postmortem_empty_session";
         postmortem_checkpoint_stale: "postmortem_checkpoint_stale";
         template_not_found: "template_not_found";
@@ -95,9 +95,9 @@ export declare const FlywheelStructuredErrorSchema: z.ZodObject<{
                 unsupported_action: "unsupported_action";
                 internal_error: "internal_error";
                 doctor_check_failed: "doctor_check_failed";
-                doctor_partial_result: "doctor_partial_result";
+                doctor_partial_report: "doctor_partial_report";
                 hotspot_parse_failure: "hotspot_parse_failure";
-                hotspot_input_unreliable: "hotspot_input_unreliable";
+                hotspot_bead_body_unparseable: "hotspot_bead_body_unparseable";
                 postmortem_empty_session: "postmortem_empty_session";
                 postmortem_checkpoint_stale: "postmortem_checkpoint_stale";
                 template_not_found: "template_not_found";
@@ -142,6 +142,12 @@ export declare function throwFlywheelError(input: {
     cause?: string;
     details?: Record<string, unknown>;
 }): never;
+/**
+ * Redact absolute filesystem paths and cap length before embedding raw error
+ * messages in MCP-visible structured output. Prevents local-path leakage via
+ * FlywheelToolError.cause without losing signal value for debugging.
+ */
+export declare function sanitizeCause(raw: string, maxLen?: number): string;
 export declare function classifyExecError(err: unknown): {
     code: 'exec_timeout' | 'exec_aborted' | 'cli_failure';
     retryable: boolean;

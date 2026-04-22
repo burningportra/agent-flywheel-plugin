@@ -572,6 +572,16 @@ export type PostmortemDraft = z.infer<typeof PostmortemDraftSchema>;
  * template library (`bead-templates.ts`). Distinct from the richer legacy
  * `BeadTemplate` interface above, which models in-repo template fixtures
  * with placeholders-as-objects.
+ *
+ * **Selection rule for downstream beads:**
+ * - Use `BeadTemplateContract` (this type) when crossing the MCP tool boundary
+ *   (e.g., `expand_bead_template` tool input/output, `deep-plan` hint emission,
+ *   `approve`-time expansion). The flat-string `placeholders` is wire-friendly.
+ * - Use `BeadTemplate` (richer legacy interface) when calling the in-process
+ *   library API (`getTemplateById()`, `renderTemplate()`). Placeholder metadata
+ *   (`description`, `example`, `required`) is needed for validation UX.
+ * - Conversions between the two happen at the tool-handler edge; never mix
+ *   them in the same call frame.
  */
 export declare const BeadTemplateContractSchema: z.ZodObject<{
     id: z.ZodString;
@@ -582,6 +592,15 @@ export declare const BeadTemplateContractSchema: z.ZodObject<{
     testStrategy: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export type BeadTemplateContract = z.infer<typeof BeadTemplateContractSchema>;
+/**
+ * Error-code telemetry. Keys of `counts` and the `code` field of each
+ * `recentEvents` entry SHOULD be `FlywheelErrorCode` values, but the schema
+ * accepts any string to stay forward-compatible with newer sessions that may
+ * have added codes we don't yet know about. The write path (in `telemetry.ts`,
+ * landed in I7) MUST validate the key is a known `FlywheelErrorCode` before
+ * incrementing; the read path tolerates unknown keys so checkpoints from
+ * future versions don't fail to load.
+ */
 export declare const ErrorCodeTelemetrySchema: z.ZodObject<{
     version: z.ZodLiteral<1>;
     sessionStartIso: z.ZodString;
