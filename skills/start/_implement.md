@@ -346,6 +346,16 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    - Retire in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`.
    - If still listed in the team, edit `~/.claude/teams/<team>/config.json` to remove from the `"members"` array, then retry `TeamDelete` when ready.
 
+### Parallel-wave build-artifact races
+
+When multiple impl beads in the same wave all trigger `npm run build` (or equivalent), each rebuilds `dist/` or its output directory. Byte-identical outputs are fine — git only sees one change — but **different commit orderings can confuse `git blame`** (bead B's commit may ship bead A's dist/ and vice versa).
+
+**Recommended pattern:**
+- Designate ONE bead per wave as the "build-committer" — only that bead commits `dist/`. Other beads commit src/ only.
+- Alternative: defer the `dist/` commit to Step 9.5 wrap-up, where the coordinator runs one final `npm run build` and commits the bumped output alongside the version bump. This is the pattern used by v3.4.0 — clean git log, no cross-bead confusion.
+
+If you observe two beads committing the same `dist/` bytes, note it in the end-of-turn summary but do NOT retroactively squash — the history is accurate and future bisects still land on the correct src/.
+
 ### Stuck-swarm diagnostics
 
 | Symptom | Likely cause | Fix |

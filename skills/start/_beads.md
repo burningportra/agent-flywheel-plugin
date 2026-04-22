@@ -1,5 +1,18 @@
 # Bead Creation & Approval — Steps 5.5, 6
 
+> ## br CLI command reference (use EXACTLY these flags — the CLI silently accepts unknown flags and returns empty JSON)
+>
+> | Operation | Correct form | Common wrong form |
+> |-----------|--------------|-------------------|
+> | Create bead | `br create --title "…" --description "…" --priority 2 --type task` | `--issue-type` (silently ignored — use `-t`/`--type`) |
+> | Add dependency | `br dep add <downstream> <upstream>` (positional) | `--depends-on` (does not exist) |
+> | Close bead with reason | `br close <id> --reason "…"` or `br close <id> -r "…"` | `br update <id> --close-reason "…"` (does not exist) |
+> | Mark status closed | `br update <id> --status closed` | `br update <id> --status done` (status enum is `open`/`deferred`/`in_progress`/`closed`) |
+> | List open beads | `br list` (default) or `br list --json` | — |
+> | Show one bead | `br show <id> --json \| jq '.[0]'` (wraps in array) | `br show <id>` parsed as single object (will fail — output is an array) |
+>
+> **Hard rule**: if `br` returns empty JSON or exits 0 with no visible effect, you likely used a flag that doesn't exist. Re-run with `--help` to verify before retrying.
+
 ## Step 5.5: Create beads from the plan
 
 Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create them manually from the plan output:
@@ -159,12 +172,14 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Polish beads", description: "Run another bead refinement round (Recommended)" },
     { label: "Back to plan", description: "Return to Step 5.6 to refine the plan itself" },
-    { label: "Launch anyway", description: "Proceed despite low score — accept the risk" },
+    { label: "Launch anyway", description: "Proceed despite low score — accept the risk (note in end-of-turn summary)" },
     { label: "Reject", description: "Discard these beads and start over with a different goal" }
   ],
   multiSelect: false
 }])
 ```
+
+> **Cosmetic-lint exception**: if ≥ 50% of the weak-bead reasons are lint cosmetic flags (e.g., "title not a verb phrase" on wave-prefix beads like `R1:`, `T13:`, `D12:`), surface them to the user as "cosmetic only" in `<weak-bead-summary>` and pre-recommend "Launch anyway". Title-format lint on wave-prefix beads is a known false-positive — do not force a polish round over it. Reserve polish rounds for substantive weakness (vague acceptance criteria, missing WHY, oversized scope).
 
 - "Polish beads" -> call `flywheel_approve_beads` with `action: "polish"`, return to Step 6.
 - "Back to plan" -> return to Step 5.6 plan-ready gate menu.
