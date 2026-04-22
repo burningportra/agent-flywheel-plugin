@@ -861,3 +861,93 @@ export async function acknowledgeMessages(exec: ExecFn, cwd: string, agentName: 
 export async function fetchInboxMessages(exec: ExecFn, cwd: string, agentName: string = 'FlywheelAgent'): Promise<AgentMailMessage[]> {
   return fetchInbox(exec, cwd, agentName, { limit: 20, includeBodies: true });
 }
+
+// ─── Coordinator Bootstrap ───────────────────────────────────
+
+export type AgentMailRole = 'coordinator' | 'implementer' | 'reviewer' | 'generic';
+
+export interface BootstrapCoordinatorOptions {
+  /**
+   * Program name passed to `macro_start_session`. Contact-policy hardening is
+   * only applied for `claude-code` coordinators (where the planner's
+   * first-contact path was previously blocked by default `contacts_only`).
+   */
+  program?: string;
+  /** Role hint — `coordinator` triggers contact-policy hardening. */
+  role?: AgentMailRole;
+  /** Model identifier forwarded to `macro_start_session`. */
+  model?: string;
+  /** Human-readable task description. */
+  taskDescription?: string;
+}
+
+export interface BootstrapCoordinatorResult {
+  /** Raw session payload from `macro_start_session`, or null on failure. */
+  session: any | null;
+  /** True when `set_contact_policy` was invoked and succeeded. */
+  contactPolicyApplied: boolean;
+  /** Non-fatal warnings (e.g. contact-policy set failed). */
+  warnings: string[];
+}
+
+/**
+ * Bootstrap a coordinator agent-mail session. After successful registration,
+ * opportunistically sets `contact_policy=auto` when the program is
+ * `claude-code` AND the role is `coordinator` so planners can DM the
+ * coordinator without a contacts-only block.
+ *
+ * Never throws: contact-policy set failures are logged at warn level with
+ * structured `code: 'agent_mail_unreachable'` and returned as a warning.
+ * The caller's session continues.
+ */
+export async function bootstrapCoordinator(
+  exec: ExecFn,
+  cwd: string,
+  agentName: string = 'FlywheelAgent',
+  options: BootstrapCoordinatorOptions = {}
+): Promise<BootstrapCoordinatorResult> {
+  const program = options.program ?? 'agent-flywheel';
+  const role: AgentMailRole = options.role ?? 'coordinator';
+  const model = options.model ?? 'auto';
+  const taskDescription = options.taskDescription ?? 'Orchestrating agentic coding flywheel';
+
+  const warnings: string[] = [];
+
+  const session = unwrapRPC(await agentMailRPC(exec, 'macro_start_session', {
+    human_key: cwd,
+    program,
+    model,
+    task_description: taskDescription,
+    inbox_limit: 10,
+    agent_name: agentName,
+  }));
+
+  // Opportunistic contact-policy hardening: only for claude-code coordinators.
+  // Prior-session learning: without this, planner first-send_message calls
+  // are blocked by the default `contacts_only` policy.
+  let contactPolicyApplied = false;
+  if (program === 'claude-code' && role === 'coordinator') {
+    try {
+      const applied = unwrapRPC(await agentMailRPC(exec, 'set_contact_policy', {
+        project_key: cwd,
+        agent_name: agentName,
+        policy: 'auto',
+      }));
+      if (applied !== null) {
+        contactPolicyApplied = true;
+      } else {
+        const msg = 'set_contact_policy returned null — session continues with default policy';
+        log.warn(msg, { code: 'agent_mail_unreachable', agent: agentName });
+        warnings.push(msg);
+      }
+    } catch (err) {
+      // Defensive: unwrapRPC itself should not throw, but any unexpected
+      // failure must not kill the coordinator session.
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('set_contact_policy failed', { code: 'agent_mail_unreachable', agent: agentName, cause: msg });
+      warnings.push(`set_contact_policy failed: ${msg}`);
+    }
+  }
+
+  return { session, contactPolicyApplied, warnings };
+}

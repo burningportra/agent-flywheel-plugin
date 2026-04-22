@@ -1,3 +1,5 @@
+import type { ExecFn } from "./exec.js";
+import { type ErrorCodeTelemetry, type PostmortemDraft } from "./types.js";
 export interface EpisodicResult {
     text: string;
     similarity: number;
@@ -58,4 +60,34 @@ export declare function getEpisodicStats(): EpisodicStats;
  *          "my project (v2)" → "my-project--v2-"
  */
 export declare function sanitiseSlug(cwd: string): string;
+export interface PostmortemSessionContext {
+    cwd: string;
+    goal: string;
+    phase: string;
+    /** From checkpoint.sessionStartSha — used for `<sha>..HEAD` range. */
+    sessionStartSha?: string;
+    /** Top-N error codes rendered into the draft markdown. */
+    errorCodeTelemetry?: ErrorCodeTelemetry;
+    exec: ExecFn;
+    signal?: AbortSignal;
+    /** Optional override for agent name used when reading inbox (default: FlywheelAgent). */
+    agentName?: string;
+}
+/**
+ * Draft a post-mortem summary for the current session. Read-only — NEVER
+ * writes to CASS / calls `flywheel_memory` with `operation: 'store'`. The
+ * tool layer gates persistence via the user.
+ *
+ * P-1 / P-2 / P-4 are enforced by never throwing on degraded input: every
+ * branch produces a valid Zod-parsed `PostmortemDraft` with warnings[]
+ * populated when inputs were partial.
+ */
+export declare function draftPostmortem(ctx: PostmortemSessionContext): Promise<PostmortemDraft>;
+/**
+ * Format a `PostmortemDraft` for human display. The canonical markdown body
+ * already lives in `draft.markdown`; this helper prepends the warning banner
+ * when `hasWarnings` is true so callers (tool layer + user) see the
+ * degraded-input signal without parsing `warnings[]` themselves.
+ */
+export declare function formatPostmortemMarkdown(draft: PostmortemDraft): string;
 //# sourceMappingURL=episodic-memory.d.ts.map

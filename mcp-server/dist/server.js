@@ -7,6 +7,7 @@ import { createLogger } from './logger.js';
 import { clearState, loadState, saveState } from './state.js';
 import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
+import { runDoctor } from './tools/doctor-tool.js';
 import { runMemory } from './tools/memory-tool.js';
 import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
@@ -183,14 +184,25 @@ const PRIMARY_TOOLS = [
                 query: { type: 'string', description: 'Search query for CASS memory' },
                 operation: {
                     type: 'string',
-                    enum: ['search', 'store'],
+                    enum: ['search', 'store', 'draft_postmortem'],
                     default: 'search',
-                    description: 'search=find entries, store=add new entry',
+                    description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits)',
                 },
                 content: {
                     type: 'string',
                     description: 'Content to store (required when operation=store)',
                 },
+            },
+            required: ['cwd'],
+        },
+    },
+    {
+        name: 'flywheel_doctor',
+        description: 'Run an 11-check health sweep of the flywheel environment: MCP connectivity, agent-mail liveness, required/optional CLIs (br/bv/ntm/cm), node version, git status, dist drift, orphaned worktrees, and checkpoint validity. Read-only — never mutates checkpoint or state. Returns a DoctorReport with per-check severity (green/yellow/red).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
             },
             required: ['cwd'],
         },
@@ -218,6 +230,7 @@ const DEFAULT_RUNNERS = {
     flywheel_review: runReview,
     flywheel_verify_beads: runVerifyBeads,
     flywheel_memory: runMemory,
+    flywheel_doctor: runDoctor,
     // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
     orch_profile: runProfile,
     orch_discover: runDiscover,

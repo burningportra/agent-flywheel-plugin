@@ -1,3 +1,4 @@
+import { z } from 'zod';
 export interface RepoProfile {
     name: string;
     languages: string[];
@@ -205,6 +206,12 @@ export interface BeadTemplateExample {
 }
 export interface BeadTemplate {
     id: string;
+    /**
+     * Schema version for this template. Pinned at creation time so plans
+     * synthesised against an older template shape continue to expand even when
+     * newer versions are added. Defaults to 1 for legacy templates.
+     */
+    version: number;
     label: string;
     summary: string;
     descriptionTemplate: string;
@@ -214,12 +221,40 @@ export interface BeadTemplate {
     dependencyHints?: string;
     examples: BeadTemplateExample[];
 }
+/**
+ * Structured input passed to `expandTemplate`. Every well-known key is
+ * optional here so callers can supply only what the synthesiser produced;
+ * the `expandTemplate` implementation validates that all `required: true`
+ * placeholders of the resolved template are present.
+ *
+ * Extra keys (via index signature) are tolerated so templates may declare
+ * their own domain-specific placeholders (e.g. `PARENT_WAVE_BEADS`,
+ * `TARGET_FILE`) without forcing the caller to stretch this interface.
+ */
+export interface TemplateExpansionInput {
+    title?: string;
+    scope?: string;
+    acceptance?: string;
+    test_plan?: string;
+    [key: string]: string | undefined;
+}
+/**
+ * Discriminated result from `expandTemplate`.
+ *
+ * On success: the fully rendered markdown body.
+ *
+ * On failure: one of the v3.4.0 FlywheelErrorCode values used to route
+ * MCP-boundary error envelopes. `detail` carries human-readable context
+ * (missing placeholder names, unknown template id, etc.) for hint rendering
+ * at the tool boundary.
+ */
 export type ExpandTemplateResult = {
     success: true;
     description: string;
 } | {
     success: false;
-    error: string;
+    error: "template_not_found" | "template_placeholder_missing" | "template_expansion_failed";
+    detail: string;
 };
 export interface IdeaScores {
     useful: number;
@@ -249,7 +284,7 @@ export interface CandidateIdea {
     scores?: IdeaScores;
 }
 export type IdeaCategory = "feature" | "refactor" | "docs" | "dx" | "performance" | "reliability" | "security" | "testing";
-export type FlywheelPhase = "idle" | "profiling" | "discovering" | "awaiting_selection" | "planning" | "researching" | "awaiting_plan_approval" | "creating_beads" | "refining_beads" | "awaiting_bead_approval" | "implementing" | "reviewing" | "iterating" | "complete";
+export type FlywheelPhase = "idle" | "profiling" | "discovering" | "awaiting_selection" | "planning" | "researching" | "awaiting_plan_approval" | "creating_beads" | "refining_beads" | "awaiting_bead_approval" | "implementing" | "reviewing" | "iterating" | "complete" | "doctor";
 export type CoordinationMode = "worktree" | "single-branch";
 export interface FlywheelState {
     phase: FlywheelPhase;
@@ -350,6 +385,18 @@ export interface FlywheelState {
      * Reset to 0 on any fail or revision-instructions round.
      */
     consecutiveCleanRounds?: number;
+    /**
+     * Populated at session end with error-code frequency + recent events.
+     * Persisted through checkpoint for post-session analysis. Optional for
+     * backward-compatibility with v3.3.0 checkpoints.
+     */
+    errorCodeTelemetry?: ErrorCodeTelemetry;
+    /**
+     * Git SHA captured at session start. Used by post-mortem reconstruction
+     * to compute the diff boundary without consulting reflog. Optional for
+     * backward-compatibility with v3.3.0 checkpoints.
+     */
+    sessionStartSha?: string;
 }
 /** On-disk checkpoint envelope — wraps FlywheelState with crash-recovery metadata. */
 export interface CheckpointEnvelope {
@@ -376,7 +423,7 @@ export interface ToolContext {
     clearState: () => void;
     signal?: AbortSignal;
 }
-export type FlywheelToolName = 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review' | 'flywheel_verify_beads' | 'flywheel_memory' | 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review' | 'orch_verify_beads' | 'orch_memory';
+export type FlywheelToolName = 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review' | 'flywheel_verify_beads' | 'flywheel_memory' | 'flywheel_doctor' | 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review' | 'orch_verify_beads' | 'orch_memory';
 export interface ToolChoiceOption {
     id: string;
     label: string;
@@ -437,8 +484,11 @@ export interface VerifyBeadsArgs {
 export interface MemoryArgs {
     cwd: string;
     query?: string;
-    operation?: "search" | "store";
+    operation?: "search" | "store" | "draft_postmortem";
     content?: string;
+}
+export interface DoctorArgs {
+    cwd: string;
 }
 export interface HitMeResult {
     text: string;
@@ -457,4 +507,146 @@ export interface AgentMailError {
     code?: number;
     stderr?: string;
 }
+export declare const DoctorCheckSeveritySchema: z.ZodEnum<{
+    green: "green";
+    yellow: "yellow";
+    red: "red";
+}>;
+export type DoctorCheckSeverity = z.infer<typeof DoctorCheckSeveritySchema>;
+export declare const DoctorCheckSchema: z.ZodObject<{
+    name: z.ZodString;
+    severity: z.ZodEnum<{
+        green: "green";
+        yellow: "yellow";
+        red: "red";
+    }>;
+    message: z.ZodString;
+    hint: z.ZodOptional<z.ZodString>;
+    durationMs: z.ZodOptional<z.ZodNumber>;
+}, z.core.$strip>;
+export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
+export declare const DoctorReportSchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    cwd: z.ZodString;
+    overall: z.ZodEnum<{
+        green: "green";
+        yellow: "yellow";
+        red: "red";
+    }>;
+    partial: z.ZodDefault<z.ZodBoolean>;
+    checks: z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        severity: z.ZodEnum<{
+            green: "green";
+            yellow: "yellow";
+            red: "red";
+        }>;
+        message: z.ZodString;
+        hint: z.ZodOptional<z.ZodString>;
+        durationMs: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strip>>;
+    elapsedMs: z.ZodNumber;
+    timestamp: z.ZodString;
+}, z.core.$strip>;
+export type DoctorReport = z.infer<typeof DoctorReportSchema>;
+export declare const HotspotSeveritySchema: z.ZodEnum<{
+    low: "low";
+    high: "high";
+    med: "med";
+}>;
+export type HotspotSeverity = z.infer<typeof HotspotSeveritySchema>;
+export declare const HotspotRowSchema: z.ZodObject<{
+    file: z.ZodString;
+    beadIds: z.ZodArray<z.ZodString>;
+    contentionCount: z.ZodNumber;
+    severity: z.ZodEnum<{
+        low: "low";
+        high: "high";
+        med: "med";
+    }>;
+    provenance: z.ZodEnum<{
+        "files-section": "files-section";
+        prose: "prose";
+    }>;
+}, z.core.$strip>;
+export type HotspotRow = z.infer<typeof HotspotRowSchema>;
+export declare const HotspotMatrixSchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    rows: z.ZodArray<z.ZodObject<{
+        file: z.ZodString;
+        beadIds: z.ZodArray<z.ZodString>;
+        contentionCount: z.ZodNumber;
+        severity: z.ZodEnum<{
+            low: "low";
+            high: "high";
+            med: "med";
+        }>;
+        provenance: z.ZodEnum<{
+            "files-section": "files-section";
+            prose: "prose";
+        }>;
+    }, z.core.$strip>>;
+    maxContention: z.ZodNumber;
+    recommendation: z.ZodEnum<{
+        swarm: "swarm";
+        "coordinator-serial": "coordinator-serial";
+    }>;
+    summaryOnly: z.ZodDefault<z.ZodBoolean>;
+}, z.core.$strip>;
+export type HotspotMatrix = z.infer<typeof HotspotMatrixSchema>;
+export declare const PostmortemDraftSchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    sessionStartSha: z.ZodOptional<z.ZodString>;
+    goal: z.ZodString;
+    phase: z.ZodString;
+    markdown: z.ZodString;
+    hasWarnings: z.ZodDefault<z.ZodBoolean>;
+    warnings: z.ZodDefault<z.ZodArray<z.ZodString>>;
+}, z.core.$strip>;
+export type PostmortemDraft = z.infer<typeof PostmortemDraftSchema>;
+/**
+ * v3.4.0 Bead template contract used by the `expand_bead_template` tool and
+ * template library (`bead-templates.ts`). Distinct from the richer legacy
+ * `BeadTemplate` interface above, which models in-repo template fixtures
+ * with placeholders-as-objects.
+ *
+ * **Selection rule for downstream beads:**
+ * - Use `BeadTemplateContract` (this type) when crossing the MCP tool boundary
+ *   (e.g., `expand_bead_template` tool input/output, `deep-plan` hint emission,
+ *   `approve`-time expansion). The flat-string `placeholders` is wire-friendly.
+ * - Use `BeadTemplate` (richer legacy interface) when calling the in-process
+ *   library API (`getTemplateById()`, `renderTemplate()`). Placeholder metadata
+ *   (`description`, `example`, `required`) is needed for validation UX.
+ * - Conversions between the two happen at the tool-handler edge; never mix
+ *   them in the same call frame.
+ */
+export declare const BeadTemplateContractSchema: z.ZodObject<{
+    id: z.ZodString;
+    version: z.ZodNumber;
+    body: z.ZodString;
+    placeholders: z.ZodArray<z.ZodString>;
+    dependenciesHint: z.ZodOptional<z.ZodString>;
+    testStrategy: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export type BeadTemplateContract = z.infer<typeof BeadTemplateContractSchema>;
+/**
+ * Error-code telemetry. Keys of `counts` and the `code` field of each
+ * `recentEvents` entry SHOULD be `FlywheelErrorCode` values, but the schema
+ * accepts any string to stay forward-compatible with newer sessions that may
+ * have added codes we don't yet know about. The write path (in `telemetry.ts`,
+ * landed in I7) MUST validate the key is a known `FlywheelErrorCode` before
+ * incrementing; the read path tolerates unknown keys so checkpoints from
+ * future versions don't fail to load.
+ */
+export declare const ErrorCodeTelemetrySchema: z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    sessionStartIso: z.ZodString;
+    counts: z.ZodRecord<z.ZodString, z.ZodNumber>;
+    recentEvents: z.ZodArray<z.ZodObject<{
+        code: z.ZodString;
+        ts: z.ZodString;
+        ctxHash: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export type ErrorCodeTelemetry = z.infer<typeof ErrorCodeTelemetrySchema>;
 //# sourceMappingURL=types.d.ts.map

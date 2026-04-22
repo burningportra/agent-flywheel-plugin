@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`expandBeadPlanSpec — happy path > expands a well-formed foundation hint into a rendered body 1`] = `
+"Introduce BeadTemplateContract at the MCP boundary.
+
+Scope:
+Add BeadTemplateContract to types.ts.
+
+Why this bead exists:
+- Downstream beads I8, I9 depend on these interfaces being stable before parallel work begins.
+- A fresh-eyes gate catches contract drift that single-author review consistently misses.
+
+Acceptance criteria:
+- [ ] Contract is exported and consumed by two downstream beads.
+- [ ] Five independent cold-read reviewers confirm the exported surface is unambiguous.
+- [ ] No dependent wave may start until the gate clears with zero P1 findings.
+
+Test plan:
+Vitest covers contract round-trip.
+
+### Files:
+- mcp-server/src/types.ts"
+`;

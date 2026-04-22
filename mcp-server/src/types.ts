@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 // ─── Repo Profile ────────────────────────────────────────────
 export interface RepoProfile {
   name: string;
@@ -237,6 +239,12 @@ export interface BeadTemplateExample {
 
 export interface BeadTemplate {
   id: string;
+  /**
+   * Schema version for this template. Pinned at creation time so plans
+   * synthesised against an older template shape continue to expand even when
+   * newer versions are added. Defaults to 1 for legacy templates.
+   */
+  version: number;
   label: string;
   summary: string;
   descriptionTemplate: string;
@@ -247,9 +255,44 @@ export interface BeadTemplate {
   examples: BeadTemplateExample[];
 }
 
+/**
+ * Structured input passed to `expandTemplate`. Every well-known key is
+ * optional here so callers can supply only what the synthesiser produced;
+ * the `expandTemplate` implementation validates that all `required: true`
+ * placeholders of the resolved template are present.
+ *
+ * Extra keys (via index signature) are tolerated so templates may declare
+ * their own domain-specific placeholders (e.g. `PARENT_WAVE_BEADS`,
+ * `TARGET_FILE`) without forcing the caller to stretch this interface.
+ */
+export interface TemplateExpansionInput {
+  title?: string;
+  scope?: string;
+  acceptance?: string;
+  test_plan?: string;
+  [key: string]: string | undefined;
+}
+
+/**
+ * Discriminated result from `expandTemplate`.
+ *
+ * On success: the fully rendered markdown body.
+ *
+ * On failure: one of the v3.4.0 FlywheelErrorCode values used to route
+ * MCP-boundary error envelopes. `detail` carries human-readable context
+ * (missing placeholder names, unknown template id, etc.) for hint rendering
+ * at the tool boundary.
+ */
 export type ExpandTemplateResult =
   | { success: true; description: string }
-  | { success: false; error: string };
+  | {
+      success: false;
+      error:
+        | "template_not_found"
+        | "template_placeholder_missing"
+        | "template_expansion_failed";
+      detail: string;
+    };
 
 // ─── Discovery ───────────────────────────────────────────────
 export interface IdeaScores {
@@ -306,7 +349,8 @@ export type FlywheelPhase =
   | "implementing"
   | "reviewing"
   | "iterating"
-  | "complete";
+  | "complete"
+  | "doctor";
 
 export type CoordinationMode = "worktree" | "single-branch";
 
@@ -422,6 +466,21 @@ export interface FlywheelState {
    * Reset to 0 on any fail or revision-instructions round.
    */
   consecutiveCleanRounds?: number;
+
+  // ─── v3.4.0 additions — telemetry + post-mortem reconstruction ──
+  /**
+   * Populated at session end with error-code frequency + recent events.
+   * Persisted through checkpoint for post-session analysis. Optional for
+   * backward-compatibility with v3.3.0 checkpoints.
+   */
+  errorCodeTelemetry?: ErrorCodeTelemetry;
+
+  /**
+   * Git SHA captured at session start. Used by post-mortem reconstruction
+   * to compute the diff boundary without consulting reflog. Optional for
+   * backward-compatibility with v3.3.0 checkpoints.
+   */
+  sessionStartSha?: string;
 }
 
 // ─── Checkpoint Persistence ─────────────────────────────────
@@ -479,6 +538,7 @@ export type FlywheelToolName =
   | 'flywheel_review'
   | 'flywheel_verify_beads'
   | 'flywheel_memory'
+  | 'flywheel_doctor'
   // Deprecated orch_* aliases — kept for back-compat, removed in v4.0.
   | 'orch_profile'
   | 'orch_discover'
@@ -523,7 +583,8 @@ export interface PlanArgs { cwd: string; mode?: "standard" | "deep"; planContent
 export interface ApproveArgs { cwd: string; action: "start" | "polish" | "reject" | "advanced" | "git-diff-review"; advancedAction?: string }
 export interface ReviewArgs { cwd: string; beadId: string; action: "hit-me" | "looks-good" | "skip" }
 export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
-export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store"; content?: string }
+export interface MemoryArgs { cwd: string; query?: string; operation?: "search" | "store" | "draft_postmortem"; content?: string }
+export interface DoctorArgs { cwd: string }
 
 // ─── Orchestrator Context (shared runtime for extracted modules) ──
 
@@ -544,3 +605,109 @@ export interface AgentMailError {
   code?: number;
   stderr?: string;
 }
+
+// ─── v3.4.0 Shared Contracts (doctor / hotspot / postmortem / template / telemetry) ──
+
+export const DoctorCheckSeveritySchema = z.enum(['green', 'yellow', 'red']);
+export type DoctorCheckSeverity = z.infer<typeof DoctorCheckSeveritySchema>;
+
+export const DoctorCheckSchema = z.object({
+  name: z.string(),
+  severity: DoctorCheckSeveritySchema,
+  message: z.string(),
+  hint: z.string().optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+});
+export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
+
+export const DoctorReportSchema = z.object({
+  version: z.literal(1),
+  cwd: z.string(),
+  overall: DoctorCheckSeveritySchema,
+  partial: z.boolean().default(false),
+  checks: z.array(DoctorCheckSchema),
+  elapsedMs: z.number().int().nonnegative(),
+  timestamp: z.string(),
+});
+export type DoctorReport = z.infer<typeof DoctorReportSchema>;
+
+export const HotspotSeveritySchema = z.enum(['low', 'med', 'high']);
+export type HotspotSeverity = z.infer<typeof HotspotSeveritySchema>;
+
+export const HotspotRowSchema = z.object({
+  file: z.string(),
+  beadIds: z.array(z.string()),
+  contentionCount: z.number().int().nonnegative(),
+  severity: HotspotSeveritySchema,
+  provenance: z.enum(['files-section', 'prose']),
+});
+export type HotspotRow = z.infer<typeof HotspotRowSchema>;
+
+export const HotspotMatrixSchema = z.object({
+  version: z.literal(1),
+  // Bounded to prevent DoS from attacker-crafted plans with thousands of fake rows.
+  // Real waves top out at ~20 contested files; 500 is an order-of-magnitude headroom.
+  rows: z.array(HotspotRowSchema).max(500),
+  maxContention: z.number().int().nonnegative(),
+  recommendation: z.enum(['swarm', 'coordinator-serial']),
+  summaryOnly: z.boolean().default(false),
+});
+export type HotspotMatrix = z.infer<typeof HotspotMatrixSchema>;
+
+export const PostmortemDraftSchema = z.object({
+  version: z.literal(1),
+  sessionStartSha: z.string().optional(),
+  goal: z.string(),
+  phase: z.string(),
+  markdown: z.string(),
+  hasWarnings: z.boolean().default(false),
+  warnings: z.array(z.string()).default([]),
+});
+export type PostmortemDraft = z.infer<typeof PostmortemDraftSchema>;
+
+/**
+ * v3.4.0 Bead template contract used by the `expand_bead_template` tool and
+ * template library (`bead-templates.ts`). Distinct from the richer legacy
+ * `BeadTemplate` interface above, which models in-repo template fixtures
+ * with placeholders-as-objects.
+ *
+ * **Selection rule for downstream beads:**
+ * - Use `BeadTemplateContract` (this type) when crossing the MCP tool boundary
+ *   (e.g., `expand_bead_template` tool input/output, `deep-plan` hint emission,
+ *   `approve`-time expansion). The flat-string `placeholders` is wire-friendly.
+ * - Use `BeadTemplate` (richer legacy interface) when calling the in-process
+ *   library API (`getTemplateById()`, `renderTemplate()`). Placeholder metadata
+ *   (`description`, `example`, `required`) is needed for validation UX.
+ * - Conversions between the two happen at the tool-handler edge; never mix
+ *   them in the same call frame.
+ */
+export const BeadTemplateContractSchema = z.object({
+  id: z.string(),
+  version: z.number().int().positive(),
+  body: z.string(),
+  placeholders: z.array(z.string()),
+  dependenciesHint: z.string().optional(),
+  testStrategy: z.string().optional(),
+});
+export type BeadTemplateContract = z.infer<typeof BeadTemplateContractSchema>;
+
+/**
+ * Error-code telemetry. Keys of `counts` and the `code` field of each
+ * `recentEvents` entry SHOULD be `FlywheelErrorCode` values, but the schema
+ * accepts any string to stay forward-compatible with newer sessions that may
+ * have added codes we don't yet know about. The write path (in `telemetry.ts`,
+ * landed in I7) MUST validate the key is a known `FlywheelErrorCode` before
+ * incrementing; the read path tolerates unknown keys so checkpoints from
+ * future versions don't fail to load.
+ */
+export const ErrorCodeTelemetrySchema = z.object({
+  version: z.literal(1),
+  sessionStartIso: z.string(),
+  counts: z.record(z.string(), z.number().int().nonnegative()),
+  recentEvents: z.array(z.object({
+    code: z.string(),
+    ts: z.string(),
+    ctxHash: z.string().optional(),
+  })),
+});
+export type ErrorCodeTelemetry = z.infer<typeof ErrorCodeTelemetrySchema>;

@@ -1,16 +1,76 @@
-import type { ToolContext, McpToolResult, MemoryArgs } from '../types.js';
-import { makeFlywheelErrorResult } from '../errors.js';
+import type { ToolContext, McpToolResult, MemoryArgs, PostmortemDraft } from '../types.js';
+import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
+import { draftPostmortem, formatPostmortemMarkdown } from '../episodic-memory.js';
+import { makeToolResult } from './shared.js';
+
+type PostmortemDraftStructuredContent = {
+  tool: 'flywheel_memory';
+  version: 1;
+  status: 'ok';
+  phase: string;
+  data: {
+    kind: 'postmortem_draft';
+    draft: PostmortemDraft;
+    markdown: string;
+  };
+};
 
 /**
  * flywheel_memory — Search and interact with CASS memory (cm CLI).
  *
- * operation="search" (default) — search CASS memory for relevant entries
- * operation="store"            — store a new memory entry
+ * operation="search" (default)   — search CASS memory for relevant entries
+ * operation="store"              — store a new memory entry
+ * operation="draft_postmortem"   — synthesize a read-only session post-mortem
+ *                                  draft from checkpoint + git + agent-mail.
+ *                                  NEVER writes to CASS — user must manually
+ *                                  invoke operation="store" to persist.
  */
 export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<McpToolResult> {
   const { exec, cwd, state, signal } = ctx;
   const operation = args.operation || 'search';
   const phase = state.phase;
+
+  // ── draft_postmortem ──────────────────────────────────────────
+  // Runs BEFORE the cm availability probe — the draft engine does not need
+  // cm CLI (it reads git + agent-mail + telemetry). Persistence of the draft
+  // goes back through operation="store", which will re-check cm availability.
+  if (operation === 'draft_postmortem') {
+    try {
+      const draft = await draftPostmortem({
+        cwd,
+        goal: state.selectedGoal ?? '(no goal set)',
+        phase,
+        sessionStartSha: state.sessionStartSha,
+        errorCodeTelemetry: state.errorCodeTelemetry,
+        exec,
+        signal,
+      });
+
+      const markdown = formatPostmortemMarkdown(draft);
+      const structured: PostmortemDraftStructuredContent = {
+        tool: 'flywheel_memory',
+        version: 1,
+        status: 'ok',
+        phase,
+        data: {
+          kind: 'postmortem_draft',
+          draft,
+          markdown,
+        },
+      };
+      return makeToolResult(markdown, structured);
+    } catch (err: unknown) {
+      // draftPostmortem is designed NOT to throw (degrades via warnings[]);
+      // defensive classification at the tool boundary.
+      const classified = classifyExecError(err);
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: classified.code,
+        message: err instanceof Error ? err.message : String(err),
+        retryable: classified.retryable,
+        cause: classified.cause,
+      });
+    }
+  }
 
   // Check if cm is available
   let cmCheck;

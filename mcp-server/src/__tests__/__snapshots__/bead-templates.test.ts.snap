@@ -1,0 +1,193 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`expandTemplate — render correctness (one per I8 template) > add-feature@1 renders 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- The feature is small enough to ship in a single bead without a dedicated template.
+- Keeping it in one bead gives the reviewer a complete picture of the change.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] Behavior is covered by at least one new or extended test.
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > doc-update@1 renders 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- Behavior introduced by F1 is not yet reflected in operator-facing documentation.
+- Agents reading the outdated docs would follow stale instructions.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] mcp-server/src/example.ts mentions every new public command, env var, or tool name introduced.
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > foundation-with-fresh-eyes-gate@1 renders 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- Downstream beads I8, I9 depend on these interfaces being stable before parallel work begins.
+- A fresh-eyes gate catches contract drift that single-author review consistently misses.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] Five independent cold-read reviewers confirm the exported surface is unambiguous.
+- [ ] No dependent wave may start until the gate clears with zero P1 findings.
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > inter-wave-fixup@1 renders (optional PARENT_WAVE_BEADS omitted) 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- Fresh-eyes review between waves surfaced a P1 issue that will not wait for the next scheduled wave.
+- Bead is deliberately small so it can land and clear before the next wave unblocks.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] Total diff stays under ~150 lines; otherwise split into its own wave.
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > new-mcp-tool@1 renders 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- The flywheel needs a new tool named flywheel_example_tool to expose render something useful.
+- Registering the tool in one bead keeps schema, handler, and tests consistent.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] Tool is registered in server.ts with a Zod input schema.
+- [ ] Handler returns a structured envelope (success + every FlywheelErrorCode branch documented).
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts
+- mcp-server/src/__tests__/tools/example.test.ts"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > new-skill@1 renders 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- A new capability is being exposed to agents and needs a discoverable skill entry.
+- Pairing SKILL.md with commands/<name>.md keeps slash-commands and skill docs in sync.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] skills/flywheel-example/SKILL.md exists and passes lint:skill.
+- [ ] commands/flywheel-example.md exists and references the SKILL.md.
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts
+- commands/flywheel-example.md"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > refactor-carve@1 renders 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- mcp-server/src/example.ts has grown large enough that it is causing reviewer fatigue and merge conflicts.
+- Carving into domain submodules improves locality without changing behavior.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] Every external import of mcp-server/src/example.ts continues to resolve (public exports preserved or re-exported).
+- [ ] Zero behavioral drift — test suite passes unchanged.
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts
+- src/topstepx/"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > refactor-module@1 renders (legacy template) 1`] = `
+"Refactor the scan pipeline module to improve separation of parsing from UI formatting while preserving existing behavior. Reorganize the code, update any touched call sites, and keep the resulting structure easier for future agents to extend.
+
+Why this bead exists:
+- The current module has pain around logic and rendering are tightly coupled.
+- The refactor should reduce maintenance cost without changing outward behavior.
+
+Acceptance criteria:
+- [ ] Reorganize scan pipeline to improve separation of parsing from UI formatting without changing intended behavior.
+- [ ] Update affected call sites or imports if the internal structure changes.
+- [ ] Add or update regression tests covering the preserved behavior.
+
+### Files:
+- src/scan.ts
+- src/scan.test.ts"
+`;
+
+exports[`expandTemplate — render correctness (one per I8 template) > test-coverage@1 renders 1`] = `
+"Title line.
+
+Scope:
+Scope paragraph.
+
+Why this bead exists:
+- I8 introduced behavior that currently lacks directed coverage.
+- A companion test bead keeps test authorship out of the feature bead's git diff for easier review.
+
+Acceptance criteria:
+- [ ] Primary acceptance line.
+- [ ] At least one happy-path and one failure-path assertion per new public export.
+
+Test plan:
+Vitest covers the main path.
+
+### Files:
+- mcp-server/src/example.ts"
+`;

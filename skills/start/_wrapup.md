@@ -120,6 +120,41 @@ git commit -m "chore: bump version to X.Y.Z — <one-line summary of what shippe
 
 After wrap-up completes, proceed immediately to Step 10. Do NOT end the turn or exit the workflow — session learnings and the post-flywheel menu are still required.
 
+## Step 10.0: Post-mortem draft (new in v3.4.0)
+
+Before asking the user to store learnings, synthesize a draft from the session's mechanical artifacts (checkpoint, git log, inbox, error-code telemetry) and let them review it.
+
+Call `flywheel_memory` with `operation: "draft_postmortem"` and `cwd`. The tool returns `structuredContent.data.draft` with a `markdown` field — a session-learnings entry synthesized by `draftPostmortem()` in `episodic-memory.ts`:
+
+```ts
+const res = await flywheel_memory({ cwd, operation: "draft_postmortem" });
+const draftMarkdown = res.structuredContent?.data?.draft?.markdown;
+```
+
+**Structured error branching (mandatory).** Route on `res.structuredContent?.data?.error?.code` (`FlywheelErrorCode`):
+- `postmortem_empty_session` → still returns a terse draft; proceed with the AskUserQuestion below, note that the session had no shippable commits.
+- `postmortem_checkpoint_stale` → `sessionStartSha` no longer resolves in `git log`. Surface the reconstruction warning from `error.hint` inline and let the user decide whether to keep the (partial) draft.
+- any other code → skip Step 10.0, proceed to Step 10.
+
+Present to the user:
+
+```
+AskUserQuestion(questions: [{
+  question: "Session post-mortem draft ready. What next?",
+  header: "Post-mortem",
+  options: [
+    { label: "Store to CASS", description: "Persist this draft as a learning via flywheel_memory operation=store (Recommended)" },
+    { label: "Edit first", description: "Print the draft; I'll edit then store" },
+    { label: "Skip", description: "Discard draft for this session" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Store to CASS"** → call `flywheel_memory` with `operation: "store"` and `content: draftMarkdown`. Then proceed to Step 10.
+- **"Edit first"** → print the draft verbatim. After the user edits (they paste the revised text in their next message or the "Other" field), loop this AskUserQuestion with the new content.
+- **"Skip"** → discard the draft. Note in the end-of-turn summary that post-mortem was skipped. Proceed to Step 10. **Never auto-commit the draft — invariant P-3.**
+
 ## Step 10: Store session learnings
 
 `flywheel_memory(operation: "store")` is the default path and wraps CASS under the hood. If the `cm` CLI is available and you want richer procedural memory semantics (tags, hierarchies, retrieval ranking), invoke `/cass-memory` directly instead — same underlying store, more control over how the learning is categorized.
@@ -159,6 +194,12 @@ AskUserQuestion(questions: [{
 - **"Skip to finish"** -> proceed to Step 12
 
 After the user responds, continue to the next step. Do NOT end the turn or exit the workflow.
+
+## Step 10.5: Telemetry flush (new in v3.4.0)
+
+Before leaving the wrap-up phase, persist the in-memory error-code counts accumulated during this session. Call `flushTelemetry({ cwd })` from `mcp-server/src/telemetry.ts`. The function atomically writes `.pi-flywheel/error-counts.json` (top-20 codes + last-100 ring buffer) and mirrors the summary into `checkpoint.errorCodeTelemetry` for backward-compat.
+
+This runs even when the rest of wrap-up errored — it is tolerant of I/O failures (silent degrade on write lock contention). If `flushTelemetry` rejects, log the error but do not surface it to the user; the next session's Step 0c trend block will simply show a gap.
 
 ## Step 11: Refine this skill
 

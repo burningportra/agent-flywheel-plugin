@@ -1,6 +1,19 @@
 import { z } from 'zod';
 import type { FlywheelToolName, FlywheelPhase } from './types.js';
 
+/**
+ * Side-channel telemetry hook. telemetry.ts registers itself here on first
+ * import so that makeFlywheelErrorResult can fire recordErrorCode without
+ * creating a circular ESM dependency (errors ← telemetry ← errors).
+ */
+let _telemetryHook: ((code: string, ctx?: { hashable?: string }) => void) | null = null;
+
+export function registerTelemetryHook(
+  hook: (code: string, ctx?: { hashable?: string }) => void,
+): void {
+  _telemetryHook = hook;
+}
+
 export const FLYWHEEL_ERROR_CODES = [
   'missing_prerequisite',
   'invalid_input',
@@ -18,6 +31,17 @@ export const FLYWHEEL_ERROR_CODES = [
   'already_closed',
   'unsupported_action',
   'internal_error',
+  // v3.4.0 — doctor/hotspot/postmortem/template/telemetry
+  'doctor_check_failed',
+  'doctor_partial_report',
+  'hotspot_parse_failure',
+  'hotspot_bead_body_unparseable',
+  'postmortem_empty_session',
+  'postmortem_checkpoint_stale',
+  'template_not_found',
+  'template_placeholder_missing',
+  'template_expansion_failed',
+  'telemetry_store_failed',
 ] as const;
 
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
@@ -65,6 +89,17 @@ export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
   already_closed: false,
   unsupported_action: false,
   internal_error: true,
+  // v3.4.0 additions
+  doctor_check_failed: false,
+  doctor_partial_report: false,
+  hotspot_parse_failure: false,
+  hotspot_bead_body_unparseable: false,
+  postmortem_empty_session: false,
+  postmortem_checkpoint_stale: false,
+  template_not_found: false,
+  template_placeholder_missing: false,
+  template_expansion_failed: true,   // may be transient if template library is mid-reload
+  telemetry_store_failed: true,      // disk contention is transient
 };
 
 export class FlywheelError extends Error {
@@ -100,15 +135,30 @@ export function throwFlywheelError(input: { code: FlywheelErrorCode; message: st
   throw new FlywheelError(input);
 }
 
+/**
+ * Redact absolute filesystem paths and cap length before embedding raw error
+ * messages in MCP-visible structured output. Prevents local-path leakage via
+ * FlywheelToolError.cause without losing signal value for debugging.
+ */
+export function sanitizeCause(raw: string, maxLen = 200): string {
+  const homeRedacted = raw.replace(/\/Users\/[^/\s:'"]+/g, '~');
+  const unixRedacted = homeRedacted.replace(/\/(?:home|var|tmp|opt|private)\/[^\s:'"]*/g, (m) => {
+    const base = m.split('/').slice(-1)[0] ?? '';
+    return base ? `<path>/${base}` : '<path>';
+  });
+  return unixRedacted.length > maxLen ? `${unixRedacted.slice(0, maxLen - 1)}…` : unixRedacted;
+}
+
 export function classifyExecError(err: unknown): {
   code: 'exec_timeout' | 'exec_aborted' | 'cli_failure';
   retryable: boolean;
   cause: string;
 } {
   const msg = err instanceof Error ? err.message : String(err);
-  if (/Timed out after \d+ms/.test(msg)) return { code: 'exec_timeout', retryable: true, cause: msg };
-  if (/aborted|AbortError/i.test(msg)) return { code: 'exec_aborted', retryable: false, cause: msg };
-  return { code: 'cli_failure', retryable: true, cause: msg };
+  const cause = sanitizeCause(msg);
+  if (/Timed out after \d+ms/.test(msg)) return { code: 'exec_timeout', retryable: true, cause };
+  if (/aborted|AbortError/i.test(msg)) return { code: 'exec_aborted', retryable: false, cause };
+  return { code: 'cli_failure', retryable: true, cause };
 }
 
 export function makeFlywheelErrorResult(
@@ -119,10 +169,17 @@ export function makeFlywheelErrorResult(
   const error: FlywheelToolError = {
     ...input,
     retryable: input.retryable ?? DEFAULT_RETRYABLE[input.code],
+    ...(input.cause != null && { cause: sanitizeCause(input.cause) }),
     phase,
     tool,
     timestamp: new Date().toISOString(),
   };
+
+  // Fire-and-forget telemetry hook (no-op if telemetry module not yet registered)
+  try {
+    _telemetryHook?.(input.code, input.cause != null ? { hashable: input.cause } : undefined);
+  } catch { /* never throw from error result builder */ }
+
   return {
     content: [{ type: 'text', text: input.message }],
     isError: true,

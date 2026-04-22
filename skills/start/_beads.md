@@ -1,5 +1,18 @@
 # Bead Creation & Approval — Steps 5.5, 6
 
+> ## br CLI command reference (use EXACTLY these flags — the CLI silently accepts unknown flags and returns empty JSON)
+>
+> | Operation | Correct form | Common wrong form |
+> |-----------|--------------|-------------------|
+> | Create bead | `br create --title "…" --description "…" --priority 2 --type task` | `--issue-type` (silently ignored — use `-t`/`--type`) |
+> | Add dependency | `br dep add <downstream> <upstream>` (positional) | `--depends-on` (does not exist) |
+> | Close bead with reason | `br close <id> --reason "…"` or `br close <id> -r "…"` | `br update <id> --close-reason "…"` (does not exist) |
+> | Mark status closed | `br update <id> --status closed` | `br update <id> --status done` (status enum is `open`/`deferred`/`in_progress`/`closed`) |
+> | List open beads | `br list` (default) or `br list --json` | — |
+> | Show one bead | `br show <id> --json \| jq '.[0]'` (wraps in array) | `br show <id>` parsed as single object (will fail — output is an array) |
+>
+> **Hard rule**: if `br` returns empty JSON or exits 0 with no visible effect, you likely used a flag that doesn't exist. Re-run with `--help` to verify before retrying.
+
 ## Step 5.5: Create beads from the plan
 
 Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create them manually from the plan output:
@@ -114,6 +127,40 @@ After calling `flywheel_approve_beads` with `action: "start"`, display **both** 
 
 Populate **Wave** from the bead's dependency wave assignment, **Effort** from the plan's effort estimate, and **Risk Flags** from any warnings or risk notes in the plan output. This gives the user visibility into what is about to be implemented and in what order.
 
+**Hotspot matrix (I5).** `flywheel_approve_beads(action: "start")` attaches a `hotspotMatrix` field to `structuredContent.data` — the deterministic shared-write analysis from `plan-simulation.ts`. When `matrix.recommendation === "coordinator-serial"` or `matrix.maxContention >= 2`, the tool also emits a `present_choices` nextStep with the 4-option menu described below. Surface the matrix to the user before showing the launch menu:
+
+```
+Shared-write hotspot analysis:
+  <path-1>          — N bead(s) (<bead-id-list>) — <severity>
+  <path-2>          — N bead(s) (<bead-id-list>) — <severity>
+  ...
+Recommendation: <matrix.recommendation>  (confidence: <matrix.confidence>)
+```
+
+Only render rows with `severity` of `med` or `high` (the `low` rows are noise). If the matrix is empty or no row is med/high, skip this block entirely — proceed straight to the regular launch menu.
+
+**When the hotspot matrix recommends `coordinator-serial` or contention is med/high, use the 4-option launch menu** instead of the regular 3-option launch menu below. The `present_choices` nextStep from `approve.ts` already carries the exact option IDs — render them as:
+
+```
+AskUserQuestion(questions: [{
+  question: "Shared-file contention detected across ready beads. How do you want to launch?",
+  header: "Launch mode",
+  options: [
+    { label: "Coordinator-serial", description: "One bead at a time through the coordinator — contention-safe (Recommended)" },
+    { label: "Swarm anyway", description: "Parallel agents — accept contention risk" },
+    { label: "Polish beads", description: "Return to Step 6 to refine beads and remove overlap" },
+    { label: "Reject", description: "Discard these beads and return to Step 3" }
+  ],
+  multiSelect: false
+}])
+```
+
+Route the choice:
+- **"Coordinator-serial"** → set `state.launchMode = "coordinator-serial"` (approve.ts records this on the structuredContent data), then proceed to Step 7. Step 7 must spawn ONE agent that iterates through every ready bead sequentially — not N parallel agents. If the user also acted on a `flywheel_approve_beads` choice, the tool's nextStep records `approve-beads-coordinator-serial` as the selected option; use that as the source of truth.
+- **"Swarm anyway"** → proceed to Step 7 as normal (N parallel agents). Note in your end-of-turn summary that the user accepted contention risk.
+- **"Polish beads"** → call `flywheel_approve_beads` with `action: "polish"` and re-enter Step 6.
+- **"Reject"** → call `flywheel_approve_beads` with `action: "reject"` and return to Step 3.
+
 **Branch on the quality score** — if `score < 0.75`, use the low-quality menu instead of the regular launch menu (do NOT launch silently).
 
 **Low quality (`score < 0.75`):**
@@ -125,12 +172,14 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Polish beads", description: "Run another bead refinement round (Recommended)" },
     { label: "Back to plan", description: "Return to Step 5.6 to refine the plan itself" },
-    { label: "Launch anyway", description: "Proceed despite low score — accept the risk" },
+    { label: "Launch anyway", description: "Proceed despite low score — accept the risk (note in end-of-turn summary)" },
     { label: "Reject", description: "Discard these beads and start over with a different goal" }
   ],
   multiSelect: false
 }])
 ```
+
+> **Cosmetic-lint exception**: if ≥ 50% of the weak-bead reasons are lint cosmetic flags (e.g., "title not a verb phrase" on wave-prefix beads like `R1:`, `T13:`, `D12:`), surface them to the user as "cosmetic only" in `<weak-bead-summary>` and pre-recommend "Launch anyway". Title-format lint on wave-prefix beads is a known false-positive — do not force a polish round over it. Reserve polish rounds for substantive weakness (vague acceptance criteria, missing WHY, oversized scope).
 
 - "Polish beads" -> call `flywheel_approve_beads` with `action: "polish"`, return to Step 6.
 - "Back to plan" -> return to Step 5.6 plan-ready gate menu.

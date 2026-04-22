@@ -8,8 +8,20 @@ import type { ExecFn } from "./exec.js";
 import { createLogger } from "./logger.js";
 import { BrStructuredErrorSchema } from "./parsers.js";
 import type { ParseResult } from "./parsers.js";
+import { classifyExecError } from "./errors.js";
 
 const log = createLogger("cli-exec");
+
+/**
+ * Side-channel telemetry hook for cli-exec failure recording.
+ * telemetry.ts registers itself here so resilientExec can fire
+ * recordErrorCode without a direct dependency on telemetry.ts.
+ */
+let _cliExecTelemetryHook: ((code: string) => void) | null = null;
+
+export function registerCliExecTelemetryHook(hook: (code: string) => void): void {
+  _cliExecTelemetryHook = hook;
+}
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -68,6 +80,12 @@ export interface ResilientExecOptions {
   isTransient?: (exitCode: number | null, stderr: string, err: unknown) => boolean;
   /** Log structured warnings on failure. Default: true */
   logWarnings?: boolean;
+  /**
+   * Optional cancellation signal. Forwarded to every `exec` attempt; also used
+   * to short-circuit retry sleeps and the retry loop itself so that aborting
+   * stops the wrapper within one retry-delay window.
+   */
+  signal?: AbortSignal;
 }
 
 // ─── Transient detection ──────────────────────────────────────
@@ -169,6 +187,41 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Abortable sleep — resolves after `ms` or immediately when `signal` aborts.
+ * Always resolves (never rejects) so callers observe abort via `signal.aborted`
+ * on the next loop iteration rather than as a thrown error.
+ */
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Build a synthesized "aborted" CliExecError so callers/classifyExecError map it to `exec_aborted`. */
+function buildAbortedError(commandStr: string, args: string[], attempts: number): CliExecError {
+  const err = new Error("aborted");
+  return {
+    command: commandStr,
+    args,
+    exitCode: null,
+    stdout: "",
+    stderr: "",
+    isTransient: false,
+    attempts,
+    lastError: err,
+  };
+}
+
 function formatCommand(cmd: string, args: string[]): string {
   return [cmd, ...args].join(" ");
 }
@@ -190,6 +243,16 @@ function buildWarning(error: CliExecError): string {
   );
 }
 
+/** Fire telemetry for the final (non-retried) failure. Never throws. */
+function fireTelemetryForError(error: CliExecError): void {
+  try {
+    if (_cliExecTelemetryHook == null) return;
+    const raw = error.lastError ?? (error.stderr ? new Error(error.stderr) : new Error("cli failure"));
+    const classified = classifyExecError(raw);
+    _cliExecTelemetryHook(classified.code);
+  } catch { /* never throw from telemetry path */ }
+}
+
 // ─── Core wrapper ─────────────────────────────────────────────
 
 /**
@@ -208,15 +271,24 @@ export async function resilientExec(
   const retryDelayMs = opts?.retryDelayMs ?? 500;
   const transientCheck = opts?.isTransient ?? isTransientDefault;
   const logWarnings = opts?.logWarnings !== false;
+  const signal = opts?.signal;
   const commandStr = formatCommand(cmd, args);
 
   let lastError: CliExecError | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Short-circuit before each attempt if aborted.
+    if (signal?.aborted) {
+      lastError = buildAbortedError(commandStr, args, attempt + 1);
+      if (logWarnings) log.warn(buildWarning(lastError));
+      return { ok: false, error: lastError };
+    }
+
     try {
       const result = await exec(cmd, args, {
         cwd: opts?.cwd,
         timeout: opts?.timeout,
+        signal,
       });
 
       // Non-zero exit code is a failure, but not an exception
@@ -233,18 +305,34 @@ export async function resilientExec(
           attempts: attempt + 1,
         };
         if (transient && attempt < maxRetries) {
-          if (retryDelayMs > 0) await sleep(retryDelayMs);
+          if (retryDelayMs > 0) {
+            if (signal) await abortableSleep(retryDelayMs, signal);
+            else await sleep(retryDelayMs);
+          }
+          if (signal?.aborted) {
+            lastError = buildAbortedError(commandStr, args, attempt + 1);
+            if (logWarnings) log.warn(buildWarning(lastError));
+            return { ok: false, error: lastError };
+          }
           continue;
         }
         // Permanent or exhausted retries
         if (logWarnings) log.warn(buildWarning(lastError));
+        fireTelemetryForError(lastError);
         return { ok: false, error: lastError };
       }
 
       // Success
       return { ok: true, value: result };
     } catch (err: unknown) {
-      // Exception path: timeout, ENOENT, etc.
+      // Exception path: timeout, ENOENT, abort, etc.
+      // If the signal caused this (or is now aborted), map to exec_aborted.
+      if (signal?.aborted) {
+        lastError = buildAbortedError(commandStr, args, attempt + 1);
+        if (logWarnings) log.warn(buildWarning(lastError));
+        return { ok: false, error: lastError };
+      }
+
       const transient = transientCheck(null, "", err);
       lastError = {
         command: commandStr,
@@ -257,10 +345,19 @@ export async function resilientExec(
         lastError: err,
       };
       if (transient && attempt < maxRetries) {
-        if (retryDelayMs > 0) await sleep(retryDelayMs);
+        if (retryDelayMs > 0) {
+          if (signal) await abortableSleep(retryDelayMs, signal);
+          else await sleep(retryDelayMs);
+        }
+        if (signal?.aborted) {
+          lastError = buildAbortedError(commandStr, args, attempt + 1);
+          if (logWarnings) log.warn(buildWarning(lastError));
+          return { ok: false, error: lastError };
+        }
         continue;
       }
       if (logWarnings) log.warn(buildWarning(lastError));
+      fireTelemetryForError(lastError);
       return { ok: false, error: lastError };
     }
   }
@@ -268,6 +365,8 @@ export async function resilientExec(
   // Should not reach here, but safety net
   /* istanbul ignore next */
   if (logWarnings && lastError) log.warn(buildWarning(lastError));
+  /* istanbul ignore next */
+  if (lastError) fireTelemetryForError(lastError);
   return { ok: false, error: lastError! };
 }
 

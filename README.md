@@ -62,6 +62,7 @@ That's it. The flywheel scans your repo, proposes improvements, plans, implement
 | `/agent-flywheel:flywheel-refine-skill` | Refine a specific skill |
 | `/agent-flywheel:flywheel-tool-feedback` | Submit feedback on agent-flywheel behavior |
 | `/agent-flywheel:flywheel-healthcheck` | Full dependency and codebase health check |
+| `/agent-flywheel:flywheel-doctor` | One-shot diagnostic of toolchain deps (MCP, Agent Mail, br/bv/ntm/cm, node, git, dist-drift, orphaned worktrees, checkpoint) |
 | `/agent-flywheel:memory` | Search or store CASS long-term memory |
 
 ## Architecture
@@ -85,17 +86,22 @@ claude --plugin-dir .
      │    ├── beads.ts        ← br CLI wrapper + verifyBeadsClosed reconciliation
      │    ├── agent-mail.ts   ← agent-mail JSON-RPC client + checkAgentMailHealth()
      │    ├── exec.ts         ← ExecFn type; shell exec with timeout + AbortSignal
-     │    ├── errors.ts       ← FlywheelErrorCode enum (16 codes) + Zod schemas + FlywheelError class + classifyExecError
+     │    ├── errors.ts       ← FlywheelErrorCode enum (26 codes) + Zod schemas + FlywheelError class + classifyExecError + sanitizeCause
      │    ├── mutex.ts        ← In-process per-bead/per-cwd mutex (concurrent_write code)
      │    ├── logger.ts       ← Structured stderr logger (createLogger)
      │    ├── profiler.ts     ← Repo profiler; collects file tree, commits, TODOs
      │    ├── scan.ts         ← ccc-based codebase analysis with signal propagation
      │    ├── deep-plan.ts    ← 3-agent deep planning with fault isolation + synthesis
      │    ├── tender.ts       ← SwarmTender: agent health monitoring, nudge budget (maxNudgesPerPoll), auto-escalation
+     │    ├── episodic-memory.ts ← draftPostmortem(): synthesizes session-learnings from checkpoint + git + agent-mail + telemetry
+     │    ├── plan-simulation.ts ← hotspot matrix: per-file contention scoring across wave beads, swarm vs serial recommendation
+     │    ├── bead-templates.ts  ← 16 bead templates with @version pinning; plumbed through deep-plan synthesizer
+     │    ├── telemetry.ts    ← FlywheelErrorCode event aggregator; bounded ring buffer + atomic spool to .pi-flywheel/error-counts.json
      │    ├── lint/           ← SKILL.md linter (parser, 6 rules incl. errorCodeReferences, 4 reporters, baseline + manifest)
      │    └── tools/          ← flywheel_profile, flywheel_discover, flywheel_select,
      │                            flywheel_plan, flywheel_approve_beads, flywheel_review,
-     │                            flywheel_verify_beads, flywheel_memory
+     │                            flywheel_verify_beads, flywheel_memory,
+     │                            flywheel_doctor (11-check toolchain diagnostic)
      └── scripts/
           └── lint-skill.ts   ← standalone CLI; CI runs compiled dist/scripts/lint-skill.js
 ```
@@ -108,11 +114,12 @@ claude --plugin-dir .
 - **agent-mail handles coordination** - file reservations prevent concurrent writes; messaging lets agents report progress.
 - **Structured logging via `createLogger`** - all diagnostic output writes JSON lines to stderr (`FW_LOG_LEVEL` controls verbosity). Never touches stdout, keeping the MCP JSON-RPC channel clean.
 - **SwarmTender auto-escalation** - `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudgesPerPoll` per poll cycle, default 3), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `flywheelAgentName`; backward compatible when unset.
-- **Structured error contracts** - every `flywheel_*` tool returns errors as tagged `FlywheelErrorCode` codes (16 codes: `missing_prerequisite`, `invalid_input`, `cli_failure`, `exec_timeout`, `concurrent_write`, `empty_plan`, etc.) inside a Zod-validated envelope. The SKILL.md orchestrator branches on `result.data.error.code` instead of string-matching. `FlywheelError` class threads tagged errors through deep helper frames; `classifyExecError` maps raw exec rejections to the right code.
+- **Structured error contracts** - every `flywheel_*` tool returns errors as tagged `FlywheelErrorCode` codes (26 codes: `missing_prerequisite`, `invalid_input`, `cli_failure`, `exec_timeout`, `concurrent_write`, `empty_plan`, etc.) inside a Zod-validated envelope. The SKILL.md orchestrator branches on `result.data.error.code` instead of string-matching. `FlywheelError` class threads tagged errors through deep helper frames; `classifyExecError` maps raw exec rejections to the right code. `sanitizeCause` redacts absolute paths before embedding in MCP error content.
+- **v3.4.0 observability bundle** - `flywheel_doctor` MCP tool diagnoses 11 toolchain dependencies in one sweep. `plan-simulation.ts` emits a hotspot matrix so waves auto-route to swarm vs coordinator-serial. `episodic-memory.ts`'s `draftPostmortem()` synthesizes a session-learnings entry from checkpoint, git log, agent-mail, and error-code telemetry. `telemetry.ts` aggregates `FlywheelErrorCode` events across sessions via a bounded spool at `.pi-flywheel/error-counts.json`. Bead templates with `@version` pinning (`bead-templates.ts`) standardize bead bodies across deep-plan synthesizer output.
 
 ## Tool name deprecation
 
-The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names remain registered as deprecated aliases for back-compat with legacy installs and dispatch to the same runners. They will be removed in v4.0 — prefer the `flywheel_*` names.
+The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names remain registered as deprecated aliases for back-compat with legacy installs and dispatch to the same runners. They will be removed in v4.0; prefer the `flywheel_*` names.
 
 ## Models used
 

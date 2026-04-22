@@ -109,7 +109,7 @@ Read it and extract the version. Also read the project name from `package.json` 
 
 ### 0b. Detect state
 
-Gather context silently (do NOT display raw output yet). Run checks 1-7 in parallel where possible:
+Gather context silently (do NOT display raw output yet). Run checks 1-8 in parallel where possible:
 
 1. **MCP tools**: Call `flywheel_profile` directly with `cwd` — if the call succeeds, MCP is available (cache the result to avoid a redundant call in Step 2). If the tool is not found or errors, set `MCP_DEGRADED = true`. Do NOT use `ToolSearch` — MCP tools may be deferred and unavailable to ToolSearch at startup.
 2. **Existing session**: Read `.pi-flywheel/checkpoint.json` if it exists. Note phase and goal.
@@ -135,6 +135,8 @@ Gather context silently (do NOT display raw output yet). Run checks 1-7 in paral
 
    Never set `NTM_AVAILABLE = true` based on `which ntm` alone — the spawn step downstream will silently fail.
 
+8. **Doctor smoke check**: Call `flywheel_doctor` with `cwd`. Cache the returned `DoctorReport` as `DOCTOR_REPORT` for use in the welcome banner (step 0c). If the call fails outright (MCP tool missing, tool error), set `DOCTOR_REPORT = null` and proceed — doctor is advisory, not blocking. If `DOCTOR_REPORT.overall === "red"`, the banner will mark the session as warning-state and surface the failing check names; the user is not blocked, but they should consider running `/agent-flywheel:flywheel-doctor` before continuing.
+
 ### 0c. Display the welcome banner
 
 Display a single cohesive welcome message. Example:
@@ -154,10 +156,34 @@ Display a single cohesive welcome message. Example:
 
 If beads is zero, show `Beads: none yet`. If MCP tools are unavailable, show `MCP: not configured` in the banner.
 
+Also append a `Doctor:` line to the banner using `DOCTOR_REPORT.overall` (from step 0b check 8):
+
+- `green` → `Doctor: green ✓`
+- `yellow` → `Doctor: yellow ⚠`
+- `red` → `Doctor: red ✗`
+- null / not run → `Doctor: not run`
+
+If `DOCTOR_REPORT.overall === "red"`, under the banner list every failing check with one line each and include a pointer to the slash command:
+
+> **Doctor flagged:**
+> - `<check_name>` — <detail>
+> - ...
+>
+> Run `/agent-flywheel:flywheel-doctor` for the full report and remediation steps.
+
 If CASS returned learnings from prior sessions, display them below the banner:
 
 > **From prior sessions:**
 > - <top 3-5 most relevant learnings, anti-patterns, or gotchas>
+
+**Error-code trends (last 10 sessions):** call `flywheel_memory` with `operation: "search"` and `query: "error-code telemetry"` (or read `.pi-flywheel/error-counts.json` directly via `readTelemetry({ cwd })` from `telemetry.ts` when available). If telemetry is non-empty, display the top 3 codes below the CASS learnings block:
+
+> **Error-code trends (last 10 sessions):**
+> - `<code_1>` — <count> occurrence(s)
+> - `<code_2>` — <count> occurrence(s)
+> - `<code_3>` — <count> occurrence(s)
+
+If telemetry is unavailable or empty, skip this block silently. The telemetry is advisory — never gate on it.
 
 This gives the user (and the agent-flywheel) context from past runs before making any decisions.
 

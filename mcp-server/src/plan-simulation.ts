@@ -6,8 +6,12 @@
  * and missing file validation.
  */
 
-import type { Bead } from './types.js';
+import type { Bead, HotspotMatrix, HotspotRow } from './types.js';
+import { HotspotMatrixSchema } from './types.js';
 import { extractArtifacts } from './beads.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('plan-simulation');
 
 // ─── Types (kept local to this module) ─────────────────────────
 
@@ -350,4 +354,234 @@ export function formatSimulationReport(result: SimulationResult): string {
   }
 
   return lines.join("\n");
+}
+
+// ─── Hotspot Matrix ────────────────────────────────────────────
+
+/**
+ * Input bead for hotspot computation. Intentionally minimal — callers
+ * don't need to produce a full Bead object.
+ */
+export interface HotspotInputBead {
+  id: string;
+  title: string;
+  body?: string; // raw markdown body; may be absent
+}
+
+/**
+ * File-path extraction regex — matches common source file extensions.
+ * Captures paths like `mcp-server/src/tools/doctor.ts` (exact string; no basename collapse).
+ */
+const FILE_PATH_RE =
+  /[a-zA-Z0-9_\-./]+(?:\.ts|\.js|\.tsx|\.jsx|\.json|\.md|\.py|\.rs|\.go|\.yaml|\.yml|\.toml)/g;
+
+/**
+ * Normalize a raw file-path token:
+ *   - strip leading `./`
+ *   - trim whitespace
+ *   - lowercase only the extension (keep path casing intact)
+ *
+ * Distinct paths like `mcp-server/src/tools/doctor.ts` vs `tools/doctor.ts`
+ * are NOT collapsed — exact string match only.
+ */
+function normalizePath(raw: string): string {
+  const trimmed = raw.trim();
+  const stripped = trimmed.startsWith('./') ? trimmed.slice(2) : trimmed;
+  // Lowercase the extension only
+  return stripped.replace(/\.[^.]+$/, (ext) => ext.toLowerCase());
+}
+
+/**
+ * Extract paths from a `### Files:` or `## Files` section (case-insensitive).
+ * Returns the set of normalized paths found.
+ */
+function extractFromFilesSection(text: string): Set<string> {
+  const result = new Set<string>();
+  // Match section headers: ## Files or ### Files (with optional colon)
+  const sectionRe = /^#{2,3}\s+Files:?\s*$/im;
+  const match = sectionRe.exec(text);
+  if (!match) return result;
+
+  const afterHeader = text.slice(match.index + match[0].length);
+  // Consume until the next heading or end of string
+  const nextHeadingMatch = /^#{1,6}\s+/m.exec(afterHeader);
+  const sectionBody = nextHeadingMatch
+    ? afterHeader.slice(0, nextHeadingMatch.index)
+    : afterHeader;
+
+  const paths = sectionBody.match(FILE_PATH_RE);
+  if (paths) {
+    for (const p of paths) {
+      result.add(normalizePath(p));
+    }
+  }
+  return result;
+}
+
+/**
+ * Extract all file paths from arbitrary prose (body text), excluding any
+ * paths already captured from a Files section.
+ */
+function extractFromProse(text: string, alreadyCaptured: Set<string>): Set<string> {
+  const result = new Set<string>();
+  const paths = text.match(FILE_PATH_RE);
+  if (paths) {
+    for (const p of paths) {
+      const normalized = normalizePath(p);
+      if (!alreadyCaptured.has(normalized)) {
+        result.add(normalized);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Pure function: compute a HotspotMatrix from a list of beads.
+ *
+ * Heuristic: exact path-string match after normalization (no basename collapse).
+ * Provenance-aware severity:
+ *   - high  → contentionCount >= 3 AND at least one bead mentions the file via a
+ *             `### Files:` / `## Files` section.
+ *   - med   → contentionCount >= 2 (any provenance), OR contentionCount >= 3
+ *             with only prose provenance.
+ *   - low   → contentionCount == 1.
+ *
+ * Output is Zod-validated before returning.
+ *
+ * Deterministic: beads are sorted by id ascending before processing; output
+ * rows are sorted by file ascending, then contentionCount descending; beadIds
+ * within each row are sorted ascending.
+ *
+ * Bounded: when beads.length > 150, returns summaryOnly:true with the top 10
+ * highest-contention rows (sorted by contentionCount desc then file asc).
+ */
+export function computeHotspotMatrix(beads: HotspotInputBead[]): HotspotMatrix {
+  // Empty input fast path
+  if (beads.length === 0) {
+    return HotspotMatrixSchema.parse({
+      version: 1,
+      rows: [],
+      maxContention: 0,
+      recommendation: 'swarm',
+      summaryOnly: false,
+    });
+  }
+
+  // Step 1: sort by id ascending for determinism
+  const sorted = [...beads].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+  // Step 2: per-file tracking
+  // fileBeadIds: file → Set<beadId>
+  // fileHasFilesSection: file → boolean (true if any bead mentioned it via files-section)
+  const fileBeadIds = new Map<string, Set<string>>();
+  const fileHasFilesSection = new Map<string, boolean>();
+
+  for (const bead of sorted) {
+    const body = bead.body;
+
+    // Validate body
+    if (body !== undefined && typeof body !== 'string') {
+      log.warn('hotspot_bead_body_unparseable: bead body is not a string', {
+        code: 'hotspot_bead_body_unparseable',
+        beadId: bead.id,
+      });
+      continue;
+    }
+
+    const text = typeof body === 'string' ? `${bead.title}\n${body}` : bead.title;
+
+    // Extract from Files section
+    const filesSectionPaths = typeof body === 'string'
+      ? extractFromFilesSection(body)
+      : new Set<string>();
+
+    // Extract from prose (excludes files-section paths)
+    const prosePaths = extractFromProse(text, filesSectionPaths);
+
+    // Record files-section paths
+    for (const file of filesSectionPaths) {
+      if (!fileBeadIds.has(file)) fileBeadIds.set(file, new Set());
+      fileBeadIds.get(file)!.add(bead.id);
+      fileHasFilesSection.set(file, true);
+    }
+
+    // Record prose paths
+    for (const file of prosePaths) {
+      if (!fileBeadIds.has(file)) fileBeadIds.set(file, new Set());
+      fileBeadIds.get(file)!.add(bead.id);
+      // Only mark as files-section if already marked; prose does NOT override
+      if (!fileHasFilesSection.has(file)) {
+        fileHasFilesSection.set(file, false);
+      }
+    }
+  }
+
+  // Step 3: build rows
+  const rows: HotspotRow[] = [];
+  for (const [file, beadIdSet] of fileBeadIds) {
+    const beadIdsSorted = [...beadIdSet].sort();
+    const contentionCount = beadIdsSorted.length;
+    const hasFilesSection = fileHasFilesSection.get(file) ?? false;
+
+    // Severity
+    let severity: 'high' | 'med' | 'low';
+    if (contentionCount >= 3 && hasFilesSection) {
+      severity = 'high';
+    } else if (contentionCount >= 2 || contentionCount >= 3) {
+      // contentionCount >= 3 without files-section also lands here (med per spec)
+      severity = 'med';
+    } else {
+      severity = 'low';
+    }
+
+    // Provenance: 'files-section' if any bead used a files-section mention
+    const provenance: 'files-section' | 'prose' = hasFilesSection ? 'files-section' : 'prose';
+
+    rows.push({
+      file,
+      beadIds: beadIdsSorted,
+      contentionCount,
+      severity,
+      provenance,
+    });
+  }
+
+  // Step 4: sort rows by file ascending, then contentionCount descending
+  rows.sort((a, b) => {
+    if (a.file < b.file) return -1;
+    if (a.file > b.file) return 1;
+    return b.contentionCount - a.contentionCount;
+  });
+
+  // Step 5: compute maxContention and recommendation
+  const maxContention = rows.length > 0
+    ? Math.max(...rows.map((r) => r.contentionCount))
+    : 0;
+
+  const hasMedOrHigh = rows.some((r) => r.severity === 'med' || r.severity === 'high');
+  const recommendation: 'swarm' | 'coordinator-serial' = hasMedOrHigh
+    ? 'coordinator-serial'
+    : 'swarm';
+
+  // Step 6: apply bounds
+  const summaryOnly = beads.length > 150;
+  let finalRows = rows;
+  if (summaryOnly) {
+    // Top 10 by contentionCount desc, then file asc
+    finalRows = [...rows]
+      .sort((a, b) => {
+        if (b.contentionCount !== a.contentionCount) return b.contentionCount - a.contentionCount;
+        return a.file < b.file ? -1 : a.file > b.file ? 1 : 0;
+      })
+      .slice(0, 10);
+  }
+
+  return HotspotMatrixSchema.parse({
+    version: 1,
+    rows: finalRows,
+    maxContention,
+    recommendation,
+    summaryOnly,
+  });
 }

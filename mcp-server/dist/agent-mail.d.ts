@@ -199,4 +199,38 @@ export declare function acknowledgeMessages(exec: ExecFn, cwd: string, agentName
  * Fetch inbox messages for the flywheel agent.
  */
 export declare function fetchInboxMessages(exec: ExecFn, cwd: string, agentName?: string): Promise<AgentMailMessage[]>;
+export type AgentMailRole = 'coordinator' | 'implementer' | 'reviewer' | 'generic';
+export interface BootstrapCoordinatorOptions {
+    /**
+     * Program name passed to `macro_start_session`. Contact-policy hardening is
+     * only applied for `claude-code` coordinators (where the planner's
+     * first-contact path was previously blocked by default `contacts_only`).
+     */
+    program?: string;
+    /** Role hint — `coordinator` triggers contact-policy hardening. */
+    role?: AgentMailRole;
+    /** Model identifier forwarded to `macro_start_session`. */
+    model?: string;
+    /** Human-readable task description. */
+    taskDescription?: string;
+}
+export interface BootstrapCoordinatorResult {
+    /** Raw session payload from `macro_start_session`, or null on failure. */
+    session: any | null;
+    /** True when `set_contact_policy` was invoked and succeeded. */
+    contactPolicyApplied: boolean;
+    /** Non-fatal warnings (e.g. contact-policy set failed). */
+    warnings: string[];
+}
+/**
+ * Bootstrap a coordinator agent-mail session. After successful registration,
+ * opportunistically sets `contact_policy=auto` when the program is
+ * `claude-code` AND the role is `coordinator` so planners can DM the
+ * coordinator without a contacts-only block.
+ *
+ * Never throws: contact-policy set failures are logged at warn level with
+ * structured `code: 'agent_mail_unreachable'` and returned as a warning.
+ * The caller's session continues.
+ */
+export declare function bootstrapCoordinator(exec: ExecFn, cwd: string, agentName?: string, options?: BootstrapCoordinatorOptions): Promise<BootstrapCoordinatorResult>;
 //# sourceMappingURL=agent-mail.d.ts.map
