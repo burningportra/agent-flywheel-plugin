@@ -206,6 +206,12 @@ export interface BeadTemplateExample {
 }
 export interface BeadTemplate {
     id: string;
+    /**
+     * Schema version for this template. Pinned at creation time so plans
+     * synthesised against an older template shape continue to expand even when
+     * newer versions are added. Defaults to 1 for legacy templates.
+     */
+    version: number;
     label: string;
     summary: string;
     descriptionTemplate: string;
@@ -215,12 +221,40 @@ export interface BeadTemplate {
     dependencyHints?: string;
     examples: BeadTemplateExample[];
 }
+/**
+ * Structured input passed to `expandTemplate`. Every well-known key is
+ * optional here so callers can supply only what the synthesiser produced;
+ * the `expandTemplate` implementation validates that all `required: true`
+ * placeholders of the resolved template are present.
+ *
+ * Extra keys (via index signature) are tolerated so templates may declare
+ * their own domain-specific placeholders (e.g. `PARENT_WAVE_BEADS`,
+ * `TARGET_FILE`) without forcing the caller to stretch this interface.
+ */
+export interface TemplateExpansionInput {
+    title?: string;
+    scope?: string;
+    acceptance?: string;
+    test_plan?: string;
+    [key: string]: string | undefined;
+}
+/**
+ * Discriminated result from `expandTemplate`.
+ *
+ * On success: the fully rendered markdown body.
+ *
+ * On failure: one of the v3.4.0 FlywheelErrorCode values used to route
+ * MCP-boundary error envelopes. `detail` carries human-readable context
+ * (missing placeholder names, unknown template id, etc.) for hint rendering
+ * at the tool boundary.
+ */
 export type ExpandTemplateResult = {
     success: true;
     description: string;
 } | {
     success: false;
-    error: string;
+    error: "template_not_found" | "template_placeholder_missing" | "template_expansion_failed";
+    detail: string;
 };
 export interface IdeaScores {
     useful: number;
