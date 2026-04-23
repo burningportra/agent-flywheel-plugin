@@ -46,6 +46,17 @@ export const DOCTOR_CHECK_NAMES = [
     // Codex-rescue handoff observability (bead `agent-flywheel-plugin-1qn`).
     'rescues_last_30d',
 ];
+// ─── Actionable hints ─────────────────────────────────────────────────────
+// DoctorCheck.hint must be a human-readable remediation sentence, not an
+// error code. These constants are used across probes so the rendered hint is
+// always something the user can act on.
+const DOCTOR_CHECK_FAILED_HINT = 'Re-run `flywheel_doctor`; if the failure persists, set FW_LOG_LEVEL=debug and inspect the server log for the specific probe.';
+const DOCTOR_PARTIAL_REPORT_HINT = 'Sweep budget (default 10s) or external abort fired before this probe ran. Re-run, raise the timeout, or reduce concurrent load.';
+const AGENT_MAIL_UNREACHABLE_HINT = 'Start Agent Mail (see `/flywheel-setup`) and confirm it is bound to http://127.0.0.1:8765 before re-running doctor.';
+const CLI_FAILURE_HINT = 'The CLI was found on PATH but exited non-zero. Run it manually to see the error, or set FW_LOG_LEVEL=debug to capture stderr.';
+const CLI_NOT_AVAILABLE_HINT = 'Install the missing CLI and ensure it is on $PATH. `/flywheel-setup` prints the install commands for each required tool.';
+const EXEC_TIMEOUT_HINT = 'The probe exceeded its per-check timeout (default 2s). Re-run with a larger `perCheckTimeoutMs`, or investigate why the CLI is slow.';
+const POSTMORTEM_CHECKPOINT_STALE_HINT = 'Clear the stale checkpoint with `/flywheel-stop`, or resume it with `/start` once you have confirmed the recorded goal still applies.';
 /**
  * Run all 11 health checks in parallel. Never throws.
  *
@@ -133,7 +144,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
                 name: DOCTOR_CHECK_NAMES[idx],
                 severity: 'red',
                 message: 'check threw unexpectedly',
-                hint: 'doctor_check_failed',
+                hint: DOCTOR_CHECK_FAILED_HINT,
             };
         }
         finally {
@@ -157,7 +168,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             name: DOCTOR_CHECK_NAMES[idx],
             severity: 'red',
             message: `check rejected: ${String(r.reason)}`,
-            hint: 'doctor_check_failed',
+            hint: DOCTOR_CHECK_FAILED_HINT,
             durationMs: elapsedMs,
         };
     });
@@ -220,7 +231,7 @@ function abortedCheck(name) {
         name,
         severity: 'red',
         message: 'check aborted before execution',
-        hint: 'doctor_partial_report',
+        hint: DOCTOR_PARTIAL_REPORT_HINT,
         durationMs: 0,
     };
 }
@@ -244,7 +255,7 @@ async function checkMcpConnectivity(cwd, signal, now) {
                 name: 'mcp_connectivity',
                 severity: 'red',
                 message: 'mcp-server/dist/server.js not found — run `npm run build`',
-                hint: 'doctor_check_failed',
+                hint: DOCTOR_CHECK_FAILED_HINT,
                 durationMs: now() - start,
             };
         }
@@ -256,7 +267,7 @@ async function checkMcpConnectivity(cwd, signal, now) {
                     name: 'mcp_connectivity',
                     severity: 'yellow',
                     message: 'server.ts newer than dist/server.js — rebuild recommended',
-                    hint: 'doctor_check_failed',
+                    hint: DOCTOR_CHECK_FAILED_HINT,
                     durationMs: now() - start,
                 };
             }
@@ -273,7 +284,7 @@ async function checkMcpConnectivity(cwd, signal, now) {
             name: 'mcp_connectivity',
             severity: 'red',
             message: `mcp connectivity probe failed: ${errMsg(err)}`,
-            hint: 'doctor_check_failed',
+            hint: DOCTOR_CHECK_FAILED_HINT,
             durationMs: now() - start,
         };
     }
@@ -290,7 +301,7 @@ async function checkAgentMailLiveness(exec, cwd, signal, timeout, now) {
                 name: 'agent_mail_liveness',
                 severity: 'red',
                 message: 'Agent Mail liveness probe failed (connection refused)',
-                hint: 'agent_mail_unreachable',
+                hint: AGENT_MAIL_UNREACHABLE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -307,7 +318,7 @@ async function checkAgentMailLiveness(exec, cwd, signal, timeout, now) {
             name: 'agent_mail_liveness',
             severity: 'yellow',
             message: 'Agent Mail reachable but status is not "alive"',
-            hint: 'agent_mail_unreachable',
+            hint: AGENT_MAIL_UNREACHABLE_HINT,
             durationMs: now() - start,
         };
     }
@@ -316,7 +327,7 @@ async function checkAgentMailLiveness(exec, cwd, signal, timeout, now) {
             name: 'agent_mail_liveness',
             severity: 'red',
             message: `Agent Mail liveness probe error: ${errMsg(err)}`,
-            hint: 'agent_mail_unreachable',
+            hint: AGENT_MAIL_UNREACHABLE_HINT,
             durationMs: now() - start,
         };
     }
@@ -365,7 +376,7 @@ async function checkBinary(checkName, binary, exec, cwd, signal, timeout, now, o
             name: checkName,
             severity: 'yellow',
             message: `${binary} --version returned code ${res.code}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }
@@ -378,7 +389,7 @@ async function checkBinary(checkName, binary, exec, cwd, signal, timeout, now, o
                 name: checkName,
                 severity: 'yellow',
                 message: `${binary} --version timed out`,
-                hint: 'exec_timeout',
+                hint: EXEC_TIMEOUT_HINT,
                 durationMs: now() - start,
             };
         }
@@ -387,7 +398,7 @@ async function checkBinary(checkName, binary, exec, cwd, signal, timeout, now, o
                 name: checkName,
                 severity: opts.requiredSeverity,
                 message: `${binary} not installed`,
-                hint: 'cli_not_available',
+                hint: CLI_NOT_AVAILABLE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -395,7 +406,7 @@ async function checkBinary(checkName, binary, exec, cwd, signal, timeout, now, o
             name: checkName,
             severity: opts.requiredSeverity,
             message: `${binary} probe failed: ${msg}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }
@@ -412,7 +423,7 @@ async function checkNodeVersion(exec, cwd, signal, timeout, now) {
                 name: 'node_version',
                 severity: 'red',
                 message: `node --version exited ${res.code}`,
-                hint: 'cli_failure',
+                hint: CLI_FAILURE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -429,7 +440,7 @@ async function checkNodeVersion(exec, cwd, signal, timeout, now) {
             name: 'node_version',
             severity: 'red',
             message: `node --version failed: ${errMsg(err)}`,
-            hint: 'cli_not_available',
+            hint: CLI_NOT_AVAILABLE_HINT,
             durationMs: now() - start,
         };
     }
@@ -446,7 +457,7 @@ async function checkGitStatus(exec, cwd, signal, timeout, now) {
                 name: 'git_status',
                 severity: 'red',
                 message: 'git rev-parse HEAD failed — not a git repo?',
-                hint: 'cli_failure',
+                hint: CLI_FAILURE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -460,7 +471,7 @@ async function checkGitStatus(exec, cwd, signal, timeout, now) {
                 name: 'git_status',
                 severity: 'yellow',
                 message: 'git status --porcelain failed',
-                hint: 'cli_failure',
+                hint: CLI_FAILURE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -485,7 +496,7 @@ async function checkGitStatus(exec, cwd, signal, timeout, now) {
             name: 'git_status',
             severity: 'red',
             message: `git status probe failed: ${errMsg(err)}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }
@@ -511,7 +522,7 @@ async function checkDistDrift(cwd, signal, now) {
                 name: 'dist_drift',
                 severity: 'red',
                 message: 'mcp-server/dist/ missing — run `npm run build`',
-                hint: 'doctor_check_failed',
+                hint: DOCTOR_CHECK_FAILED_HINT,
                 durationMs: now() - start,
             };
         }
@@ -530,7 +541,7 @@ async function checkDistDrift(cwd, signal, now) {
                 name: 'dist_drift',
                 severity: 'red',
                 message: 'mcp-server/src is newer than dist — rebuild required',
-                hint: 'doctor_check_failed',
+                hint: DOCTOR_CHECK_FAILED_HINT,
                 durationMs: now() - start,
             };
         }
@@ -546,7 +557,7 @@ async function checkDistDrift(cwd, signal, now) {
             name: 'dist_drift',
             severity: 'yellow',
             message: `dist drift probe failed: ${errMsg(err)}`,
-            hint: 'doctor_check_failed',
+            hint: DOCTOR_CHECK_FAILED_HINT,
             durationMs: now() - start,
         };
     }
@@ -587,7 +598,7 @@ async function checkOrphanedWorktrees(exec, cwd, signal, timeout, now) {
                 name: 'orphaned_worktrees',
                 severity: 'yellow',
                 message: 'git worktree list failed — cannot verify orphans',
-                hint: 'cli_failure',
+                hint: CLI_FAILURE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -613,7 +624,7 @@ async function checkOrphanedWorktrees(exec, cwd, signal, timeout, now) {
             name: 'orphaned_worktrees',
             severity: 'yellow',
             message: `${orphans.length} orphaned worktree dir${orphans.length === 1 ? '' : 's'}: ${orphans.join(', ')}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }
@@ -622,7 +633,7 @@ async function checkOrphanedWorktrees(exec, cwd, signal, timeout, now) {
             name: 'orphaned_worktrees',
             severity: 'yellow',
             message: `worktree probe failed: ${errMsg(err)}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }
@@ -648,7 +659,7 @@ async function checkCheckpointValidity(cwd, signal, now) {
                 name: 'checkpoint_validity',
                 severity: 'yellow',
                 message: 'checkpoint present but unreadable (corrupt or schema mismatch)',
-                hint: 'postmortem_checkpoint_stale',
+                hint: POSTMORTEM_CHECKPOINT_STALE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -657,7 +668,7 @@ async function checkCheckpointValidity(cwd, signal, now) {
                 name: 'checkpoint_validity',
                 severity: 'yellow',
                 message: `checkpoint loaded with warnings: ${res.warnings.join('; ')}`,
-                hint: 'postmortem_checkpoint_stale',
+                hint: POSTMORTEM_CHECKPOINT_STALE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -673,7 +684,7 @@ async function checkCheckpointValidity(cwd, signal, now) {
             name: 'checkpoint_validity',
             severity: 'yellow',
             message: `checkpoint probe failed: ${errMsg(err)}`,
-            hint: 'postmortem_checkpoint_stale',
+            hint: POSTMORTEM_CHECKPOINT_STALE_HINT,
             durationMs: now() - start,
         };
     }
@@ -706,7 +717,7 @@ async function checkSwarmModelCli(checkName, provider, capsPromise, signal, now)
             name: checkName,
             severity: 'yellow',
             message: `${provider} cli not installed${cap.reason ? ` (${cap.reason})` : ''}`,
-            hint: 'cli_not_available',
+            hint: CLI_NOT_AVAILABLE_HINT,
             durationMs: now() - start,
         };
     }
@@ -715,7 +726,7 @@ async function checkSwarmModelCli(checkName, provider, capsPromise, signal, now)
             name: checkName,
             severity: 'yellow',
             message: `${provider} cli probe failed: ${errMsg(err)}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }
@@ -748,7 +759,7 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
                 name: 'swarm_model_ratio',
                 severity: 'red',
                 message: description,
-                hint: 'cli_not_available',
+                hint: CLI_NOT_AVAILABLE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -756,7 +767,7 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
             name: 'swarm_model_ratio',
             severity: 'yellow',
             message: description,
-            hint: 'cli_not_available',
+            hint: CLI_NOT_AVAILABLE_HINT,
             durationMs: now() - start,
         };
     }
@@ -765,7 +776,7 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
             name: 'swarm_model_ratio',
             severity: 'yellow',
             message: `swarm ratio probe failed: ${errMsg(err)}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }
@@ -799,7 +810,7 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
                 name: 'rescues_last_30d',
                 severity: 'yellow',
                 message: 'cm CLI unavailable — rescue counts unknown',
-                hint: 'cli_not_available',
+                hint: CLI_NOT_AVAILABLE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -816,7 +827,7 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
                 name: 'rescues_last_30d',
                 severity: 'yellow',
                 message: 'cm search failed — rescue counts unknown',
-                hint: 'cli_failure',
+                hint: CLI_FAILURE_HINT,
                 durationMs: now() - start,
             };
         }
@@ -826,7 +837,7 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
                 name: 'rescues_last_30d',
                 severity: 'red',
                 message: `${count} codex rescues in last 30d — Claude lane likely degraded`,
-                hint: 'doctor_check_failed',
+                hint: DOCTOR_CHECK_FAILED_HINT,
                 durationMs: now() - start,
             };
         }
@@ -835,7 +846,7 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
                 name: 'rescues_last_30d',
                 severity: 'yellow',
                 message: `${count} codex rescues in last 30d — investigate stall hotspots`,
-                hint: 'doctor_check_failed',
+                hint: DOCTOR_CHECK_FAILED_HINT,
                 durationMs: now() - start,
             };
         }
@@ -851,7 +862,7 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
             name: 'rescues_last_30d',
             severity: 'yellow',
             message: `rescue count probe failed: ${errMsg(err)}`,
-            hint: 'cli_failure',
+            hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
     }

@@ -14,6 +14,7 @@
  */
 
 import { isAbsolute, resolve } from "node:path";
+import { realpathSync } from "node:fs";
 
 import type { McpToolResult, ToolContext } from "../types.js";
 import { makeToolResult } from "./shared.js";
@@ -95,7 +96,22 @@ export async function runEmitCodex(
   args: EmitCodexArgs,
 ): Promise<McpToolResult> {
   const cwd = ctx.cwd;
-  const pluginRoot = args.pluginRoot ?? cwd;
+
+  // Validate pluginRoot: unrestricted fs reads from this arg would let a
+  // caller exfiltrate any `<path>/skills/` tree on the host. Accept only
+  // (a) cwd itself, (b) a path inside cwd, or (c) the CLAUDE_PLUGIN_ROOT
+  // env value set by the plugin runtime. Compare realpaths to defeat
+  // symlink escapes.
+  const pluginRootResult = resolvePluginRoot(args.pluginRoot, cwd);
+  if (!pluginRootResult.ok) {
+    return makeEmitCodexError("invalid_input", pluginRootResult.message, {
+      retryable: false,
+      hint:
+        "Omit pluginRoot (defaults to cwd), pass a path inside cwd, or set CLAUDE_PLUGIN_ROOT in the MCP server env to whitelist the plugin install path.",
+      details: { reason: pluginRootResult.reason },
+    });
+  }
+  const pluginRoot = pluginRootResult.value;
 
   // Sanitise targetDir through the shared path-safety module (bead mq3).
   // Accept absolute paths only when they resolve inside cwd — Codex emission
@@ -146,6 +162,76 @@ export async function runEmitCodex(
       },
     );
   }
+}
+
+type ResolvePluginRootResult =
+  | { ok: true; value: string }
+  | { ok: false; reason: string; message: string };
+
+/**
+ * Resolve + validate `pluginRoot`.
+ *
+ * Accepts:
+ *   - `undefined` → defaults to `cwd`.
+ *   - A path inside `cwd` (relative or absolute).
+ *   - The value of `process.env.CLAUDE_PLUGIN_ROOT` — the plugin-install
+ *     path set by Claude Code when the MCP server runs as a plugin.
+ *
+ * Rejects everything else. Uses `realpathSync` on inputs where the path
+ * exists, so a symlink inside cwd that points outside is rejected.
+ */
+function resolvePluginRoot(
+  input: string | undefined,
+  cwd: string,
+): ResolvePluginRootResult {
+  const rawRoot = input ?? cwd;
+  let absRoot: string;
+  try {
+    absRoot = isAbsolute(rawRoot) ? rawRoot : resolve(cwd, rawRoot);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "resolve_failed",
+      message: `pluginRoot resolve failed: ${(err as Error)?.message ?? String(err)}`,
+    };
+  }
+
+  let realRoot = absRoot;
+  try {
+    realRoot = realpathSync(absRoot);
+  } catch {
+    // Non-existent paths pass through — the downstream skills walk will
+    // produce a clean "no skills/" error instead of a misleading path msg.
+  }
+
+  let realCwd = cwd;
+  try {
+    realCwd = realpathSync(cwd);
+  } catch {
+    // cwd should always exist; fall back to the raw value.
+  }
+
+  const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  const allowedRoots = [realCwd];
+  if (envRoot && envRoot.length > 0) {
+    try {
+      allowedRoots.push(realpathSync(envRoot));
+    } catch {
+      allowedRoots.push(envRoot);
+    }
+  }
+
+  for (const allowed of allowedRoots) {
+    if (realRoot === allowed) return { ok: true, value: realRoot };
+    if (realRoot.startsWith(allowed + "/")) return { ok: true, value: realRoot };
+  }
+
+  return {
+    ok: false,
+    reason: "outside_allowed_roots",
+    message:
+      "pluginRoot must be inside cwd or match CLAUDE_PLUGIN_ROOT — refusing to read skills from an arbitrary filesystem location.",
+  };
 }
 
 function renderEmitCodexText(r: EmitCodexReport): string {

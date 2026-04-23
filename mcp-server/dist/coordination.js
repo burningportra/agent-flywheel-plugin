@@ -188,6 +188,7 @@ export async function captureWaveStartSha(exec, cwd) {
         throw new FlywheelError({
             code: "cli_failure",
             message: `git rev-parse HEAD failed in ${cwd}`,
+            hint: "Check that git is installed and the cwd is a git repository; set FW_LOG_LEVEL=debug to see the git stderr.",
             cause: result.stderr.trim() || `exit ${result.code}`,
         });
     }
@@ -196,6 +197,7 @@ export async function captureWaveStartSha(exec, cwd) {
         throw new FlywheelError({
             code: "parse_failure",
             message: `git rev-parse returned an unexpected value`,
+            hint: "git rev-parse HEAD returned a non-SHA value — retry; if persistent, run `git fsck` and set FW_LOG_LEVEL=debug.",
             cause: sha.slice(0, 80),
         });
     }
@@ -211,6 +213,7 @@ export async function diffWorkerAgainstWaveStart(exec, worktreeCwd, waveStartSha
         throw new FlywheelError({
             code: "cli_failure",
             message: `git diff --name-only failed in ${worktreeCwd}`,
+            hint: "Check that the worktree exists and is a git repository; set FW_LOG_LEVEL=debug to see the git stderr.",
             cause: result.stderr.trim() || `exit ${result.code}`,
         });
     }
