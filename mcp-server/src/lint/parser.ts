@@ -1,6 +1,7 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import type { Root, Code, Heading, RootContent } from "mdast";
+import { FlywheelError } from "../errors.js";
 import type {
   AskUserQuestionCall,
   AuqOption,
@@ -726,8 +727,37 @@ function extractHeaders(tree: Root, source: string, toLC: OffsetToLineCol): Docu
   return headers;
 }
 
+/**
+ * Detect a SKILL.md that opens with a YAML frontmatter fence (`---` on line 1)
+ * but never closes it. A permissive parser silently treats the whole file as
+ * body, installing a skill with empty metadata (no name, no tools) — see CE
+ * phase4 blunder #4 (frontmatter.ts:22-25). We refuse to load such files and
+ * return a targeted hint so a contributor can repair the fence in one step.
+ *
+ * Scope: only the line-1 opener case. A `---` appearing mid-body (thematic
+ * break) is NOT a frontmatter opener and is left untouched.
+ */
+function assertFrontmatterFenceClosed(text: string, filePath: string): void {
+  // Require `---` on line 1 exactly (trailing whitespace tolerated).
+  const firstNewline = text.indexOf("\n");
+  const firstLine = firstNewline === -1 ? text : text.slice(0, firstNewline);
+  if (firstLine.trimEnd() !== "---") return;
+  // Look for a closing `---` line anywhere after line 1. A closing fence must
+  // be on its own line (trailing whitespace tolerated, no other content).
+  const rest = firstNewline === -1 ? "" : text.slice(firstNewline + 1);
+  const closeRe = /(^|\n)---[ \t]*(\n|$)/;
+  if (closeRe.test(rest)) return;
+  throw new FlywheelError({
+    code: "parse_failure",
+    message: `SKILL.md frontmatter fence opened at line 1 but never closed (${filePath}).`,
+    hint: "frontmatter started at line 1 but never closed — add ---",
+    details: { filePath },
+  });
+}
+
 export async function parse(source: string, filePath: string): Promise<ParsedDocument> {
   const { text } = preprocess(source);
+  assertFrontmatterFenceClosed(text, filePath);
   const toLC = buildOffsetMap(text);
 
   const processor = unified().use(remarkParse);
