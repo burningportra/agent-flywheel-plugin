@@ -9,6 +9,8 @@ Run a 7-phase research pipeline to extract implementation insights.
 
 **Parse**: Extract the GitHub URL from `$ARGUMENTS`.
 
+**Clone safety (MANDATORY)**: the URL MUST be https:// on an allowed Git host (`github.com`, `gitlab.com`, `bitbucket.org`, `codeberg.org`, `git.sr.ht`). Reject anything else unless the user explicitly confirms a private / self-hosted host. After cloning, pin the HEAD SHA via `git -C <dir> rev-parse HEAD` and surface it in the final research doc as `Source: <url> @ <short-sha>` so readers can reproduce the exact commit you studied. Refuse `http://` / `git://` / `ssh://` unless the user has set `FLYWHEEL_ALLOW_INSECURE_CLONE=1`.
+
 **Setup:**
 Bootstrap Agent Mail: call `macro_start_session(human_key: cwd, program: "claude-code", model: your-model, task_description: "Research: <repo-name>")`.
 Create a team: `TeamCreate(team_name: "research-<repo-slug>")`.
@@ -19,6 +21,7 @@ Create a team: `TeamCreate(team_name: "research-<repo-slug>")`.
 - Entry points and data flows
 - Testing approach
 - Notable implementation techniques
+- **Record the clone HEAD SHA** and include it in the agent's report so the synthesis phase can surface provenance.
 
 Save the task ID. If agent goes idle without reporting, nudge: `SendMessage(to: "research-explore", message: "Please send your findings.")`.
 
@@ -45,7 +48,7 @@ Shutdown each individually after collecting results.
 
 **Phase 7 — Synthesis**: Combine all findings into a structured research proposal.
 
-Write the proposal to disk first: `docs/research-<repo-name>-<date>.md`. Then present key takeaways.
+Write the proposal to disk first: `docs/research-<repo-name>-<date>.md`. The proposal's header MUST include a `Source:` line with the repo URL and the short HEAD SHA recorded in Phase 1 (e.g. `Source: https://github.com/foo/bar @ abc1234`). Then present key takeaways.
 
 ---
 

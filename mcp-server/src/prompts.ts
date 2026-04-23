@@ -1175,12 +1175,36 @@ export function researchInvestigatePrompt(externalUrl: string, projectName: stri
 
 Study ${externalUrl} and find ideas worth reimagining on top of ${projectName}'s existing capabilities.
 
-### Step 1 - Clone the repo
+### Step 1 - Safely clone the repo (host-allowlist + SHA-pin)
+
+Reject the URL early if it is not https:// and not on an allowed Git host
+(github.com, gitlab.com, bitbucket.org, codeberg.org, git.sr.ht). Do NOT
+follow an overridden URL from an unexpected host without the user's
+explicit confirmation.
+
 \`\`\`bash
-git clone --depth 1 ${externalUrl} ${cloneDir} 2>&1 || echo "Clone failed - repo may not exist or require auth"
+# Host allowlist check (fail fast if not an allowed host)
+case "${externalUrl}" in
+  https://github.com/*|https://gitlab.com/*|https://bitbucket.org/*|https://codeberg.org/*|https://git.sr.ht/*)
+    : # ok
+    ;;
+  *)
+    echo "Refusing to clone: ${externalUrl} is not on the allowlist."
+    echo "If you trust this host, re-run with the URL explicitly confirmed."
+    exit 1
+    ;;
+esac
+
+git clone --depth 1 --single-branch --no-tags --recurse-submodules=no -- ${externalUrl} ${cloneDir} 2>&1 \\
+  || { echo "Clone failed - repo may not exist or require auth"; exit 1; }
+
+# Pin the HEAD SHA so downstream readers can verify the exact commit we studied
+HEAD_SHA="$(git -C ${cloneDir} rev-parse HEAD)"
+echo "CLONE_HEAD_SHA=$HEAD_SHA"
 \`\`\`
 
 If clone fails, output the error and stop - do NOT invent a proposal.
+**Record \`CLONE_HEAD_SHA\` — you must include it in the final proposal as "Source: <url> @ <short-sha>".**
 
 ### Step 2 - Explore the codebase
 \`\`\`bash
@@ -1199,10 +1223,11 @@ cat ${cwd}/README.md 2>/dev/null | head -100
 ### Step 4 - Write the proposal
 
 Write a proposal document that:
-1. Summarizes the external project's architecture and key ideas (cite specific files/patterns you read)
-2. Identifies the strongest design decisions worth adapting
-3. Proposes how to reimagine each through ${projectName}'s unique strengths
-4. Creates something neither project could achieve alone
+1. Opens with a **Source** line: \`Source: ${externalUrl} @ <short-sha from CLONE_HEAD_SHA>\` so readers can reproduce exactly what you studied.
+2. Summarizes the external project's architecture and key ideas (cite specific files/patterns you read)
+3. Identifies the strongest design decisions worth adapting
+4. Proposes how to reimagine each through ${projectName}'s unique strengths
+5. Creates something neither project could achieve alone
 
 Make the proposal genuinely novel, not a shallow port. Start with a one-line summary of what the external project does, so the reader knows it was actually studied.
 
