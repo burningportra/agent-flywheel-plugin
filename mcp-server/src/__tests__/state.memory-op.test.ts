@@ -1,10 +1,9 @@
 /**
- * Tests for the flywheel_memory operation classifier (bead 71x).
+ * Tests for the flywheel_memory operation classifier (beads 71x + bve).
  *
  * The classifier in state.ts is the single source of truth for which
- * flywheel_memory operations exist. Parallel bead `bve` will land
- * "refresh_learnings"; its case is stubbed out and must remain
- * un-classified until `bve` lights it up.
+ * flywheel_memory operations exist. Bead `bve` lit up "refresh_learnings"
+ * — verify it now returns a non-null descriptor with the expected shape.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -41,8 +40,16 @@ describe('classifyMemoryOperation', () => {
     expect(d?.summary).toContain('docs/solutions');
   });
 
-  it('returns null for unknown operations (including bve-reserved refresh_learnings)', () => {
-    expect(classifyMemoryOperation('refresh_learnings')).toBeNull();
+  it('classifies refresh_learnings as non-mutating, no cm required (bead bve)', () => {
+    const d = classifyMemoryOperation('refresh_learnings');
+    expect(d).not.toBeNull();
+    expect(d?.name).toBe('refresh_learnings');
+    expect(d?.mutates).toBe(false);
+    expect(d?.requiresCmCli).toBe(false);
+    expect(d?.summary).toMatch(/Keep|Consolidate/);
+  });
+
+  it('returns null for unknown operations', () => {
     expect(classifyMemoryOperation('nonsense')).toBeNull();
     expect(classifyMemoryOperation('')).toBeNull();
   });

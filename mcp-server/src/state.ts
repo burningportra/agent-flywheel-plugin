@@ -52,8 +52,7 @@ export type FlywheelMemoryOperation =
   | 'store'
   | 'draft_postmortem'
   | 'draft_solution_doc'
-  // | 'refresh_learnings'  // reserved for bead `bve` — uncomment when ready
-  ;
+  | 'refresh_learnings';
 
 export interface FlywheelMemoryOperationDescriptor {
   /** Canonical name. */
@@ -109,8 +108,19 @@ export function classifyMemoryOperation(
         summary:
           'Synthesise a docs/solutions/ markdown entry paired with a CASS entry_id (read-only — caller writes the file).',
       };
-    // case 'refresh_learnings':
-    //   return { ... };  // bead `bve` slot — keep this stub.
+    case 'refresh_learnings':
+      // Bead `bve`: compound-engineering refresh sweep — pure read of
+      // docs/solutions/*.md → 5-vector overlap scorer → Keep / Update /
+      // Consolidate / Replace / Delete decisions. Read-only at this layer
+      // (the skill owns archival). Does NOT touch CASS, so cm CLI is not
+      // required. See `src/refresh-learnings.ts` for the algorithm.
+      return {
+        name: 'refresh_learnings',
+        mutates: false,
+        requiresCmCli: false,
+        summary:
+          'Sweep docs/solutions/ and classify entries Keep / Update / Consolidate / Replace / Delete (caller archives — never auto-deletes).',
+      };
     default:
       return null;
   }
