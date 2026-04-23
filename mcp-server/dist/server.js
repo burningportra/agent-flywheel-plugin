@@ -8,6 +8,7 @@ import { clearState, loadState, saveState } from './state.js';
 import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
 import { runDoctor } from './tools/doctor-tool.js';
+import { runEmitCodex } from './tools/emit-codex.js';
 import { runMemory } from './tools/memory-tool.js';
 import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
@@ -184,13 +185,17 @@ const PRIMARY_TOOLS = [
                 query: { type: 'string', description: 'Search query for CASS memory' },
                 operation: {
                     type: 'string',
-                    enum: ['search', 'store', 'draft_postmortem'],
+                    enum: ['search', 'store', 'draft_postmortem', 'draft_solution_doc'],
                     default: 'search',
-                    description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits)',
+                    description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits), draft_solution_doc=synthesize a docs/solutions/ entry paired with a CASS entry_id (read-only; caller writes the file)',
                 },
                 content: {
                     type: 'string',
                     description: 'Content to store (required when operation=store)',
+                },
+                entryId: {
+                    type: 'string',
+                    description: 'CASS entry id from a prior store call (required when operation=draft_solution_doc)',
                 },
             },
             required: ['cwd'],
@@ -240,6 +245,16 @@ const DEFAULT_RUNNERS = {
     orch_review: runReview,
     orch_verify_beads: runVerifyBeads,
     orch_memory: runMemory,
+};
+/**
+ * Extension runners — tools added by beads that don't (or can't) widen
+ * `FlywheelToolName` in types.ts. Keyed by raw string so the registration
+ * doesn't require touching the shared union.
+ *
+ * bead `agent-flywheel-plugin-zbx` — `flywheel_emit_codex`.
+ */
+const EXTENSION_RUNNERS = {
+    flywheel_emit_codex: runEmitCodex,
 };
 function isKnownToolName(name) {
     return TOOLS.some((tool) => tool.name === name);
@@ -298,6 +313,11 @@ export function createCallToolHandler(dependencies) {
         ...DEFAULT_RUNNERS,
         ...dependencies.runners,
     };
+    // Extension tools (bead `agent-flywheel-plugin-zbx`): merged via a wider
+    // string-keyed map so we can dispatch tools whose names aren't part of the
+    // `FlywheelToolName` union. Runtime safety is still enforced by
+    // `isKnownToolName`, which checks the TOOLS array.
+    const extensionRunners = { ...EXTENSION_RUNNERS };
     return async (request) => {
         const { name, arguments: args } = request.params;
         const normalizedArgs = (args ?? {});
@@ -324,7 +344,14 @@ export function createCallToolHandler(dependencies) {
             signal: ac.signal,
         };
         try {
-            return await runners[name](ctx, normalizedArgs);
+            const runner = runners[name] ?? extensionRunners[name];
+            if (!runner) {
+                return {
+                    content: [{ type: 'text', text: `No runner registered for tool: ${name}` }],
+                    isError: true,
+                };
+            }
+            return await runner(ctx, normalizedArgs);
         }
         catch (err) {
             if (err instanceof FlywheelError) {

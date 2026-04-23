@@ -10,6 +10,7 @@ import { clearState, loadState, saveState } from './state.js';
 import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
 import { runDoctor } from './tools/doctor-tool.js';
+import { runEmitCodex } from './tools/emit-codex.js';
 import { runMemory } from './tools/memory-tool.js';
 import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
@@ -276,6 +277,17 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   orch_memory: runMemory as ToolRunner,
 };
 
+/**
+ * Extension runners — tools added by beads that don't (or can't) widen
+ * `FlywheelToolName` in types.ts. Keyed by raw string so the registration
+ * doesn't require touching the shared union.
+ *
+ * bead `agent-flywheel-plugin-zbx` — `flywheel_emit_codex`.
+ */
+const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
+  flywheel_emit_codex: runEmitCodex as ToolRunner,
+};
+
 function isKnownToolName(name: string): name is FlywheelToolName {
   return TOOLS.some((tool) => tool.name === name);
 }
@@ -342,6 +354,11 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
     ...DEFAULT_RUNNERS,
     ...dependencies.runners,
   };
+  // Extension tools (bead `agent-flywheel-plugin-zbx`): merged via a wider
+  // string-keyed map so we can dispatch tools whose names aren't part of the
+  // `FlywheelToolName` union. Runtime safety is still enforced by
+  // `isKnownToolName`, which checks the TOOLS array.
+  const extensionRunners: Record<string, ToolRunner> = { ...EXTENSION_RUNNERS };
 
   return async (request: { params: { name: string; arguments?: Record<string, unknown> } }): Promise<McpToolResult> => {
     const { name, arguments: args } = request.params;
@@ -373,7 +390,14 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
     };
 
     try {
-      return await runners[name](ctx, normalizedArgs);
+      const runner = runners[name] ?? extensionRunners[name as string];
+      if (!runner) {
+        return {
+          content: [{ type: 'text', text: `No runner registered for tool: ${name}` }],
+          isError: true,
+        };
+      }
+      return await runner(ctx, normalizedArgs);
     } catch (err: unknown) {
       if (err instanceof FlywheelError) {
         return makeFlywheelErrorResult(name, state.phase, {

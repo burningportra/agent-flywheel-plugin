@@ -45,6 +45,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
@@ -152,6 +153,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
@@ -181,6 +183,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
@@ -218,6 +221,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
@@ -252,6 +256,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
@@ -285,6 +290,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
@@ -318,6 +324,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
@@ -342,6 +349,10 @@ export declare const TOOLS: ({
                 description: string;
             };
             content: {
+                type: string;
+                description: string;
+            };
+            entryId: {
                 type: string;
                 description: string;
             };
@@ -381,6 +392,7 @@ export declare const TOOLS: ({
             query?: undefined;
             operation?: undefined;
             content?: undefined;
+            entryId?: undefined;
         };
         required: string[];
     };
