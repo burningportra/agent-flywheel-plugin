@@ -3,6 +3,7 @@ import { join } from "path";
 import { writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { loadCachedProfile, profileRepo, saveCachedProfile } from "./profiler.js";
+import { assertSafeSegment } from "./utils/path-safety.js";
 
 export interface DeepPlanAgent {
   name: string;
@@ -82,8 +83,23 @@ export async function runDeepPlanAgents(
 
   const promises = agents.map(async (agent) => {
     const startTime = Date.now();
-    const taskFile = join(resolvedOutputDir, `${agent.name}-task.md`);
-    const outputFile = join(resolvedOutputDir, `${agent.name}-output.md`);
+    // Path-traversal guard (bead mq3): agent.name is attacker-influencible in
+    // the spawn config path (e.g. if a future synthesis agent emits it). Reject
+    // any separator/control/colon before splicing into the filename.
+    const nameCheck = assertSafeSegment(agent.name);
+    if (!nameCheck.ok) {
+      return {
+        name: agent.name,
+        model: agent.model ?? "default",
+        plan: `(AGENT FAILED — unsafe agent.name rejected: ${nameCheck.reason})`,
+        exitCode: 1,
+        elapsed: 0,
+        error: `unsafe agent.name: ${nameCheck.message}`,
+      } as DeepPlanResult;
+    }
+    const safeName = nameCheck.value;
+    const taskFile = join(resolvedOutputDir, `${safeName}-task.md`);
+    const outputFile = join(resolvedOutputDir, `${safeName}-output.md`);
 
     try {
       writeFileSync(taskFile, `${snapshotPreamble}${agent.task}`, "utf8");

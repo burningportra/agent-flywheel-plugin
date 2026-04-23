@@ -7,6 +7,7 @@ import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { makeFlywheelErrorResult } from '../errors.js';
+import { assertSafeRelativePath } from '../utils/path-safety.js';
 
 function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', data: Record<string, unknown>): McpToolResult {
   return {
@@ -25,10 +26,14 @@ function errorResult(
   phase: 'planning' | 'awaiting_plan_approval',
   code: FlywheelErrorCode,
   message: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  hint?: string,
 ): McpToolResult {
   return makeFlywheelErrorResult('flywheel_plan', phase, {
-    code, message, ...(details ? { details } : {}),
+    code,
+    message,
+    ...(hint ? { hint } : {}),
+    ...(details ? { details } : {}),
   });
 }
 
@@ -43,7 +48,13 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
   const { state, saveState, cwd } = ctx;
 
   if (!state.selectedGoal) {
-    return errorResult('planning', 'missing_prerequisite', 'Error: No goal selected. Call flywheel_select first.');
+    return errorResult(
+      'planning',
+      'missing_prerequisite',
+      'Error: No goal selected. Call flywheel_select first.',
+      undefined,
+      'Call flywheel_select with the chosen goal before flywheel_plan.',
+    );
   }
 
   const goal = state.selectedGoal;
@@ -56,12 +67,31 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
 
   // ── If planFile path provided, read it from disk (avoids large stdio payloads) ──
   if (args.planFile) {
+    // Path-traversal guard (bead mq3): the user-supplied planFile must stay inside cwd.
+    // allowAbsoluteInsideRoot=true preserves flows where callers already resolved
+    // to an absolute path inside the project.
+    const safe = assertSafeRelativePath(args.planFile, {
+      root: cwd,
+      allowAbsoluteInsideRoot: true,
+    });
+    if (!safe.ok) {
+      return errorResult(
+        'planning',
+        'invalid_input',
+        `Error: planFile rejected by path-safety (${safe.reason}): ${safe.message}`,
+        { planFile: args.planFile, reason: safe.reason },
+        'Provide a path relative to cwd without ".." segments, control chars, or absolute escape.',
+      );
+    }
     const absPath = resolve(cwd, args.planFile);
     if (!existsSync(absPath)) {
-      return errorResult('planning', 'not_found', `Error: planFile not found: ${absPath}`, {
-        planFile: args.planFile,
-        absolutePath: absPath,
-      });
+      return errorResult(
+        'planning',
+        'not_found',
+        `Error: planFile not found: ${absPath}`,
+        { planFile: args.planFile, absolutePath: absPath },
+        'Check the path is relative to cwd and that the plan file was saved before calling flywheel_plan.',
+      );
     }
     const content = readFileSync(absPath, 'utf8');
     const relativePath = args.planFile.startsWith('docs/') ? args.planFile : `docs/plans/${args.planFile}`;
@@ -97,7 +127,13 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
   if (args.planContent) {
     const trimmed = args.planContent.trim();
     if (trimmed.length === 0) {
-      return errorResult('planning', 'empty_plan', 'planContent is empty or whitespace.');
+      return errorResult(
+        'planning',
+        'empty_plan',
+        'planContent is empty or whitespace.',
+        undefined,
+        'Generate plan content first, then pass it via planContent or write to disk and pass planFile.',
+      );
     }
     if (trimmed.includes('(No planner outputs provided.)')) {
       return makeFlywheelErrorResult('flywheel_plan', 'planning', {
@@ -107,9 +143,12 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
       });
     }
     if (trimmed.startsWith('(AGENT')) {
-      return errorResult('planning', 'empty_plan',
+      return errorResult(
+        'planning',
+        'empty_plan',
         `planContent is an agent failure sentinel: ${trimmed.slice(0, 80)}`,
         { sentinelPrefix: '(AGENT' },
+        'The upstream planner agent failed — retry flywheel_plan with mode=standard or spawn a fresh planning agent.',
       );
     }
     const planDir = join(cwd, 'docs', 'plans');
@@ -123,9 +162,12 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
       mkdirSync(planDir, { recursive: true });
       writeFileSync(planFilePath, args.planContent, 'utf8');
     } catch (err: unknown) {
-      return errorResult('planning', 'cli_failure',
+      return errorResult(
+        'planning',
+        'cli_failure',
         `Failed to write plan file: ${err instanceof Error ? err.message : String(err)}`,
         { planFilePath },
+        'Check filesystem permissions on docs/plans/ and free disk space, then retry.',
       );
     }
 
