@@ -49,12 +49,14 @@ const V3_4_CODES = [
   'template_placeholder_missing',
   'template_expansion_failed',
   'telemetry_store_failed',
+  // agent-flywheel-plugin-iy4 — wave collision detection
+  'wave_collision_detected',
 ] as const;
 
 describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
-  it('contains exactly the 16 legacy + 10 new codes (26 total)', () => {
+  it('contains exactly the 16 legacy + 11 new codes (27 total)', () => {
     expect(FLYWHEEL_ERROR_CODES).toHaveLength(LEGACY_CODES.length + V3_4_CODES.length);
-    expect(FLYWHEEL_ERROR_CODES).toHaveLength(26);
+    expect(FLYWHEEL_ERROR_CODES).toHaveLength(27);
   });
 
   it('preserves legacy codes in order for v3.3.0 back-compat', () => {

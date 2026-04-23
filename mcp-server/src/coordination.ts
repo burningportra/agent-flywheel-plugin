@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "fs";
 import { join } from "path";
 import type { CoordinationMode } from "./types.js";
 import type { ExecFn } from "./exec.js";
 import { brExec, resilientExec } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
+import { FlywheelError } from "./errors.js";
 
 const log = createLogger("coordination");
 
@@ -212,6 +213,295 @@ export async function detectUbs(exec: ExecFn, cwd: string): Promise<boolean> {
 export function resetUbsCache(): void {
   _ubsAvailable = null;
 }
+
+// ─── Wave Collision Detection (agent-flywheel-plugin-iy4) ───────
+//
+// Post-hoc, actual-modified-files reconciliation for swarm waves. After each
+// worker in a wave commits, we run `git diff --name-only <wave-start-sha>..HEAD`
+// in the worker's worktree to discover what it *actually* touched — not what
+// it *declared* it would touch. Any path appearing in two or more workers'
+// sets is a collision. Collisions force a serial re-run of the colliding
+// units against the already-committed branch so the last writer doesn't
+// silently win.
+
+export const COLLISION_IGNORE_PATH = ".pi-flywheel/collision-ignore";
+
+/** Default ignore patterns seeded into `.pi-flywheel/collision-ignore`. */
+export const DEFAULT_COLLISION_IGNORE: readonly string[] = [
+  "package-lock.json",
+  "__snapshots__/**",
+  "*.generated.*",
+];
+
+/** Per-worker output of the wave — the worktree cwd and which unit it ran. */
+export interface WaveWorkerResult {
+  /** Stable identifier for the unit of work (bead ID, step index, etc.). */
+  unitId: string;
+  /** Absolute path to the worktree where the worker executed. */
+  worktreeCwd: string;
+}
+
+/** One collision entry — a path and every unit that touched it. */
+export interface CollisionEntry {
+  path: string;
+  unitIds: string[];
+}
+
+/** Report returned by {@link detectWaveCollisions}. */
+export interface CollisionReport {
+  /** Git SHA captured before the wave was dispatched. */
+  waveStartSha: string;
+  /** Files touched by each unit, after ignore-globs filter. */
+  touchedByUnit: Record<string, string[]>;
+  /** Paths touched by >=2 units (post-ignore). */
+  collisions: CollisionEntry[];
+  /** True iff `collisions.length > 0`. */
+  hasCollision: boolean;
+}
+
+/**
+ * Capture the wave-start SHA from `git rev-parse HEAD` in `cwd`. Call this
+ * immediately before dispatching workers so the diff window lines up.
+ */
+export async function captureWaveStartSha(
+  exec: ExecFn,
+  cwd: string,
+): Promise<string> {
+  const result = await exec("git", ["rev-parse", "HEAD"], { timeout: 5000, cwd });
+  if (result.code !== 0) {
+    throw new FlywheelError({
+      code: "cli_failure",
+      message: `git rev-parse HEAD failed in ${cwd}`,
+      cause: result.stderr.trim() || `exit ${result.code}`,
+    });
+  }
+  const sha = result.stdout.trim();
+  if (!/^[0-9a-f]{7,40}$/.test(sha)) {
+    throw new FlywheelError({
+      code: "parse_failure",
+      message: `git rev-parse returned an unexpected value`,
+      cause: sha.slice(0, 80),
+    });
+  }
+  return sha;
+}
+
+/**
+ * Diff a worker's worktree against the wave-start SHA.
+ * Returns the list of paths the worker actually modified.
+ */
+export async function diffWorkerAgainstWaveStart(
+  exec: ExecFn,
+  worktreeCwd: string,
+  waveStartSha: string,
+): Promise<string[]> {
+  const result = await exec(
+    "git",
+    ["diff", "--name-only", `${waveStartSha}..HEAD`],
+    { timeout: 10000, cwd: worktreeCwd },
+  );
+  if (result.code !== 0) {
+    throw new FlywheelError({
+      code: "cli_failure",
+      message: `git diff --name-only failed in ${worktreeCwd}`,
+      cause: result.stderr.trim() || `exit ${result.code}`,
+    });
+  }
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/**
+ * Load collision-ignore globs. Returns {@link DEFAULT_COLLISION_IGNORE} when
+ * the file is absent. Blank lines and `#`-comments are stripped.
+ */
+export function loadCollisionIgnore(repoRoot: string): string[] {
+  const path = join(repoRoot, COLLISION_IGNORE_PATH);
+  if (!existsSync(path)) return [...DEFAULT_COLLISION_IGNORE];
+  try {
+    const body = readFileSync(path, "utf-8");
+    const patterns = body
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+    return patterns.length > 0 ? patterns : [...DEFAULT_COLLISION_IGNORE];
+  } catch {
+    return [...DEFAULT_COLLISION_IGNORE];
+  }
+}
+
+/**
+ * Seed `.pi-flywheel/collision-ignore` with the default ignore set, if the
+ * file does not already exist. Creates the parent directory as needed. This
+ * is idempotent — existing user-edited files are never overwritten.
+ */
+export function seedCollisionIgnore(repoRoot: string): { created: boolean; path: string } {
+  const parent = join(repoRoot, ".pi-flywheel");
+  const path = join(repoRoot, COLLISION_IGNORE_PATH);
+  if (existsSync(path)) return { created: false, path };
+  mkdirSync(parent, { recursive: true });
+  const body = [
+    "# agent-flywheel-plugin-iy4 — wave collision ignore globs",
+    "# One pattern per line. Blank lines and `#` comments are ignored.",
+    "# Patterns use a minimal glob dialect: `*` (one segment), `**` (many",
+    "# segments), and `?` (single char). Paths listed here never count as",
+    "# collisions even if two workers edit them in the same wave.",
+    "",
+    ...DEFAULT_COLLISION_IGNORE,
+    "",
+  ].join("\n");
+  writeFileSync(path, body, "utf-8");
+  return { created: true, path };
+}
+
+/**
+ * Minimal glob matcher. Supports `*`, `**`, and `?`. Paths are normalised to
+ * forward-slash separators before matching. Avoids a minimatch/micromatch
+ * dependency for the single use-case we need here.
+ */
+export function matchesGlob(pattern: string, path: string): boolean {
+  const normPath = path.replace(/\\/g, "/");
+  const STAR_STAR = "\x00__STARSTAR__\x00";
+  const STAR = "\x00__STAR__\x00";
+  const QUESTION = "\x00__Q__\x00";
+  const stamped = pattern
+    .replace(/\\/g, "/")
+    .replace(/\*\*/g, STAR_STAR)
+    .replace(/\*/g, STAR)
+    .replace(/\?/g, QUESTION);
+  const escaped = stamped.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  const regexBody = escaped
+    .replace(new RegExp(STAR_STAR, "g"), ".*")
+    .replace(new RegExp(STAR, "g"), "[^/]*")
+    .replace(new RegExp(QUESTION, "g"), "[^/]");
+  const anchored = new RegExp(`^${regexBody}$`);
+  if (anchored.test(normPath)) return true;
+  // Bare basename patterns (no slash) also match the file's basename so that
+  // `*.generated.*` catches `src/foo.generated.ts`.
+  if (!pattern.includes("/")) {
+    const base = normPath.split("/").pop() ?? normPath;
+    return anchored.test(base);
+  }
+  return false;
+}
+
+/** Return true iff `path` matches any pattern in `patterns`. */
+export function isIgnoredCollisionPath(path: string, patterns: readonly string[]): boolean {
+  for (const p of patterns) {
+    if (matchesGlob(p, path)) return true;
+  }
+  return false;
+}
+
+/**
+ * Aggregate per-worker touched files into a collision report. Files matching
+ * the ignore-globs are dropped from both the per-unit sets and the collision
+ * scan. A path is a collision iff two or more units touched it after the
+ * filter.
+ */
+export function aggregateCollisions(
+  waveStartSha: string,
+  perWorker: Array<{ unitId: string; touched: string[] }>,
+  ignorePatterns: readonly string[],
+): CollisionReport {
+  const touchedByUnit: Record<string, string[]> = {};
+  const pathToUnits = new Map<string, Set<string>>();
+
+  for (const { unitId, touched } of perWorker) {
+    const kept: string[] = [];
+    for (const raw of touched) {
+      if (isIgnoredCollisionPath(raw, ignorePatterns)) continue;
+      kept.push(raw);
+      let bucket = pathToUnits.get(raw);
+      if (!bucket) {
+        bucket = new Set<string>();
+        pathToUnits.set(raw, bucket);
+      }
+      bucket.add(unitId);
+    }
+    touchedByUnit[unitId] = kept.sort();
+  }
+
+  const collisions: CollisionEntry[] = [];
+  for (const [path, units] of pathToUnits) {
+    if (units.size >= 2) {
+      collisions.push({ path, unitIds: [...units].sort() });
+    }
+  }
+  collisions.sort((a, b) => a.path.localeCompare(b.path));
+
+  return {
+    waveStartSha,
+    touchedByUnit,
+    collisions,
+    hasCollision: collisions.length > 0,
+  };
+}
+
+/**
+ * End-to-end collision detection for a single wave.
+ *
+ * Steps:
+ * 1. Diff each worker's worktree against {@link waveStartSha}.
+ * 2. Load the project's ignore-globs from `.pi-flywheel/collision-ignore`
+ *    (falling back to {@link DEFAULT_COLLISION_IGNORE}).
+ * 3. Aggregate and return a {@link CollisionReport}.
+ *
+ * The caller decides what to do with a `hasCollision` report — see
+ * {@link forceSerialRerun} for the canonical response.
+ */
+export async function detectWaveCollisions(
+  exec: ExecFn,
+  repoRoot: string,
+  waveStartSha: string,
+  workers: readonly WaveWorkerResult[],
+): Promise<CollisionReport> {
+  const perWorker: Array<{ unitId: string; touched: string[] }> = [];
+  for (const w of workers) {
+    const touched = await diffWorkerAgainstWaveStart(exec, w.worktreeCwd, waveStartSha);
+    perWorker.push({ unitId: w.unitId, touched });
+  }
+  const ignore = loadCollisionIgnore(repoRoot);
+  return aggregateCollisions(waveStartSha, perWorker, ignore);
+}
+
+/**
+ * Compute the colliding unit IDs (stable, sorted) from a report. Convenience
+ * helper for orchestrators that only care which units need a serial re-run.
+ */
+export function collidingUnitIds(report: CollisionReport): string[] {
+  const units = new Set<string>();
+  for (const entry of report.collisions) {
+    for (const id of entry.unitIds) units.add(id);
+  }
+  return [...units].sort();
+}
+
+/** Canonical hint wording for the `wave_collision_detected` error. */
+export const WAVE_COLLISION_HINT =
+  "Colliding beads touched shared files; re-running serially against the already-committed branch";
+
+/**
+ * Strategy executor for the serial re-run. Given a report, call `runOne` for
+ * each colliding unit in order. The caller's `runOne` is responsible for
+ * checking out the already-committed branch and replaying the unit's work.
+ *
+ * Returns a map of unitId → runOne's return value for observability.
+ */
+export async function forceSerialRerun<T>(
+  report: CollisionReport,
+  runOne: (unitId: string) => Promise<T>,
+): Promise<Record<string, T>> {
+  const out: Record<string, T> = {};
+  for (const unitId of collidingUnitIds(report)) {
+    out[unitId] = await runOne(unitId);
+  }
+  return out;
+}
+
+// ─── End collision detection ───────────────────────────────────
 
 async function detectSophia(exec: ExecFn, cwd: string): Promise<boolean> {
   // CLI available
