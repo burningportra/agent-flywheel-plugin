@@ -16,12 +16,15 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
-  unlinkSync,
   writeFileSync,
 } from "fs";
 import { join } from "path";
 import type { CheckpointEnvelope, FlywheelState } from "./types.js";
+import {
+  guardedRename,
+  guardedUnlink,
+  isFlywheelManagedPath,
+} from "./utils/fs-safety.js";
 
 // ─── Constants ────────────────────────────────────────────────
 
@@ -169,9 +172,17 @@ function writeCheckpointInner(
     const tmpFile = checkpointTmpPath(cwd);
     const mainFile = checkpointPath(cwd);
 
-    // Atomic write: tmp → rename
+    // Atomic write: tmp → rename (ownership-guarded; both paths must be
+    // inside the flywheel-managed `.pi-flywheel/` root).
     writeFileSync(tmpFile, json, "utf8");
-    renameSync(tmpFile, mainFile);
+    const r = guardedRename(tmpFile, mainFile, cwd);
+    if (!r.ok) {
+      log.warn("checkpoint rename refused by guard", {
+        code: "cli_failure",
+        cause: r.detail ?? r.reason,
+      });
+      return false;
+    }
 
     return true;
   } catch (err) {
@@ -267,8 +278,12 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
 export function clearCheckpoint(cwd: string): void {
   try {
     const mainFile = checkpointPath(cwd);
-    if (existsSync(mainFile)) {
-      unlinkSync(mainFile);
+    const r = guardedUnlink(mainFile, cwd);
+    if (!r.ok) {
+      log.warn("checkpoint clear refused by guard", {
+        code: "cli_failure",
+        cause: r.detail ?? r.reason,
+      });
     }
     // Also clean up any orphaned tmp
     cleanupOrphanedTmp(cwd);
@@ -280,17 +295,38 @@ export function clearCheckpoint(cwd: string): void {
 // ─── Internal helpers ─────────────────────────────────────────
 
 function moveToCorrupt(cwd: string, filePath: string): void {
+  // Defence-in-depth: if anything upstream has handed us a filePath that
+  // isn't actually in .pi-flywheel/, refuse all destructive action rather
+  // than renaming a user-owned file into a .corrupt sibling.
+  if (!isFlywheelManagedPath(filePath, cwd)) {
+    log.warn("moveToCorrupt refused by guard", {
+      code: "cli_failure",
+      cause: `filePath '${filePath}' outside flywheel-managed dirs`,
+    });
+    return;
+  }
+
   try {
     const corruptPath = checkpointCorruptPath(cwd);
-    renameSync(filePath, corruptPath);
-    log.warn("corrupt checkpoint moved", { dest: CHECKPOINT_CORRUPT });
+    const r = guardedRename(filePath, corruptPath, cwd);
+    if (r.ok) {
+      log.warn("corrupt checkpoint moved", { dest: CHECKPOINT_CORRUPT });
+      return;
+    }
+    log.warn("checkpoint rename refused, attempting delete", {
+      code: "cli_failure",
+      cause: r.detail ?? r.reason,
+    });
   } catch (err: unknown) {
     log.warn("checkpoint rename failed, attempting delete", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
-    try {
-      unlinkSync(filePath);
-    } catch (delErr: unknown) {
-      log.warn("checkpoint delete also failed", { code: "cli_failure", cause: delErr instanceof Error ? delErr.message : String(delErr) });
-    }
+  }
+
+  const del = guardedUnlink(filePath, cwd);
+  if (!del.ok) {
+    log.warn("checkpoint delete also refused", {
+      code: "cli_failure",
+      cause: del.detail ?? del.reason,
+    });
   }
 }
 
@@ -298,8 +334,12 @@ function moveToCorrupt(cwd: string, filePath: string): void {
 export function cleanupOrphanedTmp(cwd: string): void {
   try {
     const tmpFile = checkpointTmpPath(cwd);
-    if (existsSync(tmpFile)) {
-      unlinkSync(tmpFile);
+    const r = guardedUnlink(tmpFile, cwd);
+    if (!r.ok) {
+      log.warn("orphaned tmp cleanup refused by guard", {
+        code: "cli_failure",
+        cause: r.detail ?? r.reason,
+      });
     }
   } catch (err: unknown) {
     log.warn("orphaned tmp cleanup failed", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });

@@ -22,6 +22,7 @@ import type { FlywheelErrorCode } from './errors.js';
 import { registerCliExecTelemetryHook } from './cli-exec.js';
 import { ErrorCodeTelemetrySchema } from './types.js';
 import type { ErrorCodeTelemetry } from './types.js';
+import { isFlywheelManagedPath } from './utils/fs-safety.js';
 
 const log = createLogger('telemetry');
 
@@ -211,7 +212,17 @@ function mergeSnapshots(
  * Attempt an atomic write using O_EXCL to guard concurrent access.
  * Returns true on success, false on lock conflict.
  */
-async function atomicWriteExclusive(tmpFile: string, finalPath: string, content: string): Promise<boolean> {
+async function atomicWriteExclusive(tmpFile: string, finalPath: string, content: string, cwd: string): Promise<boolean> {
+  // Defence-in-depth: refuse if either path escapes `.pi-flywheel/`. Both
+  // paths are produced by spoolPath/tmpPath which hard-code the subdir,
+  // but this guard catches future refactors that accidentally leak a
+  // user-controlled value into either arg.
+  if (!isFlywheelManagedPath(tmpFile, cwd) || !isFlywheelManagedPath(finalPath, cwd)) {
+    log.warn('telemetry_store_failed: path outside .pi-flywheel allowlist', {
+      tmpFile, finalPath, cwd,
+    });
+    return false;
+  }
   let fd: import('node:fs/promises').FileHandle | undefined;
   try {
     fd = await open(tmpFile, 'wx'); // wx = O_WRONLY | O_CREAT | O_EXCL
@@ -290,12 +301,12 @@ export async function flushTelemetry(opts: TelemetryOptions): Promise<boolean> {
     const tmp = tmpPath(opts.cwd);
 
     // First attempt
-    let wrote = await atomicWriteExclusive(tmp, spoolPath(opts.cwd), content);
+    let wrote = await atomicWriteExclusive(tmp, spoolPath(opts.cwd), content, opts.cwd);
     if (!wrote) {
       // Retry once after 50ms
       await sleep(50);
       const tmp2 = tmpPath(opts.cwd);
-      wrote = await atomicWriteExclusive(tmp2, spoolPath(opts.cwd), content);
+      wrote = await atomicWriteExclusive(tmp2, spoolPath(opts.cwd), content, opts.cwd);
       if (!wrote) {
         log.warn('telemetry_store_failed: concurrent write conflict after retry', {
           cwd: opts.cwd,
