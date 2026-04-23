@@ -1,6 +1,7 @@
 import type { ToolContext, McpToolResult, MemoryArgs, PostmortemDraft } from '../types.js';
 import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
-import { draftPostmortem, formatPostmortemMarkdown } from '../episodic-memory.js';
+import { draftPostmortem, draftSolutionDoc, formatPostmortemMarkdown } from '../episodic-memory.js';
+import { renderSolutionDoc, type SolutionDoc } from '../solution-doc-schema.js';
 import { makeToolResult } from './shared.js';
 
 type PostmortemDraftStructuredContent = {
@@ -12,6 +13,19 @@ type PostmortemDraftStructuredContent = {
     kind: 'postmortem_draft';
     draft: PostmortemDraft;
     markdown: string;
+  };
+};
+
+type SolutionDocDraftStructuredContent = {
+  tool: 'flywheel_memory';
+  version: 1;
+  status: 'ok';
+  phase: string;
+  data: {
+    kind: 'solution_doc_draft';
+    doc: SolutionDoc;
+    /** Full rendered markdown (frontmatter + body) ready to write via Write tool. */
+    rendered: string;
   };
 };
 
@@ -71,6 +85,58 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
           classified.code === 'exec_timeout'
             ? 'Postmortem drafting exceeded its timeout — retry, or inspect git/agent-mail latency with flywheel_doctor.'
             : 'Postmortem draft failed unexpectedly — rerun once; if persistent, set FW_LOG_LEVEL=debug to capture the underlying cause.',
+        cause: classified.cause,
+      });
+    }
+  }
+
+  // ── draft_solution_doc ────────────────────────────────────────
+  // Also runs BEFORE the cm availability probe — no cm CLI is touched.
+  // Produces a SolutionDoc + rendered markdown that the wrap-up skill
+  // Step 10.55 writes to `docs/solutions/<category>/<slug>-YYYY-MM-DD.md`.
+  if (operation === 'draft_solution_doc') {
+    if (!args.entryId || !args.entryId.trim()) {
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: 'invalid_input',
+        message: 'entryId is required for draft_solution_doc operation.',
+        hint:
+          'First run operation="store" to persist the post-mortem to CASS, capture the returned entry id, then call draft_solution_doc with { entryId }.',
+      });
+    }
+    try {
+      const doc = await draftSolutionDoc({
+        cwd,
+        goal: state.selectedGoal ?? '(no goal set)',
+        phase,
+        sessionStartSha: state.sessionStartSha,
+        errorCodeTelemetry: state.errorCodeTelemetry,
+        exec,
+        signal,
+        entryId: args.entryId.trim(),
+      });
+      const rendered = renderSolutionDoc(doc);
+      const structured: SolutionDocDraftStructuredContent = {
+        tool: 'flywheel_memory',
+        version: 1,
+        status: 'ok',
+        phase,
+        data: {
+          kind: 'solution_doc_draft',
+          doc,
+          rendered,
+        },
+      };
+      // Surface the target path up-front so the wrap-up skill can mkdir/Write.
+      const textPreview = `Solution doc drafted.\nPath: ${doc.path}\n\n${rendered}`;
+      return makeToolResult(textPreview, structured);
+    } catch (err: unknown) {
+      const classified = classifyExecError(err);
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code: classified.code,
+        message: err instanceof Error ? err.message : String(err),
+        retryable: classified.retryable,
+        hint:
+          'Solution-doc drafting failed. Rerun once; if persistent, set FW_LOG_LEVEL=debug and check that draft_postmortem succeeds on its own.',
         cause: classified.cause,
       });
     }

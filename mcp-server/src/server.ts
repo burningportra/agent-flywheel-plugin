@@ -211,13 +211,17 @@ const PRIMARY_TOOLS = [
         query: { type: 'string', description: 'Search query for CASS memory' },
         operation: {
           type: 'string',
-          enum: ['search', 'store', 'draft_postmortem'],
+          enum: ['search', 'store', 'draft_postmortem', 'draft_solution_doc'],
           default: 'search',
-          description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits)',
+          description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits), draft_solution_doc=synthesize a docs/solutions/ entry paired with a CASS entry_id (read-only; caller writes the file)',
         },
         content: {
           type: 'string',
           description: 'Content to store (required when operation=store)',
+        },
+        entryId: {
+          type: 'string',
+          description: 'CASS entry id from a prior store call (required when operation=draft_solution_doc)',
         },
       },
       required: ['cwd'],

@@ -201,6 +201,55 @@ Before leaving the wrap-up phase, persist the in-memory error-code counts accumu
 
 This runs even when the rest of wrap-up errored — it is tolerant of I/O failures (silent degrade on write lock contention). If `flushTelemetry` rejects, log the error but do not surface it to the user; the next session's Step 0c trend block will simply show a gap.
 
+## Step 10.55: Durable solution doc (new in bead 71x)
+
+CASS entries are opaque — only queryable through `cm`. Write a sibling markdown file under `docs/solutions/` so future sessions (and humans, and `rg`) can grep for the same learning without the CASS daemon.
+
+**Skip this step entirely** if Step 10.0 was skipped OR the user picked "Skip" at Step 10.0's "Store to CASS" prompt — there is no CASS `entry_id` to pair against, so there is nothing to reconcile. Only run when Step 10 successfully executed `flywheel_memory` with `operation: "store"` and returned an entry id.
+
+### 1. Capture the CASS entry id
+
+The `operation: "store"` response from Step 10 surfaces the new entry id in either `structuredContent.data.entryId` or the trailing line of the text output (`Memory stored successfully.\n\n<id>`). Capture it as `entryId` — it is required for the next call.
+
+### 2. Draft the SolutionDoc
+
+```ts
+const draftRes = await flywheel_memory({
+  cwd,
+  operation: "draft_solution_doc",
+  entryId, // captured in step 1
+});
+const doc = draftRes.structuredContent?.data?.doc;          // SolutionDoc object
+const rendered = draftRes.structuredContent?.data?.rendered; // full markdown w/ frontmatter
+```
+
+**Structured error branching (mandatory).** Route on `draftRes.structuredContent?.data?.error?.code`:
+- `invalid_input` → `entryId` was missing or empty. Re-derive it from Step 10's response, then retry once. If still missing, skip the rest of Step 10.55.
+- any other code → log the error and skip the file write; do not block on solution-doc capture.
+
+### 3. Write the file
+
+`doc.path` is repo-relative and matches `docs/solutions/<category>/<slug>-YYYY-MM-DD.md` (Zod-validated server-side). The category is one of `build | test | runtime | tooling | coordination | docs | refactor | general`, picked heuristically from the goal + touched files.
+
+Use the native **Write** tool (NOT `Bash` heredoc, NOT `ctx_execute`):
+
+```
+Write({
+  file_path: <absolute path = repoRoot + "/" + doc.path>,
+  content: rendered,
+})
+```
+
+If the parent directory does not exist, run `mkdir -p docs/solutions/<category>` via Bash first — Write will fail on a missing parent.
+
+### 4. Stage and commit (optional but recommended)
+
+`git add docs/solutions/ && git commit -m "docs(solutions): capture <slug> learning"` — keeps the doc in the same wrap-up stack as the post-mortem. Skip the commit if the user chose "Skip wrap-up" at Step 9.5.
+
+### Reconciliation contract
+
+The frontmatter `entry_id` field is the **join key** between docs/solutions/ and CASS. Downstream sweepers (e.g. the parallel bead `bve` `/flywheel-compound-refresh` tool) use `rg 'entry_id: "<id>"' docs/solutions/` to find the markdown sibling for any CASS row, and inversely `cm show <id>` to verify the CASS entry still exists. Never edit `entry_id` after the file is written — treat it as immutable.
+
 ## Step 11: Refine this skill
 
 Run `/flywheel-refine-skill start` to improve this skill based on evidence from the current session. This closes the flywheel loop — each session makes the next one better.

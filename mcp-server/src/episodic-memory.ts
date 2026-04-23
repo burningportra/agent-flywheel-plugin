@@ -10,6 +10,12 @@ import {
 import { resilientExec } from "./cli-exec.js";
 import { agentMailRPC, unwrapRPC } from "./agent-mail.js";
 import { createLogger } from "./logger.js";
+import {
+  type SolutionDoc,
+  SolutionDocSchema,
+  inferSolutionCategory,
+  slugifySolutionTitle,
+} from "./solution-doc-schema.js";
 
 const log = createLogger("episodic-memory");
 
@@ -653,4 +659,167 @@ export function formatPostmortemMarkdown(draft: PostmortemDraft): string {
   if (!draft.hasWarnings || draft.warnings.length === 0) return draft.markdown;
   const banner = `> **Warnings:** ${draft.warnings.join(", ")}`;
   return `${banner}\n\n${draft.markdown}`;
+}
+
+// ─── Solution-Doc Draft Engine (bead 71x) ───────────────────
+
+/**
+ * Inputs to `draftSolutionDoc` — a strict superset of the post-mortem
+ * context plus the CASS entry_id that will be used for reconciliation.
+ *
+ * `entryId` MUST be set to the id returned by `cm add` when the paired
+ * post-mortem was stored. When reconciliation hasn't happened yet (dry-run
+ * preview) callers may pass a placeholder — the Zod schema only requires
+ * a non-empty string.
+ */
+export interface SolutionDocDraftContext extends PostmortemSessionContext {
+  /** CASS entry id produced by `cm add`. Required for F-1 reconciliation. */
+  entryId: string;
+  /**
+   * Optional pre-computed `PostmortemDraft`. When absent, `draftSolutionDoc`
+   * will call `draftPostmortem` internally to derive the body.
+   */
+  postmortem?: PostmortemDraft;
+}
+
+/**
+ * Derive a one-line problem_type tag from the session goal + warnings.
+ * Pure heuristic — downstream bead `bve` can override with richer logic.
+ */
+function deriveProblemType(goal: string, warnings: string[]): string {
+  const g = goal.toLowerCase();
+  if (warnings.some((w) => w === "postmortem_empty_session")) return "empty_session";
+  if (warnings.some((w) => w === "postmortem_checkpoint_stale")) return "stale_checkpoint";
+  if (/flak/.test(g)) return "flaky_test";
+  if (/timeout|hang/.test(g)) return "timeout";
+  if (/leak/.test(g)) return "resource_leak";
+  if (/fix\b|\bbug\b/.test(g)) return "bug_fix";
+  if (/refactor|rename|extract/.test(g)) return "refactor";
+  if (/add\b|feat|feature/.test(g)) return "new_feature";
+  return "session_learning";
+}
+
+/**
+ * Pick a dominant `component` name from the top-touched files list.
+ * Strategy: take the file with the highest change count, strip extension
+ * and leading directories. Falls back to "unknown" when nothing is touched.
+ */
+function deriveComponent(touchedFiles: ReadonlyArray<{ path: string; changes: number }>): string {
+  if (touchedFiles.length === 0) return "unknown";
+  const top = touchedFiles[0].path;
+  // Example transforms:
+  //   "mcp-server/src/episodic-memory.ts" -> "episodic-memory"
+  //   "skills/start/_wrapup.md"           -> "_wrapup"
+  //   "README.md"                         -> "README"
+  const base = top.split("/").pop() ?? top;
+  return base.replace(/\.[A-Za-z0-9]+$/, "") || "unknown";
+}
+
+/**
+ * Today's date in YYYY-MM-DD form. Extracted so tests can stub via
+ * `Date` mocking without touching module internals.
+ */
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Draft a `SolutionDoc` (durable docs/solutions/ learning entry) from the
+ * session context. Read-only — NEVER writes to disk or CASS. The wrap-up
+ * skill (`skills/start/_wrapup.md` Step 10.55) is responsible for writing
+ * the rendered markdown via the native Write tool.
+ *
+ * Invariants:
+ *   S-1: Non-throwing — degraded inputs still yield a Zod-valid SolutionDoc.
+ *   S-2: Frontmatter always includes a non-empty `entry_id` (F-1).
+ *   S-3: Path conforms to `docs/solutions/<category>/<slug>-YYYY-MM-DD.md`.
+ *   S-4: `body` re-uses the post-mortem markdown so both artifacts share
+ *        the same shipping / failing / error-codes narrative.
+ *
+ * Leaves a stable contract for downstream bead `bve` (compound-refresh)
+ * which joins CASS and docs/solutions/ on `frontmatter.entry_id`.
+ */
+export async function draftSolutionDoc(
+  ctx: SolutionDocDraftContext,
+): Promise<SolutionDoc> {
+  const postmortem = ctx.postmortem ?? (await draftPostmortem(ctx));
+
+  // Recompute touchedFiles for component inference. We run a cheap re-fetch
+  // only when we had to compute the post-mortem ourselves *and* a pre-parsed
+  // list wasn't supplied — for the common wrap-up path the post-mortem has
+  // already walked git-log, so we parse its markdown to recover the list.
+  const touchedFiles = parseTouchedFilesFromMarkdown(postmortem.markdown);
+
+  const category = inferSolutionCategory(
+    ctx.goal,
+    touchedFiles.map((f) => f.path),
+  );
+  const slug = slugifySolutionTitle(ctx.goal);
+  const created_at = todayIso();
+  const path = `docs/solutions/${category}/${slug}-${created_at}.md`;
+
+  const problem_type = deriveProblemType(ctx.goal, postmortem.warnings);
+  const component = deriveComponent(touchedFiles);
+  const tags = Array.from(
+    new Set(
+      [
+        category,
+        problem_type,
+        ctx.phase && ctx.phase !== "idle" ? `phase:${ctx.phase}` : null,
+      ].filter((t): t is string => !!t),
+    ),
+  );
+  const applies_when = postmortem.warnings.length > 0
+    ? `session ended with warnings: ${postmortem.warnings.join(", ")}`
+    : `session goal: ${ctx.goal}`;
+
+  // Body re-uses the post-mortem markdown (S-4) + a small provenance
+  // footer so grep hits show the CASS entry_id inline.
+  const body = [
+    postmortem.markdown,
+    "",
+    "---",
+    `_CASS entry: ${ctx.entryId}_`,
+  ].join("\n");
+
+  const candidate = {
+    path,
+    frontmatter: {
+      entry_id: ctx.entryId,
+      problem_type,
+      component,
+      tags,
+      applies_when,
+      created_at,
+    },
+    body,
+  };
+
+  return SolutionDocSchema.parse(candidate);
+}
+
+/**
+ * Recover touched-file paths from a rendered post-mortem markdown string.
+ * Looks for the `## Related files` section and parses `- <path> (<N> changes)`
+ * lines. Returns an empty list on any parse failure — non-throwing.
+ */
+function parseTouchedFilesFromMarkdown(markdown: string): TouchedFile[] {
+  const out: TouchedFile[] = [];
+  const lines = markdown.split("\n");
+  let inSection = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line === "## Related files") {
+      inSection = true;
+      continue;
+    }
+    if (inSection) {
+      if (line.startsWith("## ")) break; // next section
+      if (!line.startsWith("- ")) continue;
+      const m = line.match(/^- (.+?) \((\d+) changes\)$/);
+      if (!m) continue;
+      out.push({ path: m[1], changes: parseInt(m[2], 10) });
+    }
+  }
+  return out;
 }
