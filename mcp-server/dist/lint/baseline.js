@@ -46,6 +46,9 @@ export async function loadBaseline(path) {
     return BaselineFileSchema.parse(parsed);
 }
 export async function saveBaseline(path, baseline) {
+    // saveBaseline is only invoked via the explicit `--update-baseline` CLI
+    // flag — user-initiated, never installer-implicit. Version control is
+    // the backup of record for this file (see docs/audits/destructive-io-2026-04-23.md).
     const tmp = `${path}.tmp`;
     await writeFile(tmp, JSON.stringify(baseline, null, 2) + "\n", "utf8");
     await rename(tmp, path);

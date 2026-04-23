@@ -672,48 +672,96 @@ export async function fetchInboxMessages(exec, cwd, agentName = 'FlywheelAgent')
  * structured `code: 'agent_mail_unreachable'` and returned as a warning.
  * The caller's session continues.
  */
+/**
+ * P1-4 (v3.4.1): In-process dedupe map for concurrent bootstrap calls.
+ *
+ * Prior behavior: two callers with the same (cwd, agentName, program) would
+ * both fire `macro_start_session` + `set_contact_policy` racing each other —
+ * harmless in the happy path but wasteful and prone to duplicate-identity
+ * warnings on the server.
+ *
+ * New behavior: the first caller for a given key wins and takes the RPC
+ * round-trip; subsequent callers await the same in-flight Promise. The slot
+ * is cleared in `.finally()` so the next *serial* caller still goes through
+ * the full bootstrap path (we dedupe concurrency, not results).
+ *
+ * Only the in-flight slot is cached; we do NOT memoize results, because the
+ * underlying server state (sessions, contact policy) is mutable across time.
+ */
+const _bootstrapInFlight = new Map();
+function bootstrapDedupeKey(cwd, agentName, program) {
+    return `${cwd}\u0000${agentName}\u0000${program}`;
+}
+/**
+ * Test-only: reset the in-flight dedupe map. Production callers must never
+ * invoke this; the map is a process-lifetime singleton by design.
+ */
+export function _resetBootstrapDedupeForTest() {
+    _bootstrapInFlight.clear();
+}
 export async function bootstrapCoordinator(exec, cwd, agentName = 'FlywheelAgent', options = {}) {
     const program = options.program ?? 'agent-flywheel';
     const role = options.role ?? 'coordinator';
     const model = options.model ?? 'auto';
     const taskDescription = options.taskDescription ?? 'Orchestrating agentic coding flywheel';
-    const warnings = [];
-    const session = unwrapRPC(await agentMailRPC(exec, 'macro_start_session', {
-        human_key: cwd,
-        program,
-        model,
-        task_description: taskDescription,
-        inbox_limit: 10,
-        agent_name: agentName,
-    }));
-    // Opportunistic contact-policy hardening: only for claude-code coordinators.
-    // Prior-session learning: without this, planner first-send_message calls
-    // are blocked by the default `contacts_only` policy.
-    let contactPolicyApplied = false;
-    if (program === 'claude-code' && role === 'coordinator') {
-        try {
-            const applied = unwrapRPC(await agentMailRPC(exec, 'set_contact_policy', {
-                project_key: cwd,
-                agent_name: agentName,
-                policy: 'auto',
-            }));
-            if (applied !== null) {
-                contactPolicyApplied = true;
-            }
-            else {
-                const msg = 'set_contact_policy returned null — session continues with default policy';
-                log.warn(msg, { code: 'agent_mail_unreachable', agent: agentName });
-                warnings.push(msg);
-            }
-        }
-        catch (err) {
-            // Defensive: unwrapRPC itself should not throw, but any unexpected
-            // failure must not kill the coordinator session.
-            const msg = err instanceof Error ? err.message : String(err);
-            log.warn('set_contact_policy failed', { code: 'agent_mail_unreachable', agent: agentName, cause: msg });
-            warnings.push(`set_contact_policy failed: ${msg}`);
-        }
+    const key = bootstrapDedupeKey(cwd, agentName, program);
+    const existing = _bootstrapInFlight.get(key);
+    if (existing) {
+        return existing;
     }
-    return { session, contactPolicyApplied, warnings };
+    const pending = (async () => {
+        const warnings = [];
+        const session = unwrapRPC(await agentMailRPC(exec, 'macro_start_session', {
+            human_key: cwd,
+            program,
+            model,
+            task_description: taskDescription,
+            inbox_limit: 10,
+            agent_name: agentName,
+        }));
+        // Opportunistic contact-policy hardening: only for claude-code coordinators.
+        // Prior-session learning: without this, planner first-send_message calls
+        // are blocked by the default `contacts_only` policy.
+        let contactPolicyApplied = false;
+        if (program === 'claude-code' && role === 'coordinator') {
+            try {
+                const applied = unwrapRPC(await agentMailRPC(exec, 'set_contact_policy', {
+                    project_key: cwd,
+                    agent_name: agentName,
+                    policy: 'auto',
+                }));
+                if (applied !== null) {
+                    contactPolicyApplied = true;
+                }
+                else {
+                    const msg = 'set_contact_policy returned null — session continues with default policy';
+                    log.warn(msg, { code: 'agent_mail_unreachable', agent: agentName });
+                    warnings.push(msg);
+                }
+            }
+            catch (err) {
+                // Defensive: unwrapRPC itself should not throw, but any unexpected
+                // failure must not kill the coordinator session.
+                const msg = err instanceof Error ? err.message : String(err);
+                log.warn('set_contact_policy failed', { code: 'agent_mail_unreachable', agent: agentName, cause: msg });
+                warnings.push(`set_contact_policy failed: ${msg}`);
+            }
+        }
+        return { session, contactPolicyApplied, warnings };
+    })();
+    _bootstrapInFlight.set(key, pending);
+    // Clear the slot once settled, but only if our Promise is still the current
+    // occupant — another call that somehow landed during settlement shouldn't
+    // have its slot wiped.
+    pending.finally(() => {
+        if (_bootstrapInFlight.get(key) === pending) {
+            _bootstrapInFlight.delete(key);
+        }
+    }).catch(() => {
+        // Swallow: the original pending Promise's rejection propagates to the
+        // caller via the returned value; this .catch only guards the .finally
+        // chain itself.
+    });
+    return pending;
 }
 //# sourceMappingURL=agent-mail.js.map

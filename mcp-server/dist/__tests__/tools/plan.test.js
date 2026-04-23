@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPlan } from '../../tools/plan.js';
@@ -269,6 +269,72 @@ describe('runPlan', () => {
         const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
         const structured = result.structuredContent;
         expect(structured.data.synthesisPrompt).toContain('Use ultrathink.');
+    });
+    // ── Phase 0.5 brainstorm artifact handoff ────────────────────
+    // _planning.md §4.5 writes docs/brainstorms/<goal-slug>-<date>.md.
+    // flywheel_plan must auto-detect the latest match and inject it into the
+    // planner prompt for both standard and deep modes — see plan.ts
+    // readLatestBrainstorm + formatBrainstormSection.
+    describe('Phase 0.5 brainstorm handoff', () => {
+        let tmpDir;
+        beforeEach(() => {
+            tmpDir = mkdtempSync(join(tmpdir(), 'plan-brainstorm-'));
+        });
+        afterEach(() => {
+            rmSync(tmpDir, { recursive: true, force: true });
+        });
+        function writeBrainstorm(slug, date, body) {
+            const dir = join(tmpDir, 'docs', 'brainstorms');
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(join(dir, `${slug}-${date}.md`), body, 'utf8');
+        }
+        it('standard mode includes brainstorm section when artifact exists', async () => {
+            writeBrainstorm('add-caching-layer', '2026-04-23', '# Brainstorm\n\nFraming: cache the hot path only.');
+            const { ctx } = makeCtx({}, tmpDir);
+            const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+            const text = result.content[0].text;
+            expect(text).toContain('## Phase 0.5 Brainstorm');
+            expect(text).toContain('docs/brainstorms/add-caching-layer-2026-04-23.md');
+            expect(text).toContain('cache the hot path only');
+            const structured = result.structuredContent;
+            expect(structured.data.brainstormDocument).toBe('docs/brainstorms/add-caching-layer-2026-04-23.md');
+        });
+        it('standard mode omits brainstorm section when no artifact exists', async () => {
+            const { ctx } = makeCtx({}, tmpDir);
+            const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+            const text = result.content[0].text;
+            expect(text).not.toContain('Phase 0.5 Brainstorm');
+            const structured = result.structuredContent;
+            expect(structured.data.brainstormDocument).toBeUndefined();
+        });
+        it('picks the lexically-greatest brainstorm when multiple dates exist', async () => {
+            writeBrainstorm('add-caching-layer', '2026-04-20', '# OLD');
+            writeBrainstorm('add-caching-layer', '2026-04-23', '# NEWEST');
+            writeBrainstorm('add-caching-layer', '2026-04-21', '# MIDDLE');
+            const { ctx } = makeCtx({}, tmpDir);
+            const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+            expect(result.content[0].text).toContain('NEWEST');
+            expect(result.content[0].text).not.toContain('OLD');
+            expect(result.content[0].text).not.toContain('MIDDLE');
+        });
+        it('ignores brainstorms whose slug does not match the current goal', async () => {
+            writeBrainstorm('some-other-goal', '2026-04-23', '# IRRELEVANT');
+            const { ctx } = makeCtx({}, tmpDir);
+            const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+            expect(result.content[0].text).not.toContain('IRRELEVANT');
+            expect(result.content[0].text).not.toContain('Phase 0.5 Brainstorm');
+        });
+        it('deep mode threads brainstorm into every planner agent prompt', async () => {
+            writeBrainstorm('add-caching-layer', '2026-04-23', '# Brainstorm\n\nSmallest: just LRU.');
+            const { ctx } = makeCtx({}, tmpDir);
+            const result = await runPlan(ctx, { cwd: tmpDir, mode: 'deep' });
+            const structured = result.structuredContent;
+            expect(structured.data.brainstormDocument).toBe('docs/brainstorms/add-caching-layer-2026-04-23.md');
+            for (const agent of structured.data.planAgents) {
+                expect(agent.task).toContain('Phase 0.5 Brainstorm');
+                expect(agent.task).toContain('Smallest: just LRU.');
+            }
+        });
     });
 });
 //# sourceMappingURL=plan.test.js.map

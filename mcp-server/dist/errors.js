@@ -36,6 +36,8 @@ export const FLYWHEEL_ERROR_CODES = [
     'template_placeholder_missing',
     'template_expansion_failed',
     'telemetry_store_failed',
+    // agent-flywheel-plugin-iy4 — wave collision detection
+    'wave_collision_detected',
 ];
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
 export const FlywheelToolErrorSchema = z.object({
@@ -87,6 +89,8 @@ export const DEFAULT_RETRYABLE = {
     template_placeholder_missing: false,
     template_expansion_failed: true, // may be transient if template library is mid-reload
     telemetry_store_failed: true, // disk contention is transient
+    // agent-flywheel-plugin-iy4 — collision is recoverable via serial re-run
+    wave_collision_detected: true,
 };
 export class FlywheelError extends Error {
     code;

@@ -20,6 +20,9 @@ export async function loadManifest(filepath) {
     return ManifestFileSchema.parse(parsed);
 }
 export async function saveManifest(filepath, manifest) {
+    // saveManifest is only invoked via the explicit `--update-manifest` CLI
+    // flag — user-initiated. Version control is the backup of record for
+    // this file (see docs/audits/destructive-io-2026-04-23.md).
     const tmp = `${filepath}.tmp`;
     await writeFile(tmp, JSON.stringify(manifest, null, 2) + "\n", "utf8");
     await rename(tmp, filepath);

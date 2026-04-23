@@ -95,6 +95,51 @@ describe('bounds', () => {
         const tel = await readTelemetry({ cwd: testDir });
         expect(Object.keys(tel.counts).length).toBeLessThanOrEqual(3);
     });
+    // ─── P1-2: Global ring-buffer cap ───────────────────────────
+    //
+    // Prior behavior: `maxEvents` was enforced per-code, so with 26 error
+    // codes the in-memory footprint could be 26 × 100 = 2600 events.
+    // Fixed behavior: `maxEvents` is a GLOBAL cap across all buckets, with
+    // eviction that shrinks the largest bucket until the total is bounded.
+    it('P1-2: total in-memory ring entries never exceed maxEvents across all codes', async () => {
+        // Record 500 events spread across 5 codes (100 each).
+        const codes = ['cli_failure', 'exec_timeout', 'not_found', 'invalid_input', 'internal_error'];
+        for (const code of codes) {
+            for (let i = 0; i < 100; i++)
+                recordErrorCode(code);
+        }
+        // With a global cap of 50, the aggregator must evict down to 50 entries
+        // across all buckets BEFORE flush (counts are preserved; only ring size
+        // is bounded).
+        const ok = await flushTelemetry({ cwd: testDir, maxEvents: 50 });
+        expect(ok).toBe(true);
+        const tel = await readTelemetry({ cwd: testDir });
+        expect(tel).not.toBeNull();
+        // On-disk recentEvents is the merged, flush-level cap of 50.
+        expect(tel.recentEvents.length).toBeLessThanOrEqual(50);
+        // Counts remain lossless (eviction only trims ring buffers).
+        const totalCounts = Object.values(tel.counts).reduce((s, v) => s + v, 0);
+        expect(totalCounts).toBe(500);
+    });
+    it('P1-2: eviction prefers the largest bucket so work is spread fairly', async () => {
+        // One fat bucket, two thin buckets.
+        for (let i = 0; i < 200; i++)
+            recordErrorCode('cli_failure');
+        for (let i = 0; i < 10; i++)
+            recordErrorCode('exec_timeout');
+        for (let i = 0; i < 10; i++)
+            recordErrorCode('not_found');
+        const ok = await flushTelemetry({ cwd: testDir, maxEvents: 40 });
+        expect(ok).toBe(true);
+        const tel = await readTelemetry({ cwd: testDir });
+        expect(tel).not.toBeNull();
+        expect(tel.recentEvents.length).toBeLessThanOrEqual(40);
+        // Thin buckets' counts should not be zeroed by eviction (eviction only
+        // trims ring buffers, not the `counts` ledger).
+        expect(tel.counts['exec_timeout']).toBe(10);
+        expect(tel.counts['not_found']).toBe(10);
+        expect(tel.counts['cli_failure']).toBe(200);
+    });
 });
 // ─── Re-entrancy ──────────────────────────────────────────────
 describe('re-entrancy guard', () => {
@@ -231,6 +276,67 @@ describe('dual-session merge', () => {
         // Total events across both codes
         const total = Object.values(tel.counts).reduce((s, v) => s + v, 0);
         expect(total).toBe(20);
+    });
+    // ─── P1-3: Flush-lock serializes read→merge→rename (v3.4.1) ───
+    //
+    // Prior behavior: `O_EXCL` was only on the `.tmp` filename, so two
+    // concurrent flushers could both read the existing spool, merge
+    // independently, then race to rename — the later rename silently
+    // clobbered the earlier. Counts from one session were lost.
+    // Fixed behavior: a sidecar `.lock` is held via `O_EXCL` across the
+    // full read→merge→rename critical section. Waiters retry with
+    // bounded backoff (FLUSH_LOCK_MAX_ATTEMPTS × FLUSH_LOCK_RETRY_MS).
+    it('P1-3: two concurrent flushes both succeed and neither clobbers the other', async () => {
+        // Seed the spool with a baseline of 10 cli_failures.
+        for (let i = 0; i < 10; i++)
+            recordErrorCode('cli_failure');
+        await flushTelemetry({ cwd: testDir });
+        // Record additional events, then flush twice in parallel. The lock
+        // serializes both so the second flush sees the first's merged state.
+        _resetTelemetryForTest();
+        for (let i = 0; i < 5; i++)
+            recordErrorCode('cli_failure');
+        for (let i = 0; i < 5; i++)
+            recordErrorCode('exec_timeout');
+        const [okA, okB] = await Promise.all([
+            flushTelemetry({ cwd: testDir }),
+            flushTelemetry({ cwd: testDir }),
+        ]);
+        expect(okA).toBe(true);
+        expect(okB).toBe(true);
+        const tel = await readTelemetry({ cwd: testDir });
+        expect(tel).not.toBeNull();
+        // The in-memory snapshot is the same under both racers (same aggregator
+        // state), so merge-with-baseline should land cli_failure >= 15 and
+        // exec_timeout >= 5 regardless of who wins the lock first.
+        expect(tel.counts['cli_failure']).toBeGreaterThanOrEqual(15);
+        expect(tel.counts['exec_timeout']).toBeGreaterThanOrEqual(5);
+    });
+    it('P1-3: flush lock file is unlinked on successful flush', async () => {
+        recordErrorCode('cli_failure');
+        const ok = await flushTelemetry({ cwd: testDir });
+        expect(ok).toBe(true);
+        // After a clean flush the sidecar lock must be gone so the next flusher
+        // can acquire immediately (no stale-lock residue).
+        const { existsSync } = await import('node:fs');
+        const lockPath = join(testDir, '.pi-flywheel', 'error-counts.lock');
+        expect(existsSync(lockPath)).toBe(false);
+    });
+    it('P1-3: stale lock does not hang the flusher (bounded retry)', async () => {
+        // Plant a stale lock to simulate a crashed peer that never unlinked.
+        const spoolDir = join(testDir, '.pi-flywheel');
+        mkdirSync(spoolDir, { recursive: true });
+        const lockPath = join(spoolDir, 'error-counts.lock');
+        writeFileSync(lockPath, 'stale-pid-99999');
+        recordErrorCode('cli_failure');
+        // The flusher retries O_EXCL acquire FLUSH_LOCK_MAX_ATTEMPTS times
+        // (~1.25s total ceiling). It must return false, NOT hang.
+        const start = Date.now();
+        const ok = await flushTelemetry({ cwd: testDir });
+        const elapsed = Date.now() - start;
+        expect(ok).toBe(false);
+        // Ceiling is ~1.25s; generous slack for CI but well under any hang.
+        expect(elapsed).toBeLessThan(5000);
     });
 });
 // ─── Forward-compat read ──────────────────────────────────────

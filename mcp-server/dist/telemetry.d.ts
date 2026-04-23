@@ -5,7 +5,11 @@ export interface TelemetryOptions {
     cwd: string;
     /** Defaults to new Date().toISOString() */
     sessionStartIso?: string;
-    /** Ring buffer size; default 100 */
+    /**
+     * GLOBAL ring-buffer cap across all codes (NOT per-code). v3.4.1 P1-2.
+     * Default 100. The aggregator evicts oldest entries from the largest
+     * bucket when the total exceeds this bound.
+     */
     maxEvents?: number;
     /** Top-N tracking; default 20 */
     maxCodes?: number;
@@ -13,6 +17,12 @@ export interface TelemetryOptions {
 /**
  * Record an error code into the in-memory aggregator.
  * Fire-and-forget: never throws. No-op when called re-entrantly.
+ *
+ * Memory-footprint bound (v3.4.1 P1-2): after appending the new entry, this
+ * function enforces a GLOBAL cap of `maxEvents` total ring entries across all
+ * buckets (not per-bucket). When the global count exceeds the cap, the oldest
+ * entries are evicted from the largest bucket. Counts (`bucket.count`) are
+ * preserved — only the ring history is bounded.
  */
 export declare function recordErrorCode(code: FlywheelErrorCode, ctx?: {
     hashable?: string;
@@ -21,6 +31,13 @@ export declare function recordErrorCode(code: FlywheelErrorCode, ctx?: {
  * Flush the in-memory aggregator to .pi-flywheel/error-counts.json.
  * Merges with existing spool (dual-session support).
  * Returns false on store failure (never throws).
+ *
+ * v3.4.1 P1-3: the read→merge→rename critical section is held under an
+ * O_EXCL sentinel (`error-counts.lock`) on the FINAL spool path, so two
+ * concurrent flushes serialize and counts sum correctly. The previous
+ * implementation O_EXCL'd only the .tmp filename, which prevented two
+ * processes from writing the same tmp simultaneously but did NOT prevent
+ * two read-merge-rename cycles from racing and clobbering each other.
  */
 export declare function flushTelemetry(opts: TelemetryOptions): Promise<boolean>;
 /**

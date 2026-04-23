@@ -223,14 +223,9 @@ export interface BootstrapCoordinatorResult {
     warnings: string[];
 }
 /**
- * Bootstrap a coordinator agent-mail session. After successful registration,
- * opportunistically sets `contact_policy=auto` when the program is
- * `claude-code` AND the role is `coordinator` so planners can DM the
- * coordinator without a contacts-only block.
- *
- * Never throws: contact-policy set failures are logged at warn level with
- * structured `code: 'agent_mail_unreachable'` and returned as a warning.
- * The caller's session continues.
+ * Test-only: reset the in-flight dedupe map. Production callers must never
+ * invoke this; the map is a process-lifetime singleton by design.
  */
+export declare function _resetBootstrapDedupeForTest(): void;
 export declare function bootstrapCoordinator(exec: ExecFn, cwd: string, agentName?: string, options?: BootstrapCoordinatorOptions): Promise<BootstrapCoordinatorResult>;
 //# sourceMappingURL=agent-mail.d.ts.map

@@ -1,6 +1,7 @@
 import { join } from "path";
-import { writeFileSync, mkdirSync, rmSync } from "fs";
+import { writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
+import { FLYWHEEL_TMP_PREFIX, guardedRemoveDir } from "./utils/fs-safety.js";
 /**
  * Send beads to an alternative model for cross-model review.
  * Uses pi --print with a different model to get a fresh perspective.
@@ -31,7 +32,11 @@ Review these beads critically. Look for:
 Output specific, actionable suggestions as a numbered list. Each suggestion should reference specific bead IDs.
 Be specific. If everything looks solid, explain briefly why each bead is well-formed. Always output a numbered list.
 Check for: parallel-ready beads that modify the same files, closure extraction feasibility, missing error handling, vague acceptance criteria.`;
-    const outputDir = join(tmpdir(), `pi-bead-review-${Date.now()}`);
+    // Use FLYWHEEL_TMP_PREFIX so guardedRemoveDir recognises this scratch dir
+    // as flywheel-owned under the tmpdir ownership rule. Hardcoding
+    // `pi-bead-review-` would still work but would silently drift from the
+    // allowlist the moment anyone changed either side.
+    const outputDir = join(tmpdir(), `${FLYWHEEL_TMP_PREFIX}bead-review-${Date.now()}`);
     mkdirSync(outputDir, { recursive: true });
     const taskFile = join(outputDir, "review-task.md");
     writeFileSync(taskFile, prompt, "utf8");
@@ -54,9 +59,10 @@ Check for: parallel-ready beads that modify the same files, closure extraction f
         const rawOutput = result.stdout.trim();
         const suggestions = parseSuggestions(rawOutput);
         const fallbackUsed = suggestions.length > 0 && !rawOutput.match(/^\s*\d+\.\s+/m) && !rawOutput.match(/^\s*[-*•]\s+/m);
-        // Clean up temp files
+        // Clean up temp files (guarded: refuses anything outside tmpdir prefix
+        // or flywheel-managed dirs — never recursive-rm user-owned paths).
         try {
-            rmSync(outputDir, { recursive: true, force: true });
+            guardedRemoveDir(outputDir, cwd);
         }
         catch { /* ignore */ }
         return {
@@ -69,7 +75,7 @@ Check for: parallel-ready beads that modify the same files, closure extraction f
     catch (err) {
         // Clean up temp files on error too
         try {
-            rmSync(outputDir, { recursive: true, force: true });
+            guardedRemoveDir(outputDir, cwd);
         }
         catch { /* ignore */ }
         const errorMessage = err instanceof Error ? err.message : String(err);

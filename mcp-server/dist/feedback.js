@@ -9,6 +9,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, append
 import { join } from "path";
 import { parseFeedbackFile } from "./parsers.js";
 import { createLogger } from "./logger.js";
+import { assertSafeSegment } from "./utils/path-safety.js";
 const log = createLogger("feedback");
 const FEEDBACK_DIR = ".pi/flywheel-feedback";
 /**
@@ -220,10 +221,22 @@ export function parseToolFeedback(output, toolName) {
 }
 /** Save tool feedback to .pi-flywheel-feedback/tools/<toolName>.jsonl */
 export function saveToolFeedback(cwd, feedback) {
+    // Path-traversal guard (bead mq3): toolName is derived from parsed model
+    // output, so a malicious or hallucinated "../../../etc/passwd" would escape
+    // the feedback dir. Reject any segment that contains separators, control
+    // chars, or the CE-blunder colon canary.
+    const safe = assertSafeSegment(feedback.toolName);
+    if (!safe.ok) {
+        log.warn("refusing to save tool feedback for unsafe toolName", {
+            code: "invalid_input",
+            cause: `${safe.reason}: ${safe.message}`,
+        });
+        return;
+    }
     try {
         const dir = join(cwd, ".pi-flywheel-feedback", "tools");
         mkdirSync(dir, { recursive: true });
-        const file = join(dir, `${feedback.toolName}.jsonl`);
+        const file = join(dir, `${safe.value}.jsonl`);
         appendFileSync(file, JSON.stringify(feedback) + "\n", "utf8");
     }
     catch (err) {

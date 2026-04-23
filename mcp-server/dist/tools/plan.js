@@ -1,10 +1,53 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import { makeFlywheelErrorResult } from '../errors.js';
+import { assertSafeRelativePath } from '../utils/path-safety.js';
+/**
+ * Locate the most-recent brainstorm artifact for this goal.
+ *
+ * Phase 0.5 of `skills/start/_planning.md` writes pressure-test outcomes to
+ * `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>.md`. We pick the lexically-greatest
+ * match (dates in the filename make lexical order equal chronological order),
+ * falling back to `null` when the directory is missing or no slug match exists.
+ *
+ * Returns the raw file contents so the caller can splice them directly into
+ * the planner prompt — callers should NOT parse the file structure, because
+ * the orchestrator writes arbitrary synthesis prose.
+ */
+function readLatestBrainstorm(cwd, goalSlug) {
+    try {
+        const dir = join(cwd, 'docs', 'brainstorms');
+        if (!existsSync(dir))
+            return null;
+        const entries = readdirSync(dir)
+            .filter(f => f.endsWith('.md') && f.startsWith(`${goalSlug}-`));
+        if (entries.length === 0)
+            return null;
+        // Sort lexically descending — filenames embed ISO dates, so this == latest.
+        entries.sort().reverse();
+        const pick = entries[0];
+        const abs = join(dir, pick);
+        // Defensive: ensure it's a regular file, not a symlink to something weird.
+        const st = statSync(abs);
+        if (!st.isFile())
+            return null;
+        const content = readFileSync(abs, 'utf8');
+        return { path: `docs/brainstorms/${pick}`, content };
+    }
+    catch {
+        return null;
+    }
+}
+/** Format a brainstorm artifact as a prompt section; empty string if null. */
+function formatBrainstormSection(brainstorm) {
+    if (!brainstorm)
+        return '';
+    return `\n## Phase 0.5 Brainstorm (read FIRST)\n\nSource: \`${brainstorm.path}\` — pressure-test outcome from Phase 0.5 of the planning skill. Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.\n\n\`\`\`markdown\n${brainstorm.content.trim()}\n\`\`\`\n`;
+}
 function okResult(text, phase, data) {
     return {
         content: [{ type: 'text', text }],
@@ -17,9 +60,12 @@ function okResult(text, phase, data) {
         },
     };
 }
-function errorResult(phase, code, message, details) {
+function errorResult(phase, code, message, details, hint) {
     return makeFlywheelErrorResult('flywheel_plan', phase, {
-        code, message, ...(details ? { details } : {}),
+        code,
+        message,
+        ...(hint ? { hint } : {}),
+        ...(details ? { details } : {}),
     });
 }
 /**
@@ -32,7 +78,7 @@ function errorResult(phase, code, message, details) {
 export async function runPlan(ctx, args) {
     const { state, saveState, cwd } = ctx;
     if (!state.selectedGoal) {
-        return errorResult('planning', 'missing_prerequisite', 'Error: No goal selected. Call flywheel_select first.');
+        return errorResult('planning', 'missing_prerequisite', 'Error: No goal selected. Call flywheel_select first.', undefined, 'Call flywheel_select with the chosen goal before flywheel_plan.');
     }
     const goal = state.selectedGoal;
     const profile = state.repoProfile;
@@ -43,12 +89,19 @@ export async function runPlan(ctx, args) {
         : '';
     // ── If planFile path provided, read it from disk (avoids large stdio payloads) ──
     if (args.planFile) {
+        // Path-traversal guard (bead mq3): the user-supplied planFile must stay inside cwd.
+        // allowAbsoluteInsideRoot=true preserves flows where callers already resolved
+        // to an absolute path inside the project.
+        const safe = assertSafeRelativePath(args.planFile, {
+            root: cwd,
+            allowAbsoluteInsideRoot: true,
+        });
+        if (!safe.ok) {
+            return errorResult('planning', 'invalid_input', `Error: planFile rejected by path-safety (${safe.reason}): ${safe.message}`, { planFile: args.planFile, reason: safe.reason }, 'Provide a path relative to cwd without ".." segments, control chars, or absolute escape.');
+        }
         const absPath = resolve(cwd, args.planFile);
         if (!existsSync(absPath)) {
-            return errorResult('planning', 'not_found', `Error: planFile not found: ${absPath}`, {
-                planFile: args.planFile,
-                absolutePath: absPath,
-            });
+            return errorResult('planning', 'not_found', `Error: planFile not found: ${absPath}`, { planFile: args.planFile, absolutePath: absPath }, 'Check the path is relative to cwd and that the plan file was saved before calling flywheel_plan.');
         }
         const content = readFileSync(absPath, 'utf8');
         const relativePath = args.planFile.startsWith('docs/') ? args.planFile : `docs/plans/${args.planFile}`;
@@ -78,7 +131,7 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
     if (args.planContent) {
         const trimmed = args.planContent.trim();
         if (trimmed.length === 0) {
-            return errorResult('planning', 'empty_plan', 'planContent is empty or whitespace.');
+            return errorResult('planning', 'empty_plan', 'planContent is empty or whitespace.', undefined, 'Generate plan content first, then pass it via planContent or write to disk and pass planFile.');
         }
         if (trimmed.includes('(No planner outputs provided.)')) {
             return makeFlywheelErrorResult('flywheel_plan', 'planning', {
@@ -88,7 +141,7 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
             });
         }
         if (trimmed.startsWith('(AGENT')) {
-            return errorResult('planning', 'empty_plan', `planContent is an agent failure sentinel: ${trimmed.slice(0, 80)}`, { sentinelPrefix: '(AGENT' });
+            return errorResult('planning', 'empty_plan', `planContent is an agent failure sentinel: ${trimmed.slice(0, 80)}`, { sentinelPrefix: '(AGENT' }, 'The upstream planner agent failed — retry flywheel_plan with mode=standard or spawn a fresh planning agent.');
         }
         const planDir = join(cwd, 'docs', 'plans');
         const relativePath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`;
@@ -101,7 +154,7 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
             writeFileSync(planFilePath, args.planContent, 'utf8');
         }
         catch (err) {
-            return errorResult('planning', 'cli_failure', `Failed to write plan file: ${err instanceof Error ? err.message : String(err)}`, { planFilePath });
+            return errorResult('planning', 'cli_failure', `Failed to write plan file: ${err instanceof Error ? err.message : String(err)}`, { planFilePath }, 'Check filesystem permissions on docs/plans/ and free disk space, then retry.');
         }
         state.planDocument = relativePath;
         state.planRefinementRound = 0;
@@ -138,12 +191,15 @@ Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').len
         const profileContext = profile
             ? `\n\n### Repository Context\n- **Name:** ${profile.name}\n- **Languages:** ${profile.languages.join(', ')}\n- **Frameworks:** ${profile.frameworks.join(', ')}\n- **Has tests:** ${profile.hasTests}`
             : '';
+        // Phase 0.5 handoff: if the brainstorm artifact exists for this goal, surface it.
+        const brainstorm = readLatestBrainstorm(cwd, planSlug);
+        const brainstormSection = formatBrainstormSection(brainstorm);
         const planPath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}.md`;
         state.planDocument = planPath;
         saveState(state);
         return okResult(`**NEXT: Generate a detailed plan document and save it to \`${planPath}\`.**
 
-Goal: "${goal}"${constraintsSummary}${profileContext}
+Goal: "${goal}"${constraintsSummary}${profileContext}${brainstormSection}
 
 ## Plan Document Requirements
 
@@ -167,6 +223,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
             goal,
             planDocument: planPath,
             constraints: state.constraints,
+            brainstormDocument: brainstorm?.path,
         });
     }
     // ── Deep plan (multi-model) ───────────────────────────────────
@@ -182,11 +239,14 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
             memorySection = `\n## Prior Session Context\n${mem}\n`;
     }
     catch { /* CASS unavailable — proceed without */ }
+    // Phase 0.5 handoff: inject brainstorm artifact if present.
+    const brainstorm = readLatestBrainstorm(cwd, planSlug);
+    const brainstormSection = formatBrainstormSection(brainstorm);
     const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
-${memorySection}
+${memorySection}${brainstormSection}
 Write a comprehensive implementation plan from your designated perspective. The plan will be synthesized with plans from other agents with different perspectives.
 
 ## Plan requirements
@@ -251,6 +311,7 @@ Question every architectural choice: is there a simpler way? A more standard app
         mode: 'deep',
         goal,
         constraints: state.constraints,
+        brainstormDocument: brainstorm?.path,
         planAgents,
         instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
         synthesisPrompt: `Use ultrathink.

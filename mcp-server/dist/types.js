@@ -54,34 +54,26 @@ export const PostmortemDraftSchema = z.object({
     sessionStartSha: z.string().optional(),
     goal: z.string(),
     phase: z.string(),
-    markdown: z.string(),
+    // Bound the markdown payload to prevent an unbounded-growth DoS where a
+    // pathological post-mortem (e.g., huge concatenated stderr or commit-message
+    // dumps) could inflate cross-process messages, logs, or the memory store.
+    // 200_000 chars ~ 200KB UTF-8 worst case; real post-mortems are <10KB.
+    markdown: z.string().max(200_000),
     hasWarnings: z.boolean().default(false),
     warnings: z.array(z.string()).default([]),
 });
 /**
- * v3.4.0 Bead template contract used by the `expand_bead_template` tool and
- * template library (`bead-templates.ts`). Distinct from the richer legacy
- * `BeadTemplate` interface above, which models in-repo template fixtures
- * with placeholders-as-objects.
+ * v3.4.1 note: `BeadTemplateContractSchema` / `BeadTemplateContract` was
+ * declared here during v3.4.0 as a planned MCP-boundary contract but never
+ * wired to any `.parse()` call site. It was deleted per the v3.4.0 release
+ * gate's P1-5 finding — dead export-only code should not linger in the public
+ * surface. If a future MCP tool needs a wire-friendly template contract,
+ * reintroduce the schema beside the handler that actually validates it so
+ * the declaration, parse site, and tests ship together.
  *
- * **Selection rule for downstream beads:**
- * - Use `BeadTemplateContract` (this type) when crossing the MCP tool boundary
- *   (e.g., `expand_bead_template` tool input/output, `deep-plan` hint emission,
- *   `approve`-time expansion). The flat-string `placeholders` is wire-friendly.
- * - Use `BeadTemplate` (richer legacy interface) when calling the in-process
- *   library API (`getTemplateById()`, `renderTemplate()`). Placeholder metadata
- *   (`description`, `example`, `required`) is needed for validation UX.
- * - Conversions between the two happen at the tool-handler edge; never mix
- *   them in the same call frame.
+ * The in-process `BeadTemplate` interface above (richer, with placeholder
+ * metadata) remains the canonical shape for `bead-templates.ts` consumers.
  */
-export const BeadTemplateContractSchema = z.object({
-    id: z.string(),
-    version: z.number().int().positive(),
-    body: z.string(),
-    placeholders: z.array(z.string()),
-    dependenciesHint: z.string().optional(),
-    testStrategy: z.string().optional(),
-});
 /**
  * Error-code telemetry. Keys of `counts` and the `code` field of each
  * `recentEvents` entry SHOULD be `FlywheelErrorCode` values, but the schema

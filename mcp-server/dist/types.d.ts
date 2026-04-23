@@ -484,8 +484,10 @@ export interface VerifyBeadsArgs {
 export interface MemoryArgs {
     cwd: string;
     query?: string;
-    operation?: "search" | "store" | "draft_postmortem";
+    operation?: "search" | "store" | "draft_postmortem" | "draft_solution_doc";
     content?: string;
+    /** CASS entry id for the paired post-mortem. Required when operation="draft_solution_doc". */
+    entryId?: string;
 }
 export interface DoctorArgs {
     cwd: string;
@@ -605,30 +607,17 @@ export declare const PostmortemDraftSchema: z.ZodObject<{
 }, z.core.$strip>;
 export type PostmortemDraft = z.infer<typeof PostmortemDraftSchema>;
 /**
- * v3.4.0 Bead template contract used by the `expand_bead_template` tool and
- * template library (`bead-templates.ts`). Distinct from the richer legacy
- * `BeadTemplate` interface above, which models in-repo template fixtures
- * with placeholders-as-objects.
+ * v3.4.1 note: `BeadTemplateContractSchema` / `BeadTemplateContract` was
+ * declared here during v3.4.0 as a planned MCP-boundary contract but never
+ * wired to any `.parse()` call site. It was deleted per the v3.4.0 release
+ * gate's P1-5 finding — dead export-only code should not linger in the public
+ * surface. If a future MCP tool needs a wire-friendly template contract,
+ * reintroduce the schema beside the handler that actually validates it so
+ * the declaration, parse site, and tests ship together.
  *
- * **Selection rule for downstream beads:**
- * - Use `BeadTemplateContract` (this type) when crossing the MCP tool boundary
- *   (e.g., `expand_bead_template` tool input/output, `deep-plan` hint emission,
- *   `approve`-time expansion). The flat-string `placeholders` is wire-friendly.
- * - Use `BeadTemplate` (richer legacy interface) when calling the in-process
- *   library API (`getTemplateById()`, `renderTemplate()`). Placeholder metadata
- *   (`description`, `example`, `required`) is needed for validation UX.
- * - Conversions between the two happen at the tool-handler edge; never mix
- *   them in the same call frame.
+ * The in-process `BeadTemplate` interface above (richer, with placeholder
+ * metadata) remains the canonical shape for `bead-templates.ts` consumers.
  */
-export declare const BeadTemplateContractSchema: z.ZodObject<{
-    id: z.ZodString;
-    version: z.ZodNumber;
-    body: z.ZodString;
-    placeholders: z.ZodArray<z.ZodString>;
-    dependenciesHint: z.ZodOptional<z.ZodString>;
-    testStrategy: z.ZodOptional<z.ZodString>;
-}, z.core.$strip>;
-export type BeadTemplateContract = z.infer<typeof BeadTemplateContractSchema>;
 /**
  * Error-code telemetry. Keys of `counts` and the `code` field of each
  * `recentEvents` entry SHOULD be `FlywheelErrorCode` values, but the schema
