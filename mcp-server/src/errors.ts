@@ -44,6 +44,9 @@ export const FLYWHEEL_ERROR_CODES = [
   'telemetry_store_failed',
   // agent-flywheel-plugin-iy4 — wave collision detection
   'wave_collision_detected',
+  // agent-flywheel-plugin-f0j — review-mode matrix
+  'review_mode_gate_failed',
+  'review_headless_findings',
 ] as const;
 
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
@@ -104,6 +107,10 @@ export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
   telemetry_store_failed: true,      // disk contention is transient
   // agent-flywheel-plugin-iy4 — collision is recoverable via serial re-run
   wave_collision_detected: true,
+  // agent-flywheel-plugin-f0j — autofix gate is not transient; headless
+  // findings are a signal to the caller, not a retryable condition.
+  review_mode_gate_failed: false,
+  review_headless_findings: false,
 };
 
 export class FlywheelError extends Error {

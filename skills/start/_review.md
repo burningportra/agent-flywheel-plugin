@@ -1,5 +1,39 @@
 # Review & Loop — Steps 8, 9, 9.25, 9.4
 
+## Step 8.0: Pick a review mode (bead `agent-flywheel-plugin-f0j`)
+
+> **Why this exists.** Today review is one-shape — sequential reviewer personas emit suggestions the user must apply manually. The mode matrix dispatches the **same** reviewer agents into four human workflows so the same effort fits four different contexts (shipping a fixup PR vs. asking for advice vs. running unattended in CI vs. teaching a junior).
+
+Before the per-bead consolidated review prompt below, pick how reviewers should run for **this wave**. Resolve the active doctor signal first (cached `lastDoctorReport.checks` from the most recent `flywheel_doctor` run) and `git status --porcelain`:
+
+- **Green doctor + clean tree** -> recommend **Autofix** (the bead `agent-flywheel-plugin-f0j` sweet spot).
+- **Yellow doctor or warnings** -> recommend **Report-only** so findings get written to disk without touching code.
+- **Red doctor or dirty tree** -> recommend **Interactive** (current default — the user steers each finding).
+- **Non-interactive shell / CI run** -> use **Headless** without prompting.
+
+```
+AskUserQuestion(questions: [{
+  question: "How should this wave's reviewers run? (doctor=<green|yellow|red>, tree=<clean|dirty>)",
+  header: "Review mode",
+  options: [
+    { label: "Autofix", description: "Reviewers apply diffs + commit a fixup per perspective (Recommended on green doctor + clean tree)" },
+    { label: "Report-only", description: "Reviewers write docs/reviews/<perspective>-<date>.md and exit; no code edits" },
+    { label: "Headless", description: "CI-friendly: reviewers emit JSON-on-stdout; coordinator surfaces exit code per finding count" },
+    { label: "Interactive", description: "Current default — AskUserQuestion per finding" }
+  ],
+  multiSelect: false
+}])
+```
+
+Pass the chosen mode into every `flywheel_review` `hit-me` call this wave (`mode: "autofix" | "report-only" | "headless" | "interactive"`). The MCP layer:
+
+- **autofix** — gates on green doctor + clean `git status --porcelain`. If either check fails, the tool downgrades to `interactive` and returns `payload.modeGateWarning` explaining why. Reviewer prompts include "apply fixes + commit" instructions; coordinator MUST NOT `AskUserQuestion` per finding when the gate held.
+- **report-only** — reviewers write `docs/reviews/<beadId>-<perspective>-<YYYY-MM-DD>.md` and DO NOT edit code. Coordinator collects file paths via Agent Mail, summarizes them in a single message, then proceeds.
+- **headless** — reviewers emit one JSON line per finding (`{ severity, file, line, message }`). Coordinator aggregates counts; if any reviewer's `findings.length > 0`, surface `FlywheelErrorCode` `review_headless_findings` (`exitCode: 1`); on reviewer crash, `exitCode: 2`. Never `AskUserQuestion` in this mode — pass through to the caller's exit handler.
+- **interactive** — original behavior (per-finding AskUserQuestion below).
+
+**Optional flag:** `parallelSafe: true` asserts to the coordinator that reviewers won't race on the same files. It's advisory only and does NOT disable the autofix gate.
+
 ## Step 8: Review completed beads
 
 > **Wave-completion gate (MANDATORY).** Before entering this step, wait until **every** impl agent spawned in the current wave has reported back via Agent Mail (or has been force-stopped per Step 7's escalation path). Track the wave's bead IDs in a local set; do NOT enter Step 8 until that set is empty. If you receive an Agent Mail completion notification mid-wave, store the result and stay in Step 7's monitor loop until the rest finish. Reviewing wave-1 while wave-2 is mid-flight produces stale state and per-bead review prompts (which the consolidation rule below explicitly forbids).

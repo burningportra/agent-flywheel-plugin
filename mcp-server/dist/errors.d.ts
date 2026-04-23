@@ -3,7 +3,7 @@ import type { FlywheelToolName, FlywheelPhase } from './types.js';
 export declare function registerTelemetryHook(hook: (code: string, ctx?: {
     hashable?: string;
 }) => void): void;
-export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error", "doctor_check_failed", "doctor_partial_report", "hotspot_parse_failure", "hotspot_bead_body_unparseable", "postmortem_empty_session", "postmortem_checkpoint_stale", "template_not_found", "template_placeholder_missing", "template_expansion_failed", "telemetry_store_failed", "wave_collision_detected"];
+export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error", "doctor_check_failed", "doctor_partial_report", "hotspot_parse_failure", "hotspot_bead_body_unparseable", "postmortem_empty_session", "postmortem_checkpoint_stale", "template_not_found", "template_placeholder_missing", "template_expansion_failed", "telemetry_store_failed", "wave_collision_detected", "review_mode_gate_failed", "review_headless_findings"];
 export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     missing_prerequisite: "missing_prerequisite";
     invalid_input: "invalid_input";
@@ -32,6 +32,8 @@ export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     template_expansion_failed: "template_expansion_failed";
     telemetry_store_failed: "telemetry_store_failed";
     wave_collision_detected: "wave_collision_detected";
+    review_mode_gate_failed: "review_mode_gate_failed";
+    review_headless_findings: "review_headless_findings";
 }>;
 export type FlywheelErrorCode = z.infer<typeof FlywheelErrorCodeSchema>;
 export declare const FlywheelToolErrorSchema: z.ZodObject<{
@@ -63,6 +65,8 @@ export declare const FlywheelToolErrorSchema: z.ZodObject<{
         template_expansion_failed: "template_expansion_failed";
         telemetry_store_failed: "telemetry_store_failed";
         wave_collision_detected: "wave_collision_detected";
+        review_mode_gate_failed: "review_mode_gate_failed";
+        review_headless_findings: "review_headless_findings";
     }>;
     message: z.ZodString;
     retryable: z.ZodOptional<z.ZodBoolean>;
@@ -110,6 +114,8 @@ export declare const FlywheelStructuredErrorSchema: z.ZodObject<{
                 template_expansion_failed: "template_expansion_failed";
                 telemetry_store_failed: "telemetry_store_failed";
                 wave_collision_detected: "wave_collision_detected";
+                review_mode_gate_failed: "review_mode_gate_failed";
+                review_headless_findings: "review_headless_findings";
             }>;
             message: z.ZodString;
             retryable: z.ZodOptional<z.ZodBoolean>;

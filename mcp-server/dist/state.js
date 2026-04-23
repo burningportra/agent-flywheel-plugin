@@ -1,7 +1,39 @@
+import { z } from 'zod';
 import { readCheckpoint, writeCheckpoint, clearCheckpoint } from './checkpoint.js';
 import { createInitialState } from './types.js';
 import { createLogger } from './logger.js';
 const log = createLogger("state");
+// ─── flywheel_review Zod contract (bead agent-flywheel-plugin-f0j) ─────
+//
+// The runtime accepts reviewer dispatch in four "shapes" that each map to an
+// existing human workflow. Keeping the Zod schema in state.ts (rather than
+// types.ts, which holds raw TS interfaces) puts the canonical validator
+// alongside the rest of the flywheel state contracts — the skill layer and
+// the MCP server both import from here so drift is impossible.
+//
+// Modes:
+//   - "interactive"  — default; AskUserQuestion per finding (current behavior)
+//   - "autofix"      — reviewers emit diffs + commit (gated behind green
+//                      doctor + clean git tree; falls back to interactive
+//                      when the gate fails)
+//   - "report-only"  — reviewers write docs/reviews/<date>.md and exit
+//   - "headless"     — CI-friendly exit-code signal per error count
+export const ReviewModeSchema = z.enum([
+    'autofix',
+    'report-only',
+    'headless',
+    'interactive',
+]);
+export const ReviewActionSchema = z.enum(['hit-me', 'looks-good', 'skip']);
+export const ReviewArgsSchema = z.object({
+    cwd: z.string().min(1),
+    beadId: z.string().min(1),
+    action: ReviewActionSchema,
+    /** Review-mode matrix; defaults to "interactive" for backwards compatibility. */
+    mode: ReviewModeSchema.optional().default('interactive'),
+    /** Caller asserts reviewers will not race on the same files. Defaults to false. */
+    parallelSafe: z.boolean().optional().default(false),
+});
 export function loadState(cwd) {
     const result = readCheckpoint(cwd);
     if (result && result.envelope.state.phase !== 'idle' && result.envelope.state.phase !== 'complete') {

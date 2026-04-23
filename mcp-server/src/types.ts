@@ -581,7 +581,29 @@ export interface DiscoverArgs { cwd: string; ideas: CandidateIdea[] }
 export interface SelectArgs { cwd: string; goal: string }
 export interface PlanArgs { cwd: string; mode?: "standard" | "deep"; planContent?: string; planFile?: string }
 export interface ApproveArgs { cwd: string; action: "start" | "polish" | "reject" | "advanced" | "git-diff-review"; advancedAction?: string }
-export interface ReviewArgs { cwd: string; beadId: string; action: "hit-me" | "looks-good" | "skip" }
+/**
+ * Review modes (bead agent-flywheel-plugin-f0j): dispatch the same reviewer
+ * personas into four human-shaped workflows. The flag propagates into the
+ * reviewer agent prompts via `runReview` so reviewer tone/output matches the
+ * chosen mode — no new MCP tools, no new reviewer agents.
+ *
+ *   - "interactive"  — current default; AskUserQuestion per finding
+ *   - "autofix"      — reviewers emit diffs + commit; gated behind green
+ *                      doctor + clean `git status` (falls back to interactive)
+ *   - "report-only"  — reviewers write docs/reviews/<date>.md and exit
+ *   - "headless"     — CI-friendly exit-code signal per error count
+ */
+export type ReviewMode = "autofix" | "report-only" | "headless" | "interactive";
+
+export interface ReviewArgs {
+  cwd: string;
+  beadId: string;
+  action: "hit-me" | "looks-good" | "skip";
+  /** Review-mode matrix (default "interactive"). */
+  mode?: ReviewMode;
+  /** Hint that reviewers can run in parallel without stepping on each other. */
+  parallelSafe?: boolean;
+}
 export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
 export interface MemoryArgs {
   cwd: string;

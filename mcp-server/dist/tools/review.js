@@ -1,6 +1,56 @@
 import { makeFlywheelErrorResult } from '../errors.js';
 import { createLogger } from '../logger.js';
 const log = createLogger('review');
+// ─── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────────────
+//
+// Mode routing is skill-level — we do NOT introduce new MCP tools. The
+// reviewer personas are reused verbatim; `mode` only changes the agent
+// prompt preamble and the post-synthesis action (apply-diffs-and-commit
+// vs write-docs vs emit-exit-code vs ask-per-finding).
+export const AUTOFIX_GATE_HINT = 'Autofix refuses when the tree is dirty or the doctor is not green. Stash/commit local changes, run `flywheel_doctor`, then retry — or fall back to mode="interactive".';
+export const HEADLESS_EXIT_HINT = 'Headless mode returns error code "review_headless_findings" with details.findingCount when reviewers surface non-zero issues. CI wrappers should branch on structuredContent?.data?.error?.code and use details.exitCode (1 = findings, 2 = reviewer crash).';
+function modePreamble(mode, beadId) {
+    switch (mode) {
+        case 'autofix':
+            return `**Review mode: autofix.** After completing your review, APPLY your fixes directly via code-edit tools AND stage them for a single fixup commit per reviewer. When done, run \`git commit -m "fix(review/${beadId}): <reviewer-perspective>"\`. Do NOT ask the user per finding — your job is to ship the patch.\n\n`;
+        case 'report-only':
+            return `**Review mode: report-only.** Do NOT edit code. Write your full findings to \`docs/reviews/${beadId}-<perspective>-<YYYY-MM-DD>.md\` and exit. The coordinator aggregates reports — no interactive prompts.\n\n`;
+        case 'headless':
+            return `**Review mode: headless (CI).** Do NOT edit code and do NOT write markdown reports. Emit a compact machine-readable JSON summary on stdout: \`{ "beadId": "${beadId}", "perspective": "<your-perspective>", "findings": [{ "severity": "error|warn|info", "file": "...", "line": 0, "message": "..." }] }\`. The coordinator aggregates exit codes (0 = clean, 1 = findings, 2 = reviewer crash).\n\n`;
+        case 'interactive':
+        default:
+            return '';
+    }
+}
+/**
+ * Decide whether autofix mode is safe right now. Runs two cheap checks:
+ *   1. `git status --porcelain` — tree must be clean.
+ *   2. `flywheel_doctor` recent report (if checkpoint has one) — must be green.
+ * If either fails we fall back to interactive mode and surface a warning.
+ */
+async function autofixGateOk(ctx) {
+    const { exec, cwd, signal } = ctx;
+    try {
+        const statusResult = await exec('git', ['status', '--porcelain'], { cwd, timeout: 5000, signal });
+        if (statusResult.code !== 0) {
+            return { ok: false, reason: `git status failed (exit ${statusResult.code})` };
+        }
+        if (statusResult.stdout.trim().length > 0) {
+            return { ok: false, reason: 'working tree is dirty (uncommitted changes present)' };
+        }
+    }
+    catch (err) {
+        return { ok: false, reason: `git status threw: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    // Doctor signal: if the session has a recent DoctorReport cached and any
+    // check is "red", refuse. Absence of a cached report is tolerated — the
+    // git-clean check alone is still a meaningful guard.
+    const report = ctx.state.lastDoctorReport;
+    if (report?.checks?.some((c) => c.severity === 'red')) {
+        return { ok: false, reason: 'flywheel_doctor reports at least one red check' };
+    }
+    return { ok: true };
+}
 function okResult(phase, text, data) {
     return {
         content: [{ type: 'text', text }],
@@ -61,6 +111,26 @@ export async function runReview(ctx, args) {
         return errorResult('reviewing', 'invalid_input', 'Error: beadId is required.', undefined, 'Pass beadId from `br list`, or use `__gates__` / `__regress_to_plan__` / `__regress_to_beads__` / `__regress_to_implement__` sentinels.');
     }
     const beadId = args.beadId;
+    // ── Resolve review mode + autofix gating (bead agent-flywheel-plugin-f0j) ─
+    // `mode` is advisory on `looks-good`/`skip` (those paths don't spawn
+    // reviewers) but drives the hit-me dispatch. Autofix is gated behind a
+    // clean git tree + non-red doctor report; failing the gate downgrades to
+    // interactive with a warning attached to the payload.
+    const requestedMode = args.mode ?? 'interactive';
+    let effectiveMode = requestedMode;
+    let modeGateWarning;
+    if (requestedMode === 'autofix' && args.action === 'hit-me') {
+        const gate = await autofixGateOk(ctx);
+        if (!gate.ok) {
+            effectiveMode = 'interactive';
+            modeGateWarning = `Autofix refused: ${gate.reason}. Falling back to interactive mode. ${AUTOFIX_GATE_HINT}`;
+            log.warn('autofix gate refused — downgrading to interactive', {
+                beadId,
+                reason: gate.reason,
+            });
+        }
+    }
+    const parallelSafe = args.parallelSafe ?? false;
     // ── Special sentinels ─────────────────────────────────────────
     if (beadId === '__gates__') {
         return runGates(ctx, args.action);
@@ -180,6 +250,7 @@ export async function runReview(ctx, args) {
         const postCloseNote = postClose
             ? `**Note:** this bead is already closed by the impl agent. This is a post-close audit — focus on what shipped, surface bugs in landed code, and propose follow-up fixes rather than blocking the close.\n\n`
             : '';
+        const modeNote = modePreamble(effectiveMode, beadId);
         if (!state.beadHitMeTriggered)
             state.beadHitMeTriggered = {};
         if (!state.beadHitMeCompleted)
@@ -199,7 +270,7 @@ export async function runReview(ctx, args) {
             {
                 name: `FreshEyes-${beadId}-r${round}`,
                 perspective: 'fresh-eyes',
-                task: `${postCloseNote}Fresh-eyes code reviewer. You have NEVER seen this code before.
+                task: `${modeNote}${postCloseNote}Fresh-eyes code reviewer. You have NEVER seen this code before.
 
 **Bead:** ${beadId} — ${bead.title}
 **Files to review:** ${fileList}
@@ -213,7 +284,7 @@ Report what you found and what you fixed.`,
             {
                 name: `Adversary-${beadId}-r${round}`,
                 perspective: 'adversarial',
-                task: `${postCloseNote}Adversarial code reviewer. Your job is to break this implementation.
+                task: `${modeNote}${postCloseNote}Adversarial code reviewer. Your job is to break this implementation.
 
 **Bead:** ${beadId} — ${bead.title}
 **Files to review:** ${fileList}
@@ -231,7 +302,7 @@ Report your attack attempts and findings.`,
             {
                 name: `Ergonomics-${beadId}-r${round}`,
                 perspective: 'ergonomics',
-                task: `${postCloseNote}Ergonomics reviewer. Focus on usability and developer experience.
+                task: `${modeNote}${postCloseNote}Ergonomics reviewer. Focus on usability and developer experience.
 
 **Bead:** ${beadId} — ${bead.title}
 **Files to review:** ${fileList}
@@ -246,7 +317,7 @@ Report improvements made.`,
             {
                 name: `RealityCheck-${beadId}-r${round}`,
                 perspective: 'reality-check',
-                task: `${postCloseNote}Reality checker. Verify the implementation actually achieves the goal.
+                task: `${modeNote}${postCloseNote}Reality checker. Verify the implementation actually achieves the goal.
 
 **Goal:** ${goal}
 **Bead:** ${beadId} — ${bead.title}
@@ -260,7 +331,7 @@ Do NOT edit code — just report your findings.`,
             {
                 name: `Explorer-${beadId}-r${round}`,
                 perspective: 'exploration',
-                task: `${postCloseNote}Code explorer. Randomly explore the codebase to find related issues.
+                task: `${modeNote}${postCloseNote}Code explorer. Randomly explore the codebase to find related issues.
 
 **Bead:** ${beadId} — ${bead.title}
 **cwd:** ${cwd}
@@ -274,15 +345,25 @@ Report what you found. Fix obvious issues directly.`,
             },
         ];
         const baseInstructions = `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`flywheel_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
+        const modeInstructions = {
+            autofix: `Review mode=autofix: each reviewer applies and commits its fixes directly. After all 5 finish, verify the tree is green and call \`flywheel_review\` with action="looks-good" — do NOT AskUserQuestion per finding.`,
+            'report-only': `Review mode=report-only: reviewers write findings to docs/reviews/<perspective>-<date>.md and DO NOT edit code. After synthesizing, call \`flywheel_review\` with action="looks-good" to close the bead or action="hit-me" again if reports surfaced blockers.`,
+            headless: `Review mode=headless (CI): reviewers emit JSON-on-stdout only. The coordinator MUST aggregate finding counts and treat a non-zero count as review_headless_findings (CI exit code 1). Do NOT AskUserQuestion — this mode is for non-interactive shells.`,
+            interactive: baseInstructions,
+        };
         const instructions = postClose
-            ? `Bead ${beadId} is already closed; this is a post-close audit. ${baseInstructions} For looks-good, the bead stays closed (idempotent).`
-            : baseInstructions;
+            ? `Bead ${beadId} is already closed; this is a post-close audit. ${modeInstructions[effectiveMode]} For looks-good, the bead stays closed (idempotent).`
+            : modeInstructions[effectiveMode];
         const payload = {
             kind: 'review_tasks',
             strategy: 'hit_me',
             beadId,
             round,
             postClose,
+            mode: effectiveMode,
+            requestedMode,
+            parallelSafe,
+            ...(modeGateWarning ? { modeGateWarning } : {}),
             agentTasks,
             files,
             instructions,
@@ -292,6 +373,10 @@ Report what you found. Fix obvious issues directly.`,
             beadId,
             round,
             postClose,
+            mode: effectiveMode,
+            requestedMode,
+            parallelSafe,
+            ...(modeGateWarning ? { modeGateWarning } : {}),
             agentTasks,
             instructions,
         }, null, 2), payload);

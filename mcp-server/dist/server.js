@@ -140,7 +140,7 @@ const PRIMARY_TOOLS = [
     },
     {
         name: 'flywheel_review',
-        description: "Submit bead implementation for review. action=hit-me spawns parallel review agents (returns agent task specs for Claude Code to spawn). action=looks-good marks bead done and advances. action=skip defers the bead. Use beadId=__gates__ for guided review gates after all beads are done.",
+        description: "Submit bead implementation for review. action=hit-me spawns parallel review agents (returns agent task specs for Claude Code to spawn). action=looks-good marks bead done and advances. action=skip defers the bead. Use beadId=__gates__ for guided review gates after all beads are done. mode dispatches the same reviewers into four shapes (interactive/autofix/report-only/headless) per bead agent-flywheel-plugin-f0j.",
         inputSchema: {
             type: 'object',
             properties: {
@@ -153,6 +153,17 @@ const PRIMARY_TOOLS = [
                     type: 'string',
                     enum: ['hit-me', 'looks-good', 'skip'],
                     description: 'hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead',
+                },
+                mode: {
+                    type: 'string',
+                    enum: ['autofix', 'report-only', 'headless', 'interactive'],
+                    default: 'interactive',
+                    description: 'Review-mode matrix. autofix=reviewers apply diffs + commit (gated behind green doctor + clean tree); report-only=reviewers write docs/reviews/<date>.md and exit; headless=CI-friendly exit-code signal per error count; interactive=AskUserQuestion per finding (default).',
+                },
+                parallelSafe: {
+                    type: 'boolean',
+                    default: false,
+                    description: 'Caller asserts reviewers can run in parallel without racing on the same files. Advisory flag only — does not disable the autofix gate.',
                 },
             },
             required: ['cwd', 'beadId', 'action'],

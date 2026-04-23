@@ -12,8 +12,8 @@ import {
 } from '../errors.js';
 
 describe('FLYWHEEL_ERROR_CODES', () => {
-  it('has exactly 27 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision)', () => {
-    expect(FLYWHEEL_ERROR_CODES).toHaveLength(27);
+  it('has exactly 29 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode)', () => {
+    expect(FLYWHEEL_ERROR_CODES).toHaveLength(29);
   });
 
   it('DEFAULT_RETRYABLE covers every code', () => {

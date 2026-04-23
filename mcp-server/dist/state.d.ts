@@ -1,4 +1,35 @@
+import { z } from 'zod';
 import { type FlywheelState } from './types.js';
+export declare const ReviewModeSchema: z.ZodEnum<{
+    autofix: "autofix";
+    "report-only": "report-only";
+    headless: "headless";
+    interactive: "interactive";
+}>;
+export type ReviewModeZ = z.infer<typeof ReviewModeSchema>;
+export declare const ReviewActionSchema: z.ZodEnum<{
+    skip: "skip";
+    "hit-me": "hit-me";
+    "looks-good": "looks-good";
+}>;
+export type ReviewActionZ = z.infer<typeof ReviewActionSchema>;
+export declare const ReviewArgsSchema: z.ZodObject<{
+    cwd: z.ZodString;
+    beadId: z.ZodString;
+    action: z.ZodEnum<{
+        skip: "skip";
+        "hit-me": "hit-me";
+        "looks-good": "looks-good";
+    }>;
+    mode: z.ZodDefault<z.ZodOptional<z.ZodEnum<{
+        autofix: "autofix";
+        "report-only": "report-only";
+        headless: "headless";
+        interactive: "interactive";
+    }>>>;
+    parallelSafe: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
+}, z.core.$strip>;
+export type ReviewArgsZ = z.infer<typeof ReviewArgsSchema>;
 export declare function loadState(cwd: string): FlywheelState;
 export declare function saveState(cwd: string, state: FlywheelState): Promise<boolean>;
 export declare function clearState(cwd: string): void;

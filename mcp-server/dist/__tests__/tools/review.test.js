@@ -516,5 +516,90 @@ describe('runReview', () => {
             expect(structured.data.postClose).toBe(true);
         });
     });
+    // ── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────
+    describe('hit-me — review mode matrix', () => {
+        it('defaults to interactive mode and surfaces no preamble in agent prompts', async () => {
+            const bead = makeBead();
+            const { ctx } = makeCtx({}, [brShowCall(bead)]);
+            const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
+            const structured = result.structuredContent;
+            expect(structured.data.mode).toBe('interactive');
+            for (const task of structured.data.agentTasks) {
+                expect(task.task).not.toContain('Review mode: autofix');
+                expect(task.task).not.toContain('Review mode: report-only');
+                expect(task.task).not.toContain('Review mode: headless');
+            }
+        });
+        it('report-only mode injects the report-only preamble into every agent task', async () => {
+            const bead = makeBead();
+            const { ctx } = makeCtx({}, [brShowCall(bead)]);
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'hit-me',
+                mode: 'report-only',
+            });
+            const structured = result.structuredContent;
+            expect(structured.data.mode).toBe('report-only');
+            for (const task of structured.data.agentTasks) {
+                expect(task.task).toContain('Review mode: report-only');
+                expect(task.task).toContain('docs/reviews/');
+            }
+        });
+        it('headless mode injects the JSON-on-stdout preamble', async () => {
+            const bead = makeBead();
+            const { ctx } = makeCtx({}, [brShowCall(bead)]);
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'hit-me',
+                mode: 'headless',
+                parallelSafe: true,
+            });
+            const structured = result.structuredContent;
+            expect(structured.data.mode).toBe('headless');
+            expect(structured.data.parallelSafe).toBe(true);
+            for (const task of structured.data.agentTasks) {
+                expect(task.task).toContain('Review mode: headless');
+            }
+        });
+        it('autofix downgrades to interactive when the working tree is dirty', async () => {
+            const bead = makeBead();
+            const { ctx } = makeCtx({}, [
+                brShowCall(bead),
+                // Dirty tree: porcelain emits a non-empty line.
+                { cmd: 'git', args: ['status', '--porcelain'], result: { code: 0, stdout: ' M src/foo.ts\n', stderr: '' } },
+            ]);
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'hit-me',
+                mode: 'autofix',
+            });
+            const structured = result.structuredContent;
+            expect(structured.data.mode).toBe('interactive');
+            expect(structured.data.requestedMode).toBe('autofix');
+            expect(structured.data.modeGateWarning).toContain('working tree is dirty');
+        });
+        it('autofix is granted when git status is clean', async () => {
+            const bead = makeBead();
+            const { ctx } = makeCtx({}, [
+                brShowCall(bead),
+                { cmd: 'git', args: ['status', '--porcelain'], result: { code: 0, stdout: '', stderr: '' } },
+            ]);
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'hit-me',
+                mode: 'autofix',
+            });
+            const structured = result.structuredContent;
+            expect(structured.data.mode).toBe('autofix');
+            expect(structured.data.modeGateWarning).toBeUndefined();
+            for (const task of structured.data.agentTasks) {
+                expect(task.task).toContain('Review mode: autofix');
+            }
+        });
+    });
 });
 //# sourceMappingURL=review.test.js.map

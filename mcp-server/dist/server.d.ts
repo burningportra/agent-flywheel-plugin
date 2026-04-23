@@ -41,6 +41,7 @@ export declare const TOOLS: ({
             action?: undefined;
             advancedAction?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             beadIds?: undefined;
             query?: undefined;
             operation?: undefined;
@@ -149,6 +150,7 @@ export declare const TOOLS: ({
             action?: undefined;
             advancedAction?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             beadIds?: undefined;
             query?: undefined;
             operation?: undefined;
@@ -179,6 +181,7 @@ export declare const TOOLS: ({
             action?: undefined;
             advancedAction?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             beadIds?: undefined;
             query?: undefined;
             operation?: undefined;
@@ -217,6 +220,7 @@ export declare const TOOLS: ({
             action?: undefined;
             advancedAction?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             beadIds?: undefined;
             query?: undefined;
             operation?: undefined;
@@ -252,6 +256,7 @@ export declare const TOOLS: ({
             planFile?: undefined;
             planContent?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             beadIds?: undefined;
             query?: undefined;
             operation?: undefined;
@@ -279,10 +284,20 @@ export declare const TOOLS: ({
                 enum: string[];
                 description: string;
             };
+            mode: {
+                type: string;
+                enum: string[];
+                default: string;
+                description: string;
+            };
+            parallelSafe: {
+                type: string;
+                default: boolean;
+                description: string;
+            };
             goal?: undefined;
             force?: undefined;
             ideas?: undefined;
-            mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             advancedAction?: undefined;
@@ -321,6 +336,7 @@ export declare const TOOLS: ({
             action?: undefined;
             advancedAction?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -365,6 +381,7 @@ export declare const TOOLS: ({
             action?: undefined;
             advancedAction?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             beadIds?: undefined;
         };
         required: string[];
@@ -388,6 +405,7 @@ export declare const TOOLS: ({
             action?: undefined;
             advancedAction?: undefined;
             beadId?: undefined;
+            parallelSafe?: undefined;
             beadIds?: undefined;
             query?: undefined;
             operation?: undefined;
