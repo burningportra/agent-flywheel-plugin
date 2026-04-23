@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState } from '../types.js';
+import { createInitialState, PostmortemDraftSchema } from '../types.js';
 import type { FlywheelToolName } from '../types.js';
 
 describe('createInitialState', () => {
@@ -50,5 +50,39 @@ describe('FlywheelToolName', () => {
   it('includes flywheel_memory so shared contracts cover the full flywheel tool surface', () => {
     const toolName: FlywheelToolName = 'flywheel_memory';
     expect(toolName).toBe('flywheel_memory');
+  });
+});
+
+// ─── P1-1: PostmortemDraftSchema.markdown length bound (v3.4.1) ─
+//
+// Prior behavior: `markdown` was `z.string()` with no max. A pathological
+// post-mortem (e.g., huge concatenated stderr) could push MB of payload
+// through cross-process messages and the memory store.
+// Fixed behavior: `markdown` is bounded at 200_000 chars (~200KB UTF-8).
+describe('PostmortemDraftSchema — P1-1 markdown length bound', () => {
+  const baseline = {
+    version: 1 as const,
+    goal: 'test goal',
+    phase: 'test phase',
+    hasWarnings: false,
+    warnings: [],
+  };
+
+  it('accepts a markdown payload just under the 200_000-char cap', () => {
+    const markdown = 'x'.repeat(199_999);
+    const result = PostmortemDraftSchema.safeParse({ ...baseline, markdown });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a markdown payload exactly at the 200_000-char cap', () => {
+    const markdown = 'x'.repeat(200_000);
+    const result = PostmortemDraftSchema.safeParse({ ...baseline, markdown });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a markdown payload that exceeds the 200_000-char cap', () => {
+    const markdown = 'x'.repeat(200_001);
+    const result = PostmortemDraftSchema.safeParse({ ...baseline, markdown });
+    expect(result.success).toBe(false);
   });
 });

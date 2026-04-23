@@ -1,9 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   agentMailRPC,
+  bootstrapCoordinator,
   matchesReservationPath,
   normalizeReservations,
   unwrapRPC,
+  _resetBootstrapDedupeForTest,
 } from '../agent-mail.js';
 import type { AgentMailReservation } from '../agent-mail.js';
 import type { ExecFn } from '../exec.js';
@@ -235,5 +237,113 @@ describe('unwrapRPC', () => {
 
   it('returns null when result is ok:false (rpc_error)', () => {
     expect(unwrapRPC({ ok: false, error: { kind: 'rpc_error', message: 'not found' } })).toBeNull();
+  });
+});
+
+// ─── P1-4: bootstrapCoordinator in-process dedupe (v3.4.1) ──────
+//
+// Prior behavior: two concurrent callers with identical (cwd, agentName,
+// program) would each fire macro_start_session + set_contact_policy,
+// duplicating RPC traffic and producing duplicate-identity warnings.
+// Fixed behavior: an in-process Map<key, Promise> coalesces concurrent
+// callers onto the first in-flight request. The slot is cleared on
+// settlement so a later serial caller still gets a fresh bootstrap.
+
+describe('bootstrapCoordinator — P1-4 in-process dedupe', () => {
+  beforeEach(() => {
+    _resetBootstrapDedupeForTest();
+  });
+
+  /**
+   * Build an exec mock that responds to any JSON-RPC call with
+   * structuredContent = { ok: true }. Tracks how many times each tool
+   * was invoked so dedupe can be asserted.
+   */
+  function makeCountingExec(): { exec: ExecFn; calls: Record<string, number> } {
+    const calls: Record<string, number> = {};
+    const exec: ExecFn = vi.fn(async (_cmd: string, args: string[]) => {
+      // Extract tool name from the JSON body (follows `-d <json>`).
+      const dIdx = args.indexOf('-d');
+      const body = dIdx >= 0 ? args[dIdx + 1] : '';
+      let toolName = 'unknown';
+      try {
+        const parsed = JSON.parse(body);
+        toolName = parsed?.params?.name ?? 'unknown';
+      } catch { /* ignore */ }
+      calls[toolName] = (calls[toolName] ?? 0) + 1;
+
+      // Return a plausible structured response.
+      const stdout = JSON.stringify({
+        result: { structuredContent: { ok: true, tool: toolName } },
+      });
+      return { code: 0, stdout, stderr: '' };
+    });
+    return { exec, calls };
+  }
+
+  it('coalesces two concurrent calls with the same (cwd, agentName, program) into one RPC round-trip', async () => {
+    const { exec, calls } = makeCountingExec();
+
+    const [resultA, resultB] = await Promise.all([
+      bootstrapCoordinator(exec, '/tmp/test-cwd', 'DuneHopper', { program: 'claude-code' }),
+      bootstrapCoordinator(exec, '/tmp/test-cwd', 'DuneHopper', { program: 'claude-code' }),
+    ]);
+
+    // Both callers get the same underlying result (same Promise).
+    expect(resultA).toBe(resultB);
+    // macro_start_session was called exactly once, not twice.
+    expect(calls['macro_start_session']).toBe(1);
+    // set_contact_policy (claude-code coordinator branch) also once.
+    expect(calls['set_contact_policy']).toBe(1);
+  });
+
+  it('does NOT dedupe distinct triples (different cwd → independent bootstraps)', async () => {
+    const { exec, calls } = makeCountingExec();
+
+    await Promise.all([
+      bootstrapCoordinator(exec, '/tmp/cwd-a', 'DuneHopper', { program: 'claude-code' }),
+      bootstrapCoordinator(exec, '/tmp/cwd-b', 'DuneHopper', { program: 'claude-code' }),
+    ]);
+
+    // Two distinct cwds → two independent bootstraps.
+    expect(calls['macro_start_session']).toBe(2);
+  });
+
+  it('releases the dedupe slot after settlement so a later serial call runs a fresh bootstrap', async () => {
+    const { exec, calls } = makeCountingExec();
+
+    await bootstrapCoordinator(exec, '/tmp/same-cwd', 'DuneHopper', { program: 'claude-code' });
+    await bootstrapCoordinator(exec, '/tmp/same-cwd', 'DuneHopper', { program: 'claude-code' });
+
+    // Serial calls do NOT dedupe (slot is freed on settlement) — both RPC'd.
+    expect(calls['macro_start_session']).toBe(2);
+  });
+
+  it('releases the dedupe slot on failure so a retry can fresh-bootstrap', async () => {
+    let callCount = 0;
+    const exec: ExecFn = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error('network down');
+      }
+      return {
+        code: 0,
+        stdout: JSON.stringify({ result: { structuredContent: { ok: true } } }),
+        stderr: '',
+      };
+    });
+
+    // First call: exec throws. Depending on where the throw lands,
+    // bootstrapCoordinator may propagate or absorb; either way the slot
+    // must be clear so the retry is not stuck on a poisoned Promise.
+    try {
+      await bootstrapCoordinator(exec, '/tmp/retry-cwd', 'DuneHopper', { program: 'claude-code' });
+    } catch { /* allowed */ }
+
+    // Retry must do a fresh RPC — if the slot were sticky, this would
+    // resolve/reject with the previous cached Promise.
+    const result = await bootstrapCoordinator(exec, '/tmp/retry-cwd', 'DuneHopper', { program: 'claude-code' });
+    expect(result).toBeDefined();
+    expect(callCount).toBeGreaterThanOrEqual(2);
   });
 });

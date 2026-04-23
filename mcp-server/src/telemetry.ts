@@ -1,12 +1,21 @@
 /**
  * Error-code telemetry aggregator (I7 — agent-flywheel-plugin-p55).
  *
- * - Module-level singleton Map: code → { count, ring buffer of last maxEvents entries }
+ * - Module-level singleton Map: code → { count, ring buffer of recent entries }
  * - Re-entrancy guard via reentrancyDepth counter (prevents infinite recursion)
  * - Atomic spool writes (.tmp + rename) to .pi-flywheel/error-counts.json
- * - Dual-session merge via O_EXCL on the .tmp file (retry once after 50ms)
+ * - Dual-session merge via an O_EXCL .lock sentinel on the FINAL spool path,
+ *   held across read→merge→rename so concurrent flushes serialize and counts
+ *   sum correctly (v3.4.1 P1-3 fix from R1 release gate). Retries up to
+ *   FLUSH_LOCK_MAX_ATTEMPTS times with FLUSH_LOCK_RETRY_MS backoff.
  * - Zod-validates before write; on failure, logs warn and skips write
  * - Never throws from recordErrorCode or flushTelemetry
+ *
+ * Memory-footprint bound (v3.4.1 P1-2 fix from R1 release gate):
+ *   `maxEvents` is the GLOBAL ring-buffer cap across all codes, NOT per-code.
+ *   `recordErrorCode` enforces the global cap by evicting oldest entries from
+ *   the largest bucket once the global event count exceeds `maxEvents`.
+ *   Worst-case in-memory footprint: maxEvents entries (~80 bytes each).
  *
  * Self-registers with errors.ts via registerTelemetryHook and with cli-exec.ts
  * via registerCliExecTelemetryHook so that makeFlywheelErrorResult and
@@ -33,7 +42,11 @@ export interface TelemetryOptions {
   cwd: string;
   /** Defaults to new Date().toISOString() */
   sessionStartIso?: string;
-  /** Ring buffer size; default 100 */
+  /**
+   * GLOBAL ring-buffer cap across all codes (NOT per-code). v3.4.1 P1-2.
+   * Default 100. The aggregator evicts oldest entries from the largest
+   * bucket when the total exceeds this bound.
+   */
   maxEvents?: number;
   /** Top-N tracking; default 20 */
   maxCodes?: number;
@@ -66,6 +79,12 @@ let _reentrancyDepth = 0;
 /**
  * Record an error code into the in-memory aggregator.
  * Fire-and-forget: never throws. No-op when called re-entrantly.
+ *
+ * Memory-footprint bound (v3.4.1 P1-2): after appending the new entry, this
+ * function enforces a GLOBAL cap of `maxEvents` total ring entries across all
+ * buckets (not per-bucket). When the global count exceeds the cap, the oldest
+ * entries are evicted from the largest bucket. Counts (`bucket.count`) are
+ * preserved — only the ring history is bounded.
  */
 export function recordErrorCode(
   code: FlywheelErrorCode,
@@ -98,9 +117,21 @@ export function recordErrorCode(
     } else {
       bucket.count++;
       bucket.ring.push(entry);
-      if (bucket.ring.length > maxEvents) {
-        bucket.ring = bucket.ring.slice(bucket.ring.length - maxEvents);
+    }
+
+    // Global ring-buffer cap (P1-2): bound total events across all buckets.
+    // Evict oldest entries from the largest bucket until under the cap.
+    let totalEvents = 0;
+    for (const b of _aggregator.values()) totalEvents += b.ring.length;
+    while (totalEvents > maxEvents) {
+      let largest: CodeBucket | null = null;
+      for (const b of _aggregator.values()) {
+        if (largest == null || b.ring.length > largest.ring.length) largest = b;
       }
+      // Defensive: if no bucket has entries, break (shouldn't happen since totalEvents > 0).
+      if (largest == null || largest.ring.length === 0) break;
+      largest.ring.shift();
+      totalEvents--;
     }
 
     // Update session start if opts provides one
@@ -124,6 +155,65 @@ function spoolPath(cwd: string): string {
 
 function tmpPath(cwd: string): string {
   return join(spoolDir(cwd), `error-counts.${process.pid}.${Date.now()}.tmp`);
+}
+
+/**
+ * Sidecar lock path co-located with the spool. v3.4.1 P1-3: held with O_EXCL
+ * across read→merge→rename so two concurrent flushes serialize and counts sum
+ * correctly. Stale-lock cleanup is conservative — we only unlink the lock at
+ * the END of `withFlushLock` (whether success or failure inside the critical
+ * section).
+ */
+function flushLockPath(cwd: string): string {
+  return join(spoolDir(cwd), 'error-counts.lock');
+}
+
+const FLUSH_LOCK_RETRY_MS = 25;
+const FLUSH_LOCK_MAX_ATTEMPTS = 50; // ~1.25s total ceiling
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Acquire the cross-session flush lock and run `fn` while holding it.
+ *
+ * Implementation: `open(lockPath, 'wx')` (O_WRONLY | O_CREAT | O_EXCL) is the
+ * sentinel — only one process at a time can create the lock file. Other
+ * flushes retry with linear backoff. The lock is unlinked in `finally`,
+ * including when `fn` throws.
+ *
+ * Returns the result of `fn`, or `null` if the lock could not be acquired
+ * within `FLUSH_LOCK_MAX_ATTEMPTS`.
+ */
+async function withFlushLock<T>(cwd: string, fn: () => Promise<T>): Promise<T | null> {
+  const lockPath = flushLockPath(cwd);
+  if (!isFlywheelManagedPath(lockPath, cwd)) {
+    log.warn('telemetry_store_failed: lock path outside .pi-flywheel allowlist', { lockPath, cwd });
+    return null;
+  }
+  let fd: import('node:fs/promises').FileHandle | undefined;
+  for (let attempt = 0; attempt < FLUSH_LOCK_MAX_ATTEMPTS; attempt++) {
+    try {
+      fd = await open(lockPath, 'wx'); // O_WRONLY | O_CREAT | O_EXCL
+      break;
+    } catch {
+      fd = undefined;
+      await sleep(FLUSH_LOCK_RETRY_MS);
+    }
+  }
+  if (fd == null) {
+    log.warn('telemetry_store_failed: could not acquire flush lock', {
+      lockPath, attempts: FLUSH_LOCK_MAX_ATTEMPTS,
+    });
+    return null;
+  }
+  try {
+    return await fn();
+  } finally {
+    try { await fd.close(); } catch { /* ignore */ }
+    try { await unlink(lockPath); } catch { /* ignore — already unlinked is fine */ }
+  }
 }
 
 /** Build the current in-memory snapshot (bounded to maxCodes / maxEvents). */
@@ -241,16 +331,19 @@ async function atomicWriteExclusive(tmpFile: string, finalPath: string, content:
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 // ─── Public: flushTelemetry ───────────────────────────────────
 
 /**
  * Flush the in-memory aggregator to .pi-flywheel/error-counts.json.
  * Merges with existing spool (dual-session support).
  * Returns false on store failure (never throws).
+ *
+ * v3.4.1 P1-3: the read→merge→rename critical section is held under an
+ * O_EXCL sentinel (`error-counts.lock`) on the FINAL spool path, so two
+ * concurrent flushes serialize and counts sum correctly. The previous
+ * implementation O_EXCL'd only the .tmp filename, which prevented two
+ * processes from writing the same tmp simultaneously but did NOT prevent
+ * two read-merge-rename cycles from racing and clobbering each other.
  */
 export async function flushTelemetry(opts: TelemetryOptions): Promise<boolean> {
   const maxEvents = opts.maxEvents ?? 100;
@@ -271,51 +364,56 @@ export async function flushTelemetry(opts: TelemetryOptions): Promise<boolean> {
       return false;
     }
 
-    // Read existing spool and merge
-    const existing = await readExistingSpool(opts.cwd);
-    const merged = existing != null
-      ? mergeSnapshots(existing, validated.data, maxEvents)
-      : validated.data;
+    // Critical section under flush lock: read-existing → merge → rename.
+    // Without this, two concurrent flushes both read the same baseline,
+    // each compute their own merge, and the second rename clobbers the first.
+    const result = await withFlushLock(opts.cwd, async () => {
+      // Read existing spool and merge
+      const existing = await readExistingSpool(opts.cwd);
+      const merged = existing != null
+        ? mergeSnapshots(existing, validated.data, maxEvents)
+        : validated.data;
 
-    // Apply maxCodes bound on merged result
-    const topCodes = Object.entries(merged.counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, maxCodes);
-    const boundedCounts: Record<string, number> = Object.fromEntries(topCodes);
-    const boundedTelemetry: ErrorCodeTelemetry = {
-      ...merged,
-      counts: boundedCounts,
-      recentEvents: merged.recentEvents.slice(-maxEvents),
-    };
+      // Apply maxCodes bound on merged result
+      const topCodes = Object.entries(merged.counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, maxCodes);
+      const boundedCounts: Record<string, number> = Object.fromEntries(topCodes);
+      const boundedTelemetry: ErrorCodeTelemetry = {
+        ...merged,
+        counts: boundedCounts,
+        recentEvents: merged.recentEvents.slice(-maxEvents),
+      };
 
-    // Final Zod validation before write
-    const finalValidated = ErrorCodeTelemetrySchema.safeParse(boundedTelemetry);
-    if (!finalValidated.success) {
-      log.warn('telemetry_store_failed: merged snapshot failed Zod validation', {
-        error: finalValidated.error.message,
-      });
-      return false;
-    }
+      // Final Zod validation before write
+      const finalValidated = ErrorCodeTelemetrySchema.safeParse(boundedTelemetry);
+      if (!finalValidated.success) {
+        log.warn('telemetry_store_failed: merged snapshot failed Zod validation', {
+          error: finalValidated.error.message,
+        });
+        return false;
+      }
 
-    const content = JSON.stringify(finalValidated.data, null, 2);
-    const tmp = tmpPath(opts.cwd);
+      const content = JSON.stringify(finalValidated.data, null, 2);
+      const tmp = tmpPath(opts.cwd);
 
-    // First attempt
-    let wrote = await atomicWriteExclusive(tmp, spoolPath(opts.cwd), content, opts.cwd);
-    if (!wrote) {
-      // Retry once after 50ms
-      await sleep(50);
-      const tmp2 = tmpPath(opts.cwd);
-      wrote = await atomicWriteExclusive(tmp2, spoolPath(opts.cwd), content, opts.cwd);
+      // We hold the flush lock, so a single attempt is sufficient. The
+      // remaining O_EXCL on the .tmp path is defence-in-depth against a
+      // future refactor that drops the lock or runs concurrent flushes
+      // within the same process (different test contexts, etc.).
+      const wrote = await atomicWriteExclusive(tmp, spoolPath(opts.cwd), content, opts.cwd);
       if (!wrote) {
-        log.warn('telemetry_store_failed: concurrent write conflict after retry', {
+        log.warn('telemetry_store_failed: write failed under flush lock', {
           cwd: opts.cwd,
         });
         return false;
       }
-    }
+      return true;
+    });
 
-    return true;
+    // withFlushLock returns null when the lock could not be acquired.
+    if (result === null) return false;
+    return result;
   } catch (err) {
     log.warn('telemetry_store_failed: unexpected error during flush', {
       err: err instanceof Error ? err.message : String(err),
