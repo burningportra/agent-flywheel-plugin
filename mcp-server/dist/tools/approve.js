@@ -49,10 +49,11 @@ function makeApproveResult(text, phase, approvalTarget, data, nextStep) {
         data,
     });
 }
-function makeApproveError(message, phase, approvalTarget, code, details) {
+function makeApproveError(message, phase, approvalTarget, code, details, hint) {
     const base = makeFlywheelErrorResult('flywheel_approve_beads', phase, {
         code,
         message,
+        ...(hint ? { hint } : {}),
         ...(details ? { details } : {}),
     });
     return {
@@ -244,9 +245,7 @@ export function expandBeadPlanSpecs(specs, phase) {
 export async function runApprove(ctx, args) {
     const { exec, cwd, state, saveState, signal } = ctx;
     if (!state.selectedGoal) {
-        return makeApproveError('Error: No goal selected. Call flywheel_select first.', state.phase, 'beads', 'missing_prerequisite', {
-            requiredTool: 'flywheel_select',
-        });
+        return makeApproveError('Error: No goal selected. Call flywheel_select first.', state.phase, 'beads', 'missing_prerequisite', { requiredTool: 'flywheel_select' }, 'Call flywheel_select with the chosen goal before flywheel_approve_beads.');
     }
     // ── Plan approval mode (when phase is awaiting_plan_approval) ──
     if ((state.phase === 'awaiting_plan_approval' || (state.phase === 'planning' && state.planDocument)) &&
@@ -260,7 +259,7 @@ export async function runApprove(ctx, args) {
         return makeApproveError(`Error reading beads: ${brListResult.stderr}\n\nEnsure \`br\` CLI is installed and \`br init\` has been run in this directory.`, state.phase, 'beads', 'cli_failure', {
             command: 'br list --json',
             stderr: brListResult.stderr,
-        });
+        }, 'Install the br CLI and run `br init` in the repo root, then retry flywheel_approve_beads.');
     }
     let allBeads = [];
     const parsed = parseBrList(brListResult.stdout);
@@ -269,10 +268,7 @@ export async function runApprove(ctx, args) {
     }
     else {
         log.warn('Failed to parse br list output', { error: parsed.error });
-        return makeApproveError(`Error: Could not parse br list output: ${parsed.error}`, state.phase, 'beads', 'parse_failure', {
-            command: 'br list --json',
-            parseError: parsed.error,
-        });
+        return makeApproveError(`Error: Could not parse br list output: ${parsed.error}`, state.phase, 'beads', 'parse_failure', { command: 'br list --json', parseError: parsed.error }, 'Run `br list --json` manually to inspect output; upgrade br CLI if the JSON shape drifted.');
     }
     const beads = allBeads.filter(b => b.status === 'open' || b.status === 'in_progress');
     if (beads.length === 0) {
@@ -364,9 +360,7 @@ async function handlePlanApproval(ctx, args) {
         plan = readFileSync(absPath, 'utf8');
     }
     else {
-        return makeApproveError(`Error: Plan document not found at \`${planPath}\`.\n\nGenerate the plan first using \`flywheel_plan\`, then call \`flywheel_approve_beads\` again.`, state.phase, 'plan', 'not_found', {
-            planDocument: planPath,
-        });
+        return makeApproveError(`Error: Plan document not found at \`${planPath}\`.\n\nGenerate the plan first using \`flywheel_plan\`, then call \`flywheel_approve_beads\` again.`, state.phase, 'plan', 'not_found', { planDocument: planPath }, 'Run flywheel_plan to generate the plan document, then retry flywheel_approve_beads.');
     }
     const lineCount = plan.split('\n').length;
     const planRound = state.planRefinementRound ?? 0;
@@ -519,7 +513,7 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
                     failedBeadId: bead.id,
                     rolledBack: transitioned,
                     stderr: updateResult.stderr,
-                });
+                }, 'Run `br update <id> --status in_progress` manually to inspect the failure, then retry flywheel_approve_beads.');
             }
             transitioned.push(bead.id);
         }
@@ -703,7 +697,7 @@ function handleAdvanced(ctx, beads, round, advancedAction, matrix) {
         return makeApproveError(`Error: advancedAction is required when action="advanced". Options: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix`, state.phase, 'beads', 'invalid_input', {
             action: 'advanced',
             validAdvancedActions: [...ADVANCED_ACTIONS],
-        });
+        }, 'Re-call with action="advanced" and advancedAction set to one of: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix.');
     }
     const compactList = beads.map(b => `• ${b.id}: ${b.title}`).join('\n');
     if (advancedAction === 'fresh-agent') {
@@ -790,7 +784,7 @@ Current beads:\n${compactList}`, state.phase, 'beads', {
     return makeApproveError(`Unknown advancedAction: "${advancedAction}". Valid options: ${ADVANCED_ACTIONS.join(', ')}.`, state.phase, 'beads', 'unsupported_action', {
         advancedAction,
         validAdvancedActions: [...ADVANCED_ACTIONS],
-    });
+    }, `Pass advancedAction as one of: ${ADVANCED_ACTIONS.join(', ')}.`);
 }
 function formatBeadList(beads) {
     const childIds = new Set(beads.filter(b => b.parent).map(b => b.id));

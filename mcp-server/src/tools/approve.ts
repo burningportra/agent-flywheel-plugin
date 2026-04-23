@@ -79,11 +79,13 @@ function makeApproveError(
   phase: FlywheelPhase,
   approvalTarget: ApprovalTarget,
   code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'internal_error',
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  hint?: string,
 ): McpToolResult<ApproveStructuredContent> {
   const base = makeFlywheelErrorResult('flywheel_approve_beads', phase, {
     code,
     message,
+    ...(hint ? { hint } : {}),
     ...(details ? { details } : {}),
   });
   return {
@@ -342,9 +344,14 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   const { exec, cwd, state, saveState, signal } = ctx;
 
   if (!state.selectedGoal) {
-    return makeApproveError('Error: No goal selected. Call flywheel_select first.', state.phase, 'beads', 'missing_prerequisite', {
-      requiredTool: 'flywheel_select',
-    });
+    return makeApproveError(
+      'Error: No goal selected. Call flywheel_select first.',
+      state.phase,
+      'beads',
+      'missing_prerequisite',
+      { requiredTool: 'flywheel_select' },
+      'Call flywheel_select with the chosen goal before flywheel_approve_beads.',
+    );
   }
 
   // ── Plan approval mode (when phase is awaiting_plan_approval) ──
@@ -367,7 +374,8 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
       {
         command: 'br list --json',
         stderr: brListResult.stderr,
-      }
+      },
+      'Install the br CLI and run `br init` in the repo root, then retry flywheel_approve_beads.',
     );
   }
 
@@ -377,10 +385,14 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     allBeads = parsed.data;
   } else {
     log.warn('Failed to parse br list output', { error: parsed.error });
-    return makeApproveError(`Error: Could not parse br list output: ${parsed.error}`, state.phase, 'beads', 'parse_failure', {
-      command: 'br list --json',
-      parseError: parsed.error,
-    });
+    return makeApproveError(
+      `Error: Could not parse br list output: ${parsed.error}`,
+      state.phase,
+      'beads',
+      'parse_failure',
+      { command: 'br list --json', parseError: parsed.error },
+      'Run `br list --json` manually to inspect output; upgrade br CLI if the JSON shape drifted.',
+    );
   }
 
   const beads = allBeads.filter(b => b.status === 'open' || b.status === 'in_progress');
@@ -502,9 +514,8 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
       state.phase,
       'plan',
       'not_found',
-      {
-        planDocument: planPath,
-      }
+      { planDocument: planPath },
+      'Run flywheel_plan to generate the plan document, then retry flywheel_approve_beads.',
     );
   }
 
@@ -718,6 +729,7 @@ async function handleStart(
             rolledBack: transitioned,
             stderr: updateResult.stderr,
           },
+          'Run `br update <id> --status in_progress` manually to inspect the failure, then retry flywheel_approve_beads.',
         );
       }
       transitioned.push(bead.id);
@@ -967,7 +979,8 @@ function handleAdvanced(
       {
         action: 'advanced',
         validAdvancedActions: [...ADVANCED_ACTIONS],
-      }
+      },
+      'Re-call with action="advanced" and advancedAction set to one of: fresh-agent, same-agent, blunder-hunt, dedup, cross-model, graph-fix.',
     );
   }
 
@@ -1081,7 +1094,8 @@ Current beads:\n${compactList}`,
     {
       advancedAction,
       validAdvancedActions: [...ADVANCED_ACTIONS],
-    }
+    },
+    `Pass advancedAction as one of: ${ADVANCED_ACTIONS.join(', ')}.`,
   );
 }
 

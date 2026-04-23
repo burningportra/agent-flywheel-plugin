@@ -170,4 +170,66 @@ describe('classifyExecError', () => {
         expect(result).toEqual({ code: 'cli_failure', retryable: true, cause: 'string error' });
     });
 });
+// ─── bead-478: hint propagation through the Zod envelope ──────────
+//
+// Covers at least three representative codes (missing_prerequisite,
+// concurrent_write, exec_timeout) to prove downstream consumers
+// (skill-side `data.error.hint` renderer, future codex-rescue handoff
+// bead `1qn`) can rely on hint as a load-bearing field.
+describe('hint propagation through the Zod envelope', () => {
+    it('missing_prerequisite hint survives FlywheelStructuredErrorSchema parse', () => {
+        const hint = 'Run /flywheel-setup to install missing deps';
+        const result = makeFlywheelErrorResult('flywheel_approve_beads', 'idle', {
+            code: 'missing_prerequisite',
+            message: 'No goal selected.',
+            hint,
+        });
+        // The raw object must parse against the public schema — consumers will
+        // Zod-validate before reading hint.
+        expect(() => FlywheelStructuredErrorSchema.parse(result.structuredContent)).not.toThrow();
+        expect(result.structuredContent.data.error.hint).toBe(hint);
+        expect(result.structuredContent.data.error.code).toBe('missing_prerequisite');
+    });
+    it('concurrent_write hint survives the envelope', () => {
+        const hint = 'Another agent holds the lock; wait or run /flywheel-cleanup';
+        const result = makeFlywheelErrorResult('flywheel_approve_beads', 'implementing', {
+            code: 'concurrent_write',
+            message: 'Another invocation is in-flight.',
+            hint,
+        });
+        expect(() => FlywheelStructuredErrorSchema.parse(result.structuredContent)).not.toThrow();
+        expect(result.structuredContent.data.error.hint).toBe(hint);
+        expect(result.structuredContent.data.error.retryable).toBe(true);
+    });
+    it('exec_timeout hint survives the envelope', () => {
+        const hint = 'Increase timeout or split the task; see FW_LOG_LEVEL=debug for cause';
+        const result = makeFlywheelErrorResult('flywheel_plan', 'planning', {
+            code: 'exec_timeout',
+            message: 'Timed out after 8000ms.',
+            hint,
+            cause: 'Timed out after 8000ms: br list --json',
+        });
+        expect(() => FlywheelStructuredErrorSchema.parse(result.structuredContent)).not.toThrow();
+        expect(result.structuredContent.data.error.hint).toBe(hint);
+        expect(result.structuredContent.data.error.cause).toBe('Timed out after 8000ms: br list --json');
+    });
+    it('FlywheelError → toJSON → envelope preserves hint end-to-end', () => {
+        const hint = 'Wait for reviewing phase.';
+        const err = new FlywheelError({
+            code: 'blocked_state',
+            message: 'wrong phase',
+            hint,
+        });
+        const result = makeFlywheelErrorResult('flywheel_review', 'implementing', err.toJSON());
+        expect(result.structuredContent.data.error.hint).toBe(hint);
+    });
+    it('hint is optional — omitting it produces a valid envelope without hint', () => {
+        const result = makeFlywheelErrorResult('flywheel_memory', 'idle', {
+            code: 'cli_not_available',
+            message: 'cm CLI is not available.',
+        });
+        expect(() => FlywheelStructuredErrorSchema.parse(result.structuredContent)).not.toThrow();
+        expect(result.structuredContent.data.error.hint).toBeUndefined();
+    });
+});
 //# sourceMappingURL=error-contract.test.js.map

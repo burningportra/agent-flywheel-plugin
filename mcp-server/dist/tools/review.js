@@ -13,9 +13,12 @@ function okResult(phase, text, data) {
         },
     };
 }
-function errorResult(phase, code, message, details) {
+function errorResult(phase, code, message, details, hint) {
     return makeFlywheelErrorResult('flywheel_review', phase, {
-        code, message, ...(details ? { details } : {}),
+        code,
+        message,
+        ...(hint ? { hint } : {}),
+        ...(details ? { details } : {}),
     });
 }
 function parseBrShowBead(raw) {
@@ -55,7 +58,7 @@ function looksLikeBead(value) {
 export async function runReview(ctx, args) {
     const { exec, cwd, state, saveState, signal } = ctx;
     if (!args.beadId) {
-        return errorResult('reviewing', 'invalid_input', 'Error: beadId is required.');
+        return errorResult('reviewing', 'invalid_input', 'Error: beadId is required.', undefined, 'Pass beadId from `br list`, or use `__gates__` / `__regress_to_plan__` / `__regress_to_beads__` / `__regress_to_implement__` sentinels.');
     }
     const beadId = args.beadId;
     // ── Special sentinels ─────────────────────────────────────────
@@ -74,11 +77,11 @@ export async function runReview(ctx, args) {
     // ── Look up bead ──────────────────────────────────────────────
     const brShowResult = await exec('br', ['show', beadId, '--json'], { cwd, timeout: 8000, signal });
     if (brShowResult.code !== 0) {
-        return errorResult(state.phase, 'not_found', `Bead ${beadId} not found. Run \`br list\` to see available beads.\n\nError: ${brShowResult.stderr}`, { beadId, stderr: brShowResult.stderr });
+        return errorResult(state.phase, 'not_found', `Bead ${beadId} not found. Run \`br list\` to see available beads.\n\nError: ${brShowResult.stderr}`, { beadId, stderr: brShowResult.stderr }, 'Run `br list` to confirm the bead id, or `br init` if beads have not been initialized in this repo.');
     }
     const bead = parseBrShowBead(brShowResult.stdout);
     if (!bead) {
-        return errorResult(state.phase, 'parse_failure', `Error parsing bead ${beadId} from br show output.`, { beadId });
+        return errorResult(state.phase, 'parse_failure', `Error parsing bead ${beadId} from br show output.`, { beadId }, 'Run `br show <id> --json` manually to inspect raw output; this usually indicates a br CLI version mismatch.');
     }
     // ── Preflight: actual bead status (handles auto-close from impl agent) ─
     // If `br show` says the bead is already closed, the impl agent (or someone
@@ -103,7 +106,7 @@ export async function runReview(ctx, args) {
             return nextBeadOrGates(ctx, beadId, bead.title, 'Already closed by impl agent');
         }
         if (args.action === 'skip') {
-            return errorResult(state.phase, 'already_closed', `Bead ${beadId} is already closed; skip is not applicable. Move to the next bead or call flywheel_review with action=looks-good to acknowledge.`, { beadId, status: 'closed' });
+            return errorResult(state.phase, 'already_closed', `Bead ${beadId} is already closed; skip is not applicable. Move to the next bead or call flywheel_review with action=looks-good to acknowledge.`, { beadId, status: 'closed' }, 'Call flywheel_review with action=looks-good to acknowledge the already-closed bead, then continue.');
         }
         // hit-me on a closed bead falls through; payload is tagged postClose below.
     }
@@ -293,10 +296,7 @@ Report what you found. Fix obvious issues directly.`,
             instructions,
         }, null, 2), payload);
     }
-    return errorResult(state.phase, 'unsupported_action', `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip`, {
-        beadId,
-        action: args.action,
-    });
+    return errorResult(state.phase, 'unsupported_action', `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip`, { beadId, action: args.action }, 'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer).');
 }
 async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
     const { exec, cwd, state, saveState, signal } = ctx;
@@ -308,7 +308,7 @@ async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
             ready = JSON.parse(brReadyResult.stdout);
         }
         catch {
-            return errorResult(state.phase, 'parse_failure', 'br ready produced malformed JSON — fall back to manual bead selection.', { command: 'br ready --json', stdout: brReadyResult.stdout.slice(0, 200) });
+            return errorResult(state.phase, 'parse_failure', 'br ready produced malformed JSON — fall back to manual bead selection.', { command: 'br ready --json', stdout: brReadyResult.stdout.slice(0, 200) }, 'Run `br ready --json` manually to inspect the output; upgrade br CLI if the JSON shape drifted.');
         }
     }
     // Filter out already-completed beads

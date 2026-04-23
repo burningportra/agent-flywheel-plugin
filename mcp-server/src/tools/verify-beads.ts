@@ -55,7 +55,8 @@ export async function runVerifyBeads(
       'flywheel_verify_beads',
       state.phase,
       'invalid_input',
-      'Error: beadIds must be a non-empty array of bead IDs.'
+      'Error: beadIds must be a non-empty array of bead IDs.',
+      { hint: 'Pass beadIds as a non-empty string array — the wave of beads to reconcile (e.g. ["abc-1","abc-2"]).' },
     );
   }
 

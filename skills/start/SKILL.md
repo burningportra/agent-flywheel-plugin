@@ -271,6 +271,8 @@ if (code === "missing_prerequisite") {
 
 Never parse human-readable error text to route control flow. Route only on structured `data.error.code`.
 
+**Always surface `error.hint` when present.** Every `FlywheelErrorCode` throw site carries a one-sentence recovery action in `result.structuredContent?.data?.error?.hint`. When handling a structured error — whether you route on `code`, retry, or hand off to the user — render the hint inline (e.g. `Hint: <error.hint>`). Do not drop it silently; it is the user's next step.
+
 Bootstrap it before any approve call:
 
 1. **Synthesize a default goal from the existing beads.** Read the top 3 open bead titles from `br list --json` and build a default like `Continue: <title-1>; <title-2>; <title-3>` (truncate at 200 chars).

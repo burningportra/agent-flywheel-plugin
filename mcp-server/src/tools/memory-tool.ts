@@ -67,6 +67,10 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
         code: classified.code,
         message: err instanceof Error ? err.message : String(err),
         retryable: classified.retryable,
+        hint:
+          classified.code === 'exec_timeout'
+            ? 'Postmortem drafting exceeded its timeout — retry, or inspect git/agent-mail latency with flywheel_doctor.'
+            : 'Postmortem draft failed unexpectedly — rerun once; if persistent, set FW_LOG_LEVEL=debug to capture the underlying cause.',
         cause: classified.cause,
       });
     }

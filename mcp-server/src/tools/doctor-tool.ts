@@ -85,6 +85,12 @@ export async function runDoctor(
       code: classified.code,
       message: err instanceof Error ? err.message : String(err),
       retryable: classified.retryable,
+      hint:
+        classified.code === 'exec_timeout'
+          ? 'A doctor probe timed out — rerun flywheel_doctor; if persistent, set FW_LOG_LEVEL=debug and inspect the slow check.'
+          : classified.code === 'exec_aborted'
+          ? 'The doctor run was aborted before completion — rerun flywheel_doctor when the environment is stable.'
+          : 'Verify cwd is a valid absolute path and required CLIs (git, br) are on PATH, then retry flywheel_doctor.',
       cause: classified.cause,
     });
   }

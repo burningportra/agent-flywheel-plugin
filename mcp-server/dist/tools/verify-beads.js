@@ -32,7 +32,7 @@ function okResult(phase, text, data) {
 export async function runVerifyBeads(ctx, args) {
     const { exec, cwd, state, saveState, signal } = ctx;
     if (!Array.isArray(args.beadIds) || args.beadIds.length === 0) {
-        return makeToolError('flywheel_verify_beads', state.phase, 'invalid_input', 'Error: beadIds must be a non-empty array of bead IDs.');
+        return makeToolError('flywheel_verify_beads', state.phase, 'invalid_input', 'Error: beadIds must be a non-empty array of bead IDs.', { hint: 'Pass beadIds as a non-empty string array — the wave of beads to reconcile (e.g. ["abc-1","abc-2"]).' });
     }
     let report;
     try {

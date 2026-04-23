@@ -316,6 +316,10 @@ function makeValidationErrorResult(toolName: string, validationError: ToolValida
   if (isKnownToolName(toolName)) {
     return makeToolError(toolName, 'idle', 'invalid_input', validationError.message, {
       retryable: false,
+      hint:
+        validationError.reason === 'invalid_cwd'
+          ? 'Pass `cwd` as a non-empty absolute path to the project working directory.'
+          : `Supply the required parameter '${validationError.field ?? ''}' and retry.`,
       details: {
         field: validationError.field,
         reason: validationError.reason,
@@ -382,6 +386,7 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
         code: 'internal_error',
         message: `Error in ${name}: ${(err as Error)?.message ?? String(err)}`,
         retryable: true,
+        hint: 'Unexpected server error — retry once, then run flywheel_doctor or set FW_LOG_LEVEL=debug to capture root cause.',
         cause: String(err),
       });
     }
