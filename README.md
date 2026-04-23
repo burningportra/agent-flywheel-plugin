@@ -143,6 +143,10 @@ claude --plugin-dir .
 
 After editing `mcp-server/src/`, rebuild with `npm run build --prefix mcp-server` and commit the updated `mcp-server/dist/` in the same PR. The `dist-drift` CI job enforces this.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the three-step skill-add loop (skill dir, commands dir, dist rebuild) and the `skills/_template/` scaffold for a 30-minute onboarding.
+
 ## License
 
 MIT
