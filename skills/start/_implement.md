@@ -14,6 +14,8 @@
 
 Claude owns architecture / complex reasoning, Codex owns fast iteration / testing, Gemini provides a second perspective for docs / review. Cap parallel spawns at the wave's independent-bead count — do not spin up agents with nothing to do.
 
+The 1:1:1 (and richer) ratios are now actually executed via the model-diversity split in step 7.2 below — not just documented. CLI availability is detected up-front and missing CLIs degrade gracefully with a user-facing warning.
+
 **Thundering-herd mitigation** — stagger spawns by **30 seconds minimum**. Do NOT spawn all agents simultaneously; they all read AGENTS.md, hit Agent Mail, and query `br ready` at once — piling onto the same frontier bead. Use `run_in_background: true` and wait 30s between each `Agent(...)` call.
 
 **Codex input-buffer quirk** — after the prompt lands in a Codex agent, send Enter TWICE (or append a trailing newline) so the long prompt clears the input buffer.
@@ -57,14 +59,36 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 2. **Choose spawn mechanism based on NTM availability.**
 
    **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn impl agents into visible tmux panes. This lets the user observe all agents working in real-time. `ntm spawn` takes a project name (which must be a directory under `projects_base`) and uses `--label` for the per-purpose suffix. Use `$NTM_PROJECT` captured in Step 0b (which equals `basename $PWD`):
-   ```bash
-   SESSION="${NTM_PROJECT}--impl-<goal-slug>"
-   # Spawn panes for the wave (scale cc/cod/gmi per the agent ratio table above)
-   ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --cc=<N> --cod=<M> --gmi=<K>
-   # Dispatch each bead to a pane
-   ntm send "$SESSION" --pane=cc-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
-   ntm send "$SESSION" --pane=cod-1 "<bead prompt with STEP 0 Agent Mail bootstrap>"
-   ```
+
+   **Model-diversified split (Claude : Codex : Gemini at 1:1:1).** Distribute the wave's beads across the three CLIs so the user gets a second/third model perspective per wave. The split is `floor(N/3)` each plus remainders by priority (claude → codex → gemini).
+
+   1. **Detect CLI availability up-front.** Run `which claude codex gemini` (or call `flywheel_doctor` and read the `claude_cli` / `codex_cli` / `gemini_cli` rows + the `swarm_model_ratio` synthesis). Build a capabilities map. The MCP server exposes `detectCliCapabilities` from `mcp-server/src/adapters/model-diversity.ts` for programmatic callers.
+
+   2. **Compute the lane sizes** from the capabilities map and the wave size N:
+      - All three available: `floor(N/3)` each. N=3 → 1 Claude + 1 Codex + 1 Gemini. N=4 → 2C + 1Co + 1G (claude takes the +1). N=5 → 2C + 2Co + 1G. N=14 → 5C + 5Co + 4G.
+      - Missing one CLI (e.g. codex absent): redistribute its share to the surviving providers by priority. Wave of 3 with codex missing → 2 Claude + 1 Gemini, plus a degraded-mode warning to the user.
+      - All missing: fail loudly — the wave cannot be dispatched. The doctor's `swarm_model_ratio` row will be red.
+
+   3. **Spawn lanes via NTM** with the correct per-model pane counts:
+      ```bash
+      SESSION="${NTM_PROJECT}--impl-<goal-slug>"
+      ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --cc=<N_claude> --cod=<N_codex> --gem=<N_gemini>
+      # Dispatch each bead to its lane's pane (claude → cc-N, codex → cod-N, gemini → gem-N).
+      ntm send "$SESSION" --pane=cc-1 "<claude-tuned prompt>"
+      ntm send "$SESSION" --pane=cod-1 "<codex-tuned prompt>"
+      ntm send "$SESSION" --pane=gem-1 "<gemini-tuned prompt>"
+      ```
+
+   4. **Use the per-model prompt adapters** so each pane gets a prompt tuned to its model:
+      - `mcp-server/src/adapters/claude-prompt.ts` — baseline scaffold (matches existing Step 7 template).
+      - `mcp-server/src/adapters/codex-prompt.ts` — terser preambles + strict structured `COMPLETION_REPORT` block (per `/codex:gpt-5-4-prompting`). Codex panes also need 2 trailing newlines (input-buffer quirk).
+      - `mcp-server/src/adapters/gemini-prompt.ts` — explicit role framing + bounded "STOP after report" guard.
+      All three adapters share the `BeadDispatchContext` input shape and the `AdaptedPrompt` output shape so the dispatch loop is a single `adaptPromptFor(lane.provider, ctx)` switch.
+
+   5. **Agent Mail names use the adjective+noun pool** from `mcp-server/src/adapters/agent-names.ts`. Call `allocateAgentNames(N, '<wave-id>')` for collision-free assignment across a 14-bead wave (pool capacity = 1600 unique names). Pass the chosen name as `preferred_name` in the agent's STEP 0 `macro_start_session` call. **Never use descriptive role-style names like `research-coordinator`** — the Agent Mail server rejects them; see `feedback_agent_mail_naming.md` in CASS memory.
+
+   6. **Degraded-mode warning.** When the split returns `degraded: true` (one or more CLIs missing), echo the warning to the user before spawning so they know the wave is not the canonical 1:1:1. Also surface it in the wave-completion summary.
+
    - Stagger sends by 30 seconds (thundering-herd mitigation still applies).
    - The Agent Mail STEP 0 bootstrap is still MANDATORY in each pane's prompt — NTM handles process lifecycle; Agent Mail handles coordination protocol, file reservations, and audit trail.
 

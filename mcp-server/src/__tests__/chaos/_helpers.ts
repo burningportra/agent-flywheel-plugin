@@ -95,6 +95,20 @@ export function allGreenStubs(): ExecStub[] {
     { match: (cmd, args) => cmd === 'node' && args[0] === '--version', respond: ok('v22.0.0') },
     { match: (cmd, args) => cmd === 'git' && args[0] === 'rev-parse', respond: ok('abc123') },
     { match: (cmd, args) => cmd === 'git' && args[0] === 'status', respond: ok('') },
+    { match: (cmd, args) => cmd === 'git' && args[0] === 'worktree', respond: ok('') },
+    // Swarm-agent CLI detection (claude/codex/gemini at 1:1:1).
+    {
+      match: (cmd, args) => cmd === 'which' && args[0] === 'claude',
+      respond: ok('/usr/local/bin/claude'),
+    },
+    {
+      match: (cmd, args) => cmd === 'which' && args[0] === 'codex',
+      respond: ok('/usr/local/bin/codex'),
+    },
+    {
+      match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
+      respond: ok('/usr/local/bin/gemini'),
+    },
   ];
 }
 

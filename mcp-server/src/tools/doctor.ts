@@ -17,6 +17,12 @@ import { join } from 'node:path';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
+import {
+  detectCliCapabilities,
+  describeCapabilities,
+  type CapabilitiesMap,
+  type ModelProvider,
+} from '../adapters/model-diversity.js';
 import type {
   DoctorCheck,
   DoctorCheckSeverity,
@@ -47,6 +53,11 @@ export const DOCTOR_CHECK_NAMES = [
   'dist_drift',
   'orphaned_worktrees',
   'checkpoint_validity',
+  // Swarm-agent model diversity (claude/codex/gemini at 1:1:1 via NTM).
+  'claude_cli',
+  'codex_cli',
+  'gemini_cli',
+  'swarm_model_ratio',
 ] as const;
 
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
@@ -114,6 +125,21 @@ export async function runDoctorChecks(
 
   const semaphore = new Semaphore(maxConcurrency);
 
+  // Detect implementation-CLI capabilities once and share the result
+  // across the four model-diversity checks (avoids spawning `which`
+  // four separate times for the same answer).
+  const swarmCapsPromise = detectCliCapabilities(exec, {
+    timeout: perCheckTimeoutMs,
+    cwd,
+    signal: combined,
+  }).catch(
+    (err): CapabilitiesMap => ({
+      claude: { provider: 'claude', available: false, reason: errMsg(err) },
+      codex: { provider: 'codex', available: false, reason: errMsg(err) },
+      gemini: { provider: 'gemini', available: false, reason: errMsg(err) },
+    }),
+  );
+
   const checkFns: Array<() => Promise<DoctorCheck>> = [
     () => checkMcpConnectivity(cwd, combined, now),
     () => checkAgentMailLiveness(exec, cwd, combined, perCheckTimeoutMs, now),
@@ -126,6 +152,10 @@ export async function runDoctorChecks(
     () => checkDistDrift(cwd, combined, now),
     () => checkOrphanedWorktrees(exec, cwd, combined, perCheckTimeoutMs, now),
     () => checkCheckpointValidity(cwd, combined, now),
+    () => checkSwarmModelCli('claude_cli', 'claude', swarmCapsPromise, combined, now),
+    () => checkSwarmModelCli('codex_cli', 'codex', swarmCapsPromise, combined, now),
+    () => checkSwarmModelCli('gemini_cli', 'gemini', swarmCapsPromise, combined, now),
+    () => checkSwarmModelRatio(swarmCapsPromise, combined, now),
   ];
 
   const wrapped = checkFns.map((fn, idx) =>
@@ -768,6 +798,109 @@ async function checkCheckpointValidity(
       severity: 'yellow',
       message: `checkpoint probe failed: ${errMsg(err)}`,
       hint: 'postmortem_checkpoint_stale',
+      durationMs: now() - start,
+    };
+  }
+}
+
+// ─── Swarm-agent model diversity checks ───────────────────────────────────
+
+/**
+ * 12-14. Per-provider CLI availability for the swarm-agent model
+ * diversity feature. Yellow (not red) when missing — the wave can still
+ * proceed via fallback to another provider; the doctor's
+ * `swarm_model_ratio` synthesis check reports the achievable ratio.
+ */
+async function checkSwarmModelCli(
+  checkName: 'claude_cli' | 'codex_cli' | 'gemini_cli',
+  provider: ModelProvider,
+  capsPromise: Promise<CapabilitiesMap>,
+  signal: AbortSignal,
+  now: () => number,
+): Promise<DoctorCheck> {
+  const start = now();
+  if (signal.aborted) return abortedCheck(checkName);
+  try {
+    const caps = await capsPromise;
+    const cap = caps[provider];
+    if (cap.available) {
+      return {
+        name: checkName,
+        severity: 'green',
+        message: cap.path
+          ? `${provider} cli at ${cap.path}`
+          : `${provider} cli present`,
+        durationMs: now() - start,
+      };
+    }
+    return {
+      name: checkName,
+      severity: 'yellow',
+      message: `${provider} cli not installed${cap.reason ? ` (${cap.reason})` : ''}`,
+      hint: 'cli_not_available',
+      durationMs: now() - start,
+    };
+  } catch (err) {
+    return {
+      name: checkName,
+      severity: 'yellow',
+      message: `${provider} cli probe failed: ${errMsg(err)}`,
+      hint: 'cli_failure',
+      durationMs: now() - start,
+    };
+  }
+}
+
+/**
+ * 15. Synthesised swarm model ratio. Reports the Claude:Codex:Gemini
+ * ratio achievable in this environment. Severity:
+ *   - green when all three CLIs are present (1:1:1).
+ *   - yellow when at least one is present but not all three.
+ *   - red when none are present (no swarm dispatch possible).
+ */
+async function checkSwarmModelRatio(
+  capsPromise: Promise<CapabilitiesMap>,
+  signal: AbortSignal,
+  now: () => number,
+): Promise<DoctorCheck> {
+  const start = now();
+  if (signal.aborted) return abortedCheck('swarm_model_ratio');
+  try {
+    const caps = await capsPromise;
+    const description = describeCapabilities(caps);
+    const availableCount = (
+      ['claude', 'codex', 'gemini'] as const
+    ).reduce((acc, p) => acc + (caps[p].available ? 1 : 0), 0);
+    if (availableCount === 3) {
+      return {
+        name: 'swarm_model_ratio',
+        severity: 'green',
+        message: description,
+        durationMs: now() - start,
+      };
+    }
+    if (availableCount === 0) {
+      return {
+        name: 'swarm_model_ratio',
+        severity: 'red',
+        message: description,
+        hint: 'cli_not_available',
+        durationMs: now() - start,
+      };
+    }
+    return {
+      name: 'swarm_model_ratio',
+      severity: 'yellow',
+      message: description,
+      hint: 'cli_not_available',
+      durationMs: now() - start,
+    };
+  } catch (err) {
+    return {
+      name: 'swarm_model_ratio',
+      severity: 'yellow',
+      message: `swarm ratio probe failed: ${errMsg(err)}`,
+      hint: 'cli_failure',
       durationMs: now() - start,
     };
   }
