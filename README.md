@@ -40,6 +40,20 @@ Prerequisites: [Claude Code](https://github.com/anthropics/claude-code) (latest)
 
 That's it. The flywheel scans your repo, proposes improvements, plans, implements, and reviews.
 
+## Triage chain: which diagnostic do I run?
+
+Three commands answer "is the flywheel healthy?" at different depths. Run them in this order:
+
+| Order | Command | Role | Run when |
+|---|---|---|---|
+| 1 | `/agent-flywheel:flywheel-doctor` | **Read-only snapshot.** One-shot, cancellable, never mutates state. | First — always safe. Run before `/start`, after `/flywheel-cleanup`, or any time toolchain drift is suspected. |
+| 2 | `/agent-flywheel:flywheel-setup` | **Apply fixes.** Installs missing tools, registers MCP, configures pre-commit guard. | Second — only if doctor reports `red`/`yellow`. This is the remediation step for problems doctor surfaced. |
+| 3 | `/agent-flywheel:flywheel-healthcheck` | **Deep periodic audit.** Scores codebase health (TODOs, test ratio, bead graph) alongside dependencies. | Third — periodically, not for setup problems. Use for ongoing codebase hygiene, not fresh-clone fixup. |
+
+**Three-sentence hierarchy:** Doctor is the read-only snapshot you run first because it never mutates state and tells you what's wrong in under 2 seconds. Setup is the apply-fixes step you run second when doctor reports problems — it installs, registers, and configures. Healthcheck is the deep periodic audit you run third (and on a cadence) for codebase health trends, not for setup problems.
+
+If a first-time user asks "which do I run?" the answer is `/flywheel-doctor` — it is always safe and tells you whether to reach for `/flywheel-setup` next.
+
 ## Command reference
 
 | Command | Description |
@@ -146,6 +160,14 @@ After editing `mcp-server/src/`, rebuild with `npm run build --prefix mcp-server
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the three-step skill-add loop (skill dir, commands dir, dist rebuild) and the `skills/_template/` scaffold for a 30-minute onboarding.
+
+## Using agent-flywheel with Codex
+
+agent-flywheel's skills can be emitted in Codex native format (`AGENTS.md` + `.codex/skills/<name>.md`) via the `flywheel_emit_codex` MCP tool. Point it at any destination directory inside your project; skill source files are never modified, and the round-trip is drift-tested. The emitter is single-target by design — for runtimes other than Codex, keep Claude Code as the source of truth.
+
+```
+flywheel_emit_codex(cwd: "/path/to/project", targetDir: ".")
+```
 
 ## License
 

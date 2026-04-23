@@ -220,3 +220,11 @@ Use a checkmark for passing items and an X for failed/skipped items. For any X i
 
 If ALL Required items pass: *"All prerequisites met. You can now run `/start`."*
 If ANY Required item failed: *"Do not run `/start` until all Required items pass. Fix the items marked above and re-run `/flywheel-setup`."*
+
+## See also (triage chain)
+
+Setup is the **second** of three diagnostic commands. Run them in order:
+
+1. **`/agent-flywheel:flywheel-doctor`** — read-only snapshot, always safe. Run **before** setup to identify what to fix.
+2. **`/agent-flywheel:flywheel-setup`** (this skill) — apply-fixes stage; installs tools, registers MCP, configures hooks.
+3. **`/agent-flywheel:flywheel-healthcheck`** — deep periodic audit of codebase + bead graph + dependencies. Run on a cadence after setup completes, not as a setup-failure remedy.

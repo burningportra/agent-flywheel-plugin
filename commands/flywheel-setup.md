@@ -2,6 +2,8 @@
 description: Set up flywheel prerequisites for this project.
 ---
 
+**See also (triage chain):** `flywheel-setup` is the **second** step — the apply-fixes stage. Run `/flywheel-doctor` first to get a read-only snapshot of what's broken; setup then installs missing tools, registers the MCP server, and configures hooks. For ongoing codebase health trends (TODOs, test ratio, bead graph), use `/flywheel-healthcheck` periodically — not for fresh-clone fixup.
+
 Set up the agent-flywheel for this project. $ARGUMENTS
 
 Check and configure all prerequisites. For each missing tool, ask the user before installing. On refusal, print the manual install command and continue.

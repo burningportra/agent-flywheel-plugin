@@ -43,3 +43,11 @@ BEADS
 
 HEALTH SCORE: N/10
 ```
+
+## See also (triage chain)
+
+Healthcheck is the **third** of three diagnostic commands. Run them in order:
+
+1. **`/agent-flywheel:flywheel-doctor`** — read-only snapshot, always safe. Run first when toolchain drift is suspected.
+2. **`/agent-flywheel:flywheel-setup`** — apply-fixes stage; installs tools, registers MCP, configures hooks.
+3. **`/agent-flywheel:flywheel-healthcheck`** (this skill) — deep periodic audit of codebase + bead graph + dependencies. Run on a cadence; do not use it to remedy a fresh-clone setup problem (use doctor → setup for that).

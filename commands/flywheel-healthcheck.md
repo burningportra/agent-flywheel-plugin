@@ -2,6 +2,8 @@
 description: Full health check of the codebase and flywheel dependencies.
 ---
 
+**See also (triage chain):** `flywheel-healthcheck` is the **third** step — a deep periodic audit (codebase + bead graph + dependencies). For a fast, read-only toolchain snapshot, run `/flywheel-doctor` first — it's always safe and completes in under 2s. To install missing tools or repair configuration that doctor flagged, run `/flywheel-setup`. Do not reach for healthcheck to fix a fresh-clone setup problem — that's `flywheel-doctor` → `flywheel-setup`.
+
 Run a comprehensive health check. $ARGUMENTS
 
 Check all systems and produce a health score.

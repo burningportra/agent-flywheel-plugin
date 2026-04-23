@@ -356,9 +356,11 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
 
 ### 0f. Degraded modes
 
+**Triage chain (canonical order):** when any check below fails, guide the user through the three commands in this order — `/flywheel-doctor` first (read-only snapshot, always safe, cancellable, under 2s), then `/flywheel-setup` (apply fixes for what doctor found — installs binaries, registers MCP, starts Agent Mail, configures hooks), then `/flywheel-healthcheck` (deep periodic audit of codebase + bead graph + dependencies; run on a cadence, not for setup problems). Never recommend `/flywheel-setup` before `/flywheel-doctor` — doctor is the read-only snapshot that tells setup what to fix.
+
 **MCP tools missing** (flywheel_profile call failed or tool not found in step 0b):
 
-- Display in the banner: `MCP: not configured — run /flywheel-setup`
+- Display in the banner: `MCP: not configured — run /flywheel-doctor for a snapshot, then /flywheel-setup to fix`
 - Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
   - **Step 2:** Use Explore subagent only (skip `flywheel_profile`).
   - **Step 3:** Use Explore-derived ideas (skip `flywheel_discover`).

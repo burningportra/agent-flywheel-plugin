@@ -110,3 +110,11 @@ Render each `check` as one line using the glyph mapping above. If `structuredCon
 - Doctor is **read-only**. It never mutates `.pi-flywheel/checkpoint.json`, never writes spool files, never kills worktrees. Remediation is always user-gated.
 - Safe to run concurrently with `/start` — doctor does not lock anything.
 - Runtime target: under 2 seconds on a warm machine; the 10s sweep budget exists only to cap pathological cases (binary hangs).
+
+## See also (triage chain)
+
+Doctor is the **first** of three diagnostic commands. Run them in order:
+
+1. **`/agent-flywheel:flywheel-doctor`** (this skill) — read-only snapshot, always safe. Run first.
+2. **`/agent-flywheel:flywheel-setup`** — apply-fixes stage; installs tools, registers MCP, configures hooks. Run when doctor reports `red`/`yellow` checks.
+3. **`/agent-flywheel:flywheel-healthcheck`** — deep periodic audit of codebase + bead graph + dependencies. Run on a cadence, not to fix setup problems.
