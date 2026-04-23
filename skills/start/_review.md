@@ -80,6 +80,79 @@ if (code === "parse_failure") return runManualVerifyFallback();
 if (code === "not_found") return promptForRetryOrPause();
 ```
 
+## Step 8.5: Codex-rescue handoff on reviewer non-convergence (per bead `agent-flywheel-plugin-1qn`)
+
+> **Why this exists.** Fresh-eyes reviewers occasionally produce contradictory verdicts (one demands a refactor, another demands the opposite) or two of the five reviewers fail to deliver after all three nudges. The coordinator either has to pick a winner with insufficient evidence or cascade more reviewers — both bad. A targeted Codex rescue with the consolidated review artifact is faster and produces a single tie-breaking opinion. Source: bead `agent-flywheel-plugin-1qn`.
+>
+> **Trigger condition (N-1 rule for review).** Fire BEFORE the third reviewer-nudge cycle, not after. Concrete signals:
+>
+> - Two of the five reviewers have **conflicting** verdicts on the same change (e.g. one says "split this commit", another says "merge with the prior bead") AND the coordinator cannot reconcile from `git diff` alone.
+> - At least 2 of the 5 reviewers failed to deliver findings after Nudge 2, **or**
+> - A `flywheel_review` `hit-me` call returned the same `FlywheelErrorCode` on the immediately prior attempt and the next attempt would be the second retry.
+
+When triggered, present the rescue choice via `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "Reviewers haven't converged on bead <id> (<error_code>; hint: <hint>). How do you want to proceed?",
+  header: "Review stall",
+  options: [
+    { label: "Retry once more", description: "Re-spawn the missing reviewers OR ask one reviewer to reconcile the conflict directly" },
+    { label: "Hand off to Codex (Recommended)", description: "Build a rescue packet from the consolidated review notes + diff and invoke the codex-rescue skill for a tie-breaker" },
+    { label: "Abort phase", description: "Accept the bead as-is (looks-good) and document the unresolved review concern in CASS" },
+    { label: "Other", description: "Describe a different recovery path" }
+  ],
+  multiSelect: false
+}])
+```
+
+**On "Hand off to Codex"** — assemble the artifact, build the packet, dispatch via the codex-prompt adapter (consumer-only — do NOT edit `mcp-server/src/adapters/codex-prompt.ts`):
+
+```ts
+import { buildRescuePacket, renderRescuePromptForCodex, formatRescueEventForMemory }
+  from '../mcp-server/dist/codex-handoff.js';
+
+// 1. Concatenate every available review file + the bead's full diff.
+//    Whatever reviewers actually delivered, plus git diff, is the artifact.
+const artifactPath = `.pi-flywheel/rescue/review-${beadId}-${Date.now()}.md`;
+const consolidated = [
+  '# Review artifact for Codex tie-breaker',
+  ...reviewFilesOnDisk.map((p) => `\n## ${p}\n\n${fs.readFileSync(p, 'utf8')}`),
+  `\n## git diff\n\n\`\`\`diff\n${await execStr('git', ['diff', baseSha, 'HEAD'])}\n\`\`\``,
+].join('\n');
+fs.writeFileSync(artifactPath, consolidated);
+
+const packet = buildRescuePacket({
+  phase: 'review',
+  goal: `Reconcile reviewer disagreement on bead ${beadId}`,
+  artifact_path: artifactPath,
+  error_code: lastError.code,
+  hint: lastError.hint ?? '',             // VERBATIM from bead 478 hint contract
+  recent_tool_calls: state.recentToolCalls.slice(-10),
+  proposed_next_step: 'Read the consolidated review notes; deliver one verdict (accept / request change) with a one-paragraph rationale and any blocking concerns.',
+});
+
+const adapted = renderRescuePromptForCodex(packet, {
+  coordinatorName: '<your-agent-mail-name>',
+  projectKey: process.env.NTM_PROJECT,
+  rescueAgentName: '<adjective+noun from agent-names pool>',
+});
+
+// 2. Dispatch /codex:rescue --wait so the rescue blocks Step 9 progression.
+//    Codex panes need 2 trailing newlines (AdaptedPrompt.trailingNewlines).
+```
+
+**Persist the rescue event to CASS** for the doctor's `rescues_last_30d` synthesis row:
+
+```
+flywheel_memory(operation: "store", content: formatRescueEventForMemory(packet))
+```
+
+**On Codex completion:**
+
+- Treat Codex's verdict as one more reviewer voice — but **weighted** as a tie-breaker. If Codex says "accept", call `flywheel_review` with `action: "looks-good"`. If Codex says "request change", surface the blocking concerns via `AskUserQuestion` so the user picks the next move (re-open the bead vs. accept with a follow-up bead).
+- If Codex itself stalls, fall back to "Abort phase" — accept the bead and write a CASS entry capturing the unresolved disagreement so future sessions can revisit.
+
 ## Step 9: Loop until complete
 
 > **Fixed in v2.10.1:** `flywheel_verify_beads` correctly unwraps the `br show --json` array shape via `unwrapBrShowValue()` in `mcp-server/src/beads.ts`. If you see `parse_failure` errors on a current install, you're on v2.9.x or older — rebuild via `cd mcp-server && npm run build`. The fallback procedure below remains valid for older installs and for cases where `br` emits an entirely new shape.

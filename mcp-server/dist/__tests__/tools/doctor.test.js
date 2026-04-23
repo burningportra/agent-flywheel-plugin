@@ -64,6 +64,12 @@ function allGreenStubs() {
         { match: (cmd, args) => cmd === 'bv' && args[0] === '--version', respond: ok('bv 0.1.0') },
         { match: (cmd, args) => cmd === 'ntm' && args[0] === '--version', respond: ok('ntm 0.1.0') },
         { match: (cmd, args) => cmd === 'cm' && args[0] === '--version', respond: ok('cm 0.1.0') },
+        // `rescues_last_30d` synthesis row queries `cm search flywheel-rescue --json`.
+        // Empty array → 0 rescues → green.
+        {
+            match: (cmd, args) => cmd === 'cm' && args[0] === 'search' && args[1] === 'flywheel-rescue',
+            respond: ok('[]'),
+        },
         { match: (cmd, args) => cmd === 'node' && args[0] === '--version', respond: ok('v22.0.0') },
         { match: (cmd, args) => cmd === 'git' && args[0] === 'rev-parse', respond: ok('abc123') },
         {
@@ -73,6 +79,19 @@ function allGreenStubs() {
         {
             match: (cmd, args) => cmd === 'git' && args[0] === 'worktree',
             respond: ok(''),
+        },
+        // Swarm-agent CLI detection (claude/codex/gemini at 1:1:1).
+        {
+            match: (cmd, args) => cmd === 'which' && args[0] === 'claude',
+            respond: ok('/usr/local/bin/claude'),
+        },
+        {
+            match: (cmd, args) => cmd === 'which' && args[0] === 'codex',
+            respond: ok('/usr/local/bin/codex'),
+        },
+        {
+            match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
+            respond: ok('/usr/local/bin/gemini'),
         },
     ];
 }

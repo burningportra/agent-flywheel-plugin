@@ -14,7 +14,7 @@
 import { type ExecFn } from '../exec.js';
 import type { DoctorCheck, DoctorCheckSeverity, DoctorReport } from '../types.js';
 /** Canonical check names. Exported for test assertions. */
-export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity"];
+export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "rescues_last_30d"];
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
 export interface DoctorOptions {
     /** Override per-check timeout (ms). */
@@ -43,4 +43,12 @@ export declare function runDoctorChecks(cwd: string, signal?: AbortSignal, optio
  *   set partial:true and override to red themselves)
  */
 export declare function computeOverallSeverity(checks: DoctorCheck[]): DoctorCheckSeverity;
+/**
+ * Count `flywheel-rescue` entries in a `cm search --json` payload whose
+ * embedded `ts=` ISO timestamp falls within the last 30 days. Pure (no
+ * I/O) and defensive — ignores unparseable rows rather than throwing.
+ *
+ * Exported for test access.
+ */
+export declare function countRescueEntriesWithin30Days(raw: string, nowMs: number): number;
 //# sourceMappingURL=doctor.d.ts.map

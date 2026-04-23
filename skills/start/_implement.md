@@ -417,6 +417,74 @@ If you observe two beads committing the same `dist/` bytes, note it in the end-o
 | Contradictory implementations across beads | Poor coordination / stale reservations | Audit `file_reservation_paths`; revise bead boundaries so two beads never edit the same file |
 | Much code, goal still far | Strategic drift | Run the "Come to Jesus" reality check in Step 9's Check-status option |
 
+### Codex-rescue handoff on impl-agent stall (per bead `agent-flywheel-plugin-1qn`)
+
+Worker stalls — distinct from `rate_limited` / `context_low` recovery paths above — fire when the same impl bead has hit its retry budget without producing a passing commit. Detect at the **N-1th** retry, not the Nth, so the user has time to choose a different lane:
+
+- An impl agent reported the same `FlywheelErrorCode` (e.g. `cli_failure`, `parse_failure`) on the immediately prior attempt AND the next attempt would be the second retry, **OR**
+- The pane has been `idle` per `ntm --robot-is-working` for >5 min after Nudge 2 with zero new commits referencing the bead, **OR**
+- A bead has been reassigned twice and the third attempt is about to start.
+
+When any one of these triggers, surface the rescue choice — don't blind-retry:
+
+```
+AskUserQuestion(questions: [{
+  question: "Bead <id> has stalled (<error_code> twice; hint: <hint from envelope>). How do you want to proceed?",
+  header: "Impl stall",
+  options: [
+    { label: "Retry once more", description: "Spend the final retry on the same lane — sometimes a transient flake clears" },
+    { label: "Hand off to Codex (Recommended)", description: "Build a rescue packet from the failing envelope + git diff and invoke the codex-rescue skill" },
+    { label: "Abort phase", description: "Stop this bead; mark blocked and move to the next ready bead" },
+    { label: "Other", description: "Describe a different recovery path" }
+  ],
+  multiSelect: false
+}])
+```
+
+**On "Hand off to Codex"** — build a `RescuePacket` and dispatch via the existing codex prompt adapter. The packet contract lives in `mcp-server/src/codex-handoff.ts`; this section consumes that surface and `mcp-server/src/adapters/codex-prompt.ts` (do NOT edit either):
+
+```ts
+import { buildRescuePacket, renderRescuePromptForCodex, formatRescueEventForMemory }
+  from '../mcp-server/dist/codex-handoff.js';
+
+// 1. Dump the in-flight diff + last error envelope as the artifact.
+//    The artifact path is what Codex reads first — make it concrete.
+const artifactPath = `.pi-flywheel/rescue/impl-${beadId}-${Date.now()}.diff`;
+fs.writeFileSync(artifactPath, await execStr('git', ['diff', baseSha, 'HEAD']));
+
+const packet = buildRescuePacket({
+  phase: 'impl',
+  goal: bead.title,
+  artifact_path: artifactPath,
+  error_code: lastError.code,             // from the prior FlywheelToolError
+  hint: lastError.hint ?? '',             // VERBATIM from bead 478 hint contract
+  recent_tool_calls: state.recentToolCalls.slice(-10),
+  proposed_next_step: 'Apply a minimal fixup; do not rewrite the bead. Run npm run build && tests after the patch.',
+});
+
+const adapted = renderRescuePromptForCodex(packet, {
+  coordinatorName: '<your-agent-mail-name>',
+  projectKey: process.env.NTM_PROJECT,
+  rescueAgentName: '<adjective+noun from agent-names pool>',
+});
+
+// 2. Invoke /codex:rescue with the rendered prompt body. Use --wait
+//    (foreground) so the rescue blocks the wave's progression for this bead.
+//    Codex panes need 2 trailing newlines per AdaptedPrompt.trailingNewlines.
+```
+
+**Persist the rescue event to CASS** for the doctor's `rescues_last_30d` synthesis:
+
+```
+flywheel_memory(operation: "store", content: formatRescueEventForMemory(packet))
+```
+
+**On Codex completion:**
+
+- Codex returns a unified diff in its `COMPLETION_REPORT` block. Apply via `git apply --3way` and create a `fixup!` commit referencing the bead. Re-run the impl gate (`npm run build`, tests) before closing.
+- If Codex produced a clarifying question, surface it via `AskUserQuestion` and feed the answer back to the original impl agent (or to a fresh one if the stall pane is wedged).
+- If Codex itself stalls, do NOT cascade — fall back to "Abort phase" and reassign the bead manually next session.
+
 > ## MANDATORY POST-IMPLEMENTATION CONTINUATION
 >
 > After all impl agents in the current wave have completed (or been force-stopped), you MUST continue to Step 8 (read `_review.md`). Do NOT end the turn, exit the workflow, or return control to the user. The implementation phase is the MIDDLE of the flywheel — not the end. The remaining steps (review -> verify -> test coverage -> UI polish -> wrap-up -> CASS -> refine -> post-flywheel menu) are what make the flywheel a flywheel. Dropping out here is a bug.

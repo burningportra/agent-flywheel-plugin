@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { makeExec } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
+import { detectCliCapabilities, describeCapabilities, } from '../adapters/model-diversity.js';
 const log = createLogger('doctor');
 // ─── Constants ────────────────────────────────────────────────────────────
 /** Per-check exec timeout (ms). */
@@ -37,6 +38,13 @@ export const DOCTOR_CHECK_NAMES = [
     'dist_drift',
     'orphaned_worktrees',
     'checkpoint_validity',
+    // Swarm-agent model diversity (claude/codex/gemini at 1:1:1 via NTM).
+    'claude_cli',
+    'codex_cli',
+    'gemini_cli',
+    'swarm_model_ratio',
+    // Codex-rescue handoff observability (bead `agent-flywheel-plugin-1qn`).
+    'rescues_last_30d',
 ];
 /**
  * Run all 11 health checks in parallel. Never throws.
@@ -76,6 +84,18 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
     }
     const combined = budgetController.signal;
     const semaphore = new Semaphore(maxConcurrency);
+    // Detect implementation-CLI capabilities once and share the result
+    // across the four model-diversity checks (avoids spawning `which`
+    // four separate times for the same answer).
+    const swarmCapsPromise = detectCliCapabilities(exec, {
+        timeout: perCheckTimeoutMs,
+        cwd,
+        signal: combined,
+    }).catch((err) => ({
+        claude: { provider: 'claude', available: false, reason: errMsg(err) },
+        codex: { provider: 'codex', available: false, reason: errMsg(err) },
+        gemini: { provider: 'gemini', available: false, reason: errMsg(err) },
+    }));
     const checkFns = [
         () => checkMcpConnectivity(cwd, combined, now),
         () => checkAgentMailLiveness(exec, cwd, combined, perCheckTimeoutMs, now),
@@ -88,6 +108,11 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         () => checkDistDrift(cwd, combined, now),
         () => checkOrphanedWorktrees(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkCheckpointValidity(cwd, combined, now),
+        () => checkSwarmModelCli('claude_cli', 'claude', swarmCapsPromise, combined, now),
+        () => checkSwarmModelCli('codex_cli', 'codex', swarmCapsPromise, combined, now),
+        () => checkSwarmModelCli('gemini_cli', 'gemini', swarmCapsPromise, combined, now),
+        () => checkSwarmModelRatio(swarmCapsPromise, combined, now),
+        () => checkRescuesLast30d(exec, cwd, combined, perCheckTimeoutMs, now),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -652,6 +677,223 @@ async function checkCheckpointValidity(cwd, signal, now) {
             durationMs: now() - start,
         };
     }
+}
+// ─── Swarm-agent model diversity checks ───────────────────────────────────
+/**
+ * 12-14. Per-provider CLI availability for the swarm-agent model
+ * diversity feature. Yellow (not red) when missing — the wave can still
+ * proceed via fallback to another provider; the doctor's
+ * `swarm_model_ratio` synthesis check reports the achievable ratio.
+ */
+async function checkSwarmModelCli(checkName, provider, capsPromise, signal, now) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck(checkName);
+    try {
+        const caps = await capsPromise;
+        const cap = caps[provider];
+        if (cap.available) {
+            return {
+                name: checkName,
+                severity: 'green',
+                message: cap.path
+                    ? `${provider} cli at ${cap.path}`
+                    : `${provider} cli present`,
+                durationMs: now() - start,
+            };
+        }
+        return {
+            name: checkName,
+            severity: 'yellow',
+            message: `${provider} cli not installed${cap.reason ? ` (${cap.reason})` : ''}`,
+            hint: 'cli_not_available',
+            durationMs: now() - start,
+        };
+    }
+    catch (err) {
+        return {
+            name: checkName,
+            severity: 'yellow',
+            message: `${provider} cli probe failed: ${errMsg(err)}`,
+            hint: 'cli_failure',
+            durationMs: now() - start,
+        };
+    }
+}
+/**
+ * 15. Synthesised swarm model ratio. Reports the Claude:Codex:Gemini
+ * ratio achievable in this environment. Severity:
+ *   - green when all three CLIs are present (1:1:1).
+ *   - yellow when at least one is present but not all three.
+ *   - red when none are present (no swarm dispatch possible).
+ */
+async function checkSwarmModelRatio(capsPromise, signal, now) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('swarm_model_ratio');
+    try {
+        const caps = await capsPromise;
+        const description = describeCapabilities(caps);
+        const availableCount = ['claude', 'codex', 'gemini'].reduce((acc, p) => acc + (caps[p].available ? 1 : 0), 0);
+        if (availableCount === 3) {
+            return {
+                name: 'swarm_model_ratio',
+                severity: 'green',
+                message: description,
+                durationMs: now() - start,
+            };
+        }
+        if (availableCount === 0) {
+            return {
+                name: 'swarm_model_ratio',
+                severity: 'red',
+                message: description,
+                hint: 'cli_not_available',
+                durationMs: now() - start,
+            };
+        }
+        return {
+            name: 'swarm_model_ratio',
+            severity: 'yellow',
+            message: description,
+            hint: 'cli_not_available',
+            durationMs: now() - start,
+        };
+    }
+    catch (err) {
+        return {
+            name: 'swarm_model_ratio',
+            severity: 'yellow',
+            message: `swarm ratio probe failed: ${errMsg(err)}`,
+            hint: 'cli_failure',
+            durationMs: now() - start,
+        };
+    }
+}
+// ─── Codex-rescue observability ───────────────────────────────────────────
+/**
+ * 16. `rescues_last_30d` — synthesised count of `/codex:rescue` handoff
+ * events recorded in CASS over the last 30 days. The rescue branches in
+ * `_planning.md` Phase 0.6, `_implement.md` stall section, and `_review.md`
+ * Step 8.5 persist each handoff via `flywheel_memory(operation="store",
+ * content=formatRescueEventForMemory(packet))` — that formatter emits the
+ * canonical prefix `flywheel-rescue` which we count here.
+ *
+ * Severity:
+ *   - green when 0–4 rescues in the window (normal operating volume).
+ *   - yellow when 5–14 (frequent stalls — investigate hotspots).
+ *   - red when 15+ (severe — indicates Claude lane degradation).
+ *   - yellow if `cm` CLI is absent (cannot count, observability degraded).
+ *
+ * Read-only: only invokes `cm search`. Never mutates CASS.
+ */
+async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('rescues_last_30d');
+    try {
+        // First confirm cm is available — synthesis is best-effort.
+        const probe = await exec('cm', ['--version'], { timeout, cwd, signal });
+        if (probe.code !== 0) {
+            return {
+                name: 'rescues_last_30d',
+                severity: 'yellow',
+                message: 'cm CLI unavailable — rescue counts unknown',
+                hint: 'cli_not_available',
+                durationMs: now() - start,
+            };
+        }
+        // `cm search` returns matching bullets as JSON; we count entries whose
+        // body carries the canonical `flywheel-rescue` prefix AND whose embedded
+        // `ts=` ISO timestamp falls within the last 30 days.
+        const res = await exec('cm', ['search', 'flywheel-rescue', '--json'], {
+            timeout,
+            cwd,
+            signal,
+        });
+        if (res.code !== 0) {
+            return {
+                name: 'rescues_last_30d',
+                severity: 'yellow',
+                message: 'cm search failed — rescue counts unknown',
+                hint: 'cli_failure',
+                durationMs: now() - start,
+            };
+        }
+        const count = countRescueEntriesWithin30Days(res.stdout, now());
+        if (count >= 15) {
+            return {
+                name: 'rescues_last_30d',
+                severity: 'red',
+                message: `${count} codex rescues in last 30d — Claude lane likely degraded`,
+                hint: 'doctor_check_failed',
+                durationMs: now() - start,
+            };
+        }
+        if (count >= 5) {
+            return {
+                name: 'rescues_last_30d',
+                severity: 'yellow',
+                message: `${count} codex rescues in last 30d — investigate stall hotspots`,
+                hint: 'doctor_check_failed',
+                durationMs: now() - start,
+            };
+        }
+        return {
+            name: 'rescues_last_30d',
+            severity: 'green',
+            message: `${count} codex rescues in last 30d`,
+            durationMs: now() - start,
+        };
+    }
+    catch (err) {
+        return {
+            name: 'rescues_last_30d',
+            severity: 'yellow',
+            message: `rescue count probe failed: ${errMsg(err)}`,
+            hint: 'cli_failure',
+            durationMs: now() - start,
+        };
+    }
+}
+/**
+ * Count `flywheel-rescue` entries in a `cm search --json` payload whose
+ * embedded `ts=` ISO timestamp falls within the last 30 days. Pure (no
+ * I/O) and defensive — ignores unparseable rows rather than throwing.
+ *
+ * Exported for test access.
+ */
+export function countRescueEntriesWithin30Days(raw, nowMs) {
+    if (!raw.trim())
+        return 0;
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    }
+    catch {
+        return 0;
+    }
+    // Accept both payload shapes that `cm search --json` emits:
+    //   bare array, or { bullets: [...] }.
+    const bullets = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed.bullets)
+            ? (parsed.bullets)
+            : [];
+    const cutoff = nowMs - 30 * 24 * 60 * 60 * 1000;
+    let count = 0;
+    for (const b of bullets) {
+        const body = b.content ?? b.text ?? '';
+        if (!body.includes('flywheel-rescue'))
+            continue;
+        const tsMatch = /\bts=(\S+)/.exec(body);
+        if (!tsMatch?.[1])
+            continue;
+        const ts = Date.parse(tsMatch[1]);
+        if (Number.isFinite(ts) && ts >= cutoff)
+            count++;
+    }
+    return count;
 }
 // ─── Helpers ──────────────────────────────────────────────────────────────
 function errMsg(err) {

@@ -116,9 +116,78 @@ ask"; otherwise list them under "Explicit non-goals" so they don't leak in.
 
 4. Surface the artifact path in your next turn so the user can see where it landed.
 
-### 4.5d — Integration point for Phase 0.6 (reserved)
+### 4.5d — Phase 0.6: Codex-rescue handoff on planner stall
 
-> Reserved slot for bead `agent-flywheel-plugin-1qn` (codex-rescue stall branches). Do NOT fill this section — it will be populated by the parallel bead. Phase 0.5 (brainstorm) and Phase 0.6 (codex-rescue) are independent and run in sequence; the brainstorm artifact in `docs/brainstorms/` is stable input for anything Phase 0.6 adds.
+> **Why this exists.** A planner agent that hits its retry budget (e.g. `flywheel_plan` errors twice with the same `FlywheelErrorCode`, or a deep-plan synthesizer scores below 0.5 after two revisions) is almost always wrestling with framing-or-tooling friction that a different model (GPT-5 / Codex) can untangle in one pass. Rather than burn a third Claude retry, offer the user a structured Codex handoff. Source: bead `agent-flywheel-plugin-1qn`.
+>
+> **Trigger condition (N-1 retry rule).** Detect stall *before* the final retry — at the (N-1)th failure, not the Nth. Concrete signals:
+>
+> - `flywheel_plan` returned an error envelope on the **immediately prior** attempt with the same `error_code` AND the next attempt would be the second retry.
+> - Deep-plan synthesizer (Step 5.6) returned a coverage score `< 0.5` after one revision pass.
+> - Planner agent has been silent on Agent Mail for >5 min while its task is still `in_progress`.
+>
+> Any one of these fires this branch. Do NOT wait for two of them — the point is to escalate before the user has to ask "is it stuck?".
+
+When the trigger fires, present the rescue choice via `AskUserQuestion`:
+
+```
+AskUserQuestion(questions: [{
+  question: "Plan phase has stalled (<error_code> twice; hint: <hint from envelope>). How do you want to proceed?",
+  header: "Plan stall",
+  options: [
+    { label: "Retry once more", description: "Spend the final retry on the same Claude planner — sometimes a transient flake clears" },
+    { label: "Hand off to Codex (Recommended)", description: "Build a rescue packet from the failing envelope + plan artifact and invoke the codex-rescue skill" },
+    { label: "Abort phase", description: "Stop planning; return to Step 4.5 (brainstorm) or earlier to re-frame" },
+    { label: "Other", description: "Describe a different recovery path" }
+  ],
+  multiSelect: false
+}])
+```
+
+**On "Hand off to Codex"** — build a `RescuePacket` (defined in `mcp-server/src/codex-handoff.ts`) and dispatch:
+
+```ts
+// 1. Construct the packet from the failing envelope.
+import { buildRescuePacket, renderRescuePromptForCodex, formatRescueEventForMemory }
+  from '../mcp-server/dist/codex-handoff.js';
+
+const packet = buildRescuePacket({
+  phase: 'plan',
+  goal: state.selectedGoal,
+  artifact_path: 'docs/plans/<latest-plan-file>.md',
+  error_code: lastError.code,             // from the prior FlywheelToolError
+  hint: lastError.hint ?? '',             // VERBATIM from bead 478 hint contract
+  recent_tool_calls: state.recentToolCalls.slice(-10),
+  proposed_next_step: 'Re-plan the failing section with explicit acceptance criteria; if blocked, surface a single clarifying question back to the coordinator.',
+});
+
+// 2. Render via the codex-prompt adapter (consumer-only — do NOT modify it).
+const adapted = renderRescuePromptForCodex(packet, {
+  coordinatorName: '<your-agent-mail-name>',
+  projectKey: process.env.NTM_PROJECT,
+  rescueAgentName: '<adjective+noun from agent-names pool>',
+});
+
+// 3. Invoke /codex:rescue with the rendered prompt body.
+//    The /codex:rescue skill handles model selection / resume vs. fresh.
+//    Pass `--wait` (foreground) so the rescue result blocks Step 5 progression.
+```
+
+Remember to send Codex two trailing newlines (`AdaptedPrompt.trailingNewlines === 2`) — this is the same input-buffer quirk documented in `_implement.md` Step 7.
+
+**Persist the rescue event to CASS** so `flywheel_doctor`'s `rescues_last_30d` synthesis row picks it up:
+
+```
+flywheel_memory(operation: "store", content: formatRescueEventForMemory(packet))
+```
+
+The `RESCUE_EVENT_PREFIX` constant (`flywheel-rescue`) is the canonical doctor lookup prefix — do NOT roll your own message format.
+
+**On Codex completion:**
+
+- Codex returns a revised plan or a clarifying question. Accept the revised plan via `flywheel_plan` (mode="standard", `planContent: <codex output>`) and re-run the plan gate.
+- If Codex produced a clarifying question, surface it to the user via `AskUserQuestion` and feed the answer back into the next planner call.
+- If Codex itself stalls, fall back to "Abort phase" — do NOT cascade rescues.
 
 ---
 
