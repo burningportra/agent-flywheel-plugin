@@ -6,6 +6,7 @@ import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { assertSafeRelativePath } from '../utils/path-safety.js';
+import { normalizeText } from '../utils/text-normalize.js';
 /**
  * Locate the most-recent brainstorm artifact for this goal.
  *
@@ -35,7 +36,7 @@ function readLatestBrainstorm(cwd, goalSlug) {
         const st = statSync(abs);
         if (!st.isFile())
             return null;
-        const content = readFileSync(abs, 'utf8');
+        const content = normalizeText(readFileSync(abs, 'utf8'));
         return { path: `docs/brainstorms/${pick}`, content };
     }
     catch {
@@ -103,7 +104,7 @@ export async function runPlan(ctx, args) {
         if (!existsSync(absPath)) {
             return errorResult('planning', 'not_found', `Error: planFile not found: ${absPath}`, { planFile: args.planFile, absolutePath: absPath }, 'Check the path is relative to cwd and that the plan file was saved before calling flywheel_plan.');
         }
-        const content = readFileSync(absPath, 'utf8');
+        const content = normalizeText(readFileSync(absPath, 'utf8'));
         const relativePath = args.planFile.startsWith('docs/') ? args.planFile : `docs/plans/${args.planFile}`;
         state.planDocument = args.planFile;
         state.planRefinementRound = 0;

@@ -3,6 +3,7 @@ import path from "node:path";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { forceReleaseFileReservation, sendMessage, whoisAgent, } from "./agent-mail.js";
 import { createLogger } from "./logger.js";
+import { normalizeText } from "./utils/text-normalize.js";
 export const TELEMETRY_DIR = ".pi-flywheel";
 export const TELEMETRY_FILE = "tender-events.log";
 const telemetryLog = createLogger("tender-telemetry");
@@ -58,7 +59,7 @@ export function loadTenderConfig(cwd) {
     const filePath = path.join(cwd, ".pi-flywheel", "tender.config.json");
     if (fs.existsSync(filePath)) {
         try {
-            const raw = fs.readFileSync(filePath, "utf8");
+            const raw = normalizeText(fs.readFileSync(filePath, "utf8"));
             const parsed = JSON.parse(raw);
             if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
                 for (const [key, value] of Object.entries(parsed)) {

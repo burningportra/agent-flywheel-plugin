@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { z } from "zod";
+import { normalizeText } from "../utils/text-normalize.js";
 export const BASELINE_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
 const BaselineEntrySchema = z.object({
@@ -42,7 +43,7 @@ export async function loadBaseline(path) {
             return null;
         throw err;
     }
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(normalizeText(text));
     return BaselineFileSchema.parse(parsed);
 }
 export async function saveBaseline(path, baseline) {

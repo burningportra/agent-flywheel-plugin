@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createLintLogger } from "./logger.js";
+import { normalizeText } from "../utils/text-normalize.js";
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_MANIFEST_REL = "mcp-server/.lintskill-manifest.json";
 const DEFAULT_ALLOWLIST_REL = "mcp-server/.lintskill-allowlist.json";
@@ -68,7 +69,7 @@ async function loadManifest(manifestAbs, signal, timeoutMs) {
         checkAborted(signal);
         let parsed;
         try {
-            parsed = JSON.parse(raw);
+            parsed = JSON.parse(normalizeText(raw));
         }
         catch (e) {
             log.debug("manifest invalid JSON", { path: manifestAbs, err: String(e) });
@@ -98,7 +99,7 @@ async function loadAllowlist(allowlistAbs, signal, timeoutMs) {
         checkAborted(signal);
         let parsed;
         try {
-            parsed = JSON.parse(raw);
+            parsed = JSON.parse(normalizeText(raw));
         }
         catch (e) {
             log.debug("allowlist invalid JSON", { path: allowlistAbs, err: String(e) });

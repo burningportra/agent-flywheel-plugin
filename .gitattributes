@@ -1,0 +1,5 @@
+# Preserve exact bytes for CRLF/BOM normalization fixtures.
+# These files intentionally contain UTF-8 BOM and CRLF line endings — they
+# are the inputs that exercise mcp-server/src/utils/text-normalize.ts. Do
+# not let core.autocrlf or any text-attribute heuristic rewrite them.
+mcp-server/src/__tests__/fixtures/normalize-crlf-bom.md binary

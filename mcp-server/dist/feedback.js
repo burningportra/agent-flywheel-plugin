@@ -10,6 +10,7 @@ import { join } from "path";
 import { parseFeedbackFile } from "./parsers.js";
 import { createLogger } from "./logger.js";
 import { assertSafeSegment } from "./utils/path-safety.js";
+import { normalizeText } from "./utils/text-normalize.js";
 const log = createLogger("feedback");
 const FEEDBACK_DIR = ".pi/flywheel-feedback";
 /**
@@ -56,7 +57,7 @@ export function loadAllFeedback(cwd) {
             .sort() // chronological order
             .map((f) => {
             try {
-                const raw = readFileSync(join(dir, f), "utf8");
+                const raw = normalizeText(readFileSync(join(dir, f), "utf8"));
                 const parsed = parseFeedbackFile(raw);
                 return parsed.ok ? parsed.data : null;
             }

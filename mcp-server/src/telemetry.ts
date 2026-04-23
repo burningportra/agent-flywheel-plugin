@@ -32,6 +32,7 @@ import { registerCliExecTelemetryHook } from './cli-exec.js';
 import { ErrorCodeTelemetrySchema } from './types.js';
 import type { ErrorCodeTelemetry } from './types.js';
 import { isFlywheelManagedPath } from './utils/fs-safety.js';
+import { normalizeText } from './utils/text-normalize.js';
 
 const log = createLogger('telemetry');
 
@@ -257,7 +258,7 @@ function buildSnapshot(opts: TelemetryOptions): ErrorCodeTelemetry {
 async function readExistingSpool(cwd: string): Promise<ErrorCodeTelemetry | null> {
   try {
     const raw = await readFile(spoolPath(cwd), 'utf8');
-    const parsed = ErrorCodeTelemetrySchema.safeParse(JSON.parse(raw));
+    const parsed = ErrorCodeTelemetrySchema.safeParse(JSON.parse(normalizeText(raw)));
     if (!parsed.success) return null;
     return parsed.data;
   } catch {

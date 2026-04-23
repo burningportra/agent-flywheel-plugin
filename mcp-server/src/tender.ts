@@ -10,6 +10,7 @@ import {
 } from "./agent-mail.js";
 import type { ExecFn } from "./exec.js";
 import { createLogger } from "./logger.js";
+import { normalizeText } from "./utils/text-normalize.js";
 
 // ─── Telemetry ─────────────────────────────────────────────────
 
@@ -159,7 +160,7 @@ export function loadTenderConfig(cwd: string): TenderConfig {
   const filePath = path.join(cwd, ".pi-flywheel", "tender.config.json");
   if (fs.existsSync(filePath)) {
     try {
-      const raw = fs.readFileSync(filePath, "utf8");
+      const raw = normalizeText(fs.readFileSync(filePath, "utf8"));
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         for (const [key, value] of Object.entries(parsed)) {

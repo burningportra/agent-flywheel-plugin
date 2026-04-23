@@ -5,6 +5,7 @@ import type { ExecFn } from "./exec.js";
 import { brExec, resilientExec } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
 import { FlywheelError } from "./errors.js";
+import { normalizeText } from "./utils/text-normalize.js";
 
 const log = createLogger("coordination");
 
@@ -321,7 +322,7 @@ export function loadCollisionIgnore(repoRoot: string): string[] {
   const path = join(repoRoot, COLLISION_IGNORE_PATH);
   if (!existsSync(path)) return [...DEFAULT_COLLISION_IGNORE];
   try {
-    const body = readFileSync(path, "utf-8");
+    const body = normalizeText(readFileSync(path, "utf-8"));
     const patterns = body
       .split("\n")
       .map((line) => line.trim())

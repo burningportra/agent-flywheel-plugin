@@ -8,6 +8,7 @@ import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { assertSafeRelativePath } from '../utils/path-safety.js';
+import { normalizeText } from '../utils/text-normalize.js';
 
 /**
  * Locate the most-recent brainstorm artifact for this goal.
@@ -35,7 +36,7 @@ function readLatestBrainstorm(cwd: string, goalSlug: string): { path: string; co
     // Defensive: ensure it's a regular file, not a symlink to something weird.
     const st = statSync(abs);
     if (!st.isFile()) return null;
-    const content = readFileSync(abs, 'utf8');
+    const content = normalizeText(readFileSync(abs, 'utf8'));
     return { path: `docs/brainstorms/${pick}`, content };
   } catch {
     return null;
@@ -132,7 +133,7 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
         'Check the path is relative to cwd and that the plan file was saved before calling flywheel_plan.',
       );
     }
-    const content = readFileSync(absPath, 'utf8');
+    const content = normalizeText(readFileSync(absPath, 'utf8'));
     const relativePath = args.planFile.startsWith('docs/') ? args.planFile : `docs/plans/${args.planFile}`;
     state.planDocument = args.planFile;
     state.planRefinementRound = 0;

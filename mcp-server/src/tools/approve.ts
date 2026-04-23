@@ -11,6 +11,7 @@ import { computeHotspotMatrix, type HotspotInputBead } from '../plan-simulation.
 import { createLogger } from '../logger.js';
 import { expandTemplate } from '../bead-templates.js';
 import { parseTemplateHint } from '../deep-plan.js';
+import { normalizeText } from '../utils/text-normalize.js';
 
 const log = createLogger('approve');
 
@@ -507,7 +508,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
   let plan = '';
   const absPath = planPath.startsWith('/') ? planPath : join(cwd, planPath);
   if (existsSync(absPath)) {
-    plan = readFileSync(absPath, 'utf8');
+    plan = normalizeText(readFileSync(absPath, 'utf8'));
   } else {
     return makeApproveError(
       `Error: Plan document not found at \`${planPath}\`.\n\nGenerate the plan first using \`flywheel_plan\`, then call \`flywheel_approve_beads\` again.`,

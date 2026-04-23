@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger } from './logger.js';
 import { selectScanners, mergeAndDedup } from './todo-scanner.js';
+import { normalizeText } from './utils/text-normalize.js';
 const log = createLogger('profiler');
 const CACHE_DIR = ".pi-flywheel";
 const CACHE_FILE = "profile-cache.json";
@@ -14,7 +15,7 @@ export async function loadCachedProfile(exec, cwd) {
     if (!existsSync(cachePath))
         return null;
     try {
-        const raw = readFileSync(cachePath, "utf8");
+        const raw = normalizeText(readFileSync(cachePath, "utf8"));
         let cache;
         try {
             cache = JSON.parse(raw);

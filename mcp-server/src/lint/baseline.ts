@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { z } from "zod";
 import type { Finding, Severity } from "./types.js";
+import { normalizeText } from "../utils/text-normalize.js";
 
 export const BASELINE_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
@@ -50,7 +51,7 @@ export async function loadBaseline(path: string): Promise<BaselineFile | null> {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
-  const parsed = JSON.parse(text);
+  const parsed = JSON.parse(normalizeText(text));
   return BaselineFileSchema.parse(parsed);
 }
 

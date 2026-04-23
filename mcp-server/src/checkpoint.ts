@@ -25,6 +25,7 @@ import {
   guardedUnlink,
   isFlywheelManagedPath,
 } from "./utils/fs-safety.js";
+import { normalizeText } from "./utils/text-normalize.js";
 
 // ─── Constants ────────────────────────────────────────────────
 
@@ -232,7 +233,7 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
   }
 
   try {
-    const raw = readFileSync(mainFile, "utf8");
+    const raw = normalizeText(readFileSync(mainFile, "utf8"));
     let parsed: unknown;
 
     try {

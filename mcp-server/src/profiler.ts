@@ -4,6 +4,7 @@ import type { ExecFn } from "./exec.js";
 import type { RepoProfile, TodoItem, CommitSummary } from "./types.js";
 import { createLogger } from './logger.js';
 import { selectScanners, mergeAndDedup } from './todo-scanner.js';
+import { normalizeText } from './utils/text-normalize.js';
 
 const log = createLogger('profiler');
 
@@ -25,7 +26,7 @@ export async function loadCachedProfile(exec: ExecFn, cwd: string): Promise<Repo
   if (!existsSync(cachePath)) return null;
 
   try {
-    const raw = readFileSync(cachePath, "utf8");
+    const raw = normalizeText(readFileSync(cachePath, "utf8"));
     let cache: ProfileCache;
     try {
       cache = JSON.parse(raw);

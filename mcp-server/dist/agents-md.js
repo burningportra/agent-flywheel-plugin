@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
 import { onboardMemory } from "./memory.js";
+import { normalizeText } from "./utils/text-normalize.js";
 // ─── Core Rules ─────────────────────────────────────────────
 // Mandatory behavioral constraints for multi-agent coordination.
 const CORE_RULES_SECTION = `
@@ -201,7 +202,7 @@ export function scoreAgentsMd(cwd) {
             missing: ["AGENTS.md file", "Core Rules", "Agent Mail coordination", "CASS Memory", "Beads CLI (br) docs", "Beads Viewer (bv) docs"],
         };
     }
-    const content = readFileSync(agentsMdPath, "utf-8").toLowerCase();
+    const content = normalizeText(readFileSync(agentsMdPath, "utf-8")).toLowerCase();
     const missing = [];
     // Check core rules (50% of score)
     let coreRuleCount = 0;
@@ -250,7 +251,7 @@ export async function ensureCoreRules(cwd) {
         writeFileSync(agentsMdPath, DEFAULT_HEADER + CORE_RULES_SECTION.trimStart(), "utf-8");
         return;
     }
-    const content = readFileSync(agentsMdPath, "utf-8");
+    const content = normalizeText(readFileSync(agentsMdPath, "utf-8"));
     if (!content.includes(CORE_RULES_MARKER)) {
         // Insert core rules after the header (before other sections) for visibility
         appendFileSync(agentsMdPath, "\n" + CORE_RULES_SECTION.trimStart(), "utf-8");
@@ -269,7 +270,7 @@ export async function ensureAgentMailSection(cwd) {
         onboardMemory(cwd);
         return;
     }
-    let content = readFileSync(agentsMdPath, "utf-8");
+    let content = normalizeText(readFileSync(agentsMdPath, "utf-8"));
     // Ensure core rules are present
     if (!content.includes(CORE_RULES_MARKER)) {
         appendFileSync(agentsMdPath, "\n" + CORE_RULES_SECTION.trimStart(), "utf-8");

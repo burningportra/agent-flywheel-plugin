@@ -50,6 +50,7 @@ import {
   type SolutionDoc,
   type SolutionDocFrontmatter,
 } from './solution-doc-schema.js';
+import { normalizeText } from './utils/text-normalize.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -495,7 +496,7 @@ export async function refreshLearnings(
     if (rel.startsWith('_archive/') || rel.includes('/_archive/')) continue;
     let raw: string;
     try {
-      raw = await fs.readFile(`${root}/${rel}`);
+      raw = normalizeText(await fs.readFile(`${root}/${rel}`));
     } catch (err) {
       unparseable.push({
         path: rel,

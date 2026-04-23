@@ -30,6 +30,7 @@ import { FlywheelErrorCodeSchema, registerTelemetryHook } from './errors.js';
 import { registerCliExecTelemetryHook } from './cli-exec.js';
 import { ErrorCodeTelemetrySchema } from './types.js';
 import { isFlywheelManagedPath } from './utils/fs-safety.js';
+import { normalizeText } from './utils/text-normalize.js';
 const log = createLogger('telemetry');
 /** Module-level singleton aggregator */
 const _aggregator = new Map();
@@ -209,7 +210,7 @@ function buildSnapshot(opts) {
 async function readExistingSpool(cwd) {
     try {
         const raw = await readFile(spoolPath(cwd), 'utf8');
-        const parsed = ErrorCodeTelemetrySchema.safeParse(JSON.parse(raw));
+        const parsed = ErrorCodeTelemetrySchema.safeParse(JSON.parse(normalizeText(raw)));
         if (!parsed.success)
             return null;
         return parsed.data;

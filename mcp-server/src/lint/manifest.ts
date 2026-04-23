@@ -1,6 +1,7 @@
 import { readFile, writeFile, readdir, stat, rename } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { normalizeText } from "../utils/text-normalize.js";
 
 const ManifestFileSchema = z.object({
   schemaVersion: z.literal(1),
@@ -18,7 +19,7 @@ export async function loadManifest(filepath: string): Promise<ManifestFile | nul
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
-  const parsed = JSON.parse(text);
+  const parsed = JSON.parse(normalizeText(text));
   return ManifestFileSchema.parse(parsed);
 }
 

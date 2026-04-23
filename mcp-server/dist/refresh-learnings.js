@@ -45,6 +45,7 @@
  *     skill owns all filesystem mutations (archival, edits).
  */
 import { SolutionDocFrontmatterSchema, } from './solution-doc-schema.js';
+import { normalizeText } from './utils/text-normalize.js';
 // ─── Frontmatter parser ────────────────────────────────────────
 /**
  * Parse the exact YAML shape produced by `renderSolutionDoc` — a fenced
@@ -363,7 +364,7 @@ export async function refreshLearnings(root, fs, options = {}) {
             continue;
         let raw;
         try {
-            raw = await fs.readFile(`${root}/${rel}`);
+            raw = normalizeText(await fs.readFile(`${root}/${rel}`));
         }
         catch (err) {
             unparseable.push({

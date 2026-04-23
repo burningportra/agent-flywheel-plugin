@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
 import { onboardMemory } from "./memory.js";
+import { normalizeText } from "./utils/text-normalize.js";
 
 // ─── Core Rules ─────────────────────────────────────────────
 // Mandatory behavioral constraints for multi-agent coordination.
@@ -238,7 +239,7 @@ export function scoreAgentsMd(cwd: string): AgentsMdHealth {
     };
   }
 
-  const content = readFileSync(agentsMdPath, "utf-8").toLowerCase();
+  const content = normalizeText(readFileSync(agentsMdPath, "utf-8")).toLowerCase();
   const missing: string[] = [];
 
   // Check core rules (50% of score)
@@ -293,7 +294,7 @@ export async function ensureCoreRules(cwd: string): Promise<void> {
     return;
   }
 
-  const content = readFileSync(agentsMdPath, "utf-8");
+  const content = normalizeText(readFileSync(agentsMdPath, "utf-8"));
   if (!content.includes(CORE_RULES_MARKER)) {
     // Insert core rules after the header (before other sections) for visibility
     appendFileSync(agentsMdPath, "\n" + CORE_RULES_SECTION.trimStart(), "utf-8");
@@ -319,7 +320,7 @@ export async function ensureAgentMailSection(cwd: string): Promise<void> {
     return;
   }
 
-  let content = readFileSync(agentsMdPath, "utf-8");
+  let content = normalizeText(readFileSync(agentsMdPath, "utf-8"));
 
   // Ensure core rules are present
   if (!content.includes(CORE_RULES_MARKER)) {

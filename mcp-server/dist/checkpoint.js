@@ -13,6 +13,7 @@ const log = createLogger("checkpoint");
 import { existsSync, mkdirSync, readFileSync, writeFileSync, } from "fs";
 import { join } from "path";
 import { guardedRename, guardedUnlink, isFlywheelManagedPath, } from "./utils/fs-safety.js";
+import { normalizeText } from "./utils/text-normalize.js";
 // ─── Constants ────────────────────────────────────────────────
 export const CHECKPOINT_DIR = ".pi-flywheel";
 export const CHECKPOINT_FILE = "checkpoint.json";
@@ -171,7 +172,7 @@ export function readCheckpoint(cwd) {
         return null;
     }
     try {
-        const raw = readFileSync(mainFile, "utf8");
+        const raw = normalizeText(readFileSync(mainFile, "utf8"));
         let parsed;
         try {
             parsed = JSON.parse(raw);

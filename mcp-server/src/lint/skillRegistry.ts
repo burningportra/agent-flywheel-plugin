@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createLintLogger } from "./logger.js";
+import { normalizeText } from "../utils/text-normalize.js";
 
 export type SkillSource = "repo" | "manifest" | "allowlist" | "plugins";
 
@@ -118,7 +119,7 @@ async function loadManifest(
     checkAborted(signal);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(normalizeText(raw));
     } catch (e) {
       log.debug("manifest invalid JSON", { path: manifestAbs, err: String(e) });
       return [];
@@ -152,7 +153,7 @@ async function loadAllowlist(
     checkAborted(signal);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(normalizeText(raw));
     } catch (e) {
       log.debug("allowlist invalid JSON", { path: allowlistAbs, err: String(e) });
       return [];
