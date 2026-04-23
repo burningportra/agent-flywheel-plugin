@@ -169,6 +169,29 @@ agent-flywheel's skills can be emitted in Codex native format (`AGENTS.md` + `.c
 flywheel_emit_codex(cwd: "/path/to/project", targetDir: ".")
 ```
 
+## Debugging
+
+The MCP server emits structured JSON logs to stderr (never stdout — stdout is reserved for the MCP JSON-RPC channel). Set `FW_LOG_LEVEL` to turn up verbosity when a bead implementation or doctor check is misbehaving:
+
+```bash
+FW_LOG_LEVEL=debug claude --plugin-dir .
+```
+
+Levels (ordered `debug < info < warn < error`; default `warn`):
+
+- `debug` — every doctor probe, every exec command+args, every state transition, plus all higher levels.
+- `info` — tool invocations, swarm lifecycle events, checkpoint saves.
+- `warn` — unexpected-but-recoverable conditions (default).
+- `error` — tool failures and unhandled exceptions only.
+
+Example debug line (stderr, one JSON per line):
+
+```json
+{"ts":"2026-04-23T18:02:11.482Z","level":"debug","ctx":"doctor","msg":"doctor check threw","check":"ntm_binary","err":"spawn ntm ENOENT"}
+```
+
+When `flywheel_doctor` reports `[WARN]` or `[FAIL]`, rerun the session with `FW_LOG_LEVEL=debug` and inspect the stderr trace for the failing probe's exec command and stderr bytes.
+
 ## License
 
 MIT

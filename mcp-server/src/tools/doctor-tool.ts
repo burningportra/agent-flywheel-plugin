@@ -29,9 +29,21 @@ function glyphFor(severity: 'green' | 'yellow' | 'red'): string {
 }
 
 /**
+ * Tip appended to doctor output on any non-green overall result. Points
+ * contributors at the `FW_LOG_LEVEL` env var — `createLogger` filters
+ * stderr JSON lines by this level (default `warn`).
+ */
+const FW_LOG_LEVEL_TIP =
+  'Tip: set FW_LOG_LEVEL=debug for full trace. See README "Debugging" section.';
+
+/**
  * Render a DoctorReport as a compact plain-text summary — 1 line per check
  * with a severity glyph. This is the human-facing view that appears in MCP
  * `content[]`. Structured data lives in `structuredContent.data.report`.
+ *
+ * On any non-green overall result (yellow or red), a trailing line surfaces
+ * the `FW_LOG_LEVEL=debug` tip so contributors can discover the verbose-log
+ * escape hatch without grepping the README.
  */
 export function renderDoctorReportText(report: DoctorReport): string {
   const header = `flywheel doctor — overall: ${glyphFor(report.overall)} (${report.elapsedMs}ms${report.partial ? ', partial' : ''})`;
@@ -39,7 +51,11 @@ export function renderDoctorReportText(report: DoctorReport): string {
     const base = `${glyphFor(c.severity)} ${c.name}: ${c.message}`;
     return c.hint ? `${base} [hint: ${c.hint}]` : base;
   });
-  return [header, ...lines].join('\n');
+  const out = [header, ...lines];
+  if (report.overall !== 'green') {
+    out.push('', FW_LOG_LEVEL_TIP);
+  }
+  return out.join('\n');
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────

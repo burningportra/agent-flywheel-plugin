@@ -212,4 +212,33 @@ describe('I4 — flywheel_doctor tool registration', () => {
     expect(text).toContain('[WARN] bv_binary: bv not installed [hint: cli_not_available]');
     expect(text).toContain('[FAIL] agent_mail_liveness: unreachable');
   });
+
+  it('renderDoctorReportText appends FW_LOG_LEVEL tip on non-green overall', () => {
+    const yellowReport: DoctorReport = {
+      version: 1,
+      cwd: '/tmp/x',
+      overall: 'yellow',
+      partial: false,
+      checks: [{ name: 'bv_binary', severity: 'yellow', message: 'bv not installed' }],
+      elapsedMs: 1,
+      timestamp: '2026-04-23T00:00:00.000Z',
+    };
+    expect(renderDoctorReportText(yellowReport)).toContain('FW_LOG_LEVEL=debug');
+
+    const redReport: DoctorReport = { ...yellowReport, overall: 'red' };
+    expect(renderDoctorReportText(redReport)).toContain('FW_LOG_LEVEL=debug');
+  });
+
+  it('renderDoctorReportText omits FW_LOG_LEVEL tip on green overall', () => {
+    const greenReport: DoctorReport = {
+      version: 1,
+      cwd: '/tmp/x',
+      overall: 'green',
+      partial: false,
+      checks: [{ name: 'br_binary', severity: 'green', message: 'br 0.1.0' }],
+      elapsedMs: 1,
+      timestamp: '2026-04-23T00:00:00.000Z',
+    };
+    expect(renderDoctorReportText(greenReport)).not.toContain('FW_LOG_LEVEL');
+  });
 });
