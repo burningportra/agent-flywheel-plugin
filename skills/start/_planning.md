@@ -1,4 +1,126 @@
-# Planning Phase — Steps 5, 5.55, 5.6
+# Planning Phase — Steps 4.5 (Phase 0.5 brainstorm), 5, 5.55, 5.6
+
+## Step 4.5: Phase 0.5 — Brainstorm pressure-test (MANDATORY unless skipped)
+
+> **Why this exists.** `flywheel_discover` surfaces ideas; Step 5 picks a *plan shape*. But neither step interrogates the **framing** of the goal itself. "We planned the wrong thing" is the most expensive failure mode — beads ship but the goal was miscalibrated. A three-question pressure-test at this boundary catches the mis-framed goal before we spend plan + implement budget.
+>
+> Source: `docs/research/compound-engineering-apply.md` Proposal 4 ("Brainstorm step between discover and plan") — ported inline here rather than as a separate skill to avoid orchestrator fragmentation.
+
+### 4.5a — Skip heuristic (fast-path)
+
+Skip Phase 0.5 entirely and jump to Step 5 when **either** of the following holds:
+
+1. `flywheel_discover` returned a top-ranked idea with `confidence >= 0.8` (the agent is highly certain about framing — no pressure-test needed).
+2. The user's initial prompt captured in Step 0.preflight (`USER_INPUT`) is **>100 characters** AND reads as a detailed goal statement (multiple clauses specifying scope, users, or constraints — not just a one-word topic).
+
+If EITHER condition holds, emit a single line to the transcript noting the skip reason (e.g. `"Phase 0.5 skipped: discover confidence 0.87 >= 0.8"` or `"Phase 0.5 skipped: initial prompt is 247 chars with detailed framing"`) and proceed directly to Step 5.
+
+Otherwise, run the dialogue below. **Do not skip silently** — an explicit skip notice is part of the audit trail.
+
+### 4.5b — Three-question pressure-test dialogue
+
+Use THREE separate `AskUserQuestion` calls, one per question, so the user's answer to each shapes how the next is framed. Each question offers 2–4 labeled options covering scope / adjacents / ambition. Leverage the "Other" field for custom answers.
+
+**Question 1 — Smallest version (scope floor).**
+
+```
+AskUserQuestion(questions: [{
+  question: "What's the SMALLEST version of this that would still be worth shipping?",
+  header: "Smallest",
+  options: [
+    { label: "Core-only slice", description: "Ship only the load-bearing primitive; skip every nice-to-have for v1" },
+    { label: "Happy-path MVP", description: "Cover the 80% case end-to-end; defer edge cases and polish" },
+    { label: "Time-boxed prototype", description: "Ship whatever lands in one cycle; explicitly accept throwaway code" },
+    { label: "Other (describe)", description: "Specify a different floor in the Other field" }
+  ],
+  multiSelect: false
+}])
+```
+
+**Question 2 — 10x version (ambition ceiling).**
+
+```
+AskUserQuestion(questions: [{
+  question: "What's the 10x version of this — what would it look like if we weren't constrained?",
+  header: "10x",
+  options: [
+    { label: "Breadth expansion", description: "Same pattern applied across every related surface (all commands, all users, all entrypoints)" },
+    { label: "Depth expansion", description: "A single surface but radically smarter (automated, learning, self-healing)" },
+    { label: "Platform play", description: "Ship this as reusable infrastructure others build on, not a point solution" },
+    { label: "Other (describe)", description: "Specify a different ceiling in the Other field" }
+  ],
+  multiSelect: false
+}])
+```
+
+**Question 3 — Adjacent user asks (scope creep radar).**
+
+```
+AskUserQuestion(questions: [{
+  question: "What have users (or you) asked for ADJACENT to this that might belong in the same cycle?",
+  header: "Adjacents",
+  options: [
+    { label: "Nothing adjacent", description: "This goal is isolated — no related asks to fold in" },
+    { label: "Bundle a related ask", description: "Specify which adjacent ask to include in the Other field" },
+    { label: "Related but defer", description: "Name the adjacent ask but park it for a later cycle" },
+    { label: "Unsure — I'll decide during planning", description: "Let the planner surface adjacents as it goes" }
+  ],
+  multiSelect: false
+}])
+```
+
+### 4.5c — Synthesize and write the brainstorm artifact
+
+After all three answers land, write a brainstorm artifact to disk so `flywheel_plan` (both standard and deep) can read it back as planner context.
+
+1. Compute `<goal-slug>` from the currently selected goal (same slugify rule used elsewhere — lowercase, hyphens, strip non-alphanumerics).
+2. Compute `<date>` as `YYYY-MM-DD` from today.
+3. Write the file to `docs/brainstorms/<goal-slug>-<date>.md` using the **Write** tool (not bash heredoc) with this shape:
+
+```markdown
+# Brainstorm — <goal title>
+
+**Date:** <YYYY-MM-DD>
+**Goal slug:** <goal-slug>
+**Source:** Phase 0.5 pressure-test (skills/start/_planning.md §4.5)
+
+## Framing synthesis
+
+<2–4 sentence synthesis combining the three answers into a single framing
+statement: what we're building, what we're NOT building (from Q1 floor and
+Q3 defer), and the ambition ceiling we're aiming at (from Q2). Write this
+in your own words as the orchestrator — this is the payload the planner
+reads.>
+
+## User answers
+
+### Smallest version (scope floor)
+- **Selected:** <label>
+- **Detail:** <description + any Other-field text>
+
+### 10x version (ambition ceiling)
+- **Selected:** <label>
+- **Detail:** <description + any Other-field text>
+
+### Adjacent asks (scope creep radar)
+- **Selected:** <label>
+- **Detail:** <description + any Other-field text>
+
+## Planner instructions
+
+Planner agents: read this file FIRST. Anchor the plan's scope to the smallest
+version. Reserve the 10x version as a "future direction" appendix, not a v1
+requirement. Fold in adjacents ONLY if the user selected "Bundle a related
+ask"; otherwise list them under "Explicit non-goals" so they don't leak in.
+```
+
+4. Surface the artifact path in your next turn so the user can see where it landed.
+
+### 4.5d — Integration point for Phase 0.6 (reserved)
+
+> Reserved slot for bead `agent-flywheel-plugin-1qn` (codex-rescue stall branches). Do NOT fill this section — it will be populated by the parallel bead. Phase 0.5 (brainstorm) and Phase 0.6 (codex-rescue) are independent and run in sequence; the brainstorm artifact in `docs/brainstorms/` is stable input for anything Phase 0.6 adds.
+
+---
 
 ## Step 5: Choose planning mode
 
@@ -26,7 +148,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
+**Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`. `flywheel_plan` auto-detects the most-recent `docs/brainstorms/<goal-slug>-*.md` (written by Phase 0.5) and threads its synthesized framing into the planner prompt; no extra argument is required. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
 **Structured error branching (mandatory).** When `flywheel_plan` returns `status: "error"`, branch on `result.structuredContent?.data?.error?.code` (a `FlywheelErrorCode`) instead of matching message text:
 
@@ -38,6 +160,8 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
 ```
 
 **Deep plan**:
+
+> **Brainstorm handoff.** `flywheel_plan` auto-detects the most-recent `docs/brainstorms/<goal-slug>-*.md` artifact (if any) and injects its synthesized framing into every per-perspective planner prompt under a `## Phase 0.5 Brainstorm` header. Each spawned planner therefore inherits the scope floor, 10x ceiling, and adjacent-ask decisions from Phase 0.5 without you having to repeat them. If Phase 0.5 was skipped by heuristic, planners simply proceed without that section.
 
 1. **Bootstrap Agent Mail** — call `macro_start_session` with:
    - `human_key`: current working directory

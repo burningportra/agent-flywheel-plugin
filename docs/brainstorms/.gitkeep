@@ -1,0 +1,18 @@
+# Brainstorms
+
+This directory holds pre-plan brainstorm artifacts emitted by **Phase 0.5** of
+`skills/start/_planning.md` (the pressure-test step between `flywheel_discover`
+and `flywheel_plan`).
+
+Each file is named `<goal-slug>-<YYYY-MM-DD>.md` and captures:
+
+- The synthesized framing of the goal after the three-question dialogue
+- User answers to the pressure-test questions (smallest / 10x / adjacent)
+- Any free-form "Other" text supplied via `AskUserQuestion`
+
+The `flywheel_plan` tool reads the most-recent brainstorm (matching the current
+goal slug) and feeds its synthesized framing into the planner agent prompts so
+that Phase 0.5 findings shape the plan rather than being discarded.
+
+Do not hand-edit files written by Phase 0.5. Re-run the dialogue (e.g. via
+"Start over") to regenerate.

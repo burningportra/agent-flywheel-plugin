@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
 import { slugifyGoal } from './shared.js';
@@ -8,6 +8,45 @@ import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { assertSafeRelativePath } from '../utils/path-safety.js';
+
+/**
+ * Locate the most-recent brainstorm artifact for this goal.
+ *
+ * Phase 0.5 of `skills/start/_planning.md` writes pressure-test outcomes to
+ * `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>.md`. We pick the lexically-greatest
+ * match (dates in the filename make lexical order equal chronological order),
+ * falling back to `null` when the directory is missing or no slug match exists.
+ *
+ * Returns the raw file contents so the caller can splice them directly into
+ * the planner prompt — callers should NOT parse the file structure, because
+ * the orchestrator writes arbitrary synthesis prose.
+ */
+function readLatestBrainstorm(cwd: string, goalSlug: string): { path: string; content: string } | null {
+  try {
+    const dir = join(cwd, 'docs', 'brainstorms');
+    if (!existsSync(dir)) return null;
+    const entries = readdirSync(dir)
+      .filter(f => f.endsWith('.md') && f.startsWith(`${goalSlug}-`));
+    if (entries.length === 0) return null;
+    // Sort lexically descending — filenames embed ISO dates, so this == latest.
+    entries.sort().reverse();
+    const pick = entries[0];
+    const abs = join(dir, pick);
+    // Defensive: ensure it's a regular file, not a symlink to something weird.
+    const st = statSync(abs);
+    if (!st.isFile()) return null;
+    const content = readFileSync(abs, 'utf8');
+    return { path: `docs/brainstorms/${pick}`, content };
+  } catch {
+    return null;
+  }
+}
+
+/** Format a brainstorm artifact as a prompt section; empty string if null. */
+function formatBrainstormSection(brainstorm: { path: string; content: string } | null): string {
+  if (!brainstorm) return '';
+  return `\n## Phase 0.5 Brainstorm (read FIRST)\n\nSource: \`${brainstorm.path}\` — pressure-test outcome from Phase 0.5 of the planning skill. Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.\n\n\`\`\`markdown\n${brainstorm.content.trim()}\n\`\`\`\n`;
+}
 
 function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', data: Record<string, unknown>): McpToolResult {
   return {
@@ -214,6 +253,10 @@ Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').len
       ? `\n\n### Repository Context\n- **Name:** ${profile.name}\n- **Languages:** ${profile.languages.join(', ')}\n- **Frameworks:** ${profile.frameworks.join(', ')}\n- **Has tests:** ${profile.hasTests}`
       : '';
 
+    // Phase 0.5 handoff: if the brainstorm artifact exists for this goal, surface it.
+    const brainstorm = readLatestBrainstorm(cwd, planSlug);
+    const brainstormSection = formatBrainstormSection(brainstorm);
+
     const planPath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}.md`;
     state.planDocument = planPath;
     saveState(state);
@@ -221,7 +264,7 @@ Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').len
     return okResult(
       `**NEXT: Generate a detailed plan document and save it to \`${planPath}\`.**
 
-Goal: "${goal}"${constraintsSummary}${profileContext}
+Goal: "${goal}"${constraintsSummary}${profileContext}${brainstormSection}
 
 ## Plan Document Requirements
 
@@ -247,6 +290,7 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
         goal,
         planDocument: planPath,
         constraints: state.constraints,
+        brainstormDocument: brainstorm?.path,
       }
     );
   }
@@ -264,11 +308,15 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
     if (mem) memorySection = `\n## Prior Session Context\n${mem}\n`;
   } catch { /* CASS unavailable — proceed without */ }
 
+  // Phase 0.5 handoff: inject brainstorm artifact if present.
+  const brainstorm = readLatestBrainstorm(cwd, planSlug);
+  const brainstormSection = formatBrainstormSection(brainstorm);
+
   const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
-${memorySection}
+${memorySection}${brainstormSection}
 Write a comprehensive implementation plan from your designated perspective. The plan will be synthesized with plans from other agents with different perspectives.
 
 ## Plan requirements
@@ -337,6 +385,7 @@ Question every architectural choice: is there a simpler way? A more standard app
     mode: 'deep',
     goal,
     constraints: state.constraints,
+    brainstormDocument: brainstorm?.path,
     planAgents,
     instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
     synthesisPrompt: `Use ultrathink.
