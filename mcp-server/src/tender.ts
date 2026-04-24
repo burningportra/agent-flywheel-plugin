@@ -47,6 +47,10 @@ export type TenderTelemetryEvent =
 
 export const TELEMETRY_DIR = ".pi-flywheel";
 export const TELEMETRY_FILE = "tender-events.log";
+export const DEFAULT_TENDER_DAEMON_AGENT = "FlywheelAgent";
+export const DEFAULT_TENDER_DAEMON_INTERVAL_MS = 30_000;
+
+const MAX_TRACKED_MESSAGE_IDS = 2_000;
 
 const telemetryLog = createLogger("tender-telemetry");
 
@@ -69,6 +73,278 @@ export function emitTelemetry(
       error: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+export interface TenderDaemonMessage {
+  id: number;
+  thread_id?: string;
+  sender_name?: string;
+  subject?: string;
+  importance?: "low" | "normal" | "high" | "urgent";
+  created_ts?: string;
+}
+
+export interface TenderDaemonState {
+  session: string;
+  lastPollTs: number;
+  knownMessageIds: number[];
+  paneStates: Record<string, string>;
+  robotState: string | null;
+}
+
+export interface TenderDaemonPollSnapshot {
+  session: string;
+  pollTs?: number;
+  messages: TenderDaemonMessage[];
+  paneStates: Record<string, string>;
+  robotState: string | null;
+}
+
+export type TenderDaemonEvent =
+  | {
+      kind: "tick";
+      ts: string;
+      pollTs: number;
+      session: string;
+      newMessages: number;
+      paneCount: number;
+      robotState: string | null;
+    }
+  | {
+      kind: "message_received";
+      ts: string;
+      pollTs: number;
+      session: string;
+      messageId: number;
+      senderName?: string;
+      subject?: string;
+      threadId?: string;
+      importance?: "low" | "normal" | "high" | "urgent";
+      createdTs?: string;
+    }
+  | {
+      kind: "pane_state_changed";
+      ts: string;
+      pollTs: number;
+      session: string;
+      pane: string;
+      previousState: string;
+      nextState: string;
+    }
+  | {
+      kind: "rate_limited";
+      ts: string;
+      pollTs: number;
+      session: string;
+      pane: string;
+      state: "rate_limited";
+    }
+  | {
+      kind: "context_low";
+      ts: string;
+      pollTs: number;
+      session: string;
+      pane: string;
+      state: "context_low";
+    }
+  | {
+      kind: "daemon_stopped";
+      ts: string;
+      session: string;
+      reason: string;
+    };
+
+export interface TenderDaemonRunOnceResult {
+  events: TenderDaemonEvent[];
+  nextState: TenderDaemonState;
+}
+
+function normalizeStateValue(value: string | null | undefined): string {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.length > 0 ? normalized : "unknown";
+}
+
+function normalizeRobotState(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizePaneStateMap(paneStates: Record<string, string>): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [pane, state] of Object.entries(paneStates)) {
+    const key = pane.trim();
+    if (key.length === 0) continue;
+    normalized[key] = normalizeStateValue(state);
+  }
+  return normalized;
+}
+
+function parseMessageTs(createdTs: string | undefined): number | null {
+  if (typeof createdTs !== "string" || createdTs.length === 0) return null;
+  const parsed = Date.parse(createdTs);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function trimKnownMessageIds(knownMessageIds: Set<number>): void {
+  const overflow = knownMessageIds.size - MAX_TRACKED_MESSAGE_IDS;
+  if (overflow <= 0) return;
+  const iter = knownMessageIds.values();
+  for (let i = 0; i < overflow; i++) {
+    const next = iter.next();
+    if (next.done) break;
+    knownMessageIds.delete(next.value);
+  }
+}
+
+export function makeTenderDaemonStoppedEvent(
+  session: string,
+  reason: string,
+  ts: string = new Date().toISOString(),
+): TenderDaemonEvent {
+  return { kind: "daemon_stopped", ts, session, reason };
+}
+
+export function runTenderDaemonOnce(
+  prevState: TenderDaemonState,
+  snapshot: TenderDaemonPollSnapshot,
+): TenderDaemonRunOnceResult {
+  const pollTs = Number.isFinite(snapshot.pollTs ?? NaN) ? (snapshot.pollTs as number) : Date.now();
+  const ts = new Date(pollTs).toISOString();
+
+  const nextPaneStates = normalizePaneStateMap(snapshot.paneStates);
+  const nextRobotState = normalizeRobotState(snapshot.robotState);
+  const prevRobotState = normalizeRobotState(prevState.robotState);
+
+  const knownMessageIds = new Set<number>(
+    prevState.knownMessageIds.filter((id) => Number.isFinite(id)),
+  );
+  const newMessages: TenderDaemonMessage[] = [];
+
+  for (const message of snapshot.messages) {
+    if (!Number.isFinite(message.id)) continue;
+    const createdTs = parseMessageTs(message.created_ts);
+    const isNewById = !knownMessageIds.has(message.id);
+    const isNewByCreatedTs = createdTs === null ? true : createdTs > prevState.lastPollTs;
+    if (isNewById && isNewByCreatedTs) {
+      newMessages.push(message);
+    }
+    knownMessageIds.add(message.id);
+  }
+  trimKnownMessageIds(knownMessageIds);
+
+  const events: TenderDaemonEvent[] = [
+    {
+      kind: "tick",
+      ts,
+      pollTs,
+      session: snapshot.session,
+      newMessages: newMessages.length,
+      paneCount: Object.keys(nextPaneStates).length,
+      robotState: nextRobotState,
+    },
+  ];
+
+  newMessages.sort((a, b) => {
+    const aTs = parseMessageTs(a.created_ts) ?? a.id;
+    const bTs = parseMessageTs(b.created_ts) ?? b.id;
+    return aTs - bTs;
+  });
+  for (const message of newMessages) {
+    events.push({
+      kind: "message_received",
+      ts,
+      pollTs,
+      session: snapshot.session,
+      messageId: message.id,
+      senderName: message.sender_name,
+      subject: message.subject,
+      threadId: message.thread_id,
+      importance: message.importance,
+      createdTs: message.created_ts,
+    });
+  }
+
+  const paneNames = new Set<string>([
+    ...Object.keys(prevState.paneStates),
+    ...Object.keys(nextPaneStates),
+  ]);
+  for (const pane of paneNames) {
+    const previousState = normalizeStateValue(prevState.paneStates[pane]);
+    const currentState = normalizeStateValue(nextPaneStates[pane]);
+    if (previousState === currentState) continue;
+    events.push({
+      kind: "pane_state_changed",
+      ts,
+      pollTs,
+      session: snapshot.session,
+      pane,
+      previousState,
+      nextState: currentState,
+    });
+    if (currentState === "rate_limited") {
+      events.push({
+        kind: "rate_limited",
+        ts,
+        pollTs,
+        session: snapshot.session,
+        pane,
+        state: "rate_limited",
+      });
+    } else if (currentState === "context_low") {
+      events.push({
+        kind: "context_low",
+        ts,
+        pollTs,
+        session: snapshot.session,
+        pane,
+        state: "context_low",
+      });
+    }
+  }
+
+  if (normalizeStateValue(prevRobotState) !== normalizeStateValue(nextRobotState)) {
+    const previousState = normalizeStateValue(prevRobotState);
+    const nextState = normalizeStateValue(nextRobotState);
+    events.push({
+      kind: "pane_state_changed",
+      ts,
+      pollTs,
+      session: snapshot.session,
+      pane: "_session",
+      previousState,
+      nextState,
+    });
+    if (nextState === "rate_limited") {
+      events.push({
+        kind: "rate_limited",
+        ts,
+        pollTs,
+        session: snapshot.session,
+        pane: "_session",
+        state: "rate_limited",
+      });
+    } else if (nextState === "context_low") {
+      events.push({
+        kind: "context_low",
+        ts,
+        pollTs,
+        session: snapshot.session,
+        pane: "_session",
+        state: "context_low",
+      });
+    }
+  }
+
+  return {
+    events,
+    nextState: {
+      session: snapshot.session,
+      lastPollTs: pollTs,
+      knownMessageIds: [...knownMessageIds],
+      paneStates: nextPaneStates,
+      robotState: nextRobotState,
+    },
+  };
 }
 
 // ─── Types ─────────────────────────────────────────────────────

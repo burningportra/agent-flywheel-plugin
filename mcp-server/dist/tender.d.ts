@@ -27,11 +27,88 @@ export type TenderTelemetryEvent = {
 };
 export declare const TELEMETRY_DIR = ".pi-flywheel";
 export declare const TELEMETRY_FILE = "tender-events.log";
+export declare const DEFAULT_TENDER_DAEMON_AGENT = "FlywheelAgent";
+export declare const DEFAULT_TENDER_DAEMON_INTERVAL_MS = 30000;
 /**
  * Append a telemetry event as NDJSON to `<cwd>/.pi-flywheel/tender-events.log`.
  * Creates the directory if missing. Failures are logged but never throw.
  */
 export declare function emitTelemetry(event: TenderTelemetryEvent, cwd: string): void;
+export interface TenderDaemonMessage {
+    id: number;
+    thread_id?: string;
+    sender_name?: string;
+    subject?: string;
+    importance?: "low" | "normal" | "high" | "urgent";
+    created_ts?: string;
+}
+export interface TenderDaemonState {
+    session: string;
+    lastPollTs: number;
+    knownMessageIds: number[];
+    paneStates: Record<string, string>;
+    robotState: string | null;
+}
+export interface TenderDaemonPollSnapshot {
+    session: string;
+    pollTs?: number;
+    messages: TenderDaemonMessage[];
+    paneStates: Record<string, string>;
+    robotState: string | null;
+}
+export type TenderDaemonEvent = {
+    kind: "tick";
+    ts: string;
+    pollTs: number;
+    session: string;
+    newMessages: number;
+    paneCount: number;
+    robotState: string | null;
+} | {
+    kind: "message_received";
+    ts: string;
+    pollTs: number;
+    session: string;
+    messageId: number;
+    senderName?: string;
+    subject?: string;
+    threadId?: string;
+    importance?: "low" | "normal" | "high" | "urgent";
+    createdTs?: string;
+} | {
+    kind: "pane_state_changed";
+    ts: string;
+    pollTs: number;
+    session: string;
+    pane: string;
+    previousState: string;
+    nextState: string;
+} | {
+    kind: "rate_limited";
+    ts: string;
+    pollTs: number;
+    session: string;
+    pane: string;
+    state: "rate_limited";
+} | {
+    kind: "context_low";
+    ts: string;
+    pollTs: number;
+    session: string;
+    pane: string;
+    state: "context_low";
+} | {
+    kind: "daemon_stopped";
+    ts: string;
+    session: string;
+    reason: string;
+};
+export interface TenderDaemonRunOnceResult {
+    events: TenderDaemonEvent[];
+    nextState: TenderDaemonState;
+}
+export declare function makeTenderDaemonStoppedEvent(session: string, reason: string, ts?: string): TenderDaemonEvent;
+export declare function runTenderDaemonOnce(prevState: TenderDaemonState, snapshot: TenderDaemonPollSnapshot): TenderDaemonRunOnceResult;
 export type AgentHealth = "active" | "idle" | "stuck";
 export interface AgentStatus {
     worktreePath: string;

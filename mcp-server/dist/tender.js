@@ -6,6 +6,9 @@ import { createLogger } from "./logger.js";
 import { normalizeText } from "./utils/text-normalize.js";
 export const TELEMETRY_DIR = ".pi-flywheel";
 export const TELEMETRY_FILE = "tender-events.log";
+export const DEFAULT_TENDER_DAEMON_AGENT = "FlywheelAgent";
+export const DEFAULT_TENDER_DAEMON_INTERVAL_MS = 30_000;
+const MAX_TRACKED_MESSAGE_IDS = 2_000;
 const telemetryLog = createLogger("tender-telemetry");
 /**
  * Append a telemetry event as NDJSON to `<cwd>/.pi-flywheel/tender-events.log`.
@@ -24,6 +27,178 @@ export function emitTelemetry(event, cwd) {
             error: err instanceof Error ? err.message : String(err),
         });
     }
+}
+function normalizeStateValue(value) {
+    const normalized = value?.trim().toLowerCase() ?? "";
+    return normalized.length > 0 ? normalized : "unknown";
+}
+function normalizeRobotState(value) {
+    const normalized = value?.trim().toLowerCase() ?? "";
+    return normalized.length > 0 ? normalized : null;
+}
+function normalizePaneStateMap(paneStates) {
+    const normalized = {};
+    for (const [pane, state] of Object.entries(paneStates)) {
+        const key = pane.trim();
+        if (key.length === 0)
+            continue;
+        normalized[key] = normalizeStateValue(state);
+    }
+    return normalized;
+}
+function parseMessageTs(createdTs) {
+    if (typeof createdTs !== "string" || createdTs.length === 0)
+        return null;
+    const parsed = Date.parse(createdTs);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+function trimKnownMessageIds(knownMessageIds) {
+    const overflow = knownMessageIds.size - MAX_TRACKED_MESSAGE_IDS;
+    if (overflow <= 0)
+        return;
+    const iter = knownMessageIds.values();
+    for (let i = 0; i < overflow; i++) {
+        const next = iter.next();
+        if (next.done)
+            break;
+        knownMessageIds.delete(next.value);
+    }
+}
+export function makeTenderDaemonStoppedEvent(session, reason, ts = new Date().toISOString()) {
+    return { kind: "daemon_stopped", ts, session, reason };
+}
+export function runTenderDaemonOnce(prevState, snapshot) {
+    const pollTs = Number.isFinite(snapshot.pollTs ?? NaN) ? snapshot.pollTs : Date.now();
+    const ts = new Date(pollTs).toISOString();
+    const nextPaneStates = normalizePaneStateMap(snapshot.paneStates);
+    const nextRobotState = normalizeRobotState(snapshot.robotState);
+    const prevRobotState = normalizeRobotState(prevState.robotState);
+    const knownMessageIds = new Set(prevState.knownMessageIds.filter((id) => Number.isFinite(id)));
+    const newMessages = [];
+    for (const message of snapshot.messages) {
+        if (!Number.isFinite(message.id))
+            continue;
+        const createdTs = parseMessageTs(message.created_ts);
+        const isNewById = !knownMessageIds.has(message.id);
+        const isNewByCreatedTs = createdTs === null ? true : createdTs > prevState.lastPollTs;
+        if (isNewById && isNewByCreatedTs) {
+            newMessages.push(message);
+        }
+        knownMessageIds.add(message.id);
+    }
+    trimKnownMessageIds(knownMessageIds);
+    const events = [
+        {
+            kind: "tick",
+            ts,
+            pollTs,
+            session: snapshot.session,
+            newMessages: newMessages.length,
+            paneCount: Object.keys(nextPaneStates).length,
+            robotState: nextRobotState,
+        },
+    ];
+    newMessages.sort((a, b) => {
+        const aTs = parseMessageTs(a.created_ts) ?? a.id;
+        const bTs = parseMessageTs(b.created_ts) ?? b.id;
+        return aTs - bTs;
+    });
+    for (const message of newMessages) {
+        events.push({
+            kind: "message_received",
+            ts,
+            pollTs,
+            session: snapshot.session,
+            messageId: message.id,
+            senderName: message.sender_name,
+            subject: message.subject,
+            threadId: message.thread_id,
+            importance: message.importance,
+            createdTs: message.created_ts,
+        });
+    }
+    const paneNames = new Set([
+        ...Object.keys(prevState.paneStates),
+        ...Object.keys(nextPaneStates),
+    ]);
+    for (const pane of paneNames) {
+        const previousState = normalizeStateValue(prevState.paneStates[pane]);
+        const currentState = normalizeStateValue(nextPaneStates[pane]);
+        if (previousState === currentState)
+            continue;
+        events.push({
+            kind: "pane_state_changed",
+            ts,
+            pollTs,
+            session: snapshot.session,
+            pane,
+            previousState,
+            nextState: currentState,
+        });
+        if (currentState === "rate_limited") {
+            events.push({
+                kind: "rate_limited",
+                ts,
+                pollTs,
+                session: snapshot.session,
+                pane,
+                state: "rate_limited",
+            });
+        }
+        else if (currentState === "context_low") {
+            events.push({
+                kind: "context_low",
+                ts,
+                pollTs,
+                session: snapshot.session,
+                pane,
+                state: "context_low",
+            });
+        }
+    }
+    if (normalizeStateValue(prevRobotState) !== normalizeStateValue(nextRobotState)) {
+        const previousState = normalizeStateValue(prevRobotState);
+        const nextState = normalizeStateValue(nextRobotState);
+        events.push({
+            kind: "pane_state_changed",
+            ts,
+            pollTs,
+            session: snapshot.session,
+            pane: "_session",
+            previousState,
+            nextState,
+        });
+        if (nextState === "rate_limited") {
+            events.push({
+                kind: "rate_limited",
+                ts,
+                pollTs,
+                session: snapshot.session,
+                pane: "_session",
+                state: "rate_limited",
+            });
+        }
+        else if (nextState === "context_low") {
+            events.push({
+                kind: "context_low",
+                ts,
+                pollTs,
+                session: snapshot.session,
+                pane: "_session",
+                state: "context_low",
+            });
+        }
+    }
+    return {
+        events,
+        nextState: {
+            session: snapshot.session,
+            lastPollTs: pollTs,
+            knownMessageIds: [...knownMessageIds],
+            paneStates: nextPaneStates,
+            robotState: nextRobotState,
+        },
+    };
 }
 export const DEFAULT_TENDER_CONFIG = {
     pollInterval: 60_000,
