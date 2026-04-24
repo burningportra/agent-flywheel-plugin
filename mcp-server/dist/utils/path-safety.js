@@ -20,6 +20,7 @@
  * `fs-safety.ts` (write-owner/symlink checks, bead 8tf). This module only
  * handles path *strings* — it does not touch the filesystem.
  */
+import { realpathSync } from "node:fs";
 import { isAbsolute, normalize, resolve, relative, sep } from "node:path";
 // ─── Constants ──────────────────────────────────────────────
 const DEFAULT_MAX_PATH_LENGTH = 1024;
@@ -35,6 +36,19 @@ function preview(raw) {
 }
 function err(reason, message, raw) {
     return { ok: false, reason, message, rawPreview: preview(raw) };
+}
+function formatPathLabel(label) {
+    return label ?? "Path";
+}
+function isEnoent(err) {
+    if (typeof err === "object" && err !== null && "code" in err) {
+        return err.code === "ENOENT";
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return /\bENOENT\b/i.test(msg);
+}
+function isSameOrChildPath(candidate, root) {
+    return candidate === root || candidate.startsWith(root + sep);
 }
 // ─── Public API ─────────────────────────────────────────────
 /**
@@ -126,6 +140,87 @@ export function assertSafeRelativePath(input, opts) {
         return err("escapes_root", `Path resolves outside of root '${opts.root}'.`, input);
     }
     return { ok: true, value: rel === "" ? "." : rel };
+}
+/**
+ * Resolve a path to its canonical realpath. Returns a structured result
+ * instead of throwing so MCP-boundary callers can emit tool-friendly errors.
+ */
+export function resolveRealpath(input, opts = {}) {
+    const label = formatPathLabel(opts.label);
+    let absolutePath;
+    try {
+        absolutePath = isAbsolute(input)
+            ? input
+            : opts.base
+                ? resolve(opts.base, input)
+                : resolve(input);
+    }
+    catch (err) {
+        return {
+            ok: false,
+            reason: "resolve_failed",
+            message: `${label} resolve failed: ${err instanceof Error ? err.message : String(err)}`,
+            absolutePath: input,
+        };
+    }
+    try {
+        return {
+            ok: true,
+            absolutePath,
+            realPath: realpathSync(absolutePath),
+        };
+    }
+    catch (err) {
+        return {
+            ok: false,
+            reason: isEnoent(err) ? "not_found" : "resolve_failed",
+            message: isEnoent(err)
+                ? `${label} not found: ${absolutePath}`
+                : `${label} resolve failed: ${err instanceof Error ? err.message : String(err)}`,
+            absolutePath,
+        };
+    }
+}
+/**
+ * Resolve a path and verify its canonical target remains inside `root` after
+ * symlink resolution. Intended for MCP-controlled file and directory args.
+ */
+export function resolveRealpathWithinRoot(input, opts) {
+    const label = formatPathLabel(opts.label);
+    const rootLabel = formatPathLabel(opts.rootLabel ?? "Root");
+    const rootResult = resolveRealpath(opts.root, { label: rootLabel });
+    if (!rootResult.ok) {
+        return {
+            ok: false,
+            reason: rootResult.reason === "not_found" ? "root_not_found" : rootResult.reason,
+            message: rootResult.reason === "not_found"
+                ? `${rootLabel} not found: ${rootResult.absolutePath}`
+                : rootResult.message,
+            absolutePath: rootResult.absolutePath,
+        };
+    }
+    const pathResult = resolveRealpath(input, { base: opts.root, label });
+    if (!pathResult.ok) {
+        return pathResult;
+    }
+    if (!isSameOrChildPath(pathResult.realPath, rootResult.realPath)) {
+        return {
+            ok: false,
+            reason: "outside_root",
+            message: `${label} resolves outside ${rootLabel.toLowerCase()} after symlink resolution.`,
+            absolutePath: pathResult.absolutePath,
+            realPath: pathResult.realPath,
+            realRoot: rootResult.realPath,
+        };
+    }
+    const relativePath = relative(rootResult.realPath, pathResult.realPath) || ".";
+    return {
+        ok: true,
+        absolutePath: pathResult.absolutePath,
+        realPath: pathResult.realPath,
+        realRoot: rootResult.realPath,
+        relativePath,
+    };
 }
 /**
  * Convenience wrapper: throw an Error on rejection. Prefer the non-throwing

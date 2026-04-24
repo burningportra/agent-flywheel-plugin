@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runDoctorChecks, computeOverallSeverity, DOCTOR_CHECK_NAMES, } from '../../tools/doctor.js';
@@ -221,6 +221,26 @@ describe('runDoctorChecks', () => {
             expect(report.overall).not.toBe('red');
         }
         finally {
+            cleanup(cwd);
+        }
+    });
+    it('refuses to scan repo-relative symlink targets outside cwd', async () => {
+        const cwd = makeTmpCwd();
+        const outside = mkdtempSync(join(tmpdir(), 'doctor-outside-'));
+        try {
+            mkdirSync(join(outside, 'nested'), { recursive: true });
+            writeFileSync(join(outside, 'nested', 'file.ts'), '// outside\n');
+            symlinkSync(outside, join(cwd, 'mcp-server', 'src'));
+            const exec = makeStubbedExec(allGreenStubs());
+            const report = await runDoctorChecks(cwd, undefined, { exec });
+            const distDrift = report.checks.find((c) => c.name === 'dist_drift');
+            expect(distDrift).toBeDefined();
+            expect(distDrift.severity).toBe('yellow');
+            expect(distDrift.message).toContain('refused path');
+            expect(distDrift.message).toContain('outside cwd');
+        }
+        finally {
+            cleanup(outside);
             cleanup(cwd);
         }
     });

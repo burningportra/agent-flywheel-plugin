@@ -81,7 +81,8 @@ export async function runDoctor(
   args: DoctorArgs,
 ): Promise<McpToolResult> {
   try {
-    const report = await runDoctorChecks(args.cwd, ctx.signal);
+    void args;
+    const report = await runDoctorChecks(ctx.cwd, ctx.signal);
     const structured: DoctorStructuredContent = {
       tool: 'flywheel_doctor',
       version: 1,

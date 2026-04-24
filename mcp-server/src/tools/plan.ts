@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
 import { slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
@@ -7,7 +7,10 @@ import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { makeFlywheelErrorResult } from '../errors.js';
-import { assertSafeRelativePath } from '../utils/path-safety.js';
+import {
+  assertSafeRelativePath,
+  resolveRealpathWithinRoot,
+} from '../utils/path-safety.js';
 import { normalizeText } from '../utils/text-normalize.js';
 
 /**
@@ -123,25 +126,41 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
         'Provide a path relative to cwd without ".." segments, control chars, or absolute escape.',
       );
     }
-    const absPath = resolve(cwd, args.planFile);
-    if (!existsSync(absPath)) {
+    const resolvedPlanFile = resolveRealpathWithinRoot(args.planFile, {
+      root: cwd,
+      label: 'planFile',
+      rootLabel: 'cwd',
+    });
+    if (!resolvedPlanFile.ok) {
+      const code: FlywheelErrorCode =
+        resolvedPlanFile.reason === 'not_found' || resolvedPlanFile.reason === 'root_not_found'
+          ? 'not_found'
+          : 'invalid_input';
       return errorResult(
         'planning',
-        'not_found',
-        `Error: planFile not found: ${absPath}`,
-        { planFile: args.planFile, absolutePath: absPath },
-        'Check the path is relative to cwd and that the plan file was saved before calling flywheel_plan.',
+        code,
+        code === 'not_found'
+          ? `Error: planFile not found: ${resolvedPlanFile.absolutePath}`
+          : `Error: planFile rejected by realpath guard (${resolvedPlanFile.reason}): ${resolvedPlanFile.message}`,
+        {
+          planFile: args.planFile,
+          absolutePath: resolvedPlanFile.absolutePath,
+          reason: resolvedPlanFile.reason,
+        },
+        code === 'not_found'
+          ? 'Check the path is relative to cwd and that the plan file was saved before calling flywheel_plan.'
+          : 'Pass an existing plan file inside cwd. Symlinks that resolve outside the project root are rejected.',
       );
     }
-    const content = normalizeText(readFileSync(absPath, 'utf8'));
-    const relativePath = args.planFile.startsWith('docs/') ? args.planFile : `docs/plans/${args.planFile}`;
-    state.planDocument = args.planFile;
+    const content = normalizeText(readFileSync(resolvedPlanFile.realPath, 'utf8'));
+    const planDocument = resolvedPlanFile.relativePath;
+    state.planDocument = planDocument;
     state.planRefinementRound = 0;
     state.phase = 'awaiting_plan_approval';
     saveState(state);
 
     return okResult(
-      `**Plan loaded from \`${args.planFile}\`.**
+      `**Plan loaded from \`${planDocument}\`.**
 
 **NEXT: Call \`flywheel_approve_beads\` to review the plan and proceed to bead creation.**
 
@@ -154,7 +173,7 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
         source: 'plan_file',
         goal,
         mode,
-        planDocument: args.planFile,
+        planDocument,
         planStats: {
           chars: content.length,
           lines: content.split('\n').length,

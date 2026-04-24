@@ -1,14 +1,17 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { runMemory } from '../../tools/memory-tool.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 // ─── Helpers ──────────────────────────────────────────────────
-function makeCtx(execCalls = [], stateOverrides = {}) {
+function makeCtx(execCalls = [], stateOverrides = {}, cwd = '/fake/cwd') {
     const exec = createMockExec(execCalls);
     const state = makeState(stateOverrides);
     const saved = [];
     const ctx = {
         exec,
-        cwd: '/fake/cwd',
+        cwd,
         state,
         saveState: (s) => { saved.push(structuredClone(s)); },
         clearState: () => { },
@@ -284,6 +287,45 @@ describe('runMemory', () => {
         // No operation specified — should default to search (list mode)
         const result = await runMemory(ctx, { cwd: '/fake/cwd' });
         expect(result.content[0].text).toContain('Recent CASS memory');
+    });
+    it('returns structured not_found when refreshRoot does not exist', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'memory-refresh-'));
+        try {
+            const { ctx } = makeCtx([], {}, cwd);
+            const result = await runMemory(ctx, {
+                cwd,
+                operation: 'refresh_learnings',
+                refreshRoot: 'docs/solutions',
+            });
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toBe(`refreshRoot not found: ${join(cwd, 'docs', 'solutions')}`);
+            expect(result.structuredContent?.data?.error?.code).toBe('not_found');
+        }
+        finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+    it('rejects refreshRoot symlinks that resolve outside cwd', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'memory-refresh-'));
+        const outsideDir = mkdtempSync(join(tmpdir(), 'memory-outside-'));
+        try {
+            mkdirSync(join(cwd, 'docs'), { recursive: true });
+            writeFileSync(join(outsideDir, 'note.md'), '# External\n');
+            symlinkSync(outsideDir, join(cwd, 'docs', 'solutions'));
+            const { ctx } = makeCtx([], {}, cwd);
+            const result = await runMemory(ctx, {
+                cwd,
+                operation: 'refresh_learnings',
+                refreshRoot: 'docs/solutions',
+            });
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain('refreshRoot rejected by realpath guard');
+            expect(result.structuredContent?.data?.error?.code).toBe('invalid_input');
+        }
+        finally {
+            rmSync(cwd, { recursive: true, force: true });
+            rmSync(outsideDir, { recursive: true, force: true });
+        }
     });
 });
 //# sourceMappingURL=memory-tool.test.js.map

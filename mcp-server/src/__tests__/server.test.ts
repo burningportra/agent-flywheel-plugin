@@ -1,10 +1,22 @@
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createCallToolHandler, TOOLS } from '../server.js';
 import { createInitialState } from '../types.js';
 import { FlywheelError } from '../errors.js';
 
+function makeTmpCwd(): string {
+  return mkdtempSync(join(tmpdir(), 'server-cwd-'));
+}
+
+function cleanup(dir: string) {
+  rmSync(dir, { recursive: true, force: true });
+}
+
 describe('createCallToolHandler', () => {
   it('preserves structuredContent returned by tool implementations', async () => {
+    const cwd = process.cwd();
     const structuredContent = {
       tool: 'flywheel_profile',
       version: 1,
@@ -36,18 +48,19 @@ describe('createCallToolHandler', () => {
     const result = await handler({
       params: {
         name: 'flywheel_profile',
-        arguments: { cwd: '/tmp/repo' },
+        arguments: { cwd },
       },
     } as never);
 
     expect(runProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: '/tmp/repo' }),
-      { cwd: '/tmp/repo' }
+      expect.objectContaining({ cwd }),
+      { cwd }
     );
     expect(result.structuredContent).toBe(structuredContent);
   });
 
   it('returns structured validation errors before dispatching to the tool', async () => {
+    const cwd = process.cwd();
     const runSelect = vi.fn();
 
     const handler = createCallToolHandler({
@@ -63,7 +76,7 @@ describe('createCallToolHandler', () => {
     const result = await handler({
       params: {
         name: 'flywheel_select',
-        arguments: { cwd: '/tmp/repo' },
+        arguments: { cwd },
       },
     } as never);
 
@@ -93,6 +106,7 @@ describe('createCallToolHandler', () => {
   });
 
   it('dispatches deprecated orch_profile alias to the same runner as flywheel_profile', async () => {
+    const cwd = process.cwd();
     const structuredContent = {
       tool: 'flywheel_profile',
       version: 1,
@@ -117,10 +131,10 @@ describe('createCallToolHandler', () => {
     });
 
     const primary = await handler({
-      params: { name: 'flywheel_profile', arguments: { cwd: '/tmp/repo' } },
+      params: { name: 'flywheel_profile', arguments: { cwd } },
     } as never);
     const alias = await handler({
-      params: { name: 'orch_profile', arguments: { cwd: '/tmp/repo' } },
+      params: { name: 'orch_profile', arguments: { cwd } },
     } as never);
 
     expect(runProfile).toHaveBeenCalledTimes(2);
@@ -130,6 +144,7 @@ describe('createCallToolHandler', () => {
   });
 
   it('dispatches deprecated orch_memory alias to the same runner as flywheel_memory', async () => {
+    const cwd = process.cwd();
     const runMemory = vi.fn().mockResolvedValue({
       content: [{ type: 'text', text: 'Memory result' }],
     });
@@ -146,10 +161,10 @@ describe('createCallToolHandler', () => {
     });
 
     const primary = await handler({
-      params: { name: 'flywheel_memory', arguments: { cwd: '/tmp/repo' } },
+      params: { name: 'flywheel_memory', arguments: { cwd } },
     } as never);
     const alias = await handler({
-      params: { name: 'orch_memory', arguments: { cwd: '/tmp/repo' } },
+      params: { name: 'orch_memory', arguments: { cwd } },
     } as never);
 
     expect(runMemory).toHaveBeenCalledTimes(2);
@@ -180,6 +195,7 @@ describe('createCallToolHandler', () => {
   });
 
   it('converts thrown FlywheelError to structured response preserving code and fields', async () => {
+    const cwd = process.cwd();
     const handler = createCallToolHandler({
       makeExec: vi.fn(() => vi.fn()),
       loadState: vi.fn(() => ({ ...createInitialState(), phase: 'implementing' as const })),
@@ -195,7 +211,7 @@ describe('createCallToolHandler', () => {
     const result = await handler({
       params: {
         name: 'flywheel_review',
-        arguments: { cwd: '/tmp/repo', beadId: 'b-1', action: 'looks-good' },
+        arguments: { cwd, beadId: 'b-1', action: 'looks-good' },
       },
     } as never);
 
@@ -223,6 +239,7 @@ describe('createCallToolHandler', () => {
   });
 
   it('returns structured internal errors when a tool runner throws', async () => {
+    const cwd = process.cwd();
     const handler = createCallToolHandler({
       makeExec: vi.fn(() => vi.fn()),
       loadState: vi.fn(() => ({ ...createInitialState(), phase: 'planning' as const })),
@@ -236,7 +253,7 @@ describe('createCallToolHandler', () => {
     const result = await handler({
       params: {
         name: 'flywheel_plan',
-        arguments: { cwd: '/tmp/repo' },
+        arguments: { cwd },
       },
     } as never);
 
@@ -261,6 +278,7 @@ describe('createCallToolHandler', () => {
   });
 
   it('passes an AbortSignal through ctx to tool runners', async () => {
+    const cwd = process.cwd();
     let capturedSignal: AbortSignal | undefined;
     const runProfile = vi.fn().mockImplementation(async (ctx: { signal?: AbortSignal }) => {
       capturedSignal = ctx.signal;
@@ -276,10 +294,99 @@ describe('createCallToolHandler', () => {
     });
 
     await handler({
-      params: { name: 'flywheel_profile', arguments: { cwd: '/tmp/repo' } },
+      params: { name: 'flywheel_profile', arguments: { cwd } },
     } as never);
 
     expect(capturedSignal).toBeInstanceOf(AbortSignal);
     expect(capturedSignal!.aborted).toBe(false);
+  });
+
+  it('canonicalizes cwd through realpath before dispatching to tool runners', async () => {
+    const realCwd = makeTmpCwd();
+    const symlinkParent = makeTmpCwd();
+    const symlinkCwd = join(symlinkParent, 'linked-repo');
+    symlinkSync(realCwd, symlinkCwd);
+    const canonicalCwd = realpathSync(realCwd);
+
+    try {
+      const runProfile = vi.fn().mockResolvedValue({
+        content: [{ type: 'text', text: 'Profile complete' }],
+      });
+      const makeExec = vi.fn(() => vi.fn());
+      const loadState = vi.fn(() => createInitialState());
+
+      const handler = createCallToolHandler({
+        makeExec,
+        loadState,
+        saveState: vi.fn(),
+        clearState: vi.fn(),
+        runners: {
+          flywheel_profile: runProfile,
+        },
+      });
+
+      await handler({
+        params: {
+          name: 'flywheel_profile',
+          arguments: { cwd: symlinkCwd },
+        },
+      } as never);
+
+      expect(makeExec).toHaveBeenCalledWith(canonicalCwd);
+      expect(loadState).toHaveBeenCalledWith(canonicalCwd);
+      expect(runProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: canonicalCwd }),
+        { cwd: canonicalCwd },
+      );
+    } finally {
+      cleanup(symlinkParent);
+      cleanup(realCwd);
+    }
+  });
+
+  it('returns structured not_found when cwd does not exist', async () => {
+    const missingCwd = join(tmpdir(), `missing-cwd-${Date.now()}`);
+    const runProfile = vi.fn();
+    const handler = createCallToolHandler({
+      makeExec: vi.fn(() => vi.fn()),
+      loadState: vi.fn(() => createInitialState()),
+      saveState: vi.fn(),
+      clearState: vi.fn(),
+      runners: {
+        flywheel_profile: runProfile,
+      },
+    });
+
+    const result = await handler({
+      params: {
+        name: 'flywheel_profile',
+        arguments: { cwd: missingCwd },
+      },
+    } as never);
+
+    expect(runProfile).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: `cwd not found: ${missingCwd}` }],
+      structuredContent: {
+        tool: 'flywheel_profile',
+        version: 1,
+        status: 'error',
+        phase: 'idle',
+        data: {
+          kind: 'error',
+          error: {
+            code: 'not_found',
+            message: `cwd not found: ${missingCwd}`,
+            retryable: false,
+            details: {
+              cwd: missingCwd,
+              absolutePath: missingCwd,
+              reason: 'not_found',
+            },
+          },
+        },
+      },
+    });
   });
 });

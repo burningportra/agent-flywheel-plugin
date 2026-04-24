@@ -17,6 +17,7 @@ import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
+import { resolveRealpath } from './utils/path-safety.js';
 import { VERSION } from './version.js';
 const log = createLogger('server');
 const PRIMARY_TOOLS = [
@@ -323,6 +324,15 @@ function makeValidationErrorResult(toolName, validationError) {
         isError: true,
     };
 }
+function makeCwdResolutionErrorResult(toolName, reason, message, details) {
+    return makeToolError(toolName, 'idle', reason, message, {
+        retryable: false,
+        hint: reason === 'not_found'
+            ? 'Pass an existing project directory. Symlinks are resolved via realpath before tool execution.'
+            : 'Pass a readable project directory. Symlinks are resolved via realpath before tool execution.',
+        details,
+    });
+}
 export function createCallToolHandler(dependencies) {
     const runners = {
         ...DEFAULT_RUNNERS,
@@ -346,7 +356,17 @@ export function createCallToolHandler(dependencies) {
                 isError: true,
             };
         }
-        const cwd = normalizedArgs.cwd;
+        const rawCwd = normalizedArgs.cwd;
+        const resolvedCwd = resolveRealpath(rawCwd, { label: 'cwd' });
+        if (!resolvedCwd.ok) {
+            return makeCwdResolutionErrorResult(name, resolvedCwd.reason === 'not_found' ? 'not_found' : 'invalid_input', resolvedCwd.message, {
+                cwd: rawCwd,
+                absolutePath: resolvedCwd.absolutePath,
+                reason: resolvedCwd.reason,
+            });
+        }
+        const cwd = resolvedCwd.realPath;
+        const runnerArgs = { ...normalizedArgs, cwd };
         const exec = dependencies.makeExec(cwd);
         const state = dependencies.loadState(cwd);
         const ac = new AbortController();
@@ -366,7 +386,7 @@ export function createCallToolHandler(dependencies) {
                     isError: true,
                 };
             }
-            return await runner(ctx, normalizedArgs);
+            return await runner(ctx, runnerArgs);
         }
         catch (err) {
             if (err instanceof FlywheelError) {
