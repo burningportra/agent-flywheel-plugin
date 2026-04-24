@@ -114,7 +114,11 @@ requirement. Fold in adjacents ONLY if the user selected "Bundle a related
 ask"; otherwise list them under "Explicit non-goals" so they don't leak in.
 ```
 
-4. Surface the artifact path in your next turn so the user can see where it landed.
+4. Mention the artifact path in a single line of your response (e.g. `Brainstorm written to docs/brainstorms/<goal-slug>-<date>.md`) so the user can see where it landed — but **do NOT end your turn here**.
+
+5. **Proceed immediately to Step 5 in the SAME response**, calling Step 5's `AskUserQuestion` ("How would you like to plan?") without waiting for any user input. Per UNIVERSAL RULE 1, the flywheel must stay inside `AskUserQuestion` at every decision point. Writing a file is not a decision point — the next decision is the plan-mode choice, and it belongs in the same turn.
+
+   ⚠ **Anti-pattern**: writing the artifact, saying "Written to `<path>`. Ready to plan?", and ending the turn. That "Ready to plan?" is a prose question, not an `AskUserQuestion` — it kicks the user out of the flywheel UX and forces them to free-text the next step. Always invoke Step 5's `AskUserQuestion` instead.
 
 ### 4.5d — Phase 0.6: Codex-rescue handoff on planner stall
 

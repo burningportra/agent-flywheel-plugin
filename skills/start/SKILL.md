@@ -249,7 +249,7 @@ AskUserQuestion(questions: [{
 | **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
-| **Set a goal** | Run `/brainstorming` to refine the goal, then proceed to Step 4 |
+| **Set a goal** | Run `/brainstorming` to refine the goal, then **in the same turn** call `flywheel_select` (Step 4), read `_planning.md`, and run through Step 4.5 (Phase 0.5) and Step 5's `AskUserQuestion` without pausing for user input — see "Stay-in-turn rule" below |
 | **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
 | **Quick fix** | Invoke `/flywheel-fix` |
 | **Audit** | Invoke `/flywheel-audit` |
@@ -405,8 +405,22 @@ AskUserQuestion(questions: [{
 ```
 
 - **"Discover ideas"** → proceed to Step 3
-- **"Set a goal"** → run `/brainstorming`, then proceed to Step 4
+- **"Set a goal"** → run `/brainstorming`, then **stay in the same turn** and call `flywheel_select` (Step 4) + enter Step 4.5 / Step 5 without waiting for user input (see "Stay-in-turn rule" below)
 - **"Re-scan"** → call `flywheel_profile` with `force: true`, then return to this menu
+
+#### Stay-in-turn rule (MANDATORY between every step)
+
+Per UNIVERSAL RULE 1, every user decision flows through `AskUserQuestion`. Between steps, never end your turn on prose like "Ready to plan?", "Shall we continue?", or "Let me know when you're ready." Those are implicit decisions the user cannot answer with labeled options — they kick the user out of the flywheel UX.
+
+**Rule:** after writing a file, calling a tool, or invoking a sub-skill, the next thing in your response must be EITHER another tool call (including the next step's `AskUserQuestion`) OR the explicit completion of a phase. Do not end a turn in the middle of a phase.
+
+Concretely:
+- After `/brainstorming` returns → same turn: `flywheel_select` → read `_planning.md` → run Step 4.5 questions → Step 5 `AskUserQuestion`.
+- After writing the brainstorm artifact in 4.5c → same turn: Step 5 `AskUserQuestion`.
+- After `flywheel_plan` returns → same turn: Step 5.55 alignment-check `AskUserQuestion` (or Step 5.6 if alignment already satisfied).
+- After `flywheel_approve_beads` returns → same turn: Step 6 launch menu.
+
+If you find yourself writing "Ready to <next step>?" — STOP and call the next `AskUserQuestion` instead.
 
 ## Step 3: Discover improvement ideas
 

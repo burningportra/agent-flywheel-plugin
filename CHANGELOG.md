@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.2] - 2026-04-24
+
+### Fixed
+
+- `skills/start/_planning.md` Phase 0.5 (step 4.5c): rewrote the end of the brainstorm-artifact step. Previous wording ("Surface the artifact path in your next turn") read as "end turn, wait for user" — after writing `docs/brainstorms/…md` the agent would stop and force the user back to free-text. Now explicitly requires proceeding to Step 5's `AskUserQuestion` in the SAME response, with an anti-pattern callout flagging "Written to `<path>`. Ready to plan?" as a UX break.
+- `skills/start/SKILL.md` Step 0e routing table: the "Set a goal" row now explicitly requires in-turn progression through Step 4 → Step 4.5 → Step 5 without waiting for user input between sub-skill and the next `AskUserQuestion`.
+
+### Added
+
+- `skills/start/SKILL.md`: new MANDATORY "Stay-in-turn rule" subsection covering every step transition. Four concrete same-turn examples (after `/brainstorming`, after 4.5c artifact write, after `flywheel_plan`, after `flywheel_approve_beads`) plus a detector rule — any draft sentence matching "Ready to <next step>?" must be replaced with the next `AskUserQuestion` call. Enforces UNIVERSAL RULE 1 at every decision point.
+
 ## [3.5.1] - 2026-04-24
 
 ### Fixed
