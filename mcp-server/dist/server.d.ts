@@ -47,6 +47,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };
@@ -156,6 +157,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };
@@ -187,6 +189,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };
@@ -226,6 +229,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };
@@ -262,6 +266,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };
@@ -306,6 +311,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };
@@ -341,6 +347,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };
@@ -369,6 +376,10 @@ export declare const TOOLS: ({
                 description: string;
             };
             entryId: {
+                type: string;
+                description: string;
+            };
+            refreshRoot: {
                 type: string;
                 description: string;
             };
@@ -411,6 +422,7 @@ export declare const TOOLS: ({
             operation?: undefined;
             content?: undefined;
             entryId?: undefined;
+            refreshRoot?: undefined;
         };
         required: string[];
     };

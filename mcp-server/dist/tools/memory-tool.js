@@ -1,7 +1,49 @@
+import { promises as fsPromises } from 'node:fs';
+import { join, relative, resolve as pathResolve } from 'node:path';
 import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
 import { draftPostmortem, draftSolutionDoc, formatPostmortemMarkdown } from '../episodic-memory.js';
 import { renderSolutionDoc } from '../solution-doc-schema.js';
+import { refreshLearnings, } from '../refresh-learnings.js';
 import { makeToolResult } from './shared.js';
+/**
+ * Real-filesystem adapter for `refreshLearnings`. Lives in this module — not
+ * in `refresh-learnings.ts` itself — so the algorithm stays pure and tests
+ * can supply an in-memory stub without touching disk.
+ *
+ * Walks `root/**\/*.md` recursively, skipping hidden directories and the
+ * `_archive/` subtree (handled again upstream as a belt-and-braces guard).
+ */
+async function listMarkdownRecursive(root) {
+    const out = [];
+    async function walk(dir) {
+        let entries;
+        try {
+            entries = await fsPromises.readdir(dir, { withFileTypes: true });
+        }
+        catch {
+            return;
+        }
+        for (const entry of entries) {
+            if (entry.name.startsWith('.'))
+                continue;
+            const abs = join(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (entry.name === '_archive')
+                    continue;
+                await walk(abs);
+            }
+            else if (entry.isFile() && entry.name.endsWith('.md')) {
+                out.push(relative(root, abs));
+            }
+        }
+    }
+    await walk(root);
+    return out;
+}
+const REAL_REFRESH_FS = {
+    listMarkdown: listMarkdownRecursive,
+    readFile: (absPath) => fsPromises.readFile(absPath, 'utf8'),
+};
 /**
  * flywheel_memory — Search and interact with CASS memory (cm CLI).
  *
@@ -106,6 +148,42 @@ export async function runMemory(ctx, args) {
                 message: err instanceof Error ? err.message : String(err),
                 retryable: classified.retryable,
                 hint: 'Solution-doc drafting failed. Rerun once; if persistent, set FW_LOG_LEVEL=debug and check that draft_postmortem succeeds on its own.',
+                cause: classified.cause,
+            });
+        }
+    }
+    // ── refresh_learnings ─────────────────────────────────────────
+    // Bead `bve` — pure read-only sweep of docs/solutions/. Does NOT need
+    // the cm CLI (it operates entirely on markdown frontmatter). Surface
+    // the RefreshReport verbatim; the caller (skill) decides what to
+    // archive based on per-decision recommendations.
+    if (operation === 'refresh_learnings') {
+        const root = args.refreshRoot
+            ? pathResolve(cwd, args.refreshRoot)
+            : pathResolve(cwd, 'docs', 'solutions');
+        try {
+            const report = await refreshLearnings(root, REAL_REFRESH_FS);
+            const summary = summarizeRefreshReport(root, report);
+            const structured = {
+                tool: 'flywheel_memory',
+                version: 1,
+                status: 'ok',
+                phase,
+                data: {
+                    kind: 'refresh_learnings_report',
+                    root,
+                    report,
+                },
+            };
+            return makeToolResult(summary, structured);
+        }
+        catch (err) {
+            const classified = classifyExecError(err);
+            return makeFlywheelErrorResult('flywheel_memory', phase, {
+                code: classified.code,
+                message: err instanceof Error ? err.message : String(err),
+                retryable: classified.retryable,
+                hint: 'refresh_learnings sweep failed. Check that <cwd>/docs/solutions exists and is readable; pass refreshRoot to override the default location.',
                 cause: classified.cause,
             });
         }
@@ -287,5 +365,36 @@ export async function runMemory(ctx, args) {
     return {
         content: [{ type: 'text', text: `## CASS memory: "${args.query}"\n\n${formatted}` }],
     };
+}
+function summarizeRefreshReport(root, report) {
+    const counts = {};
+    for (const d of report.decisions) {
+        counts[d.classification] = (counts[d.classification] ?? 0) + 1;
+    }
+    const order = ['Keep', 'Update', 'Consolidate', 'Replace', 'Delete'];
+    const summaryLine = order
+        .map((c) => `${c}: ${counts[c] ?? 0}`)
+        .join('  ');
+    const lines = [];
+    lines.push(`flywheel_memory.refresh_learnings — swept ${root}`);
+    lines.push(`  Decisions: ${report.decisions.length} (${summaryLine})`);
+    lines.push(`  Unparseable: ${report.unparseable.length}`);
+    lines.push(`  Elapsed: ${report.elapsedMs}ms`);
+    if (report.decisions.length > 0) {
+        lines.push('');
+        lines.push('  Per-group:');
+        for (const d of report.decisions) {
+            lines.push(`    [${d.classification}] ${d.docs.map((doc) => doc.path).join(' + ')}`);
+            lines.push(`      reason: ${d.reason}`);
+        }
+    }
+    if (report.unparseable.length > 0) {
+        lines.push('');
+        lines.push('  Unparseable entries (surface to user; never auto-acted on):');
+        for (const u of report.unparseable) {
+            lines.push(`    - ${u.path}: ${u.reason}`);
+        }
+    }
+    return lines.join('\n');
 }
 //# sourceMappingURL=memory-tool.js.map

@@ -501,10 +501,15 @@ export interface VerifyBeadsArgs {
 export interface MemoryArgs {
     cwd: string;
     query?: string;
-    operation?: "search" | "store" | "draft_postmortem" | "draft_solution_doc";
+    operation?: "search" | "store" | "draft_postmortem" | "draft_solution_doc" | "refresh_learnings";
     content?: string;
     /** CASS entry id for the paired post-mortem. Required when operation="draft_solution_doc". */
     entryId?: string;
+    /**
+     * Optional override for the docs/solutions/ root scanned by
+     * operation="refresh_learnings". Defaults to `<cwd>/docs/solutions`.
+     */
+    refreshRoot?: string;
 }
 export interface DoctorArgs {
     cwd: string;

@@ -20,14 +20,34 @@
  * only when the underlying fs call itself fails unexpectedly.
  */
 /**
- * Directory names/segments the flywheel considers its own. A destructive
- * op is only allowed if the resolved target sits inside one of these roots.
+ * Directory names/segments the flywheel considers its own when invoked
+ * inside ANY repo. A destructive op is only allowed if the resolved target
+ * sits inside one of these roots.
  *
- * We deliberately accept an explicit allowlist rather than a blocklist —
- * defence-in-depth against future refactors that introduce new destructive
- * sites on user-owned paths.
+ * `mcp-server/dist` is intentionally NOT in this list — it is owned by the
+ * plugin repo only, and a consumer project can legitimately ship its own
+ * `mcp-server/dist`. See `getFlywheelManagedDirs(cwd)` for the cwd-aware
+ * resolver that adds `mcp-server/dist` only when cwd is the plugin repo.
  */
-export declare const FLYWHEEL_MANAGED_DIRS: readonly [".pi-flywheel", ".pi-flywheel-feedback", string];
+export declare const FLYWHEEL_MANAGED_DIRS: readonly [".pi-flywheel", ".pi-flywheel-feedback"];
+/**
+ * Heuristic: is `cwd` the agent-flywheel-plugin repo itself?
+ *
+ * We accept either signal:
+ *   - `process.env.CLAUDE_PLUGIN_ROOT` is set and matches `cwd`
+ *     (plugin runtime sets this when launching the MCP server).
+ *   - `<cwd>/mcp-server/package.json` declares `"name": "agent-flywheel-mcp"`
+ *     (the plugin checkout in dev).
+ *
+ * Pure heuristic — never throws. Returns false on any I/O error.
+ */
+export declare function isPluginRepoRoot(cwd: string): boolean;
+/**
+ * Cwd-aware managed-directory list. Adds `mcp-server/dist` only when cwd
+ * is the plugin repo itself — a consumer project's own dist/ stays
+ * user-owned.
+ */
+export declare function getFlywheelManagedDirs(cwd: string): readonly string[];
 /**
  * Tmpdir prefix the flywheel uses for scratch work. `bead-review.ts` and
  * other short-lived helpers should put their work under this prefix so a

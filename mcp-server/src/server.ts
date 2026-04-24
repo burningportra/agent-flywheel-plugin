@@ -223,9 +223,9 @@ const PRIMARY_TOOLS = [
         query: { type: 'string', description: 'Search query for CASS memory' },
         operation: {
           type: 'string',
-          enum: ['search', 'store', 'draft_postmortem', 'draft_solution_doc'],
+          enum: ['search', 'store', 'draft_postmortem', 'draft_solution_doc', 'refresh_learnings'],
           default: 'search',
-          description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits), draft_solution_doc=synthesize a docs/solutions/ entry paired with a CASS entry_id (read-only; caller writes the file)',
+          description: 'search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits), draft_solution_doc=synthesize a docs/solutions/ entry paired with a CASS entry_id (read-only; caller writes the file), refresh_learnings=sweep docs/solutions/ and classify entries Keep/Update/Consolidate/Replace/Delete (read-only; caller archives)',
         },
         content: {
           type: 'string',
@@ -234,6 +234,10 @@ const PRIMARY_TOOLS = [
         entryId: {
           type: 'string',
           description: 'CASS entry id from a prior store call (required when operation=draft_solution_doc)',
+        },
+        refreshRoot: {
+          type: 'string',
+          description: 'Optional override for the docs/solutions/ root scanned by operation=refresh_learnings. Defaults to <cwd>/docs/solutions.',
         },
       },
       required: ['cwd'],

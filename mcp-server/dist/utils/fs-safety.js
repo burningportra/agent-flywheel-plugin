@@ -19,24 +19,63 @@
  * result so callers can log/warn and degrade gracefully. They throw
  * only when the underlying fs call itself fails unexpectedly.
  */
-import { existsSync, mkdirSync, renameSync, statSync, unlinkSync, copyFileSync, } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, copyFileSync, } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 // ─── Allowlist ────────────────────────────────────────────────
 /**
- * Directory names/segments the flywheel considers its own. A destructive
- * op is only allowed if the resolved target sits inside one of these roots.
+ * Directory names/segments the flywheel considers its own when invoked
+ * inside ANY repo. A destructive op is only allowed if the resolved target
+ * sits inside one of these roots.
  *
- * We deliberately accept an explicit allowlist rather than a blocklist —
- * defence-in-depth against future refactors that introduce new destructive
- * sites on user-owned paths.
+ * `mcp-server/dist` is intentionally NOT in this list — it is owned by the
+ * plugin repo only, and a consumer project can legitimately ship its own
+ * `mcp-server/dist`. See `getFlywheelManagedDirs(cwd)` for the cwd-aware
+ * resolver that adds `mcp-server/dist` only when cwd is the plugin repo.
  */
 export const FLYWHEEL_MANAGED_DIRS = [
     ".pi-flywheel",
     ".pi-flywheel-feedback",
-    // Build output, never authored by hand.
-    join("mcp-server", "dist"),
 ];
+/**
+ * Heuristic: is `cwd` the agent-flywheel-plugin repo itself?
+ *
+ * We accept either signal:
+ *   - `process.env.CLAUDE_PLUGIN_ROOT` is set and matches `cwd`
+ *     (plugin runtime sets this when launching the MCP server).
+ *   - `<cwd>/mcp-server/package.json` declares `"name": "agent-flywheel-mcp"`
+ *     (the plugin checkout in dev).
+ *
+ * Pure heuristic — never throws. Returns false on any I/O error.
+ */
+export function isPluginRepoRoot(cwd) {
+    const cwdAbs = resolve(cwd);
+    const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
+    if (envRoot && resolve(envRoot) === cwdAbs)
+        return true;
+    try {
+        const pkgPath = join(cwdAbs, "mcp-server", "package.json");
+        if (!existsSync(pkgPath))
+            return false;
+        const raw = readFileSync(pkgPath, "utf8");
+        const parsed = JSON.parse(raw);
+        return parsed.name === "agent-flywheel-mcp";
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Cwd-aware managed-directory list. Adds `mcp-server/dist` only when cwd
+ * is the plugin repo itself — a consumer project's own dist/ stays
+ * user-owned.
+ */
+export function getFlywheelManagedDirs(cwd) {
+    if (isPluginRepoRoot(cwd)) {
+        return [...FLYWHEEL_MANAGED_DIRS, join("mcp-server", "dist")];
+    }
+    return FLYWHEEL_MANAGED_DIRS;
+}
 /**
  * Tmpdir prefix the flywheel uses for scratch work. `bead-review.ts` and
  * other short-lived helpers should put their work under this prefix so a
@@ -57,7 +96,7 @@ export const BACKUP_SUBDIR = "_backup";
 export function isFlywheelManagedPath(absPath, cwd) {
     const resolved = resolve(absPath);
     const cwdAbs = resolve(cwd);
-    for (const dir of FLYWHEEL_MANAGED_DIRS) {
+    for (const dir of getFlywheelManagedDirs(cwdAbs)) {
         const root = resolve(cwdAbs, dir);
         if (resolved === root || resolved.startsWith(root + sep)) {
             return true;
@@ -77,12 +116,13 @@ export function isFlywheelManagedPath(absPath, cwd) {
  * Build a guard failure for a path that refused the ownership check.
  */
 function denied(absPath, cwd) {
+    const dirs = getFlywheelManagedDirs(resolve(cwd));
     return {
         ok: false,
         resolvedPath: resolve(absPath),
         reason: "target_outside_allowlist",
         detail: `Refusing destructive op on '${absPath}': not inside any flywheel-managed ` +
-            `directory (${FLYWHEEL_MANAGED_DIRS.join(", ")}) under cwd '${cwd}' ` +
+            `directory (${dirs.join(", ")}) under cwd '${cwd}' ` +
             `and not under tmpdir/${FLYWHEEL_TMP_PREFIX}*.`,
     };
 }

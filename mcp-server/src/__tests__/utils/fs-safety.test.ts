@@ -24,11 +24,26 @@ import {
   FLYWHEEL_MANAGED_DIRS,
   FLYWHEEL_TMP_PREFIX,
   backupThenReplace,
+  getFlywheelManagedDirs,
   guardedRemoveDir,
   guardedRename,
   guardedUnlink,
   isFlywheelManagedPath,
 } from "../../utils/fs-safety.js";
+
+/**
+ * Fake plugin-repo marker. `getFlywheelManagedDirs` adds `mcp-server/dist`
+ * only when cwd looks like the plugin repo — in the tests we materialise
+ * a tiny `mcp-server/package.json` with the right `name`.
+ */
+function markPluginRepo(root: string): void {
+  mkdirSync(join(root, "mcp-server"), { recursive: true });
+  writeFileSync(
+    join(root, "mcp-server", "package.json"),
+    JSON.stringify({ name: "agent-flywheel-mcp" }),
+    "utf8",
+  );
+}
 
 let tmp: string;
 
@@ -51,9 +66,18 @@ describe("isFlywheelManagedPath", () => {
     expect(isFlywheelManagedPath(p, tmp)).toBe(true);
   });
 
-  it("accepts paths inside mcp-server/dist/", () => {
+  it("accepts paths inside mcp-server/dist/ when cwd is the plugin repo", () => {
+    markPluginRepo(tmp);
     const p = join(tmp, "mcp-server", "dist", "server.js");
     expect(isFlywheelManagedPath(p, tmp)).toBe(true);
+  });
+
+  it("rejects paths inside mcp-server/dist/ for a non-plugin consumer cwd", () => {
+    // No plugin marker — a consumer project's own mcp-server/dist must NOT
+    // be classified as flywheel-managed (would let `flywheel_doctor --autofix`
+    // clobber the consumer's build output).
+    const p = join(tmp, "mcp-server", "dist", "server.js");
+    expect(isFlywheelManagedPath(p, tmp)).toBe(false);
   });
 
   it("rejects the cwd root itself", () => {
@@ -83,10 +107,18 @@ describe("isFlywheelManagedPath", () => {
   });
 
   it("exposes the allowlist constant for doc/reference consumers", () => {
-    // The allowlist is part of the module contract — changing it should be
-    // an explicit, reviewable change.
+    // The static allowlist is part of the module contract — changing it
+    // should be an explicit, reviewable change.
     expect(FLYWHEEL_MANAGED_DIRS).toContain(".pi-flywheel");
-    expect(FLYWHEEL_MANAGED_DIRS).toContain(`mcp-server${sep}dist`);
+    expect(FLYWHEEL_MANAGED_DIRS).not.toContain(`mcp-server${sep}dist`);
+  });
+
+  it("getFlywheelManagedDirs adds mcp-server/dist only for the plugin repo", () => {
+    // Consumer cwd: just the static allowlist.
+    expect(getFlywheelManagedDirs(tmp)).not.toContain(`mcp-server${sep}dist`);
+    // Plugin repo cwd: mcp-server/dist is appended.
+    markPluginRepo(tmp);
+    expect(getFlywheelManagedDirs(tmp)).toContain(`mcp-server${sep}dist`);
   });
 });
 

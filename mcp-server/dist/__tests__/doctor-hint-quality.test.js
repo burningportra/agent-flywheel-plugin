@@ -28,9 +28,11 @@ describe('doctor.ts hint quality', () => {
     });
     it('hint constants are substantial remediation sentences', () => {
         const src = readFileSync(resolve(__dirname, '../tools/doctor.ts'), 'utf8');
-        // Pull every `const <NAME>_HINT = '...';` (or template) and assert
-        // the body is long enough to carry a real instruction (>30 chars).
-        const constDecl = /const ([A-Z_]+_HINT)\s*=\s*['"`]([\s\S]*?)['"`];/g;
+        // Pull every `const <NAME>_HINT = '...';` and assert the body is long
+        // enough to carry a real instruction (>30 chars). Capture single-quoted
+        // strings specifically — matching quotes are required so a backtick
+        // inside the body does not prematurely end the capture.
+        const constDecl = /const ([A-Z_]+_HINT)\s*=\s*'((?:\\.|[^'\\])*)';/g;
         const found = [];
         let m;
         while ((m = constDecl.exec(src)) !== null) {
