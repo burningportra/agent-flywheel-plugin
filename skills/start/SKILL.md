@@ -420,7 +420,7 @@ Before discovering ideas, query CASS for past goal history: call `flywheel_memor
 ```
 AskUserQuestion(questions: [{
   question: "How deep should discovery go?",
-  header: "Discovery depth",
+  header: "Depth",
   options: [
     { label: "Fast (default)", description: "flywheel_discover one-shot — 5-10 ranked ideas (Recommended for repeat cycles)" },
     { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30→5→15 pipeline — matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
