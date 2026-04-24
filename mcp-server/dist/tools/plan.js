@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
@@ -32,9 +32,11 @@ function readLatestBrainstorm(cwd, goalSlug) {
         entries.sort().reverse();
         const pick = entries[0];
         const abs = join(dir, pick);
-        // Defensive: ensure it's a regular file, not a symlink to something weird.
-        const st = statSync(abs);
-        if (!st.isFile())
+        // lstatSync (NOT statSync): refuse symlinks outright so a planted
+        // `<slug>-2026-01-01.md -> /etc/passwd` cannot leak content into the
+        // planner prompt. Regular files only.
+        const st = lstatSync(abs);
+        if (!st.isFile() || st.isSymbolicLink())
             return null;
         const content = normalizeText(readFileSync(abs, 'utf8'));
         return { path: `docs/brainstorms/${pick}`, content };
@@ -100,7 +102,7 @@ export async function runPlan(ctx, args) {
         if (!safe.ok) {
             return errorResult('planning', 'invalid_input', `Error: planFile rejected by path-safety (${safe.reason}): ${safe.message}`, { planFile: args.planFile, reason: safe.reason }, 'Provide a path relative to cwd without ".." segments, control chars, or absolute escape.');
         }
-        const resolvedPlanFile = resolveRealpathWithinRoot(args.planFile, {
+        const resolvedPlanFile = resolveRealpathWithinRoot(safe.value, {
             root: cwd,
             label: 'planFile',
             rootLabel: 'cwd',

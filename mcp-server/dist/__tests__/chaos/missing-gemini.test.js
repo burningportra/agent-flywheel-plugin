@@ -83,7 +83,10 @@ describe('chaos/missing-gemini (missing CLI deps)', () => {
         const cwd = makeTmpCwd();
         try {
             const exec = makeExecFn(allGreenStubs());
-            const report = await runDoctorChecks(cwd, undefined, { exec });
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec,
+                codexConfigPath: null,
+            });
             expect(() => DoctorReportSchema.parse(report)).not.toThrow();
             expect(report.overall).toBe('green');
             for (const check of report.checks) {

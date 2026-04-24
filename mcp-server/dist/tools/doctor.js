@@ -11,7 +11,8 @@
  * `red` / `yellow` entries in the returned `DoctorReport`. The tool-level
  * envelope is built by the I4 registration wrapper.
  */
-import { statSync, readdirSync } from 'node:fs';
+import { statSync, readdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { makeExec } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
@@ -44,6 +45,8 @@ export const DOCTOR_CHECK_NAMES = [
     'codex_cli',
     'gemini_cli',
     'swarm_model_ratio',
+    // Codex companion app-server / ChatGPT-account compat (bead `cif`).
+    'codex_config_compat',
     // Codex-rescue handoff observability (bead `agent-flywheel-plugin-1qn`).
     'rescues_last_30d',
 ];
@@ -58,6 +61,7 @@ const CLI_FAILURE_HINT = 'The CLI was found on PATH but exited non-zero. Run it 
 const CLI_NOT_AVAILABLE_HINT = 'Install the missing CLI and ensure it is on $PATH. `/flywheel-setup` prints the install commands for each required tool.';
 const EXEC_TIMEOUT_HINT = 'The probe exceeded its per-check timeout (default 2s). Re-run with a larger `perCheckTimeoutMs`, or investigate why the CLI is slow.';
 const POSTMORTEM_CHECKPOINT_STALE_HINT = 'Clear the stale checkpoint with `/flywheel-stop`, or resume it with `/start` once you have confirmed the recorded goal still applies.';
+const CODEX_CONFIG_GPT5_HINT = 'Comment out the `model = "..."` line in ~/.codex/config.toml. The codex-companion app-server path uses OpenAI API auth and rejects gpt-5*/gpt-5-codex on ChatGPT-account auth even though `codex exec` accepts them. Removing the override lets the app-server pick its built-in default.';
 /**
  * Run all 11 health checks in parallel. Never throws.
  *
@@ -124,6 +128,9 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         () => checkSwarmModelCli('codex_cli', 'codex', swarmCapsPromise, combined, now),
         () => checkSwarmModelCli('gemini_cli', 'gemini', swarmCapsPromise, combined, now),
         () => checkSwarmModelRatio(swarmCapsPromise, combined, now),
+        () => checkCodexConfigCompat(combined, now, options.codexConfigPath === undefined
+            ? join(homedir(), '.codex', 'config.toml')
+            : options.codexConfigPath),
         () => checkRescuesLast30d(exec, cwd, combined, perCheckTimeoutMs, now),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
@@ -818,6 +825,108 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
  *
  * Read-only: only invokes `cm search`. Never mutates CASS.
  */
+/**
+ * Pure parser for ~/.codex/config.toml. Looks for the top-level `model`
+ * key and reports its raw value (TOML-stripped quotes). Returns null if
+ * the key is absent, commented out, or only set inside a [section].
+ *
+ * Intentionally simple — we only care about `model = "..."` at the root
+ * level above the first `[section]` header. A real TOML parser would be
+ * overkill for one key.
+ *
+ * Exported for test access only.
+ */
+export function parseCodexConfigTopLevelModel(content) {
+    for (const rawLine of content.split('\n')) {
+        const line = rawLine.trim();
+        if (line.startsWith('['))
+            return null;
+        if (line.startsWith('#') || line.length === 0)
+            continue;
+        const m = /^model\s*=\s*"([^"]*)"\s*(?:#.*)?$/.exec(line);
+        if (m)
+            return m[1] ?? null;
+    }
+    return null;
+}
+/** Models known to fail through the codex-companion app-server path on
+ * ChatGPT-account auth (bead `cif`). These models work fine via
+ * `codex exec` but the JSON-RPC `app-server` route uses OpenAI API auth
+ * and rejects them with "model does not exist or you do not have access".
+ */
+const CODEX_INCOMPATIBLE_MODEL_PATTERNS = [
+    /^gpt-5(\.|-|$)/i,
+    /^o4-mini/i,
+];
+export function isCodexIncompatibleModel(model) {
+    return CODEX_INCOMPATIBLE_MODEL_PATTERNS.some((re) => re.test(model));
+}
+/**
+ * 16. Codex companion app-server / ChatGPT-account compat (bead `cif`).
+ *
+ * The codex-companion's app-server transport rejects gpt-5* (and a few
+ * other) models on ChatGPT-account auth — even though `codex exec`
+ * accepts the same model on the same account. This silently breaks
+ * `/codex-rescue` and any flywheel handoff. Detect the misconfiguration
+ * upfront so the user gets a clear actionable hint instead of a stack of
+ * "Reconnecting... 5/5" log lines.
+ *
+ * Severity:
+ *   - green when no model line is set, or model is not in the broken set.
+ *   - yellow when an incompatible model is the explicit top-level default.
+ *
+ * Pure read of ~/.codex/config.toml; no exec, no network. Missing file
+ * (Codex not installed) is green — `codex_cli` check covers that case.
+ */
+async function checkCodexConfigCompat(signal, now, configPath) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('codex_config_compat');
+    if (configPath === null) {
+        return {
+            name: 'codex_config_compat',
+            severity: 'green',
+            message: 'codex config check disabled (codexConfigPath=null)',
+            durationMs: now() - start,
+        };
+    }
+    let content;
+    try {
+        content = readFileSync(configPath, 'utf8');
+    }
+    catch {
+        return {
+            name: 'codex_config_compat',
+            severity: 'green',
+            message: `no ${configPath} — nothing to validate`,
+            durationMs: now() - start,
+        };
+    }
+    const model = parseCodexConfigTopLevelModel(content);
+    if (model === null) {
+        return {
+            name: 'codex_config_compat',
+            severity: 'green',
+            message: 'no top-level `model = ...` override in ~/.codex/config.toml',
+            durationMs: now() - start,
+        };
+    }
+    if (isCodexIncompatibleModel(model)) {
+        return {
+            name: 'codex_config_compat',
+            severity: 'yellow',
+            message: `~/.codex/config.toml sets model="${model}" — codex-companion app-server will reject this on ChatGPT-account auth`,
+            hint: CODEX_CONFIG_GPT5_HINT,
+            durationMs: now() - start,
+        };
+    }
+    return {
+        name: 'codex_config_compat',
+        severity: 'green',
+        message: `~/.codex/config.toml model="${model}" — compatible with app-server`,
+        durationMs: now() - start,
+    };
+}
 async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
     const start = now();
     if (signal.aborted)

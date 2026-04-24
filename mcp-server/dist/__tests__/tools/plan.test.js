@@ -147,6 +147,25 @@ describe('runPlan', () => {
                 rmSync(outsideDir, { recursive: true, force: true });
             }
         });
+        it('rejects planFile when a directory component is a symlink escaping cwd', async () => {
+            const outsideDir = mkdtempSync(join(tmpdir(), 'plan-outside-dir-'));
+            const outsidePlan = join(outsideDir, 'plan.md');
+            writeFileSync(outsidePlan, '# External Plan\n');
+            symlinkSync(outsideDir, join(tmpDir, 'subdir'));
+            try {
+                const { ctx } = makeCtx({}, tmpDir);
+                const result = await runPlan(ctx, {
+                    cwd: tmpDir,
+                    planFile: 'subdir/plan.md',
+                });
+                expect(result.isError).toBe(true);
+                expect(result.content[0].text).toContain('planFile rejected by realpath guard');
+                expect(result.structuredContent?.data?.error?.code).toBe('invalid_input');
+            }
+            finally {
+                rmSync(outsideDir, { recursive: true, force: true });
+            }
+        });
         it('reports plan stats (chars, lines) in output', async () => {
             const content = 'line1\nline2\nline3\n';
             const planPath = join(tmpDir, 'plan.md');
@@ -349,6 +368,28 @@ describe('runPlan', () => {
             for (const agent of structured.data.planAgents) {
                 expect(agent.task).toContain('Phase 0.5 Brainstorm');
                 expect(agent.task).toContain('Smallest: just LRU.');
+            }
+        });
+        it('refuses brainstorm symlink that points outside cwd (security)', async () => {
+            // Plant a symlink whose name matches the slug pattern, pointing at
+            // an external file. statSync would follow it; lstatSync must reject.
+            const dir = join(tmpDir, 'docs', 'brainstorms');
+            mkdirSync(dir, { recursive: true });
+            const externalDir = mkdtempSync(join(tmpdir(), 'plan-brainstorm-attacker-'));
+            const externalFile = join(externalDir, 'leak.md');
+            writeFileSync(externalFile, '# LEAKED-CONTENT\n\nshould not appear in prompt', 'utf8');
+            try {
+                symlinkSync(externalFile, join(dir, 'add-caching-layer-2099-12-31.md'));
+                const { ctx } = makeCtx({}, tmpDir);
+                const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+                const text = result.content[0].text;
+                expect(text).not.toContain('LEAKED-CONTENT');
+                expect(text).not.toContain('Phase 0.5 Brainstorm');
+                const structured = result.structuredContent;
+                expect(structured.data.brainstormDocument).toBeUndefined();
+            }
+            finally {
+                rmSync(externalDir, { recursive: true, force: true });
             }
         });
     });

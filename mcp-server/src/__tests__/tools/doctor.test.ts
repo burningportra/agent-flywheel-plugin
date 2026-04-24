@@ -6,6 +6,8 @@ import {
   runDoctorChecks,
   computeOverallSeverity,
   DOCTOR_CHECK_NAMES,
+  parseCodexConfigTopLevelModel,
+  isCodexIncompatibleModel,
 } from '../../tools/doctor.js';
 import type { DoctorCheck } from '../../types.js';
 import type { ExecFn } from '../../exec.js';
@@ -157,7 +159,10 @@ describe('runDoctorChecks', () => {
     const cwd = makeTmpCwd();
     try {
       const exec = makeStubbedExec(allGreenStubs());
-      const report = await runDoctorChecks(cwd, undefined, { exec });
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec,
+        codexConfigPath: null,
+      });
 
       expect(report.version).toBe(1);
       expect(report.cwd).toBe(cwd);
@@ -285,7 +290,10 @@ describe('runDoctorChecks', () => {
       symlinkSync(outside, join(cwd, 'mcp-server', 'src'));
 
       const exec = makeStubbedExec(allGreenStubs());
-      const report = await runDoctorChecks(cwd, undefined, { exec });
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec,
+        codexConfigPath: null,
+      });
       const distDrift = report.checks.find((c) => c.name === 'dist_drift');
 
       expect(distDrift).toBeDefined();
@@ -406,7 +414,10 @@ describe('runDoctorChecks', () => {
       writeFileSync(join(cwd, 'mcp-server', 'src', 'server.ts'), '// new\n');
 
       const exec = makeStubbedExec(allGreenStubs());
-      const report = await runDoctorChecks(cwd, undefined, { exec });
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec,
+        codexConfigPath: null,
+      });
       const drift = report.checks.find((c) => c.name === 'dist_drift');
       expect(drift!.severity).toBe('red');
     } finally {
@@ -432,6 +443,100 @@ describe('runDoctorChecks', () => {
       const worktrees = report.checks.find((c) => c.name === 'orphaned_worktrees');
       expect(worktrees!.severity).toBe('yellow');
       expect(worktrees!.message).toContain('ghost');
+    } finally {
+      cleanup(cwd);
+    }
+  });
+});
+
+// ─── codex_config_compat ──────────────────────────────────────────────────
+
+describe('parseCodexConfigTopLevelModel (pure)', () => {
+  it('returns the value for a top-level `model = "..."` line', () => {
+    expect(parseCodexConfigTopLevelModel('model = "gpt-5.5"\n')).toBe('gpt-5.5');
+  });
+
+  it('skips commented-out model lines', () => {
+    expect(parseCodexConfigTopLevelModel('# model = "gpt-5.5"\n')).toBeNull();
+  });
+
+  it('returns null when the model key only appears inside a [section]', () => {
+    const src = '[some_provider]\nmodel = "gpt-5.5"\n';
+    expect(parseCodexConfigTopLevelModel(src)).toBeNull();
+  });
+
+  it('honors the first top-level value before any section header', () => {
+    const src = 'model = "o3"\n[features]\nmulti_agent = true\n';
+    expect(parseCodexConfigTopLevelModel(src)).toBe('o3');
+  });
+
+  it('returns null when no model line is present', () => {
+    expect(parseCodexConfigTopLevelModel('approval_policy = "never"\n')).toBeNull();
+  });
+});
+
+describe('isCodexIncompatibleModel', () => {
+  it('flags gpt-5, gpt-5.5, gpt-5-codex, and o4-mini variants', () => {
+    expect(isCodexIncompatibleModel('gpt-5')).toBe(true);
+    expect(isCodexIncompatibleModel('gpt-5.5')).toBe(true);
+    expect(isCodexIncompatibleModel('gpt-5-codex')).toBe(true);
+    expect(isCodexIncompatibleModel('o4-mini')).toBe(true);
+  });
+
+  it('passes app-server-compatible models through', () => {
+    expect(isCodexIncompatibleModel('o3')).toBe(false);
+    expect(isCodexIncompatibleModel('gpt-4o')).toBe(false);
+    expect(isCodexIncompatibleModel('claude-sonnet-4-6')).toBe(false);
+  });
+});
+
+describe('codex_config_compat (integrated)', () => {
+  it('green when ~/.codex/config.toml is absent', async () => {
+    const cwd = makeTmpCwd();
+    try {
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec: makeStubbedExec(allGreenStubs()),
+        codexConfigPath: join(cwd, 'no-such-config.toml'),
+      });
+      const compat = report.checks.find((c) => c.name === 'codex_config_compat');
+      expect(compat!.severity).toBe('green');
+      expect(compat!.message).toContain('nothing to validate');
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
+  it('yellow when config sets gpt-5.5 (the bead `cif` repro)', async () => {
+    const cwd = makeTmpCwd();
+    const fixture = join(cwd, 'codex-config.toml');
+    writeFileSync(fixture, 'model = "gpt-5.5"\nmodel_reasoning_effort = "xhigh"\n');
+    try {
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec: makeStubbedExec(allGreenStubs()),
+        codexConfigPath: fixture,
+      });
+      const compat = report.checks.find((c) => c.name === 'codex_config_compat');
+      expect(compat!.severity).toBe('yellow');
+      expect(compat!.message).toContain('gpt-5.5');
+      expect(compat!.hint).toBeDefined();
+      expect(compat!.hint!.toLowerCase()).toContain('comment out');
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
+  it('green when config sets a compatible model (o3)', async () => {
+    const cwd = makeTmpCwd();
+    const fixture = join(cwd, 'codex-config.toml');
+    writeFileSync(fixture, 'model = "o3"\n');
+    try {
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec: makeStubbedExec(allGreenStubs()),
+        codexConfigPath: fixture,
+      });
+      const compat = report.checks.find((c) => c.name === 'codex_config_compat');
+      expect(compat!.severity).toBe('green');
+      expect(compat!.message).toContain('o3');
     } finally {
       cleanup(cwd);
     }

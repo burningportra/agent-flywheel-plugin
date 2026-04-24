@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -268,6 +268,7 @@ describe('createCallToolHandler', () => {
         const symlinkParent = makeTmpCwd();
         const symlinkCwd = join(symlinkParent, 'linked-repo');
         symlinkSync(realCwd, symlinkCwd);
+        const canonicalCwd = realpathSync(realCwd);
         try {
             const runProfile = vi.fn().mockResolvedValue({
                 content: [{ type: 'text', text: 'Profile complete' }],
@@ -289,9 +290,9 @@ describe('createCallToolHandler', () => {
                     arguments: { cwd: symlinkCwd },
                 },
             });
-            expect(makeExec).toHaveBeenCalledWith(realCwd);
-            expect(loadState).toHaveBeenCalledWith(realCwd);
-            expect(runProfile).toHaveBeenCalledWith(expect.objectContaining({ cwd: realCwd }), { cwd: realCwd });
+            expect(makeExec).toHaveBeenCalledWith(canonicalCwd);
+            expect(loadState).toHaveBeenCalledWith(canonicalCwd);
+            expect(runProfile).toHaveBeenCalledWith(expect.objectContaining({ cwd: canonicalCwd }), { cwd: canonicalCwd });
         }
         finally {
             cleanup(symlinkParent);
