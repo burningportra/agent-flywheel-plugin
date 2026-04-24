@@ -15,6 +15,7 @@ import { runProfile } from './tools/profile.js';
 import { runReview } from './tools/review.js';
 import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
+import { runAdvanceWave } from './tools/advance-wave.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -188,6 +189,27 @@ const PRIMARY_TOOLS = [
         },
     },
     {
+        name: 'flywheel_advance_wave',
+        description: 'Verify a completed wave of beads, then read the next frontier and return dispatch-ready per-lane prompts. Combines verify → readyBeads → prompt rendering in one atomic call. Returns {verification, nextWave, waveComplete}.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                closedBeadIds: {
+                    type: 'array',
+                    description: 'Bead IDs from the wave that just completed — will be verified first',
+                    minItems: 1,
+                    items: { type: 'string' },
+                },
+                maxNextWave: {
+                    type: 'number',
+                    description: 'Max beads in the next wave (defaults to composition tier from swarm.ts)',
+                },
+            },
+            required: ['cwd', 'closedBeadIds'],
+        },
+    },
+    {
         name: 'flywheel_memory',
         description: 'Search and interact with CASS memory (cm CLI). Use to recall past decisions, gotchas, and patterns from prior flywheel runs. Requires cm CLI to be installed.',
         inputSchema: {
@@ -250,6 +272,7 @@ const DEFAULT_RUNNERS = {
     flywheel_approve_beads: runApprove,
     flywheel_review: runReview,
     flywheel_verify_beads: runVerifyBeads,
+    flywheel_advance_wave: runAdvanceWave,
     flywheel_memory: runMemory,
     flywheel_doctor: runDoctor,
     // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
@@ -260,6 +283,7 @@ const DEFAULT_RUNNERS = {
     orch_approve_beads: runApprove,
     orch_review: runReview,
     orch_verify_beads: runVerifyBeads,
+    orch_advance_wave: runAdvanceWave,
     orch_memory: runMemory,
 };
 /**

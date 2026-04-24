@@ -43,6 +43,8 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -153,6 +155,8 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -185,6 +189,8 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -225,6 +231,8 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -262,6 +270,8 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -307,6 +317,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             advancedAction?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -343,6 +355,49 @@ export declare const TOOLS: ({
             advancedAction?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            closedBeadIds: {
+                type: string;
+                description: string;
+                minItems: number;
+                items: {
+                    type: string;
+                };
+            };
+            maxNextWave: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -394,6 +449,8 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
         };
         required: string[];
     };
@@ -418,6 +475,8 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;

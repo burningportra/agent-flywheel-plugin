@@ -17,6 +17,7 @@ import { runProfile } from './tools/profile.js';
 import { runReview } from './tools/review.js';
 import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
+import { runAdvanceWave } from './tools/advance-wave.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -215,6 +216,27 @@ const PRIMARY_TOOLS = [
     },
   },
   {
+    name: 'flywheel_advance_wave',
+    description: 'Verify a completed wave of beads, then read the next frontier and return dispatch-ready per-lane prompts. Combines verify → readyBeads → prompt rendering in one atomic call. Returns {verification, nextWave, waveComplete}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+        closedBeadIds: {
+          type: 'array',
+          description: 'Bead IDs from the wave that just completed — will be verified first',
+          minItems: 1,
+          items: { type: 'string' },
+        },
+        maxNextWave: {
+          type: 'number',
+          description: 'Max beads in the next wave (defaults to composition tier from swarm.ts)',
+        },
+      },
+      required: ['cwd', 'closedBeadIds'],
+    },
+  },
+  {
     name: 'flywheel_memory',
     description: 'Search and interact with CASS memory (cm CLI). Use to recall past decisions, gotchas, and patterns from prior flywheel runs. Requires cm CLI to be installed.',
     inputSchema: {
@@ -280,6 +302,7 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   flywheel_approve_beads: runApprove as ToolRunner,
   flywheel_review: runReview as ToolRunner,
   flywheel_verify_beads: runVerifyBeads as ToolRunner,
+  flywheel_advance_wave: runAdvanceWave as ToolRunner,
   flywheel_memory: runMemory as ToolRunner,
   flywheel_doctor: runDoctor as ToolRunner,
   // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
@@ -290,6 +313,7 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   orch_approve_beads: runApprove as ToolRunner,
   orch_review: runReview as ToolRunner,
   orch_verify_beads: runVerifyBeads as ToolRunner,
+  orch_advance_wave: runAdvanceWave as ToolRunner,
   orch_memory: runMemory as ToolRunner,
 };
 

@@ -537,6 +537,7 @@ export type FlywheelToolName =
   | 'flywheel_approve_beads'
   | 'flywheel_review'
   | 'flywheel_verify_beads'
+  | 'flywheel_advance_wave'
   | 'flywheel_memory'
   | 'flywheel_doctor'
   // Deprecated orch_* aliases — kept for back-compat, removed in v4.0.
@@ -547,6 +548,7 @@ export type FlywheelToolName =
   | 'orch_approve_beads'
   | 'orch_review'
   | 'orch_verify_beads'
+  | 'orch_advance_wave'
   | 'orch_memory';
 
 export interface ToolChoiceOption {
@@ -605,6 +607,7 @@ export interface ReviewArgs {
   parallelSafe?: boolean;
 }
 export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
+export interface AdvanceWaveArgs { cwd: string; closedBeadIds: string[]; maxNextWave?: number }
 export interface MemoryArgs {
   cwd: string;
   query?: string;
