@@ -128,7 +128,7 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
         'Provide a path relative to cwd without ".." segments, control chars, or absolute escape.',
       );
     }
-    const resolvedPlanFile = resolveRealpathWithinRoot(args.planFile, {
+    const resolvedPlanFile = resolveRealpathWithinRoot(safe.value, {
       root: cwd,
       label: 'planFile',
       rootLabel: 'cwd',

@@ -41,6 +41,14 @@ describe('agent-names', () => {
     expect(names.filter((name) => name === 'XenialAnchor')).toHaveLength(1);
   });
 
+  it('returns [] for count=0 (no allocation needed)', () => {
+    expect(allocateAgentNames(0, 'seed')).toEqual([]);
+  });
+
+  it('throws for negative count (underflow guard at the call site)', () => {
+    expect(() => allocateAgentNames(-1, 'seed')).toThrow(/count must be >= 0/);
+  });
+
   it('returns only adjective+noun Agent Mail names from every public picker', () => {
     const names = [
       pickAgentName('agent-flywheel-plugin-byx'),

@@ -191,6 +191,28 @@ describe('runPlan', () => {
       }
     });
 
+    it('rejects planFile when a directory component is a symlink escaping cwd', async () => {
+      const outsideDir = mkdtempSync(join(tmpdir(), 'plan-outside-dir-'));
+      const outsidePlan = join(outsideDir, 'plan.md');
+      writeFileSync(outsidePlan, '# External Plan\n');
+      symlinkSync(outsideDir, join(tmpDir, 'subdir'));
+
+      try {
+        const { ctx } = makeCtx({}, tmpDir);
+
+        const result = await runPlan(ctx, {
+          cwd: tmpDir,
+          planFile: 'subdir/plan.md',
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain('planFile rejected by realpath guard');
+        expect((result.structuredContent as any)?.data?.error?.code).toBe('invalid_input');
+      } finally {
+        rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
     it('reports plan stats (chars, lines) in output', async () => {
       const content = 'line1\nline2\nline3\n';
       const planPath = join(tmpDir, 'plan.md');

@@ -1,9 +1,19 @@
 import { describe, it, expect } from "vitest";
 import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
   assertSafeRelativePath,
   assertSafeSegment,
   requireSafeRelativePath,
   requireSafeSegment,
+  resolveRealpathWithinRoot,
 } from "../../utils/path-safety.js";
 
 const ROOT = "/tmp/flywheel-root";
@@ -151,6 +161,69 @@ describe("assertSafeSegment", () => {
     const r = assertSafeSegment(long, { maxLength: 50 });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("too_long");
+  });
+});
+
+describe("resolveRealpathWithinRoot", () => {
+  it("returns realRoot/realPath/relativePath for a happy-path file inside root", () => {
+    const root = mkdtempSync(join(tmpdir(), "rrwr-happy-"));
+    try {
+      const file = join(root, "docs", "x.md");
+      mkdirSync(join(root, "docs"));
+      writeFileSync(file, "hello", "utf8");
+      const r = resolveRealpathWithinRoot(file, { root, label: "x" });
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.realRoot).toBeTruthy();
+        expect(r.realPath).toBeTruthy();
+        expect(r.relativePath).toBe(join("docs", "x.md"));
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects with reason 'outside_root' when input symlinks outside root", () => {
+    const root = mkdtempSync(join(tmpdir(), "rrwr-escape-"));
+    const external = mkdtempSync(join(tmpdir(), "rrwr-external-"));
+    try {
+      const target = join(external, "leak.md");
+      writeFileSync(target, "leaked", "utf8");
+      const link = join(root, "escape.md");
+      symlinkSync(target, link);
+      const r = resolveRealpathWithinRoot(link, { root, label: "x" });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("outside_root");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects with reason 'not_found' when input does not exist inside an existing root", () => {
+    const root = mkdtempSync(join(tmpdir(), "rrwr-missing-"));
+    try {
+      const r = resolveRealpathWithinRoot(join(root, "nope.md"), {
+        root,
+        label: "x",
+      });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("not_found");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects with reason 'root_not_found' when root itself is missing", () => {
+    const root = mkdtempSync(join(tmpdir(), "rrwr-rootmiss-"));
+    rmSync(root, { recursive: true, force: true });
+    const r = resolveRealpathWithinRoot(join(root, "x.md"), {
+      root,
+      label: "x",
+      rootLabel: "Root",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("root_not_found");
   });
 });
 
