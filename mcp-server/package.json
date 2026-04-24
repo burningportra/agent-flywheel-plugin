@@ -1,6 +1,6 @@
 {
   "name": "agent-flywheel-mcp",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "description": "MCP server for agent-flywheel — state + CLI glue for the agentic coding flywheel",
   "type": "module",
   "scripts": {

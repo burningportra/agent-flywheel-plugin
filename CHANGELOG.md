@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-04-23
+
+### Added
+
+- `flywheel_emit_codex` MCP tool and `emit/codex.ts`: single-target Codex format emitter that walks `skills/<name>/SKILL.md` and writes `<targetDir>/AGENTS.md` + `<targetDir>/.codex/skills/<name>.md`. Includes a fixed Claude→Codex tool-translation table; deliberately not generalised into a multi-target registry.
+- `flywheel_refresh_learnings` operation (and bead `bve` algorithm in `refresh-learnings.ts`): periodic sweep of `docs/solutions/` that scores 5-vector overlap and classifies each group as Keep / Update / Consolidate / Replace / Delete. Read-only — caller decides what to archive.
+- `docs/solutions/` durable learning store paired with CASS via `entry_id`; new `flywheel_memory` operation `draft_solution_doc` synthesizes the markdown and the wrap-up skill writes it.
+- Per-phase Codex-rescue handoff packet at stall-N-1: writes a self-contained prompt to `.pi-flywheel/codex-rescue-<phase>-<sha>.md` so a Codex agent can pick up where Claude stalled.
+- Swarm-agent model diversity (Claude/Codex/Gemini at 1:1:1 via NTM) in `adapters/model-diversity.ts`; new doctor checks `claude_cli`, `codex_cli`, `gemini_cli`, `swarm_model_ratio`, `rescues_last_30d`.
+- `Phase 0.5 brainstorm` step in `skills/start/_planning.md`: AskUserQuestion-driven 3-question pressure-test between discover and plan.
+- Actual-modified-files collision detection in `coordination.ts`: per-worker `git diff --name-only` reconciles against the declared `Files:` list.
+- Line-ending normalization (BOM + CRLF → LF) at all markdown / yaml / json read boundaries via `utils/text-normalize.ts`.
+- Path-safety, clone-safety, and fs-safety modules (`utils/path-safety.ts`, `utils/clone-safety.ts`, `utils/fs-safety.ts`) — guarded primitives for the three classes of footgun audited in CE phase 4.
+- `CONTRIBUTING.md` + `skills/_template/SKILL.md` scaffold for ~30-min new-skill onboarding.
+- Triage chain documentation (doctor → setup → healthcheck) collapsing the naming ambiguity.
+- 1600-name adjective+noun agent-name pool with FNV-1a hashing in `adapters/agent-names.ts`.
+- Pre-commit hook requiring `AGENT_NAME` env var so co-authored swarm commits stay traceable.
+
+### Changed
+
+- Every `FlywheelError` throw site (and ~37 `DoctorCheck` sites) now carries an actionable `hint` remediation sentence instead of an error-code echo. Backed by a new regression test (`doctor-hint-quality.test.ts`).
+- `flywheel_review` gained a mode matrix (autofix / report-only / headless / interactive) selectable per invocation.
+- `FLYWHEEL_MANAGED_DIRS` no longer statically includes `mcp-server/dist`; the new `getFlywheelManagedDirs(cwd)` adds it ONLY when cwd is the plugin repo (CLAUDE_PLUGIN_ROOT match OR `mcp-server/package.json` declares `name: agent-flywheel-mcp`). Prevents `flywheel_doctor --autofix` from clobbering a consumer project's own `mcp-server/dist`.
+- `FlywheelErrorCode` enum expanded from 26 to 29 codes (collision `iy4`, review-mode `f0j`, refresh-sweep `bve`).
+
+### Security
+
+- `flywheel_emit_codex` now validates `pluginRoot` via a new `resolvePluginRoot` helper: realpaths the input and rejects anything outside `cwd` or `CLAUDE_PLUGIN_ROOT`. Closes the unrestricted-fs-read path that would have let a prompt-injected call exfiltrate any `<host-path>/skills/` tree.
+- Frontmatter loader warns on unclosed `---` fences in SKILL.md (avoids silent body-as-frontmatter parse on malformed input).
+
+### Fixed
+
+- `coordination.ts` git-rev-parse and git-diff failure throws now include actionable hints.
+- v3.4.1 carryover: 5 P1 release-gate items from R1 (post-mortem checkpoint stale handling, telemetry summary in swarm-status, hotspot-row caps, sanitiseCause path-redaction edges, README mode-guide stub).
+
+### Tests
+
+- 919 passing (v3.4.0 baseline) to 1187 passing (+268 new tests).
+
 ## [3.4.0] - 2026-04-21
 
 ### Added
