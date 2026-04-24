@@ -40,6 +40,64 @@ fi
   }])
   ```
 
+### Wave-to-wave reliability (v3.6.0+)
+
+Before starting the wave, decide whether you'll babysit the loop in-chat or hand it off to the durable surfaces. Three tools collapse the manual monitor dance into 1–2 calls and let the loop survive `/compact`, idle turns, and the user walking away:
+
+**1. `tender-daemon` — background watcher (survives `/compact`)**
+
+Spawn ONCE per wave, before dispatching impl agents. It polls inbox + `ntm --robot-is-working` every N seconds and appends NDJSON deltas to `.pi-flywheel/tender-events.log`. On resume, you tail the log to reconstruct what happened while you were gone — no state loss when context is reset.
+
+```bash
+nohup node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js \
+  --session=agent-flywheel-plugin--impl-<goal-slug> \
+  --project="$PWD" \
+  --interval=30000 \
+  --logfile=.pi-flywheel/tender-events.log \
+  --agent=<your-coordinator-name> \
+  > /tmp/tender-daemon.log 2>&1 &
+echo "tender_daemon_pid=$!"
+```
+
+Event kinds emitted: `tick`, `message_received`, `pane_state_changed`, `rate_limited`, `context_low`, `daemon_stopped`. On wave completion, `kill -TERM <pid>` flushes a `daemon_stopped` event and exits cleanly.
+
+**Tail-on-resume pattern** — when chat re-enters mid-wave, run:
+```bash
+tail -100 .pi-flywheel/tender-events.log | jq -c '.'
+```
+to catch up on every state change you missed.
+
+**2. `flywheel_advance_wave` — one-call wave transition**
+
+After every wave completes, instead of: verify-beads → read frontier → render prompts → dispatch (4-step manual dance), call:
+```
+flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>])
+```
+Returns `{ verification, nextWave: { beadIds, prompts: [{beadId, lane, prompt}], complexity } | null, waveComplete }`. If `nextWave` is non-null, dispatch the rendered prompts to NTM panes via `ntm --robot-send`. If `waveComplete: true` and `nextWave: null`, the queue is drained — proceed to Step 8.
+
+This is the surface that makes the flywheel actually flywheel. Use it after EVERY wave; do not re-implement the dance manually.
+
+**3. `ScheduleWakeup` — coordinator re-entry**
+
+After dispatching a wave, schedule yourself to re-enter in ~5 min so you don't sit idle:
+```
+ScheduleWakeup(
+  delaySeconds: 270,
+  prompt: "Continue v3.6.0 impl wave: tail .pi-flywheel/tender-events.log, check inbox for [impl] *done* messages, call flywheel_advance_wave with newly-closed bead IDs.",
+  reason: "Re-enter mid-wave to advance after agents deliver"
+)
+```
+Stays inside cache TTL (270s), survives idle turns. Combine with the tender-daemon for full reliability — daemon writes events to disk, ScheduleWakeup brings you back to read them.
+
+**Putting it together** — recommended wave loop:
+1. Spawn NTM panes via `ntm spawn`.
+2. Spawn tender-daemon as a single background process.
+3. Dispatch prompts via `ntm --robot-send`.
+4. Call `ScheduleWakeup(270s, …)` and end the turn.
+5. (Wakeup fires) — `tail .pi-flywheel/tender-events.log` → call `flywheel_advance_wave(closedBeadIds)`.
+6. Dispatch returned `nextWave.prompts` (or proceed to Step 8 if `waveComplete && nextWave === null`).
+7. `kill -TERM $tender_daemon_pid` when the queue drains.
+
 ### Pre-loop — swarm scaling + stagger
 
 **Agent ratio by open-bead count** (from `br ready --json`). Pick the smallest tier that accommodates your wave:
@@ -215,7 +273,14 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    ⚠ Do NOT use `ntm spawn impl-<goal-slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and an `impl-<goal-slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
 
-   **Post-wave bridge to Step 8.** When every bead in the wave is closed (via Agent Mail completion OR proactive close OR force-stop), leave the tmux session alive (user may want to inspect panes) but transition the coordinator to the Step 8 review gate. **Do not skip the AskUserQuestion review prompt just because you watched the panes succeed** — the user still gets "Looks good / Self review / Fresh-eyes" and fresh-eyes review is still run via `Agent()` (NOT NTM — reviewers are short-lived). See `_review.md`.
+   **Post-wave bridge — call `flywheel_advance_wave` (v3.6.0+).** When every bead in the wave is closed (via Agent Mail completion OR proactive close OR force-stop), do NOT manually re-render the next wave. One call:
+   ```
+   flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>])
+   ```
+   - If `nextWave: null` and `waveComplete: true` → queue drained. `kill -TERM $tender_daemon_pid`, leave the tmux session alive (user may want to inspect panes), transition to Step 8.
+   - If `nextWave.prompts` returned → dispatch them via `ntm --robot-send` to fresh panes (or reuse idle ones via `--robot-restart-pane`), then `ScheduleWakeup(270s, …)` and end the turn. The daemon will keep logging while you're idle.
+
+   **Do not skip the Step 8 AskUserQuestion review prompt just because you watched the panes succeed** — the user still gets "Looks good / Self review / Fresh-eyes" and fresh-eyes review is still run via `Agent()` (NOT NTM — reviewers are short-lived). See `_review.md`.
 
    **If NTM is unavailable** (fallback): Spawn via the `Agent()` tool as described below.
 

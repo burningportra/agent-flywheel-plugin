@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-04-24
+
+Wave-to-wave reliability — the flywheel now actually flywheels without LLM-in-the-loop babysitting. Three new surfaces collapse the manual monitor dance and let the loop survive `/compact`, idle turns, and the user walking away.
+
+### Added
+
+- **`flywheel_advance_wave` MCP tool** (`mcp-server/src/tools/advance-wave.ts`, 193 LOC + 256 LOC tests, 9 passing). Single call that takes the wave's closed bead IDs, runs `verifyBeadsClosed` to auto-close any stragglers with matching commits, reads `br ready --json` for the next frontier, and renders per-lane dispatch prompts (round-robin `cc → cod → gem`) using the existing claude/codex/gemini prompt adapters. Returns `{ verification, nextWave: { beadIds, prompts, complexity } | null, waveComplete }`. Replaces the fragile 4-step manual dance (verify → frontier → render → dispatch). Full suite remains green: 1315 tests / 89 files.
+- **`tender-daemon` background watcher** (`mcp-server/src/tender-daemon.ts` + `mcp-server/scripts/tender-daemon.ts` entry, 458 LOC + 133 LOC tests, 3 passing). Standalone Node script spawnable via `nohup ... &`. CLI args: `--session`, `--project`, `--interval`, `--logfile`, `--agent`, `--ntm-timeout`. Polls inbox + `ntm --robot-is-working` + `ntm --robot-agent-health`, diffs against in-memory snapshot, appends NDJSON deltas (`tick`, `message_received`, `pane_state_changed`, `rate_limited`, `context_low`) to `.pi-flywheel/tender-events.log`. SIGTERM/SIGINT path emits `daemon_stopped` event and flushes log. Lets the coordinator reconstruct mid-wave state on resume by tailing the log — no state loss across `/compact`.
+- **`ScheduleWakeup` wiring in `_implement.md`**: documented post-wave pattern that schedules coordinator re-entry at 270s (inside cache TTL) so the loop continues even when the chat goes idle. Combined with the tender-daemon, gives full survive-everything reliability.
+- New "Wave-to-wave reliability" section in `skills/start/_implement.md` documenting the recommended wave loop (spawn → daemon → dispatch → ScheduleWakeup → wake → advance_wave → repeat) and the tail-on-resume pattern.
+
+### Dogfooded
+
+This release was built using the flywheel itself in team mode: 2-pane NTM session (`agent-flywheel-plugin--v360-reliability`), Agent Mail coordination via `OliveDune` (cc) and `CobaltLynx` (cod), with `RedBear` as the coordinator. Background poller verified completion via NDJSON tick log every 30s. The build process was the proof of monitoring — see commits `35b4f3f` (advance-wave) and `cff80aa` (tender-daemon).
+
 ## [3.5.4] - 2026-04-24
 
 ### Fixed
