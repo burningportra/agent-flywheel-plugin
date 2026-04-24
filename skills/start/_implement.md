@@ -69,15 +69,32 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
       - Missing one CLI (e.g. codex absent): redistribute its share to the surviving providers by priority. Wave of 3 with codex missing → 2 Claude + 1 Gemini, plus a degraded-mode warning to the user.
       - All missing: fail loudly — the wave cannot be dispatched. The doctor's `swarm_model_ratio` row will be red.
 
-   3. **Spawn lanes via NTM** with the correct per-model pane counts:
+   3. **Spawn lanes via NTM** with the correct per-model pane counts. Load `/ntm` and `/vibing-with-ntm` first if you haven't — they carry the canonical orchestrator decision tree, stuck-pane ladder, and command surface this section assumes.
       ```bash
       SESSION="${NTM_PROJECT}--impl-<goal-slug>"
-      ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --cc=<N_claude> --cod=<N_codex> --gem=<N_gemini>
-      # Dispatch each bead to its lane's pane (claude → cc-N, codex → cod-N, gemini → gem-N).
-      ntm send "$SESSION" --pane=cc-1 "<claude-tuned prompt>"
-      ntm send "$SESSION" --pane=cod-1 "<codex-tuned prompt>"
-      ntm send "$SESSION" --pane=gem-1 "<gemini-tuned prompt>"
+
+      # --no-user omits pane 0 entirely; lanes start at pane index 1.
+      # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
+      ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
+        --cc=<N_claude> --cod=<N_codex> --gem=<N_gemini> --stagger-mode=smart
       ```
+
+      **Pane addressing is numeric** — `cc-1` / `cod-1` / `gem-1` style does NOT work. With `--no-user`, panes are laid out contiguously by spawn order:
+
+      | Lane    | Pane indices                                              |
+      |---------|------------------------------------------------------------|
+      | Claude  | `1` … `N_claude`                                          |
+      | Codex   | `N_claude+1` … `N_claude+N_codex`                         |
+      | Gemini  | `N_claude+N_codex+1` … `N_claude+N_codex+N_gemini`        |
+
+      Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
+      ```bash
+      ntm --robot-send="$SESSION" --panes=1 --type=cc  --msg="<claude-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_claude+1)) --type=cod --msg="<codex-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_claude+N_codex+1)) --type=gem --msg="<gemini-tuned prompt>"
+      ```
+
+      ⚠ **Forbidden in automation:** `ntm view` (retiles the user's tmux layout and returns nothing useful) and `ntm dashboard` / `ntm palette` (human-only TUIs). The user can run them; the orchestrator must not.
 
    4. **Use the per-model prompt adapters** so each pane gets a prompt tuned to its model:
       - `mcp-server/src/adapters/claude-prompt.ts` — baseline scaffold (matches existing Step 7 template).
@@ -122,20 +139,22 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
    1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per pane you spawned. A missing identity means the agent skipped `macro_start_session`.
-   2. On any missing identity, nudge immediately:
+   2. On any missing identity, nudge immediately (use `--robot-send` to dodge CASS dedup blocking):
       ```bash
-      ntm send "$SESSION" --pane=<pane> "Before any other work, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot track you otherwise."
+      ntm --robot-send="$SESSION" --panes=<pane> --msg="Before any other work, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot track you otherwise."
       ```
    3. If the agent has an identity but hasn't sent a message in >2 min while its bead is still open, it's silently stuck. Treat as idle (escalation below).
 
-   **Nudge escalation per idle pane.** "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 2 min while bead is open. Treat `rate_limited` and `context_low` as separate recovery paths, NOT idle:
-   - `rate_limited` → probe reality first (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`. Do not nudge.
+   **Nudge escalation per idle pane.** Cross-reference: this is the [orchestrator decision tree from `/vibing-with-ntm`](references/vibing-with-ntm/SKILL.md#orchestrator-decision-tree) — load that skill if you need full operator-card detail (OC-001 rate-limit probe, OC-003 stuck-pane ladder, OC-009 context handoff, OC-016 convergence termination).
+
+   "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 2 min while bead is open. Treat `rate_limited` and `context_low` as separate recovery paths, NOT idle:
+   - `rate_limited` → probe reality first (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail="$SESSION" --panes=<pane> --lines=10`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`. Do not nudge.
    - `context_low` → dispatch handoff-then-restart: save state via Agent Mail, then `ntm --robot-restart-pane="$SESSION" --panes=<N> --restart-bead=<bead-id>` on a fresh pane.
 
-   For a genuinely idle pane:
-   - Nudge 1: `ntm send "$SESSION" --pane=<pane> "Status check — report progress on <bead-id> and any blockers via Agent Mail."`
-   - Nudge 2 (2 min later): `ntm send "$SESSION" --pane=<pane> "Still waiting on <bead-id>. If blocked, message <coordinator> with the blocker. If done, run 'br update <bead-id> --status closed'."`
-   - Nudge 3 (2 min later): `ntm send "$SESSION" --pane=<pane> "Final nudge. Delivering now or I reassign/close on your behalf."`
+   For a genuinely idle pane (use `--robot-send`, NOT `ntm send` — see CASS-dedup note above):
+   - Nudge 1: `ntm --robot-send="$SESSION" --panes=<pane> --msg="Status check — report progress on <bead-id> and any blockers via Agent Mail."`
+   - Nudge 2 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Still waiting on <bead-id>. If blocked, message <coordinator> with the blocker. If done, run 'br update <bead-id> --status closed'."`
+   - Nudge 3 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Final nudge. Delivering now or I reassign/close on your behalf."`
    - After 3 nudges AND identical `--robot-tail` output for ≥3 ticks, the pane is wedged (CLI likely hung on `/usage`, `/rate-limit-options`, or a confirm dialog). Climb the stuck-pane ladder instead of blind nudging:
      1. `ntm --robot-health-restart-stuck="$SESSION" --stuck-threshold=10m --dry-run` — surfaces which panes are actually stuck.
      2. `ntm --robot-smart-restart="$SESSION" --panes=<N> --prompt="<re-dispatch prompt>"` — graceful; refuses if pane is actually working.

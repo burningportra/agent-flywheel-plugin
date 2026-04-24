@@ -243,15 +243,35 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
 
 3. **Spawn 3 plan agents IN PARALLEL.**
 
-   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn planners into visible tmux panes. `ntm spawn` takes a project name (which must be a directory under `projects_base`) and uses `--label` for the per-purpose suffix. Use `$NTM_PROJECT` captured in Step 0b (which equals `basename $PWD`):
+   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn planners into visible tmux panes. Load `/ntm` and `/vibing-with-ntm` first if you haven't — they carry the canonical orchestrator decision tree, stuck-pane ladder, and command surface this section assumes.
+
+   `ntm spawn` takes a project name (which must be a directory under `projects_base`) and uses `--label` for the per-purpose suffix. Use `$NTM_PROJECT` captured in Step 0b (which equals `basename $PWD`):
    ```bash
    SESSION="${NTM_PROJECT}--deep-plan-<slug>"
-   ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --cc=1 --cod=1 --gmi=1
-   ntm send "$SESSION" --pane=cc-1 "<correctness planner prompt>"
-   ntm send "$SESSION" --pane=cod-1 "<ergonomics planner prompt>"
-   ntm send "$SESSION" --pane=gmi-1 "<robustness planner prompt>"
+
+   # --no-user omits pane 0 entirely; planners get pane indices 1, 2, 3.
+   # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
+   ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
    ```
-   Each agent's prompt MUST still include the Agent Mail bootstrap (`macro_start_session`, `send_message` to coordinator on completion). NTM handles the process lifecycle; Agent Mail handles the coordination protocol.
+
+   **Pane → planner mapping** (panes are addressed by numeric index — `cc-1` / `cod-1` / `gmi-1` style does NOT work):
+
+   | Pane # | Type  | Perspective | Model hint  |
+   |--------|-------|-------------|-------------|
+   | 1      | `cc`  | correctness | opus        |
+   | 2      | `cod` | ergonomics  | gpt-5-codex |
+   | 3      | `gmi` | robustness  | gemini      |
+
+   Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
+   ```bash
+   ntm --robot-send="$SESSION" --panes=1 --type=cc  --msg="<correctness planner prompt>"
+   ntm --robot-send="$SESSION" --panes=2 --type=cod --msg="<ergonomics  planner prompt>"
+   ntm --robot-send="$SESSION" --panes=3 --type=gmi --msg="<robustness  planner prompt>"
+   ```
+
+   Each planner's prompt MUST still include the Agent Mail bootstrap (`macro_start_session` — the call auto-assigns an adjective+noun name; planner introduces itself to coordinator via `send_message` immediately after). NTM handles the process lifecycle; Agent Mail handles the coordination protocol.
+
+   ⚠ **Forbidden in automation:** `ntm view` (retiles the user's tmux layout and returns nothing useful) and `ntm dashboard` / `ntm palette` (human-only TUIs). The user can run them; the orchestrator must not.
 
    **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM launches panes asynchronously; a pane process can live while the agent inside is idle, crashed, or skipping Agent Mail.
 
@@ -281,21 +301,25 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
 
    **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
    1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per planner pane. A missing identity means the agent skipped `macro_start_session`.
-   2. On any missing identity, nudge immediately:
+   2. On any missing identity, nudge immediately (use `--robot-send` to dodge CASS dedup blocking):
       ```bash
-      ntm send "$SESSION" --pane=<pane> "Before anything else, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot collect your plan otherwise."
+      ntm --robot-send="$SESSION" --panes=<pane> --msg="Before anything else, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot collect your plan otherwise."
       ```
    3. If the agent has an identity but hasn't sent a message in >3 min, treat as idle and start the nudge escalation below.
 
-   **Nudge escalation per idle pane.** "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 3 min. Treat `rate_limited` and `context_low` as separate paths, NOT idle:
-   - `rate_limited` → probe reality (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`.
+   **Nudge escalation per idle pane.** Cross-reference: this is the [orchestrator decision tree from `/vibing-with-ntm`](references/vibing-with-ntm/SKILL.md#orchestrator-decision-tree) — load that skill if you need full operator-card detail (OC-001 rate-limit probe, OC-003 stuck-pane ladder, OC-009 context handoff, OC-016 convergence termination).
+
+   "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 3 min. Treat `rate_limited` and `context_low` as separate paths, NOT idle:
+   - `rate_limited` → probe reality (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail="$SESSION" --panes=<pane> --lines=10`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`.
    - `context_low` → restart the pane on a fresh account: `ntm --robot-restart-pane="$SESSION" --panes=<N>` with a re-dispatch prompt.
 
-   For a genuinely idle pane:
-   - Nudge 1: `ntm send "$SESSION" --pane=<pane> "Your plan is needed — deliver the file path to <coordinator> via Agent Mail."`
-   - Nudge 2 (2 min later): `ntm send "$SESSION" --pane=<pane> "Still waiting on your <perspective> plan. Report status and any blockers."`
-   - Nudge 3 (2 min later): `ntm send "$SESSION" --pane=<pane> "Final nudge — deliver now or I proceed to synthesis without you."`
+   For a genuinely idle pane (use `--robot-send`, NOT `ntm send` — see CASS-dedup note above):
+   - Nudge 1: `ntm --robot-send="$SESSION" --panes=<pane> --msg="Your plan is needed — deliver the file path to <coordinator> via Agent Mail."`
+   - Nudge 2 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Still waiting on your <perspective> plan. Report status and any blockers."`
+   - Nudge 3 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Final nudge — deliver now or I proceed to synthesis without you."`
    - After 3 nudges AND identical `--robot-tail` for ≥3 ticks, the pane is wedged. Climb the stuck-pane ladder: `--robot-smart-restart` → `--robot-smart-restart --hard-kill` → `--robot-restart-pane`. If the restart doesn't recover the planner within one more tick, mark it as failed and continue to synthesis with the plans you have (2 is usable; 1 is a degraded-warning case). Do NOT block the flywheel indefinitely on a stuck planner.
+
+   **Swarm-wide convergence stop.** If `ntm --robot-wait` returns no new attention events for 2 consecutive cycles AND no planners delivered AND `docs/plans/<date>-*.md` file sizes are unchanged across both cycles: the swarm is stuck on prose-without-output. Dispatch one OC-004 ship-or-surface nudge (see `/vibing-with-ntm` PROMPTS.md). If still no progress on the next cycle, hard-stop via `ntm swarm stop "$SESSION"` and proceed to synthesis with whatever plans landed.
 
    ⚠ Do NOT use `ntm spawn deep-plan-<slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and a `deep-plan-<slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
 

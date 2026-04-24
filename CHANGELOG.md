@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-04-24
+
+### Fixed
+
+- `skills/start/_planning.md` and `skills/start/_implement.md`: NTM pane addressing. Previous `--pane=cc-1` / `cod-1` / `gem-1` / `gmi-1` syntax was invalid — NTM addresses panes by numeric index. Replaced with explicit index formulas (`--panes=1`, `--panes=$((N_claude+1))`, etc.) and a pane→lane mapping table.
+- Orchestrator dispatch and nudge loops now use `ntm --robot-send` instead of `ntm send`. Plain `ntm send` silently aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — a silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design.
+- Rate-limit probe `ntm --robot-tail` invocation now includes required `--panes=<N>` and `--lines=<N>` args (previously a bare `ntm --robot-tail` which returns nothing useful).
+- Added `--no-user` + `--stagger-mode=smart` to NTM spawn commands in both deep-plan and impl flows; cleaner pane numbering and prevents thundering-herd on simultaneous cold-boot.
+
+### Added
+
+- Cross-references from `_planning.md` and `_implement.md` to the `/ntm` and `/vibing-with-ntm` skills so future orchestrators load their canonical decision trees and operator cards (OC-001, OC-003, OC-009, OC-016) instead of re-deriving logic.
+- Swarm-wide convergence-stop rule in `_planning.md` — if `--robot-wait` returns no events for 2 cycles AND no planners delivered AND plan files unchanged, dispatch one ship-or-surface nudge then hard-stop via `ntm swarm stop` and proceed to synthesis with partial plans.
+- Explicit "forbidden in automation" note for `ntm view`, `ntm dashboard`, and `ntm palette` (TUI-only surfaces).
+- `reference_stop_review_gate_hook_cold_boot.md` memory capturing the upstream openai-codex plugin Stop-hook JSON.parse bug and its cold-boot cause, so future sessions diagnose it in seconds instead of re-investigating.
+
+### Security
+
+- `flywheel_doctor` gained a `codex_config_compat` check: parses `~/.codex/config.toml` for a top-level `model = "..."` line and emits a yellow row when the configured model is in the known-incompatible set (`gpt-5*`, `gpt-5-codex`, `o4-mini`) for the `codex app-server` JSON-RPC transport. Catches misconfigurations that silently break every flywheel→codex handoff before the next session blows up on them.
+
 ## [3.5.0] - 2026-04-23
 
 ### Added
