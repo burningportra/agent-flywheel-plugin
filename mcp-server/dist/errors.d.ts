@@ -129,6 +129,22 @@ export declare const FlywheelStructuredErrorSchema: z.ZodObject<{
     }, z.core.$strip>;
 }, z.core.$strip>;
 export type FlywheelStructuredError = z.infer<typeof FlywheelStructuredErrorSchema>;
+/**
+ * Default actionable hint per error code.
+ *
+ * Acts as a safety net so every FlywheelError carries a non-empty,
+ * remediation-oriented hint even if the call site forgets to pass one.
+ * Call sites SHOULD still pass a contextual hint when they have more
+ * specific information (e.g. the exact CLI invocation that failed) —
+ * the per-call hint always wins. The contract enforced by
+ * error-contract.test.ts: each value must be a sentence > 30 chars and
+ * MUST NOT echo the code name (`hint !== code`).
+ *
+ * Added in agent-flywheel-plugin-9p3 to give the iteration test a
+ * single source of truth to assert against, parallel to
+ * DEFAULT_RETRYABLE.
+ */
+export declare const DEFAULT_HINTS: Record<FlywheelErrorCode, string>;
 export declare const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean>;
 export declare class FlywheelError extends Error {
     readonly code: FlywheelErrorCode;

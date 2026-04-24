@@ -5,6 +5,7 @@ import {
   FlywheelToolErrorSchema,
   FlywheelStructuredErrorSchema,
   DEFAULT_RETRYABLE,
+  DEFAULT_HINTS,
   FlywheelError,
   throwFlywheelError,
   makeFlywheelErrorResult,
@@ -277,5 +278,61 @@ describe('hint propagation through the Zod envelope', () => {
 
     expect(() => FlywheelStructuredErrorSchema.parse(result.structuredContent)).not.toThrow();
     expect(result.structuredContent.data.error.hint).toBeUndefined();
+  });
+});
+
+// ─── agent-flywheel-plugin-9p3: hint contract over ALL error codes ─
+//
+// v3.5.0's hint refactor introduced 7 hint constants in doctor.ts and
+// `doctor-hint-quality.test.ts` regression-guards that file's source.
+// This block is the *runtime* dual: it iterates every FlywheelErrorCode
+// and asserts that constructing a FlywheelError without an explicit
+// hint still yields an actionable hint via the DEFAULT_HINTS fallback.
+// Adding a new code without a default hint will fail this test.
+//
+// Contract per code:
+//   (a) DEFAULT_HINTS[code] is non-empty
+//   (b) hint length > 30 chars (substantial enough to be actionable)
+//   (c) hint is not the literal code name (case-insensitive) — guards
+//       against the doctor.ts regression where `hint: 'cli_failure'`
+//       was shipped as a placeholder.
+
+describe('FlywheelError hint contract (all 29 codes)', () => {
+  it('DEFAULT_HINTS covers every FlywheelErrorCode', () => {
+    expect(Object.keys(DEFAULT_HINTS).sort()).toEqual([...FLYWHEEL_ERROR_CODES].sort());
+  });
+
+  it.each([...FLYWHEEL_ERROR_CODES])('%s has an actionable default hint', (code) => {
+    const err = new FlywheelError({ code, message: `test message for ${code}` });
+
+    // (a) non-empty
+    expect(err.hint, `${code} must carry a default hint`).toBeTruthy();
+    const hint = err.hint!;
+
+    // (b) substantial — short hints (<31 chars) cannot carry remediation
+    expect(
+      hint.length,
+      `${code} default hint too short to be actionable: "${hint}"`,
+    ).toBeGreaterThan(30);
+
+    // (c) hint must not echo the code name — that was the doctor.ts bug
+    expect(hint, `${code} hint must not be the literal code name`).not.toBe(code);
+    expect(
+      hint.toLowerCase(),
+      `${code} hint must not be the code name (case-insensitive)`,
+    ).not.toBe(code.toLowerCase());
+  });
+
+  it.each([...FLYWHEEL_ERROR_CODES])('%s explicit hint overrides DEFAULT_HINTS fallback', (code) => {
+    const explicit = `explicit hint for ${code}: do the thing.`;
+    const err = new FlywheelError({ code, message: 'm', hint: explicit });
+    expect(err.hint).toBe(explicit);
+  });
+
+  it.each([...FLYWHEEL_ERROR_CODES])('%s default hint survives toJSON → envelope round-trip', (code) => {
+    const err = new FlywheelError({ code, message: `runtime ${code}` });
+    const result = makeFlywheelErrorResult('flywheel_profile', 'idle', err.toJSON());
+    const parsed = FlywheelStructuredErrorSchema.parse(result.structuredContent);
+    expect(parsed.data.error.hint).toBe(DEFAULT_HINTS[code]);
   });
 });
