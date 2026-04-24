@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.3] - 2026-04-24
+
+### Fixed
+
+- `skills/start/_implement.md` Step 7: added a mandatory "Pre-flight: NTM readiness gate" that re-runs the NTM detection inline before the implementation loop begins. Previous behaviour relied on `NTM_AVAILABLE` / `NTM_PROJECT` captured in SKILL.md Step 0b — but those variables are not persisted to `checkpoint.json`, so after `/compact` or any session resume they were lost and the loop silently fell through to `Agent()` spawning, stripping the user of visible tmux panes. The gate now forces re-detection, and the decision rule explicitly forbids falling back to `Agent()` when NTM is available just because the NTM block is longer.
+- `skills/start/_planning.md` Deep plan mode: mirrored the NTM readiness gate so deep-plan orchestration also re-detects NTM inline rather than relying on in-turn state that vanishes on resume. Misconfigured NTM (installed but no symlink under `projects_base`) now surfaces a fix-or-fallback `AskUserQuestion` instead of silently skipping.
+
 ## [3.5.2] - 2026-04-24
 
 ### Fixed

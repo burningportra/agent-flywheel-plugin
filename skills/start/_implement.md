@@ -2,6 +2,44 @@
 
 ## Step 7: Implement each bead
 
+### Pre-flight: NTM readiness gate (MANDATORY — run BEFORE Pre-loop)
+
+`NTM_AVAILABLE` and `NTM_PROJECT` are captured in SKILL.md Step 0b but **not persisted to `checkpoint.json`**. After `/compact`, session resume, or any context reset, they are lost — and the implementation loop below will silently fall through to `Agent()` spawning, which strips the user of visible tmux panes. This is the #1 reason NTM "always gets skipped."
+
+**You MUST re-run the detection inline before choosing a spawn mechanism**, even if you think you remember the earlier result:
+
+```bash
+if ! command -v ntm >/dev/null 2>&1; then
+  echo "NTM_AVAILABLE=false reason=cli-missing"
+else
+  NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
+  PROJECT_BASENAME=$(basename "$PWD")
+  if [ -n "$NTM_BASE" ] && [ -d "$NTM_BASE/$PROJECT_BASENAME" ]; then
+    echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE"
+  else
+    echo "NTM_AVAILABLE=false reason=misconfigured base=$NTM_BASE project=$PROJECT_BASENAME"
+  fi
+fi
+```
+
+**Decision rule** (no silent fallthrough):
+
+- `NTM_AVAILABLE=true` → **you MUST use NTM** for this wave. Record `NTM_PROJECT = <project>` and proceed to the NTM branch in step 2 of the Implementation loop. Do NOT spawn via `Agent()` as a shortcut just because the NTM block is longer — the user's visibility into the wave depends on tmux panes, and skipping NTM here silently degrades the flywheel UX.
+- `NTM_AVAILABLE=false reason=cli-missing` → NTM not installed. Spawn via `Agent()` (fallback). No user prompt needed.
+- `NTM_AVAILABLE=false reason=misconfigured` → NTM installed but `projects_base/<basename>` missing. Surface the fix via `AskUserQuestion` BEFORE dispatching:
+  ```
+  AskUserQuestion(questions: [{
+    question: "NTM is installed but this project isn't linked under its projects_base (<base>). Fix it or fall back to Agent()?",
+    header: "NTM setup",
+    options: [
+      { label: "Symlink now (Recommended)", description: "ln -s \"$PWD\" \"$NTM_BASE/$(basename \"$PWD\")\" — one-shot fix, enables visible panes for this wave" },
+      { label: "Fall back to Agent()", description: "Skip NTM this session — agents run invisibly via Agent() tool" },
+      { label: "Run /flywheel-setup", description: "Full setup wizard to configure NTM permanently" }
+    ],
+    multiSelect: false
+  }])
+  ```
+
 ### Pre-loop — swarm scaling + stagger
 
 **Agent ratio by open-bead count** (from `br ready --json`). Pick the smallest tier that accommodates your wave:

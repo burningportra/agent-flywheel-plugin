@@ -236,6 +236,27 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
 
 > **Brainstorm handoff.** `flywheel_plan` auto-detects the most-recent `docs/brainstorms/<goal-slug>-*.md` artifact (if any) and injects its synthesized framing into every per-perspective planner prompt under a `## Phase 0.5 Brainstorm` header. Each spawned planner therefore inherits the scope floor, 10x ceiling, and adjacent-ask decisions from Phase 0.5 without you having to repeat them. If Phase 0.5 was skipped by heuristic, planners simply proceed without that section.
 
+> **NTM readiness gate (MANDATORY — run BEFORE step 1).** `NTM_AVAILABLE` / `NTM_PROJECT` from SKILL.md Step 0b are in-turn variables, not persisted in `checkpoint.json` — after `/compact` or session resume they are lost and the branch below silently falls through to `Agent()`, stripping the user of visible tmux panes. Re-run the detection inline even if you think you remember the earlier result:
+>
+> ```bash
+> if ! command -v ntm >/dev/null 2>&1; then
+>   echo "NTM_AVAILABLE=false reason=cli-missing"
+> else
+>   NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
+>   PROJECT_BASENAME=$(basename "$PWD")
+>   if [ -n "$NTM_BASE" ] && [ -d "$NTM_BASE/$PROJECT_BASENAME" ]; then
+>     echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE"
+>   else
+>     echo "NTM_AVAILABLE=false reason=misconfigured base=$NTM_BASE project=$PROJECT_BASENAME"
+>   fi
+> fi
+> ```
+>
+> **Decision rule**:
+> - `NTM_AVAILABLE=true` → you MUST use the NTM branch below. Do NOT fall back to `Agent()` just because the NTM block is longer.
+> - `NTM_AVAILABLE=false reason=cli-missing` → use the `Agent()` fallback silently.
+> - `NTM_AVAILABLE=false reason=misconfigured` → surface the symlink fix via `AskUserQuestion` before dispatching (same menu as `_implement.md` Pre-flight gate).
+
 1. **Bootstrap Agent Mail** — call `macro_start_session` with:
    - `human_key`: current working directory
    - `program`: "claude-code"
