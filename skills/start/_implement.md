@@ -163,15 +163,28 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        --timeout=90s                               # returns sooner if an event fires
    ```
 
-   **On each wake, read the live per-pane truth:**
-   ```bash
-   ntm --robot-is-working="$SESSION"             # working | idle | rate_limited | error | context_low
-   ntm --robot-agent-health="$SESSION"           # OAuth, quota, context-window, account state
-   ntm --robot-tail="$SESSION" --panes=<N> --lines=50   # sample the actual pane buffer for any pane flagged idle/error
+   **On each wake, read the live per-pane truth (run all 4 — inbox is mandatory, not optional):**
+
+   1. `ntm --robot-is-working="$SESSION"` — `working | idle | rate_limited | error | context_low`
+   2. `ntm --robot-agent-health="$SESSION"` — OAuth, quota, context-window, account state
+   3. `ntm --robot-tail="$SESSION" --panes=<N> --lines=50` — sample the actual pane buffer for any pane flagged idle/error
+   4. **Inbox poll (MANDATORY — this is how you observe agent progress):**
+      ```
+      fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false, status: "unread", limit: 50)
+      ```
+      Then for each new message:
+      - `mark_message_read(message_id: <id>)` — so the next poll shows only fresh traffic.
+      - If `subject` matches `[impl] <bead-id> done`, run `acknowledge_message(message_id: <id>)` and treat the bead as a candidate for proactive close (verify commit + acceptance, then `br update --status closed`).
+      - If `subject` matches `[impl] <bead-id> blocker`, fetch the body via `fetch_topic`, capture into CASS, and decide: nudge for clarification, reassign, or escalate per Step 9's gates.
+   5. `git log --oneline --grep="<bead-id>"` per in-flight bead — catches the "agent committed but forgot `br update`" failure mode (see Step 7's proactive-close rule).
+
+   **Tick log (MANDATORY — print this to the user every wake so they have proof of monitoring).** After running the 5 reads above, emit ONE compact line of plain text in the chat (NOT a tool result, actual user-facing output):
+
    ```
-   Plus, on each tick:
-   - `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` — which agents sent `started` / `bead-closed` / status messages.
-   - `git log --oneline --grep="<bead-id>"` per in-flight bead — catches the "agent committed but forgot `br update`" failure mode (see Step 7's proactive-close rule).
+   tick #<N> @ <HH:MM:SS> — panes: <W working / I idle / R rate-limited> · inbox: <K new> [bead-x9q done by Coral, bead-y3r started by Onyx] · commits: <N since last tick>
+   ```
+
+   Skip ticks where nothing changed (don't spam), but emit at least one line every 3 ticks so the user can see the orchestrator is alive. If the inbox count is `0 new` for 3 consecutive ticks AND no panes are `working`, suspect Agent Mail breakage — call `health_check` on the agent-mail server before continuing the loop.
 
    If the event cursor expires, re-run `ntm --robot-snapshot` and continue.
 

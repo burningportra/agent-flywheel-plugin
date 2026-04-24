@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.4] - 2026-04-24
+
+### Fixed
+
+- `skills/start/_implement.md` and `skills/start/_planning.md` monitor loops: hoisted `fetch_inbox` from a trailing bullet into a first-class step (call #4 of 5 in the wake sequence) and added explicit handling rules for `[impl] <bead-id> done` / `blocker` and `[plan] <perspective> delivered` / `blocker` subjects. Each unread message must now be `mark_message_read`-ed and (for completion messages) `acknowledge_message`-ed so the next poll surfaces only fresh traffic.
+- Added MANDATORY "Tick log" requirement: after every wake cycle, the coordinator must print one user-visible line summarising panes/inbox/commits (or panes/inbox/plans for deep-plan). This gives the user proof that inbox monitoring is actually happening — previously the orchestrator could technically poll without ever surfacing what it observed. Includes a 3-tick zero-inbox heuristic that triggers a `health_check` on the agent-mail server to catch silent breakage.
+
 ## [3.5.3] - 2026-04-24
 
 ### Fixed

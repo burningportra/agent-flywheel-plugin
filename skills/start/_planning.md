@@ -314,13 +314,27 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
        --timeout=90s
    ```
 
-   **On each wake, read the live per-pane truth:**
-   ```bash
-   ntm --robot-is-working="$SESSION"             # working | idle | rate_limited | error | context_low
-   ntm --robot-agent-health="$SESSION"           # OAuth, quota, context-window, account state
-   ntm --robot-tail="$SESSION" --panes=<N> --lines=50   # sample the actual pane buffer for any pane flagged idle/error
+   **On each wake, read the live per-pane truth (run all 4 — inbox is mandatory, not optional):**
+
+   1. `ntm --robot-is-working="$SESSION"` — `working | idle | rate_limited | error | context_low`
+   2. `ntm --robot-agent-health="$SESSION"` — OAuth, quota, context-window, account state
+   3. `ntm --robot-tail="$SESSION" --panes=<N> --lines=50` — sample the actual pane buffer for any pane flagged idle/error
+   4. **Inbox poll (MANDATORY — this is how you observe planner deliveries):**
+      ```
+      fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false, status: "unread", limit: 50)
+      ```
+      For each new message:
+      - `mark_message_read(message_id: <id>)` so the next poll only shows fresh traffic.
+      - If `subject` matches `[plan] <perspective> delivered`, fetch via `fetch_topic` to get the disk path, read the plan file with the Read tool, and tick that planner off the wave.
+      - If `subject` matches `[plan] <perspective> blocker`, capture the blocker text and decide: nudge for clarification, restart the pane, or skip and continue with N-1 plans.
+
+   **Tick log (MANDATORY — print this to the user every wake so they have proof of monitoring).** After running the 4 reads above, emit ONE compact line of plain text in the chat (NOT a tool result, actual user-facing output):
+
    ```
-   Plus: `fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false)` to see which planners have delivered their plan-file path.
+   tick #<N> @ <HH:MM:SS> — panes: <W working / I idle / R rate-limited> · inbox: <K new> [cc delivered docs/plans/…-correctness.md, gmi started] · plans: <M of 3 received>
+   ```
+
+   Skip ticks where nothing changed (don't spam), but emit at least one line every 3 ticks so the user knows the orchestrator is alive. If the inbox count is `0 new` for 3 consecutive ticks AND no panes are `working`, suspect Agent Mail breakage — call `health_check` on the agent-mail server before continuing the loop.
 
    If the event cursor expires, re-run `ntm --robot-snapshot` and continue.
 
