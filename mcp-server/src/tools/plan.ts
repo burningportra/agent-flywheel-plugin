@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
 import { slugifyGoal } from './shared.js';
@@ -36,9 +36,11 @@ function readLatestBrainstorm(cwd: string, goalSlug: string): { path: string; co
     entries.sort().reverse();
     const pick = entries[0];
     const abs = join(dir, pick);
-    // Defensive: ensure it's a regular file, not a symlink to something weird.
-    const st = statSync(abs);
-    if (!st.isFile()) return null;
+    // lstatSync (NOT statSync): refuse symlinks outright so a planted
+    // `<slug>-2026-01-01.md -> /etc/passwd` cannot leak content into the
+    // planner prompt. Regular files only.
+    const st = lstatSync(abs);
+    if (!st.isFile() || st.isSymbolicLink()) return null;
     const content = normalizeText(readFileSync(abs, 'utf8'));
     return { path: `docs/brainstorms/${pick}`, content };
   } catch {

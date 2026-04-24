@@ -462,5 +462,32 @@ describe('runPlan', () => {
         expect(agent.task).toContain('Smallest: just LRU.');
       }
     });
+
+    it('refuses brainstorm symlink that points outside cwd (security)', async () => {
+      // Plant a symlink whose name matches the slug pattern, pointing at
+      // an external file. statSync would follow it; lstatSync must reject.
+      const dir = join(tmpDir, 'docs', 'brainstorms');
+      mkdirSync(dir, { recursive: true });
+
+      const externalDir = mkdtempSync(join(tmpdir(), 'plan-brainstorm-attacker-'));
+      const externalFile = join(externalDir, 'leak.md');
+      writeFileSync(externalFile, '# LEAKED-CONTENT\n\nshould not appear in prompt', 'utf8');
+
+      try {
+        symlinkSync(externalFile, join(dir, 'add-caching-layer-2099-12-31.md'));
+
+        const { ctx } = makeCtx({}, tmpDir);
+        const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+
+        const text = result.content[0].text;
+        expect(text).not.toContain('LEAKED-CONTENT');
+        expect(text).not.toContain('Phase 0.5 Brainstorm');
+
+        const structured = result.structuredContent as { data: { brainstormDocument?: string } };
+        expect(structured.data.brainstormDocument).toBeUndefined();
+      } finally {
+        rmSync(externalDir, { recursive: true, force: true });
+      }
+    });
   });
 });
