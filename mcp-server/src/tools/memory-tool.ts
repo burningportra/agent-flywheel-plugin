@@ -10,6 +10,7 @@ import {
   type RefreshFs,
   type RefreshReport,
 } from '../refresh-learnings.js';
+import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { makeToolResult } from './shared.js';
 
 type PostmortemDraftStructuredContent = {
@@ -59,6 +60,17 @@ type RefreshLearningsStructuredContent = {
  * `_archive/` subtree (handled again upstream as a belt-and-braces guard).
  */
 async function listMarkdownRecursive(root: string): Promise<string[]> {
+  let realRoot: string;
+  try {
+    realRoot = await fsPromises.realpath(root);
+  } catch (err) {
+    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === 'ENOENT') {
+      throw new Error(`refreshRoot not found: ${root}`);
+    }
+    throw new Error(
+      `refreshRoot realpath failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   const out: string[] = [];
   async function walk(dir: string): Promise<void> {
     let entries;
@@ -74,11 +86,11 @@ async function listMarkdownRecursive(root: string): Promise<string[]> {
         if (entry.name === '_archive') continue;
         await walk(abs);
       } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        out.push(relative(root, abs));
+        out.push(relative(realRoot, abs));
       }
     }
   }
-  await walk(root);
+  await walk(realRoot);
   return out;
 }
 
@@ -206,9 +218,37 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
   // the RefreshReport verbatim; the caller (skill) decides what to
   // archive based on per-decision recommendations.
   if (operation === 'refresh_learnings') {
-    const root = args.refreshRoot
+    const rawRoot = args.refreshRoot
       ? pathResolve(cwd, args.refreshRoot)
       : pathResolve(cwd, 'docs', 'solutions');
+    const resolvedRoot = resolveRealpathWithinRoot(rawRoot, {
+      root: cwd,
+      label: 'refreshRoot',
+      rootLabel: 'cwd',
+    });
+    if (!resolvedRoot.ok) {
+      const code =
+        resolvedRoot.reason === 'not_found' || resolvedRoot.reason === 'root_not_found'
+          ? 'not_found'
+          : 'invalid_input';
+      return makeFlywheelErrorResult('flywheel_memory', phase, {
+        code,
+        message:
+          code === 'not_found'
+            ? resolvedRoot.message
+            : `refreshRoot rejected by realpath guard (${resolvedRoot.reason}): ${resolvedRoot.message}`,
+        hint:
+          code === 'not_found'
+            ? 'Check that <cwd>/docs/solutions exists and is readable; pass refreshRoot to override the default location.'
+            : 'Pass an existing refreshRoot inside cwd. Symlinks that resolve outside the project root are rejected.',
+        details: {
+          refreshRoot: args.refreshRoot ?? 'docs/solutions',
+          absolutePath: resolvedRoot.absolutePath,
+          reason: resolvedRoot.reason,
+        },
+      });
+    }
+    const root = resolvedRoot.realPath;
     try {
       const report = await refreshLearnings(root, REAL_REFRESH_FS);
       const summary = summarizeRefreshReport(root, report);

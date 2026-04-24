@@ -56,6 +56,32 @@ export interface AssertSafeSegmentOptions {
      */
     rejectLeadingDot?: boolean;
 }
+export type RealpathReason = "resolve_failed" | "not_found" | "outside_root" | "root_not_found";
+export interface RealpathOk {
+    ok: true;
+    absolutePath: string;
+    realPath: string;
+}
+export interface RealpathErr {
+    ok: false;
+    reason: Extract<RealpathReason, "resolve_failed" | "not_found">;
+    message: string;
+    absolutePath: string;
+}
+export type RealpathResult = RealpathOk | RealpathErr;
+export interface RealpathWithinRootOk extends RealpathOk {
+    realRoot: string;
+    relativePath: string;
+}
+export interface RealpathWithinRootErr {
+    ok: false;
+    reason: RealpathReason;
+    message: string;
+    absolutePath: string;
+    realPath?: string;
+    realRoot?: string;
+}
+export type RealpathWithinRootResult = RealpathWithinRootOk | RealpathWithinRootErr;
 /**
  * Validate a *single* path segment (no separators). Use for user-supplied
  * identifiers that are later spliced into a path, e.g. bead IDs, skill names,
@@ -79,6 +105,23 @@ export declare function assertSafeSegment(input: unknown, opts?: AssertSafeSegme
  * On success returns the *relative* path (with platform-native separators).
  */
 export declare function assertSafeRelativePath(input: unknown, opts: AssertSafeRelativePathOptions): SafePathResult;
+/**
+ * Resolve a path to its canonical realpath. Returns a structured result
+ * instead of throwing so MCP-boundary callers can emit tool-friendly errors.
+ */
+export declare function resolveRealpath(input: string, opts?: {
+    base?: string;
+    label?: string;
+}): RealpathResult;
+/**
+ * Resolve a path and verify its canonical target remains inside `root` after
+ * symlink resolution. Intended for MCP-controlled file and directory args.
+ */
+export declare function resolveRealpathWithinRoot(input: string, opts: {
+    root: string;
+    label?: string;
+    rootLabel?: string;
+}): RealpathWithinRootResult;
 /**
  * Convenience wrapper: throw an Error on rejection. Prefer the non-throwing
  * variants at MCP boundaries so the tool can emit a structured `invalid_input`

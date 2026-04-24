@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPlan } from '../../tools/plan.js';
@@ -130,6 +130,22 @@ describe('runPlan', () => {
             const result = await runPlan(ctx, { cwd: tmpDir, planFile: 'missing.md' });
             expect(result.isError).toBe(true);
             expect(result.content[0].text).toContain('planFile not found');
+        });
+        it('rejects planFile symlinks that resolve outside cwd', async () => {
+            const outsideDir = mkdtempSync(join(tmpdir(), 'plan-outside-'));
+            const outsidePlan = join(outsideDir, 'external.md');
+            writeFileSync(outsidePlan, '# External Plan\n');
+            symlinkSync(outsidePlan, join(tmpDir, 'plan.md'));
+            try {
+                const { ctx } = makeCtx({}, tmpDir);
+                const result = await runPlan(ctx, { cwd: tmpDir, planFile: 'plan.md' });
+                expect(result.isError).toBe(true);
+                expect(result.content[0].text).toContain('planFile rejected by realpath guard');
+                expect(result.structuredContent?.data?.error?.code).toBe('invalid_input');
+            }
+            finally {
+                rmSync(outsideDir, { recursive: true, force: true });
+            }
         });
         it('reports plan stats (chars, lines) in output', async () => {
             const content = 'line1\nline2\nline3\n';

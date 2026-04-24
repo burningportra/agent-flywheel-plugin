@@ -19,6 +19,7 @@ import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
+import { resolveRealpath } from './utils/path-safety.js';
 import type {
   McpToolResult,
   FlywheelToolName,
@@ -364,6 +365,22 @@ function makeValidationErrorResult(toolName: string, validationError: ToolValida
   };
 }
 
+function makeCwdResolutionErrorResult(
+  toolName: FlywheelToolName,
+  reason: 'invalid_input' | 'not_found',
+  message: string,
+  details: Record<string, unknown>,
+): McpToolResult {
+  return makeToolError(toolName, 'idle', reason, message, {
+    retryable: false,
+    hint:
+      reason === 'not_found'
+        ? 'Pass an existing project directory. Symlinks are resolved via realpath before tool execution.'
+        : 'Pass a readable project directory. Symlinks are resolved via realpath before tool execution.',
+    details,
+  });
+}
+
 export function createCallToolHandler(dependencies: CallToolHandlerDependencies) {
   const runners: Record<FlywheelToolName, ToolRunner> = {
     ...DEFAULT_RUNNERS,
@@ -391,7 +408,22 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
       };
     }
 
-    const cwd = normalizedArgs.cwd as string;
+    const rawCwd = normalizedArgs.cwd as string;
+    const resolvedCwd = resolveRealpath(rawCwd, { label: 'cwd' });
+    if (!resolvedCwd.ok) {
+      return makeCwdResolutionErrorResult(
+        name,
+        resolvedCwd.reason === 'not_found' ? 'not_found' : 'invalid_input',
+        resolvedCwd.message,
+        {
+          cwd: rawCwd,
+          absolutePath: resolvedCwd.absolutePath,
+          reason: resolvedCwd.reason,
+        },
+      );
+    }
+    const cwd = resolvedCwd.realPath;
+    const runnerArgs = { ...normalizedArgs, cwd };
     const exec = dependencies.makeExec(cwd);
     const state = dependencies.loadState(cwd);
     const ac = new AbortController();
@@ -412,7 +444,7 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
           isError: true,
         };
       }
-      return await runner(ctx, normalizedArgs);
+      return await runner(ctx, runnerArgs);
     } catch (err: unknown) {
       if (err instanceof FlywheelError) {
         return makeFlywheelErrorResult(name, state.phase, {

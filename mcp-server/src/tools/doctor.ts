@@ -12,7 +12,7 @@
  * envelope is built by the I4 registration wrapper.
  */
 
-import { existsSync, statSync, readdirSync, type Dirent } from 'node:fs';
+import { statSync, readdirSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
@@ -23,6 +23,7 @@ import {
   type CapabilitiesMap,
   type ModelProvider,
 } from '../adapters/model-diversity.js';
+import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import type {
   DoctorCheck,
   DoctorCheckSeverity,
@@ -315,22 +316,42 @@ async function checkMcpConnectivity(
   const start = now();
   if (signal.aborted) return abortedCheck('mcp_connectivity');
 
-  const distServer = join(cwd, 'mcp-server', 'dist', 'server.js');
-  const srcServer = join(cwd, 'mcp-server', 'src', 'server.ts');
+  const distServer = resolveDoctorPath(
+    cwd,
+    join('mcp-server', 'dist', 'server.js'),
+    'mcp-server/dist/server.js',
+  );
+  const srcServer = resolveDoctorPath(
+    cwd,
+    join('mcp-server', 'src', 'server.ts'),
+    'mcp-server/src/server.ts',
+  );
 
   try {
-    if (!existsSync(distServer)) {
+    if (!distServer.ok) {
       return {
         name: 'mcp_connectivity',
-        severity: 'red',
-        message: 'mcp-server/dist/server.js not found — run `npm run build`',
+        severity: distServer.reason === 'not_found' ? 'red' : 'yellow',
+        message:
+          distServer.reason === 'not_found'
+            ? 'mcp-server/dist/server.js not found — run `npm run build`'
+            : `mcp connectivity probe refused path: ${distServer.message}`,
         hint: DOCTOR_CHECK_FAILED_HINT,
         durationMs: now() - start,
       };
     }
-    if (existsSync(srcServer)) {
-      const distMtime = statSync(distServer).mtimeMs;
-      const srcMtime = statSync(srcServer).mtimeMs;
+    if (!srcServer.ok && srcServer.reason !== 'not_found') {
+      return {
+        name: 'mcp_connectivity',
+        severity: 'yellow',
+        message: `mcp connectivity probe refused path: ${srcServer.message}`,
+        hint: DOCTOR_CHECK_FAILED_HINT,
+        durationMs: now() - start,
+      };
+    }
+    if (srcServer.ok) {
+      const distMtime = statSync(distServer.realPath).mtimeMs;
+      const srcMtime = statSync(srcServer.realPath).mtimeMs;
       if (srcMtime > distMtime) {
         return {
           name: 'mcp_connectivity',
@@ -635,27 +656,33 @@ async function checkDistDrift(
   const start = now();
   if (signal.aborted) return abortedCheck('dist_drift');
   try {
-    const srcDir = join(cwd, 'mcp-server', 'src');
-    const distDir = join(cwd, 'mcp-server', 'dist');
-    if (!existsSync(srcDir)) {
+    const srcDir = resolveDoctorPath(cwd, join('mcp-server', 'src'), 'mcp-server/src');
+    const distDir = resolveDoctorPath(cwd, join('mcp-server', 'dist'), 'mcp-server/dist');
+    if (!srcDir.ok) {
       return {
         name: 'dist_drift',
-        severity: 'green',
-        message: 'no mcp-server/src/ — skipping dist drift check',
+        severity: srcDir.reason === 'not_found' ? 'green' : 'yellow',
+        message:
+          srcDir.reason === 'not_found'
+            ? 'no mcp-server/src/ — skipping dist drift check'
+            : `dist drift probe refused path: ${srcDir.message}`,
         durationMs: now() - start,
       };
     }
-    if (!existsSync(distDir)) {
+    if (!distDir.ok) {
       return {
         name: 'dist_drift',
-        severity: 'red',
-        message: 'mcp-server/dist/ missing — run `npm run build`',
+        severity: distDir.reason === 'not_found' ? 'red' : 'yellow',
+        message:
+          distDir.reason === 'not_found'
+            ? 'mcp-server/dist/ missing — run `npm run build`'
+            : `dist drift probe refused path: ${distDir.message}`,
         hint: DOCTOR_CHECK_FAILED_HINT,
         durationMs: now() - start,
       };
     }
-    const srcMax = newestMtime(srcDir, (n) => n.endsWith('.ts'));
-    const distMax = newestMtime(distDir);
+    const srcMax = newestMtime(srcDir.realPath, (n) => n.endsWith('.ts'));
+    const distMax = newestMtime(distDir.realPath);
     if (srcMax === null) {
       return {
         name: 'dist_drift',
@@ -701,16 +728,19 @@ async function checkOrphanedWorktrees(
   const start = now();
   if (signal.aborted) return abortedCheck('orphaned_worktrees');
   try {
-    const dir = join(cwd, '.claude', 'worktrees');
-    if (!existsSync(dir)) {
+    const dir = resolveDoctorPath(cwd, join('.claude', 'worktrees'), '.claude/worktrees');
+    if (!dir.ok) {
       return {
         name: 'orphaned_worktrees',
-        severity: 'green',
-        message: 'no .claude/worktrees/ directory',
+        severity: dir.reason === 'not_found' ? 'green' : 'yellow',
+        message:
+          dir.reason === 'not_found'
+            ? 'no .claude/worktrees/ directory'
+            : `worktree probe refused path: ${dir.message}`,
         durationMs: now() - start,
       };
     }
-    const entries = readdirSync(dir, { withFileTypes: true })
+    const entries = readdirSync(dir.realPath, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name);
 
@@ -781,12 +811,19 @@ async function checkCheckpointValidity(
   const start = now();
   if (signal.aborted) return abortedCheck('checkpoint_validity');
   try {
-    const ckptPath = join(cwd, '.pi-flywheel', 'checkpoint.json');
-    if (!existsSync(ckptPath)) {
+    const ckptPath = resolveDoctorPath(
+      cwd,
+      join('.pi-flywheel', 'checkpoint.json'),
+      '.pi-flywheel/checkpoint.json',
+    );
+    if (!ckptPath.ok) {
       return {
         name: 'checkpoint_validity',
-        severity: 'green',
-        message: 'no checkpoint — nothing to validate',
+        severity: ckptPath.reason === 'not_found' ? 'green' : 'yellow',
+        message:
+          ckptPath.reason === 'not_found'
+            ? 'no checkpoint — nothing to validate'
+            : `checkpoint probe refused path: ${ckptPath.message}`,
         durationMs: now() - start,
       };
     }
@@ -1063,6 +1100,18 @@ export function countRescueEntriesWithin30Days(
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function resolveDoctorPath(
+  cwd: string,
+  relativePath: string,
+  label: string,
+): ReturnType<typeof resolveRealpathWithinRoot> {
+  return resolveRealpathWithinRoot(relativePath, {
+    root: cwd,
+    label,
+    rootLabel: 'cwd',
+  });
 }
 
 /**
