@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.3] - 2026-04-25
+
+### Fixed
+
+- **Critical: `commands/start.md` was a stale verbatim duplicate of `skills/start/SKILL.md`** that diverged across every release since v3.5.4. When users typed `/agent-flywheel:start`, Claude Code loaded the slash-command file (`commands/start.md` ~ 415 LOC) — NOT the skill file — and served menus from before v3.6.0. Visible symptom: users saw the old 4-option fresh-start menu with `Quick fix` instead of `Auto-swarm (Recommended)` and `Deslop pass`. Banner correctly read `v3.6.2`, masking the bug. Fixed by replacing `commands/start.md` with a thin pointer (~34 LOC) that delegates to the canonical skill via the `Skill` tool. Single source of truth eliminates drift permanently.
+- Audit: of all 21 `commands/*.md` files, only `start` was a full duplicate (cmd:skill line ratio 0.06 vs all others ≥ 0.83). `flywheel-doctor` and `flywheel-compound-refresh` are already healthy thin pointers (ratios 0.10 / 0.18). No other slash-commands exhibit this drift pattern.
+
 ## [3.6.2] - 2026-04-24
 
 ### Added
