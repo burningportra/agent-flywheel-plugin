@@ -200,9 +200,8 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
-    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
-    { label: "New goal", description: "Start fresh with a new goal (discards previous session)" },
-    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" }
+    { label: "Deslop pass", description: "Apply /simplify-and-refactor-code-isomorphically with isomorphism proofs — single-pass, fresh-eyes, 5-Codex swarm, or iterative 10x. See skills/start/_deslop.md" },
+    { label: "Other", description: "Work on beads manually, start a new goal, or research an external repo (sub-menu)" }
   ],
   multiSelect: false
 }])
@@ -216,10 +215,9 @@ AskUserQuestion(questions: [{
   header: "Start",
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Deslop pass", description: "Apply /simplify-and-refactor-code-isomorphically with isomorphism proofs — single-pass, fresh-eyes, 5-Codex swarm, or iterative 10x. See skills/start/_deslop.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
-    { label: "New goal", description: "Scan the repo and discover improvement ideas" },
-    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
-    { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
+    { label: "Other", description: "New goal / research an external repo / quick targeted fix (sub-menu)" }
   ],
   multiSelect: false
 }])
@@ -234,8 +232,8 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities" },
     { label: "Set a goal", description: "I already know what I want to build" },
-    { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
-    { label: "Setup", description: "Run /flywheel-setup to configure prerequisites" }
+    { label: "Deslop pass", description: "Apply /simplify-and-refactor-code-isomorphically — proof-obligated refactor pass. Meaningful even on a clean repo with no beads. See skills/start/_deslop.md" },
+    { label: "Other", description: "Research an external repo or run /flywheel-setup (sub-menu)" }
   ],
   multiSelect: false
 }])
@@ -248,6 +246,8 @@ AskUserQuestion(questions: [{
 | Choice | Action |
 |--------|--------|
 | **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 cod + 2 cc). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
+| **Other** | Surface a follow-up `AskUserQuestion` with the state-appropriate sub-options (per UNIVERSAL RULE 1, never end the turn here). For previous-session-exists state: `Work on beads / New goal / Research repo / Quick fix`. For open-beads-exist state: `New goal / Research repo / Quick fix / Audit`. For fresh-start state: `Research repo / Setup`. Then route the chosen sub-option through the matching row below. |
+| **Deslop pass** | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Codex swarm / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the slash-named skills (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove preservation. |
 | **Resume session** | Run the **drift check** below before jumping to the saved phase |
 | **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.2] - 2026-04-24
+
+### Added
+
+- `skills/start/_deslop.md`: dedicated on-ramp for `/simplify-and-refactor-code-isomorphically` — the user's elaborate 98-file proof-obligated refactor skill. Surfaces a mandatory mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Codex swarm via NTM / Iterative 10x via `/repeatedly-apply-skill`), then routes to the matching section. Swarm mode mirrors the v3.6.0 wave pattern: NTM readiness gate → CLI capability check → baseline capture (tests + LOC + warnings) → tender-daemon spawn → 5 Codex panes via `ntm spawn $NTM_PROJECT --label deslop --no-user --cod=5 --stagger-mode=smart` → 5-min looper → controller fresh-eyes review between ticks → termination via `kill -TERM $tender_daemon_pid`. Includes project-level build mutex (`flock $PWD/.pi-flywheel/build.lock`) so the 5 panes don't all `rch build` simultaneously, plus an operator-decoder table mapping each phrase from the user's documentation to a concrete action (isomorphism cards, ledger, one-lever-per-commit, no-rewrites/no-sed, deletion-with-permission, pathology catalog).
+- `skills/start/SKILL.md`: new "Deslop pass" option in all three Step 0d menus (previous-session-exists, open-beads-exist, fresh-start). Placed AFTER "Auto-swarm" so the recommended ordering stays Auto-swarm → Resume → Deslop → Work-on-beads → New goal. Step 0e routing entry surfaces the mode-selection AskUserQuestion before dispatch (per UNIVERSAL RULE 1) and flags `/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm` as load-bearing — no paraphrasing.
+- `skills/start/_inflight_prompt.md` saturation-skills list: added `/simplify-and-refactor-code-isomorphically` so deslop is auto-considered when reviews converge mid-wave alongside `/mock-code-finder`, `/deadlock-finder-and-fixer`, `/reality-check-for-project`, `/modes-of-reasoning-project-analysis`, `/profiling-software-performance`, `/security-audit-for-saas`. Operator-decoder gained a dedicated row for the deslop trigger condition (high LOC-to-behavior ratio or AI-junk patterns in a subsystem) and points dedicated runs at `_deslop.md` instead.
+
 ## [3.6.1] - 2026-04-24
 
 ### Added

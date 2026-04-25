@@ -20,7 +20,7 @@
 >
 > You can also use the various skills with names beginning with the string "testing-" to improve our testing posture (e.g., /testing-perfect-e2e-integration-tests-with-logging-and-no-mocks, /testing-conformance-harnesses, /testing-golden-artifacts, /testing-fuzzing, etc., as relevant and applicable).
 >
-> And if we are done working on all open or stalled beads, and the review rounds are starting to converge and appear to be saturated (i.e., not many new bugs being found and fixed relative to the effort and token usage), then you can start applying various skills such as /mock-code-finder, /deadlock-finder-and-fixer, /reality-check-for-project, /modes-of-reasoning-project-analysis, /profiling-software-performance, and /security-audit-for-saas (only to the extent applicable) to helpfully come up with more useful things to do, which you can then create new beads for using br (see /beads-workflow) and execute using /vibing-with-ntm and the existing swarm.
+> And if we are done working on all open or stalled beads, and the review rounds are starting to converge and appear to be saturated (i.e., not many new bugs being found and fixed relative to the effort and token usage), then you can start applying various skills such as /mock-code-finder, /deadlock-finder-and-fixer, /reality-check-for-project, /modes-of-reasoning-project-analysis, /profiling-software-performance, /security-audit-for-saas, and /simplify-and-refactor-code-isomorphically (only to the extent applicable) to helpfully come up with more useful things to do, which you can then create new beads for using br (see /beads-workflow) and execute using /vibing-with-ntm and the existing swarm.
 
 ---
 
@@ -39,7 +39,8 @@
 | "code review workflow in /vibing-with-ntm" | When all beads closed, invoke `/vibing-with-ntm` review section. Reuse the live swarm panes — do NOT spawn fresh reviewers. |
 | "/testing-* skills" | After review convergence, invoke applicable testing skills to backfill coverage. New work goes through `br create` first. |
 | "saturation" | Convergence rule (per `_implement.md` swarm-wide stop): 2 review cycles produce ≤1 new actionable finding each. |
-| "more useful things to do" skills | `/mock-code-finder`, `/deadlock-finder-and-fixer`, `/reality-check-for-project`, `/modes-of-reasoning-project-analysis`, `/profiling-software-performance`, `/security-audit-for-saas`. Each finding becomes a new bead via `br create`, dispatched into the existing swarm via `flywheel_advance_wave`. |
+| "more useful things to do" skills | `/mock-code-finder`, `/deadlock-finder-and-fixer`, `/reality-check-for-project`, `/modes-of-reasoning-project-analysis`, `/profiling-software-performance`, `/security-audit-for-saas`, `/simplify-and-refactor-code-isomorphically`. Each finding becomes a new bead via `br create`, dispatched into the existing swarm via `flywheel_advance_wave`. |
+| `/simplify-and-refactor-code-isomorphically` (deslop) | After review saturation, if any subsystem has noticeably high LOC-to-behavior ratio or AI-junk patterns (defensive branches for impossible inputs, duplicated wrappers, `_v2` files, orphaned helpers), invoke this skill scoped to the identified subsystem(s). Each candidate becomes a new bead via `br create` so the swarm dispatches it through `flywheel_advance_wave`. For dedicated deslop runs (not saturation-triggered), see `skills/start/_deslop.md` instead. |
 
 ---
 
