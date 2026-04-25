@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-04-24
+
+### Added
+
+- `skills/start/_inflight_prompt.md`: canonical "Universal in-flight prompt" for `/agent-flywheel:start` against projects with existing open / in-progress beads. Prescribes a 4 cod + 2 cc swarm via `/ntm` + `/vibing-with-ntm`, `rch`-driven builds, project-level build mutex (`flock .pi-flywheel/build.lock`), 4-min looper for nudging idle panes, `bv triage`-guided dispatch, stalled-bead reopen rule (in_progress + no commit in 30min + agent absent from `list_window_identities` → reopen), auto code-review handoff on completion, `/testing-*` family for coverage backfill, and saturation-trigger for `/mock-code-finder`, `/deadlock-finder-and-fixer`, `/reality-check-for-project`, `/modes-of-reasoning-project-analysis`, `/profiling-software-performance`, `/security-audit-for-saas`. Includes operator-decoder table mapping each phrase in the verbatim prompt to a concrete action and a 7-item pre-conditions checklist (NTM readiness gate → Agent Mail bootstrap → CLI cap check → disk-space guard → tender-daemon spawn → bead snapshot + reopen → looper schedule).
+- `skills/start/SKILL.md`: new "Auto-swarm (Recommended)" option in both Step 0d menus (previous-session-exists AND open-beads-exist) plus a new routing-table row in Step 0e that loads `_inflight_prompt.md` end-to-end. Slash-named skills are flagged load-bearing — do NOT paraphrase.
+
 ## [3.6.0] - 2026-04-24
 
 Wave-to-wave reliability — the flywheel now actually flywheels without LLM-in-the-loop babysitting. Three new surfaces collapse the manual monitor dance and let the loop survive `/compact`, idle turns, and the user walking away.

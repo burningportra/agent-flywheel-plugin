@@ -198,8 +198,9 @@ AskUserQuestion(questions: [{
   question: "What would you like to do?",
   header: "Start",
   options: [
-    { label: "Resume session", description: "Continue '<goal>' from <phase> phase" },
-    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect" },
+    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
+    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "New goal", description: "Start fresh with a new goal (discards previous session)" },
     { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" }
   ],
@@ -214,7 +215,8 @@ AskUserQuestion(questions: [{
   question: "What would you like to do?",
   header: "Start",
   options: [
-    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect" },
+    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "New goal", description: "Scan the repo and discover improvement ideas" },
     { label: "Research repo", description: "Paste a GitHub URL to study an external repo for insights" },
     { label: "Quick fix", description: "Apply a targeted fix without the full flywheel" }
@@ -245,6 +247,7 @@ AskUserQuestion(questions: [{
 
 | Choice | Action |
 |--------|--------|
+| **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 cod + 2 cc). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
 | **Resume session** | Run the **drift check** below before jumping to the saved phase |
 | **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
