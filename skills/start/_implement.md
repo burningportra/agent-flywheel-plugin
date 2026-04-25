@@ -6,39 +6,68 @@
 
 `NTM_AVAILABLE` and `NTM_PROJECT` are captured in SKILL.md Step 0b but **not persisted to `checkpoint.json`**. After `/compact`, session resume, or any context reset, they are lost — and the implementation loop below will silently fall through to `Agent()` spawning, which strips the user of visible tmux panes. This is the #1 reason NTM "always gets skipped."
 
-**You MUST re-run the detection inline before choosing a spawn mechanism**, even if you think you remember the earlier result:
+**You MUST re-run the detection inline before choosing a spawn mechanism**, even if you think you remember the earlier result. The detection now **auto-symlinks** nested repos silently — only true ambiguity (name-collision) surfaces an `AskUserQuestion`:
 
 ```bash
 if ! command -v ntm >/dev/null 2>&1; then
   echo "NTM_AVAILABLE=false reason=cli-missing"
 else
   NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
-  PROJECT_BASENAME=$(basename "$PWD")
-  if [ -n "$NTM_BASE" ] && [ -d "$NTM_BASE/$PROJECT_BASENAME" ]; then
-    echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE"
+  PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
+  PROJECT_BASENAME=$(basename "$PROJECT_ROOT")
+  TARGET="$NTM_BASE/$PROJECT_BASENAME"
+
+  if [ -z "$NTM_BASE" ]; then
+    echo "NTM_AVAILABLE=false reason=no-projects-base"
+  elif [ ! -e "$TARGET" ]; then
+    # Auto-symlink: nested or sibling repo not yet linked under projects_base.
+    # This is the common case (e.g. ~/Documents/GitHub/foo/services/bar — basename=bar
+    # not under base=~/Documents/GitHub directly). Silent fix, no user prompt.
+    ln -s "$PROJECT_ROOT" "$TARGET" \
+      && echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE action=auto-symlinked" \
+      || echo "NTM_AVAILABLE=false reason=symlink-failed target=$TARGET"
+  elif [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$PROJECT_ROOT" ]; then
+    echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE action=existing-symlink-ok"
+  elif [ "$(realpath "$TARGET" 2>/dev/null)" = "$(realpath "$PROJECT_ROOT" 2>/dev/null)" ]; then
+    echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE action=existing-dir-matches"
   else
-    echo "NTM_AVAILABLE=false reason=misconfigured base=$NTM_BASE project=$PROJECT_BASENAME"
+    # COLLISION: $TARGET exists but points to a different repo. Do NOT clobber.
+    echo "NTM_AVAILABLE=false reason=name-collision target=$TARGET points-to=$(readlink -f "$TARGET" 2>/dev/null) want=$PROJECT_ROOT"
   fi
 fi
 ```
 
 **Decision rule** (no silent fallthrough):
 
-- `NTM_AVAILABLE=true` → **you MUST use NTM** for this wave. Record `NTM_PROJECT = <project>` and proceed to the NTM branch in step 2 of the Implementation loop. Do NOT spawn via `Agent()` as a shortcut just because the NTM block is longer — the user's visibility into the wave depends on tmux panes, and skipping NTM here silently degrades the flywheel UX.
+- `NTM_AVAILABLE=true` (any `action=*`) → **you MUST use NTM** for this wave. Record `NTM_PROJECT = $PROJECT_BASENAME` and proceed to the NTM branch in step 2 of the Implementation loop. Do NOT spawn via `Agent()` as a shortcut just because the NTM block is longer — the user's visibility into the wave depends on tmux panes, and skipping NTM here silently degrades the flywheel UX.
 - `NTM_AVAILABLE=false reason=cli-missing` → NTM not installed. Spawn via `Agent()` (fallback). No user prompt needed.
-- `NTM_AVAILABLE=false reason=misconfigured` → NTM installed but `projects_base/<basename>` missing. Surface the fix via `AskUserQuestion` BEFORE dispatching:
+- `NTM_AVAILABLE=false reason=no-projects-base` → `ntm config show` returned empty. Surface a one-question fix:
   ```
   AskUserQuestion(questions: [{
-    question: "NTM is installed but this project isn't linked under its projects_base (<base>). Fix it or fall back to Agent()?",
+    question: "NTM is installed but has no projects_base configured. Set it to the parent of this repo?",
     header: "NTM setup",
     options: [
-      { label: "Symlink now (Recommended)", description: "ln -s \"$PWD\" \"$NTM_BASE/$(basename \"$PWD\")\" — one-shot fix, enables visible panes for this wave" },
+      { label: "Set + auto-symlink (Recommended)", description: "ntm config set projects_base $(dirname \"$(git rev-parse --show-toplevel)\") and re-run the gate" },
       { label: "Fall back to Agent()", description: "Skip NTM this session — agents run invisibly via Agent() tool" },
       { label: "Run /flywheel-setup", description: "Full setup wizard to configure NTM permanently" }
     ],
     multiSelect: false
   }])
   ```
+- `NTM_AVAILABLE=false reason=name-collision` → another repo with the same basename is already linked under `projects_base`. Surface the conflict via `AskUserQuestion` (NEVER auto-clobber — destructive):
+  ```
+  AskUserQuestion(questions: [{
+    question: "NTM has a different repo named '$PROJECT_BASENAME' already at $TARGET (resolves to $points-to). What should I do?",
+    header: "NTM name collision",
+    options: [
+      { label: "Use unique label", description: "Replace target name in the spawn with a project-disambiguating label like '$PROJECT_BASENAME-$(git rev-parse --short HEAD)'" },
+      { label: "Replace symlink", description: "rm $TARGET && ln -s $PROJECT_ROOT $TARGET — destroys the link to the OTHER repo, only safe if it's stale" },
+      { label: "Fall back to Agent()", description: "Skip NTM this session — agents run invisibly via Agent() tool" }
+    ],
+    multiSelect: false
+  }])
+  ```
+- `NTM_AVAILABLE=false reason=symlink-failed` → permission error or other filesystem failure. Surface the error verbatim and fall back to `Agent()`.
 
 ### Wave-to-wave reliability (v3.6.0+)
 

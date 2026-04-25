@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.4] - 2026-04-25
+
+### Changed
+
+- **NTM readiness gate auto-symlinks nested repos silently.** Previously, any project whose basename wasn't already a top-level entry under NTM `projects_base` (the common case for nested layouts like `~/Documents/GitHub/foo/services/bar`) surfaced an `AskUserQuestion` with three options. Now: if `$TARGET` doesn't exist, the gate runs `ln -s "$PROJECT_ROOT" "$TARGET"` directly and emits `action=auto-symlinked`. Only true ambiguity (name-collision with a different repo OR `ntm config` has no `projects_base` set) still surfaces `AskUserQuestion` — destructive cases never auto-clobber.
+- Detection now uses `git rev-parse --show-toplevel` instead of `$PWD` so it works correctly when invoked from a subdirectory of the project. Symlink-or-no-collision check uses `realpath` for accurate identity comparison.
+- Updated in both `skills/start/_implement.md` (canonical implementation with full edge cases) and `skills/start/_planning.md` (quick reference cross-linked to `_implement.md`).
+
 ## [3.6.3] - 2026-04-25
 
 ### Fixed
