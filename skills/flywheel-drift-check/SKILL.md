@@ -24,6 +24,24 @@ Run a strategic drift check. $ARGUMENTS
    🔄 New opportunities: (not in original plan)
    ```
 
-6. Ask: "Would you like to update the plan to address the drift? (This will trigger a polish loop)"
+6. **If drift is significant** (≥3 stale or new-opportunity beads), surface a follow-up via `AskUserQuestion`:
 
-7. If yes, call `flywheel_approve_beads` with `action: "polish"` via the agent-flywheel MCP server.
+   ```
+   AskUserQuestion(questions: [{
+     question: "Significant drift detected (<N> stale + <M> new-opportunity beads). What do you want to do?",
+     header: "Drift",
+     options: [
+       { label: "Polish-loop the plan", description: "Call flywheel_approve_beads(action: 'polish') and refine bead graph in place (Recommended for tactical drift)" },
+       { label: "Run full reality-check", description: "Drift-check is the lightweight version; reality-check is the deep strategic pass — invoke /agent-flywheel:flywheel-reality-check (or read skills/start/_reality_check.md). Best when drift suggests a vision-vs-implementation gap, not just bead-graph staleness." },
+       { label: "Ignore — log and continue", description: "Acknowledge drift but proceed without changes" }
+     ],
+     multiSelect: false
+   }])
+   ```
+
+7. Route on the answer:
+   - **"Polish-loop the plan"** → call `flywheel_approve_beads` with `action: "polish"` via the agent-flywheel MCP server.
+   - **"Run full reality-check"** → invoke the reality-check slash command or read `skills/start/_reality_check.md` and execute its depth-selection flow.
+   - **"Ignore"** → log and exit.
+
+For minor drift (<3 affected beads), skip the follow-up and just ask the original "polish?" question — the lightweight path is sufficient.

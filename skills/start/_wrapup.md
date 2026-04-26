@@ -1,4 +1,45 @@
-# Wrap-up & Post-Flywheel — Steps 9.5, 10, 11, 12
+# Wrap-up & Post-Flywheel — Steps 9.45, 9.5, 10, 11, 12
+
+## Step 9.45: Pre-wrap reality-check gate (new in v3.6.5)
+
+Before declaring the cycle done, offer a strategic alignment check. Beads can technically close while the *aggregate* of the work drifts from the original goal — this gate is a one-question speed bump that catches it.
+
+**Skip this step entirely** if:
+- Fewer than 3 beads were closed this session (not enough surface area to drift), OR
+- A reality-check pass was already run during this session (look for it in checkpoint history or recent CASS entries tagged `reality-check-<date>`).
+
+Otherwise, surface:
+
+```
+AskUserQuestion(questions: [{
+  question: "Before wrap-up: gap-check the implementation against the original goal '<state.selectedGoal>'?",
+  header: "Reality check",
+  options: [
+    { label: "Skip — looks aligned", description: "Proceed directly to Step 9.5 wrap-up (Recommended if scope was tight and reviews already converged)" },
+    { label: "Quick check", description: "Read AGENTS.md + README.md, scan the closed beads, surface any obvious aspirational-vs-real divergence inline (no new beads)" },
+    { label: "Full reality-check pass", description: "Read skills/start/_reality_check.md and run the depth-selection menu — gap report, optionally convert to beads, optionally re-launch swarm" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **"Skip — looks aligned"** → proceed to Step 9.5.
+- **"Quick check"** → `Read` AGENTS.md + README.md (root), then `br list --json` to enumerate this session's closed beads. Compare in your head: does the closed-beads body cover the goal end-to-end? Surface any divergence as a one-paragraph note. Then surface a follow-up:
+  ```
+  AskUserQuestion(questions: [{
+    question: "Quick check done. Proceed to wrap-up or escalate?",
+    header: "Decision",
+    options: [
+      { label: "Proceed to wrap-up", description: "Findings are minor or out-of-scope — wrap up as-is" },
+      { label: "Escalate to full pass", description: "Run skills/start/_reality_check.md before wrapping" },
+      { label: "Create beads now", description: "Open new beads for the divergences via br create, do NOT close this session yet" }
+    ],
+    multiSelect: false
+  }])
+  ```
+- **"Full reality-check pass"** → read `skills/start/_reality_check.md` and execute its depth-selection flow. After Phase 1 + (optionally) Phase 2 complete, return here and re-show the original Step 9.45 menu — the user may now pick "Skip" with confidence.
+
+The gate is one round-trip on the happy path (the user picks "Skip" and proceeds). It's a guardrail against the silent failure mode where every bead closes but the project still doesn't deliver.
 
 ## Step 9.5: Wrap-up — commit, version bump, rebuild
 

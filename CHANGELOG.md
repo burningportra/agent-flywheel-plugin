@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.5] - 2026-04-26
+
+Reality-check becomes a first-class flywheel surface — top-level menu option, slash command, auto-trigger at saturation, pre-wrap gate, CASS-driven freshness suggestion, drift-check escalation path, dedicated saturation pipeline, mandatory bead tagging, doctor advisory.
+
+### Added
+
+- `skills/start/_reality_check.md`: dedicated on-ramp for `/reality-check-for-project` — the canonical "come-to-Jesus" gap-analysis pass for long-running multi-agent projects. Surfaces a mandatory depth-selection `AskUserQuestion` (Reality check only / Reality check + beads / Full pipeline = check + beads + 3 cod × 3 cc swarm with 3-min looper), then executes the matching section verbatim. Phase 1 prompt is the user's frozen template ("First read ALL of the AGENTS.md file and README.md file super carefully…THEN apply /reality-check-for-project here in an exhaustive way") — agent reads docs end-to-end, runs Explore for code investigation, then invokes the skill exhaustively. Phase 2 prompt converts every gap into a granular self-contained bead graph via `br` only (per `/beads-workflow`), with detailed comments capturing background/reasoning/considerations so future-self never re-reads the plan doc. Phase 3 (full pipeline only) executes the gap-closure beads via NTM swarm. Inherits the canonical pre-flight checklist from `_implement.md` and the operator-decoder table from `_inflight_prompt.md`. **CASS capture** of the gap report is mandatory after Phase 1 (high-value session intelligence); each bead created in Phase 2 is tagged `reality-check-<YYYY-MM-DD>` and references the CASS `entryId` for traceability.
+- `skills/start/_saturation.md`: unified saturation pipeline orchestrating `/reality-check-for-project` (strategic lens) + `/mock-code-finder`, `/deadlock-finder-and-fixer`, `/profiling-software-performance`, `/security-audit-for-saas`, `/modes-of-reasoning-project-analysis`, `/simplify-and-refactor-code-isomorphically` (tactical lenses). Auto-triggered at convergence + ≥80% bead closure. Findings deduplicated to a shared scratchpad, then a single bead-creation pass tags everything `saturation-<date>` + `lens-<skill>` for downstream filtering. Reality-check findings scope the tactical lenses for higher signal.
+- `skills/flywheel-reality-check/SKILL.md` + `commands/flywheel-reality-check.md`: dedicated slash command `/agent-flywheel:flywheel-reality-check` — direct entry point that bypasses the `/start` menu. Both files are thin pointers to `skills/start/_reality_check.md` (single-source-of-truth pattern from v3.6.3).
+- `skills/start/_wrapup.md` Step 9.45: pre-wrap reality-check gate. Before declaring the cycle done, agents now offer a one-question alignment check (Skip / Quick check / Full pass). Catches the silent failure mode where every bead closes but the aggregate doesn't deliver. Skipped automatically if <3 beads closed this session OR a reality-check already ran.
+- `skills/start/SKILL.md` Step 0c: CASS-driven reality-check freshness suggestion in the welcome banner. If ≥3 prior sessions exist for this project AND no reality-check has run in the last 7 sessions, the banner appends a one-line nudge to invoke `/agent-flywheel:flywheel-reality-check`. Advisory only — never gates.
+- `skills/flywheel-doctor/SKILL.md`: documented agent-side advisory check for reality-check freshness (queries CASS for last `reality-check-*` tagged entry; surfaces `[INFO] reality_check_freshness — last reality-check: <X> sessions ago` if stale). Will eventually graduate to a proper check in `mcp-server/src/tools/doctor.ts`; documented as advisory until then.
+- `skills/flywheel-drift-check/SKILL.md`: when significant drift is detected (≥3 stale or new-opportunity beads), the skill now surfaces a follow-up `AskUserQuestion` offering "Run full reality-check" alongside the original "polish-loop the plan" path. Drift-check is the lightweight tactical version; reality-check is the deep strategic version.
+
+### Changed
+
+- `skills/start/SKILL.md` Step 0d: **Reality check is now top-level** (not under "Other") in the `open-beads-exist` menu — the state where gap analysis matters most. "Deslop pass" moved to that state's "Other" sub-menu (still reachable). Other states unchanged: previous-session-exists keeps Reality check under "Other", fresh-start keeps it under "Other".
+- `skills/start/_inflight_prompt.md` operator-decoder table: new hard rule at saturation. When 2 review cycles converge AND ≥80% of original beads are closed, agents now MUST surface `AskUserQuestion` offering "Yes — run reality-check / Skip — proceed to saturation skills / Skip — proceed to wrap-up". The "more useful things to do" row now points at `_saturation.md` for the unified pipeline rather than ad-hoc invocation of each skill.
+
+### Wholistic integration map
+
+| Surface | Reality-check entry point |
+|---------|--------------------------|
+| `/agent-flywheel:start` open-beads-exist menu | Top-level option #2 |
+| `/agent-flywheel:start` other menus | "Other" sub-menu option |
+| `/agent-flywheel:flywheel-reality-check` | Direct slash command (new) |
+| Welcome banner (`SKILL.md` 0c) | Freshness suggestion if stale |
+| Saturation in `_inflight_prompt.md` | Hard gate at convergence |
+| `_saturation.md` (new) | Strategic lens in unified pipeline |
+| Pre-wrap (`_wrapup.md` Step 9.45) | One-question alignment gate |
+| `/agent-flywheel:flywheel-drift-check` | Escalation path on significant drift |
+| `/agent-flywheel:flywheel-doctor` | Freshness advisory check |
+| Bead tagging | `reality-check-<YYYY-MM-DD>` mandatory |
+| CASS persistence | Mandatory gap-report capture |
+
+
 ## [3.6.4] - 2026-04-25
 
 ### Changed

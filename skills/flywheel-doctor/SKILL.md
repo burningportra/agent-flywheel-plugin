@@ -76,6 +76,25 @@ For each failing check, the skill prints the canonical one-line fix below the re
 
 If `overall` is `red`, do NOT run `/start` until the red checks are fixed — downstream gates will fail with more confusing errors.
 
+## Strategic-alignment advisory (manual, run after the MCP report — new in v3.6.5)
+
+After rendering the MCP `DoctorReport`, run one additional **agent-side advisory check** that the MCP tool does NOT yet implement: reality-check freshness. This is documentation of a check the agent performs by querying CASS — eventually it should move into `mcp-server/src/tools/doctor.ts` as a proper check, but it ships as an advisory until then.
+
+Procedure:
+1. Call `flywheel_memory(operation: "search", cwd, query: "reality-check gap report")`.
+2. Inspect the most-recent matching entry's date (entries are stored with a `date` field per `_reality_check.md` §2).
+3. Count distinct prior flywheel sessions for this `cwd` (via CASS or `git log` since the project's first flywheel commit — heuristic only).
+4. If ≥3 prior sessions exist AND the most recent reality-check is older than 7 sessions (or never run), append below the doctor report:
+
+   ```
+   [INFO] reality_check_freshness — last reality-check: <X> sessions ago
+          → consider /agent-flywheel:flywheel-reality-check before continuing
+   ```
+
+5. If <3 prior sessions OR the most recent reality-check was within the last 7 sessions, skip silently.
+
+This is **advisory only** — never gate on it, never mark the doctor report `red` because of it. It's a nudge, not a blocker. Single-session projects don't need reality-checks; the threshold exists to avoid noise on fresh repos.
+
 ## Skill tool invocation
 
 Invoke the MCP tool directly with a single argument — the current working directory:
