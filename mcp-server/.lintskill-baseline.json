@@ -1,28 +1,44 @@
 {
   "schemaVersion": 1,
   "rulesetVersion": 1,
-  "generated": "2026-04-22T02:06:17.466Z",
+  "generated": "2026-04-27T01:01:34.951Z",
   "entries": [
     {
-      "ruleId": "AUQ003",
+      "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
-      "line": 417,
-      "fingerprint": "sha256:87d0ed90a3e9897b0262469fbf073725c62470b619a418f329aef3196fc12c9c",
+      "file": "skills/start/SKILL.md",
+      "line": 209,
+      "fingerprint": "sha256:f92eef67973014be2dd0dde9e91e0a664d7179c0f208897f72a489c554259ace",
       "reason": ""
     },
     {
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
-      "line": 423,
+      "file": "skills/start/SKILL.md",
+      "line": 224,
+      "fingerprint": "sha256:409207e827e9f83d46759007b4fbb5ea7f90fc23176b28d5b831c72d5890f893",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "skills/start/SKILL.md",
+      "line": 241,
+      "fingerprint": "sha256:b619d33345c683a5f543a00259b385ade3305d8b7252a883de9be96bbbe7e257",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "skills/start/SKILL.md",
+      "line": 451,
       "fingerprint": "sha256:d12e9e6791b585d9b544b6fe622cb1161580255b7fe182cf319ae5369ba014b1",
       "reason": ""
     },
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "file": "skills/start/SKILL.md",
       "line": 169,
       "fingerprint": "sha256:e32bf24eb509870236863352cecbc6b71320f0be98cae8ba7c97e65239269ac4",
       "reason": ""
@@ -30,7 +46,7 @@
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "file": "skills/start/SKILL.md",
       "line": 182,
       "fingerprint": "sha256:1b6f029ddbb28a2218dcddc84bde793baa643e99ebb91def269e8bddb78f5602",
       "reason": ""
@@ -38,7 +54,7 @@
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "file": "skills/start/SKILL.md",
       "line": 183,
       "fingerprint": "sha256:551cf7b35a3ddf1f027754deaeb977ea65c0b5f9930ace5a3f294f3e3dca3280",
       "reason": ""
@@ -46,9 +62,17 @@
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "/Users/kevtrinh/Documents/GitHub/agent-flywheel-plugin/.claude/worktrees/distracted-borg-5ecb9a/skills/start/SKILL.md",
+      "file": "skills/start/SKILL.md",
       "line": 184,
       "fingerprint": "sha256:b0fa0c49e6965ded39e7226ee9e0cc31a53d67ee7a3ce44e2228f3ffba2fe99d",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "skills/start/SKILL.md",
+      "line": 190,
+      "fingerprint": "sha256:84f9e825371e71eb235b9331d088361e28341c838f5ce41270c6aafb9755e0a4",
       "reason": ""
     }
   ]

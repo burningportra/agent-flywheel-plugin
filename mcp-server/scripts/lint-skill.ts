@@ -50,8 +50,14 @@ interface BaselineModule {
     findings: unknown[],
     baseline: unknown,
     source: string,
+    repoRoot?: string,
   ) => { live: unknown[]; baselined: unknown[] };
-  generateBaseline: (findings: unknown[], source: string) => unknown;
+  generateBaseline: (
+    findings: unknown[],
+    source: string,
+    generated?: string,
+    repoRoot?: string,
+  ) => unknown;
   normalizeSourceForFingerprint: (s: string) => string;
 }
 
@@ -377,7 +383,7 @@ export async function main(argv: string[]): Promise<number> {
       return lintMod.EXIT_INVALID_ARGS;
     }
     try {
-      const bf = baselineMod.generateBaseline(result.findings, source);
+      const bf = baselineMod.generateBaseline(result.findings, source, undefined, repoRoot);
       await baselineMod.saveBaseline(opts.baseline, bf);
       const count = (bf as { entries?: unknown[] }).entries?.length ?? 0;
       process.stdout.write(`wrote baseline: ${opts.baseline} (${count} entries)\n`);
@@ -396,7 +402,7 @@ export async function main(argv: string[]): Promise<number> {
       process.stderr.write(`lint-skill: failed to load baseline ${opts.baseline}: ${String(err)}\n`);
       return lintMod.EXIT_FILE_ERROR;
     }
-    const { live, baselined } = baselineMod.applyBaseline(result.findings, bf, source);
+    const { live, baselined } = baselineMod.applyBaseline(result.findings, bf, source, repoRoot);
     result = { findings: [...live, ...baselined], internalErrors: result.internalErrors };
   }
 

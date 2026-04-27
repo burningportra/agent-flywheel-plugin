@@ -303,7 +303,7 @@ export async function main(argv) {
             return lintMod.EXIT_INVALID_ARGS;
         }
         try {
-            const bf = baselineMod.generateBaseline(result.findings, source);
+            const bf = baselineMod.generateBaseline(result.findings, source, undefined, repoRoot);
             await baselineMod.saveBaseline(opts.baseline, bf);
             const count = bf.entries?.length ?? 0;
             process.stdout.write(`wrote baseline: ${opts.baseline} (${count} entries)\n`);
@@ -323,7 +323,7 @@ export async function main(argv) {
             process.stderr.write(`lint-skill: failed to load baseline ${opts.baseline}: ${String(err)}\n`);
             return lintMod.EXIT_FILE_ERROR;
         }
-        const { live, baselined } = baselineMod.applyBaseline(result.findings, bf, source);
+        const { live, baselined } = baselineMod.applyBaseline(result.findings, bf, source, repoRoot);
         result = { findings: [...live, ...baselined], internalErrors: result.internalErrors };
     }
     result.findings = reportersMod.sortFindings(result.findings);

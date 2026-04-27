@@ -1,9 +1,20 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile, rename } from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
 import { normalizeText } from "../utils/text-normalize.js";
 export const BASELINE_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
+// Convert any path (absolute, relative, mixed-separator) to a POSIX-style
+// path relative to repoRoot. Baseline entries store paths in this form so a
+// baseline generated in worktree A still matches findings emitted in worktree
+// B or in a fresh clone. Without this, absolute paths embedded in the JSON
+// would differ across machines/worktrees and the baseline would never apply.
+export function toRepoRelativePosix(file, repoRoot) {
+    const abs = path.isAbsolute(file) ? file : path.resolve(repoRoot, file);
+    const rel = path.relative(repoRoot, abs);
+    return rel.split(path.sep).join("/");
+}
 const BaselineEntrySchema = z.object({
     ruleId: z.string(),
     rulesetVersion: z.number().int().nonnegative(),
@@ -54,7 +65,7 @@ export async function saveBaseline(path, baseline) {
     await writeFile(tmp, JSON.stringify(baseline, null, 2) + "\n", "utf8");
     await rename(tmp, path);
 }
-export function applyBaseline(findings, baseline, source) {
+export function applyBaseline(findings, baseline, source, repoRoot) {
     if (!baseline)
         return { live: findings.slice(), baselined: [] };
     const fpCache = new Map();
@@ -66,9 +77,15 @@ export function applyBaseline(findings, baseline, source) {
         }
         return cached;
     };
-    const baselineMatches = (f) => baseline.entries.some((e) => e.ruleId === f.ruleId &&
-        e.file === f.file &&
-        (e.line === f.line || e.fingerprint === fpFor(f.line)));
+    // Normalize both sides to repo-relative POSIX paths when repoRoot is known.
+    // Without repoRoot we fall back to raw equality (used by older callers/tests).
+    const normalize = (file) => repoRoot ? toRepoRelativePosix(file, repoRoot) : file;
+    const baselineMatches = (f) => {
+        const fNorm = normalize(f.file);
+        return baseline.entries.some((e) => e.ruleId === f.ruleId &&
+            normalize(e.file) === fNorm &&
+            (e.line === f.line || e.fingerprint === fpFor(f.line)));
+    };
     const live = [];
     const baselined = [];
     for (const f of findings) {
@@ -81,11 +98,11 @@ export function applyBaseline(findings, baseline, source) {
     }
     return { live, baselined };
 }
-export function generateBaseline(findings, source, generated = new Date().toISOString()) {
+export function generateBaseline(findings, source, generated = new Date().toISOString(), repoRoot) {
     const entries = findings.map((f) => ({
         ruleId: f.ruleId,
         rulesetVersion: RULESET_VERSION,
-        file: f.file,
+        file: repoRoot ? toRepoRelativePosix(f.file, repoRoot) : f.file,
         line: f.line,
         fingerprint: computeFingerprint(source, f.line),
         reason: "",

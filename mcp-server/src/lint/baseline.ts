@@ -1,11 +1,23 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile, rename } from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
 import type { Finding, Severity } from "./types.js";
 import { normalizeText } from "../utils/text-normalize.js";
 
 export const BASELINE_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
+
+// Convert any path (absolute, relative, mixed-separator) to a POSIX-style
+// path relative to repoRoot. Baseline entries store paths in this form so a
+// baseline generated in worktree A still matches findings emitted in worktree
+// B or in a fresh clone. Without this, absolute paths embedded in the JSON
+// would differ across machines/worktrees and the baseline would never apply.
+export function toRepoRelativePosix(file: string, repoRoot: string): string {
+  const abs = path.isAbsolute(file) ? file : path.resolve(repoRoot, file);
+  const rel = path.relative(repoRoot, abs);
+  return rel.split(path.sep).join("/");
+}
 
 const BaselineEntrySchema = z.object({
   ruleId: z.string(),
@@ -68,6 +80,7 @@ export function applyBaseline(
   findings: Finding[],
   baseline: BaselineFile | null,
   source: string,
+  repoRoot?: string,
 ): { live: Finding[]; baselined: Finding[] } {
   if (!baseline) return { live: findings.slice(), baselined: [] };
 
@@ -81,13 +94,20 @@ export function applyBaseline(
     return cached;
   };
 
-  const baselineMatches = (f: Finding): boolean =>
-    baseline.entries.some(
+  // Normalize both sides to repo-relative POSIX paths when repoRoot is known.
+  // Without repoRoot we fall back to raw equality (used by older callers/tests).
+  const normalize = (file: string): string =>
+    repoRoot ? toRepoRelativePosix(file, repoRoot) : file;
+
+  const baselineMatches = (f: Finding): boolean => {
+    const fNorm = normalize(f.file);
+    return baseline.entries.some(
       (e) =>
         e.ruleId === f.ruleId &&
-        e.file === f.file &&
+        normalize(e.file) === fNorm &&
         (e.line === f.line || e.fingerprint === fpFor(f.line)),
     );
+  };
 
   const live: Finding[] = [];
   const baselined: Finding[] = [];
@@ -105,11 +125,12 @@ export function generateBaseline(
   findings: Finding[],
   source: string,
   generated: string = new Date().toISOString(),
+  repoRoot?: string,
 ): BaselineFile {
   const entries = findings.map<BaselineEntry>((f) => ({
     ruleId: f.ruleId,
     rulesetVersion: RULESET_VERSION,
-    file: f.file,
+    file: repoRoot ? toRepoRelativePosix(f.file, repoRoot) : f.file,
     line: f.line,
     fingerprint: computeFingerprint(source, f.line),
     reason: "",
