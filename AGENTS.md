@@ -62,6 +62,18 @@ If the second call shows anything else, retry the update once before reporting c
 - Report errors to the team lead via agent-mail with subject `[error] <context>`. Do not silently skip tasks.
 - Check your agent-mail inbox at task start for updates or cancellations.
 
+### Known issue: agent-mail exclusive-reservation enforcement is advisory
+
+`file_reservation_paths(... exclusive=true)` does **not** reject overlapping requests at the server level. When two agents request exclusive reservations on the same path, the second request returns a response with **both** a populated `granted` array (a fresh reservation id with `exclusive: true`) **and** a populated `conflicts` array naming the existing holder. The server tells you about the conflict but issues the reservation anyway. Reproduced 2026-04-27 against agent-mail running at `http://127.0.0.1:8765/mcp` (bead `agent-flywheel-plugin-j0b`).
+
+**Coordinator-side mitigation, mandatory for now:**
+
+1. After any `file_reservation_paths` call, inspect the response: if `conflicts` is non-empty, **treat the request as failed even if `granted` is also non-empty**. Do not edit the file. Either wait for the existing TTL to expire, coordinate with the holder via `send_message`, or pick a different file.
+2. The pre-commit guard (`/Users/kevtrinh/.mcp_agent_mail_git_mailbox_repo/projects/<slug>/.git/hooks/pre-commit`, installed via `install_precommit_guard`) is the second line of defense — it blocks commits that touch a path reserved by another agent. Do not bypass it.
+3. Round-1 of the 2026-04-26 reality-check session showed two agents (RoseFalcon + StormyAnchor) holding exclusive reservations on `mcp-server/scripts/lint-skill.ts` simultaneously. No actual write-conflict materialised that session, but the latent risk is real.
+
+This is a server-side bug in mcp-agent-mail; the upstream fix should make the second exclusive request return `granted: []` with the existing holder in `conflicts`. Until that lands, the conflict-checking discipline above is load-bearing.
+
 ## Agent-Mail Transport
 
 ### Transport History
