@@ -51,7 +51,7 @@
 2. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture your registration token.
 3. **CLI capability check** — `which claude codex` (gemini optional). If `codex` missing, the 4-cod lane collapses; surface a degraded-mode `AskUserQuestion` before proceeding (override default cc:cod ratio? abort? proceed degraded?).
 4. **Disk-space guard** — `df -h $PWD`. If <5GB free, run the stale-artifact cleanup BEFORE spawning so agents don't die mid-build.
-5. **Tender-daemon spawn** — start `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &` (v3.6.0+). Capture PID for shutdown.
+5. **Tender-daemon spawn** — start `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --project=$PWD --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &` (v3.6.0+; `--project` defaults to `process.cwd()` in v3.6.7+, but pass it explicitly for compatibility). Capture PID for shutdown.
 6. **Bead snapshot** — `br list --json` and `br ready --json`. Identify any stalled in-progress beads up front and reopen them per the rule above.
 7. **Looper schedule** — invoke `Skill: loop` with `4m` interval and the marching-orders prompt referenced in the operator-decoder table.
 

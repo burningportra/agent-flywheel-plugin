@@ -14,13 +14,13 @@ const ROBOT_STATES = new Set(["working", "idle", "rate_limited", "error", "conte
 export function usageText() {
     return [
         "Usage:",
-        "  tender-daemon --session=<tmux-name> --project=<cwd> [--interval=30000] [--logfile=.pi-flywheel/tender-events.log] [--agent=FlywheelAgent]",
+        "  tender-daemon --session=<tmux-name> [--project=<cwd>] [--interval=30000] [--logfile=.pi-flywheel/tender-events.log] [--agent=FlywheelAgent]",
         "",
         "Required:",
         "  --session  NTM session name",
-        "  --project  Project path used for fetch_inbox and ntm cwd",
         "",
         "Optional:",
+        "  --project  Project path used for fetch_inbox and ntm cwd (default: process.cwd())",
         "  --interval Poll interval in milliseconds (default 30000)",
         "  --logfile  NDJSON event log path (default .pi-flywheel/tender-events.log)",
         "  --agent    Agent-mail identity for inbox polling (default FlywheelAgent)",
@@ -89,13 +89,11 @@ export function parseTenderDaemonArgs(argv) {
     }
     if (!parsed.session)
         return { ok: false, error: "missing required --session" };
-    if (!parsed.project)
-        return { ok: false, error: "missing required --project" };
     return {
         ok: true,
         args: {
             session: parsed.session,
-            project: parsed.project,
+            project: parsed.project ?? process.cwd(),
             interval: parsed.interval ?? DEFAULT_TENDER_DAEMON_INTERVAL_MS,
             logfile: parsed.logfile ?? DEFAULT_LOGFILE,
             agent: parsed.agent ?? DEFAULT_TENDER_DAEMON_AGENT,

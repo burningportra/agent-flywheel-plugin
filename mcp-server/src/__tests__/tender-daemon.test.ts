@@ -58,13 +58,36 @@ describe("tender-daemon script", () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const { runCli } = await loadDaemonModule();
 
-    const code = await runCli(["--session=test"]);
+    const code = await runCli(["--unknown=foo"]);
 
     expect(code).toBe(2);
     const output = stderrSpy.mock.calls.map((call) => String(call[0])).join("\n");
     expect(output).toContain("Usage:");
-    expect(output).toContain("missing required --project");
+    expect(output).toContain("unknown flag '--unknown'");
     stderrSpy.mockRestore();
+  });
+
+  it("returns exit code 2 when --session is omitted (still required)", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const { runCli } = await loadDaemonModule();
+
+    const code = await runCli(["--project=/tmp"]);
+
+    expect(code).toBe(2);
+    const output = stderrSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(output).toContain("missing required --session");
+    stderrSpy.mockRestore();
+  });
+
+  it("defaults --project to process.cwd() when omitted (regression for v8n)", async () => {
+    const { parseTenderDaemonArgs } = await loadDaemonModule();
+    const result = parseTenderDaemonArgs(["--session=test-session"]);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.args.session).toBe("test-session");
+      expect(result.args.project).toBe(process.cwd());
+    }
   });
 
   it("writes tick events periodically and appends daemon_stopped on stop", async () => {
