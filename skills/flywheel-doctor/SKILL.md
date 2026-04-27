@@ -63,7 +63,7 @@ Glyph mapping: `green → [OK]`, `yellow → [WARN]`, `red → [FAIL]`. If `part
 For each failing check, the skill prints the canonical one-line fix below the report:
 
 - `mcp_connectivity` → `/reload-plugins` in Claude Code, then re-run doctor. If still red, rebuild: `cd mcp-server && npm ci && npm run build`.
-- `agent_mail_liveness` → run `/agent-flywheel:flywheel-setup` (it installs and starts agent-mail), or start manually: `nohup uv run python -m mcp_agent_mail.cli serve-http > /dev/null 2>&1 &`.
+- `agent_mail_liveness` → run `/agent-flywheel:flywheel-setup` (it installs and starts agent-mail; the Rust port [`mcp_agent_mail_rust`](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) is the primary distribution). Manual start: `nohup am serve-http > /dev/null 2>&1 &` (Rust, preferred) or `nohup mcp-agent-mail serve > /dev/null 2>&1 &`. Legacy Python fallback: `nohup uv run python -m mcp_agent_mail.cli serve-http > /dev/null 2>&1 &`.
 - `br_binary` missing → `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh" | bash`.
 - `bv_binary` missing → `brew install dicklesworthstone/tap/bv` (Homebrew) or the beads_viewer install script.
 - `ntm_binary` missing → yellow only; install via `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/ntm/main/install.sh" | bash` if you plan to use parallel swarms.

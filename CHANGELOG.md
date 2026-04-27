@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.11] - 2026-04-27
+
+### Changed
+
+- **Agent Mail: Rust port (`mcp_agent_mail_rust`) is now the primary distribution.** Upstream rewrote agent-mail in Rust as a standalone binary (`mcp-agent-mail` server + `am` operator/robot CLI) that ships pre-built — no `uv` / `python3` required to install or run. The Rust port is wire-compatible with the legacy Python build on the same `http://127.0.0.1:8765/mcp` HTTP transport with the same MCP tool names, so all runtime integration (`mcp-server/src/agent-mail.ts`, `gates.ts`, `tender.ts`, `swarm.ts`, `tools/doctor.ts`, `.mcp.json`) works untouched. This release flips the **install / detect / start / docs** path to Rust-first, with the Python build retained as a labeled fallback for existing installs:
+  - `commands/flywheel-setup.md` + `skills/flywheel-setup/SKILL.md`: §0 ACFS-stack probe now checks `command -v mcp-agent-mail || command -v am` first; the Python `python3 -c "import mcp_agent_mail"` probe is the documented fallback. Stack-script prerequisite line drops `uv` / `python3` from the *required* set (still optional for cass/cm). §5 install path uses `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail_rust/main/install.sh?$(date +%s)" | bash` and the auto-start command is `nohup am serve-http > /dev/null 2>&1 &` (or `nohup mcp-agent-mail serve > /dev/null 2>&1 &` if `am` is missing); the legacy `nohup uv run python -m mcp_agent_mail.cli serve-http &` path is retained behind a clearly-labeled "Legacy Python installed" branch with a migrate-to-Rust nudge.
+  - `skills/flywheel-doctor/SKILL.md`: `agent_mail_liveness` remediation hint now suggests `am serve-http` first, `mcp-agent-mail serve` second, Python last.
+  - `AGENTS.md`: "Diagnosing Connection Issues" section replaces `npx agent-mail-server` with the Rust binaries and adds the `/health/liveness` probe alongside `/mcp`.
+  - `README.md` + `CONTRIBUTING.md`: Required-tools / optional-tools rows now link to `mcp_agent_mail_rust` with the legacy Python build noted as still-supported on the same transport.
+
+  No code in `mcp-server/src/**` was touched, no schema changed, and no `.mcp.json` rewrite is needed — operators with a working Python install keep working until they choose to migrate. The startup-hook line `Agent Mail: NOT RUNNING (start with: am)` already pointed at the Rust CLI.
+
 ## [3.6.10] - 2026-04-26
 
 ### Fixed

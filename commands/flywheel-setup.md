@@ -10,13 +10,13 @@ Check and configure all prerequisites. For each missing tool, ask the user befor
 
 ## 0. ACFS stack shortcut
 
-Before checking individual tools, count how many of the ACFS stack tools are missing (br, bv, ntm, dcg, cass, cm, agent-mail). Run `br --version`, `bv --version`, `ntm --version`, `dcg --version`, `cass --version`, `cm --version`, and `python3 -c "import mcp_agent_mail"` via Bash to check.
+Before checking individual tools, count how many of the ACFS stack tools are missing (br, bv, ntm, dcg, cass, cm, agent-mail). Run `br --version`, `bv --version`, `ntm --version`, `dcg --version`, `cass --version`, `cm --version`, and `command -v mcp-agent-mail >/dev/null || command -v am >/dev/null` via Bash to check. (The Rust port `mcp_agent_mail_rust` is the **primary** distribution; either binary — `mcp-agent-mail` or `am` — counts as installed. Fall back to `python3 -c "import mcp_agent_mail"` only when neither Rust binary is present, for legacy installs.)
 
 If **3 or more** are missing, offer the fast path:
 
-> "Multiple ACFS stack tools are missing. Install the full stack at once? This installs br, bv, ntm, dcg, cass, cm, agent-mail, and more."
+> "Multiple ACFS stack tools are missing. Install the full stack at once? This installs br, bv, ntm, dcg, cass, cm, agent-mail (Rust), and more."
 
-Prerequisites for the stack script: `curl`, `uv`, and `python3` must be on PATH. Check these first; if any are missing, skip the shortcut and fall through to individual installs.
+Prerequisites for the stack script: `curl` must be on PATH. (`uv` and `python3` are no longer required for agent-mail — the Rust port is a standalone binary — but the stack script may still install them for cass/cm.) Check `curl` first; if missing, skip the shortcut and fall through to individual installs.
 
 On consent, run via Bash:
 ```
@@ -62,14 +62,19 @@ Run `bv --version` via Bash.
 
 ### 5. agent-mail (multi-agent coordination)
 
+The flywheel targets the **Rust port** ([`mcp_agent_mail_rust`](https://github.com/Dicklesworthstone/mcp_agent_mail_rust)) as the primary distribution. The Python version still works via the same HTTP transport at `http://127.0.0.1:8765/mcp`, but new installs and the auto-start path use the Rust binary.
+
 Test liveness: `curl -s --max-time 3 http://127.0.0.1:8765/health/liveness` via Bash.
 
-- If reachable: call `health_check` via `agent-mail` MCP tool.
-- If not reachable: check if package is installed: `python3 -c "import mcp_agent_mail"` via Bash.
-  - Installed but not running: ask *"agent-mail is installed but not running. Start it in the background?"* On consent: `nohup uv run python -m mcp_agent_mail.cli serve-http > /dev/null 2>&1 &`, wait 3 seconds, re-check liveness.
-  - Not installed: ask *"agent-mail is not installed. Install now?"*
-    - On consent: `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/scripts/install.sh" | bash -s -- --yes`
-    - On refusal: print install instructions and continue.
+- If reachable: call `health_check` via the `agent-mail` MCP tool.
+- If not reachable: detect what's installed (Rust binary first, then legacy Python):
+  1. Run `command -v mcp-agent-mail` and `command -v am` via Bash. Either being on PATH means the Rust port is installed.
+  2. If neither, run `python3 -c "import mcp_agent_mail"` via Bash to detect a legacy Python install.
+- **Rust installed but not running:** ask *"agent-mail (Rust) is installed but not running. Start it in the background?"* On consent: `nohup am serve-http > /dev/null 2>&1 &` (or `nohup mcp-agent-mail serve > /dev/null 2>&1 &` if `am` is missing), wait 3 seconds, re-check liveness.
+- **Legacy Python installed but not running:** ask *"agent-mail (legacy Python) is installed but not running. Start it in the background?"* On consent: `nohup uv run python -m mcp_agent_mail.cli serve-http > /dev/null 2>&1 &`, wait 3 seconds, re-check liveness. After it works, recommend migrating: *"The Rust port is now the primary distribution. Run the install command below to switch."*
+- **Not installed at all:** ask *"agent-mail is not installed. Install the Rust port now? (recommended)"*
+  - On consent: `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail_rust/main/install.sh?$(date +%s)" | bash`. The installer drops `mcp-agent-mail` and `am` into `~/.local/bin`; ensure that's on PATH. After install, start it: `nohup am serve-http > /dev/null 2>&1 &`, wait 3 seconds, re-check liveness.
+  - On refusal: print the Rust install command above and the legacy fallback `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/scripts/install.sh" | bash -s -- --yes`, then continue.
 
 ---
 

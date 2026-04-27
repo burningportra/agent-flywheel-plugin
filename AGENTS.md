@@ -42,11 +42,32 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 - **`bv`** — bead visualizer: renders bead status dashboards, dependency graphs.
 - **`ccc`** — optional codebase indexing/search tool. Not required; the system falls back gracefully if unavailable.
 
+## NTM is mandatory for all spawned work
+
+**Hard rule.** Every multi-agent spawn — planning fan-out, swarm waves, deslop sweeps, reality-check follow-ups, scrutiny passes, parallel reviewers, ad-hoc "do these N things in parallel" requests — **must go through NTM** (`ntm spawn` + `ntm --robot-send`). No exceptions.
+
+**What is forbidden as a substitute for NTM:**
+- Raw `Task`/`Agent` tool calls to fan out implementation work onto multiple Claude subagents.
+- Backgrounded `claude --print` / `codex` / `pi` / `gemini` shells launched with `&` or `run_in_background`.
+- `tmux new-window` / `tmux split-window` invoked directly (NTM owns pane lifecycle, robot-send addressing, stagger, and stuck-pane recovery).
+- Spawning agents through any other orchestrator (custom shell loops, Makefile parallel targets, `xargs -P`, GNU `parallel`) for work that produces code or PRs.
+
+**Why:** NTM provides the canonical pane registry, robot-send addressing (`--type=cc|pi|cod|gem`), Agent Mail integration, stuck-pane detection, stagger to avoid cold-boot thundering herd, and the `--no-user` discipline. Bypassing it loses observability, breaks file-reservation handshakes, and produces work the flywheel cannot track or recover.
+
+**Allowed exceptions (narrow):**
+- Single-shot research / read-only Q&A subagents that produce no code and no PRs (e.g. `Explore`, `general-purpose` for one-off lookups). These can use the `Task`/`Agent` tool directly.
+- Single foreground `Bash` invocations that complete in-band (linter, test, build).
+- Codex-rescue / triangulation calls where the codex skill's contract explicitly handles the dispatch.
+
+If you find yourself wanting to spawn N>1 coding workers without NTM, stop and load `/ntm` + `/vibing-with-ntm` first. Reviewers: reject PRs whose skill changes introduce non-NTM fan-out for implementation work.
+
 ## NTM pane priority
 
 When spawning NTM panes for the swarm (planning, implement, deslop, etc.), **prefer `--pi=` (and `--type=pi` for `--robot-send`) over `--cod=` / `--type=cod`**. Pi is the default secondary lane after Claude (`cc`); Codex (`cod`) is only a fallback when Pi is unavailable on the host (no Pi CLI, quota exhausted, or the workflow explicitly demands Codex).
 
-Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, and any future swarm/orchestrator skill). Reviewers: reject PRs that reintroduce `--cod=` / `--type=cod` as the default without a documented Pi-unavailable justification.
+**Gemini → Pi fallback.** Pi was added to NTM (see [ntm@3f1c23b](https://github.com/burningportra/ntm/commit/3f1c23b61230f98197950335643be7525cf248e5)) as the designated substitute when Gemini is unavailable. When the model-diversified split (`cc:pi:gem` 1:1:1) detects that Gemini is missing/quota-exhausted, **reassign Gemini's share to Pi (`--pi=`) before redistributing to Claude or Codex**. Order of substitution for a missing Gemini lane: Pi → Codex → Claude.
+
+Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, and any future swarm/orchestrator skill). Reviewers: reject PRs that reintroduce `--cod=` / `--type=cod` as the default without a documented Pi-unavailable justification, or that redistribute a missing Gemini lane to anything other than Pi first.
 
 ## Bead Lifecycle
 
@@ -107,9 +128,9 @@ Do **not** use `"type": "sse"` or `"type": "url"` — use `"http"`.
 
 ### Diagnosing Connection Issues
 
-1. Ensure the agent-mail server is running: `npx agent-mail-server`
+1. Ensure the agent-mail server is running. The flywheel targets the **Rust port** ([`mcp_agent_mail_rust`](https://github.com/Dicklesworthstone/mcp_agent_mail_rust)) as the primary distribution; start it with `am serve-http` (or `mcp-agent-mail serve` if `am` is not on PATH). Legacy Python fallback: `uv run python -m mcp_agent_mail.cli serve-http` (works because both speak the same HTTP MCP protocol on port 8765).
 2. Verify port 8765 is listening: `lsof -i :8765`
-3. Test the endpoint: `curl -s http://127.0.0.1:8765/mcp`
+3. Test the endpoint: `curl -s http://127.0.0.1:8765/mcp` (also: `curl -s http://127.0.0.1:8765/health/liveness` should return `{"status":"alive"}`).
 
 ### Programmatic Health Check
 

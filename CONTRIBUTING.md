@@ -6,7 +6,7 @@ This guide walks you from a fresh clone to a new skill discoverable through `/ag
 
 - Node.js 18.18+ (see `mcp-server/package.json` `engines` for the pinned minimum).
 - [Claude Code](https://github.com/anthropics/claude-code) (latest).
-- Optional: [br](https://github.com/Dicklesworthstone/beads_rust), [bv](https://github.com/Dicklesworthstone/beads_viewer), and [agent-mail](https://github.com/Dicklesworthstone/mcp_agent_mail) if you want to exercise the full flywheel locally. `/agent-flywheel:flywheel-setup` installs them.
+- Optional: [br](https://github.com/Dicklesworthstone/beads_rust), [bv](https://github.com/Dicklesworthstone/beads_viewer), and [agent-mail](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) (Rust port — primary; the [legacy Python build](https://github.com/Dicklesworthstone/mcp_agent_mail) works too) if you want to exercise the full flywheel locally. `/agent-flywheel:flywheel-setup` installs them.
 
 Clone, install, and build once:
 

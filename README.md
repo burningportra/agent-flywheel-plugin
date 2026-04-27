@@ -28,7 +28,7 @@ Prerequisites: [Claude Code](https://github.com/anthropics/claude-code) (latest)
 
 `/agent-flywheel:flywheel-setup` detects missing tools and offers to install them. If multiple are missing, it offers a one-shot install of the full [ACFS stack](https://github.com/DavidSchargel/dicklesworthstone-acfs-stack-for-macos).
 
-**Required:** [br](https://github.com/Dicklesworthstone/beads_rust) (bead tracker), [bv](https://github.com/Dicklesworthstone/beads_viewer) (bead viewer), [agent-mail](https://github.com/Dicklesworthstone/mcp_agent_mail) (multi-agent coordination)
+**Required:** [br](https://github.com/Dicklesworthstone/beads_rust) (bead tracker), [bv](https://github.com/Dicklesworthstone/beads_viewer) (bead viewer), [agent-mail](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) (multi-agent coordination — the Rust port is the primary distribution; the [legacy Python build](https://github.com/Dicklesworthstone/mcp_agent_mail) still works on the same HTTP transport for existing installs)
 
 **Recommended:** [ntm](https://github.com/Dicklesworthstone/ntm) (parallel sessions), [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) (safety guard), [cass](https://github.com/Dicklesworthstone/coding_agent_session_search) (session search), [cm](https://github.com/Dicklesworthstone/cass_memory_system) (agent memory)
 
