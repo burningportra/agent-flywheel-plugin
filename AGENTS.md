@@ -42,6 +42,12 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 - **`bv`** — bead visualizer: renders bead status dashboards, dependency graphs.
 - **`ccc`** — optional codebase indexing/search tool. Not required; the system falls back gracefully if unavailable.
 
+## NTM pane priority
+
+When spawning NTM panes for the swarm (planning, implement, deslop, etc.), **prefer `--pi=` (and `--type=pi` for `--robot-send`) over `--cod=` / `--type=cod`**. Pi is the default secondary lane after Claude (`cc`); Codex (`cod`) is only a fallback when Pi is unavailable on the host (no Pi CLI, quota exhausted, or the workflow explicitly demands Codex).
+
+Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, and any future swarm/orchestrator skill). Reviewers: reject PRs that reintroduce `--cod=` / `--type=cod` as the default without a documented Pi-unavailable justification.
+
 ## Bead Lifecycle
 
 After running an implementation, ALWAYS close the bead and verify the close took effect:

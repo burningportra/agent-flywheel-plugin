@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.8] - 2026-04-26
+
+### Changed
+
+- **NTM pane priority — prefer `pi` over `cod`.** Swarm-spawning skills now default to Pi as the secondary lane after Claude (`cc`); Codex is only a fallback when Pi is unavailable on the host. Updated `skills/start/_planning.md` (deep-plan triad: `cc` + `pi` + `gmi`), `skills/start/_implement.md` (impl swarm: `--cc=` + `--pi=` + `--gem=`), and `skills/start/_deslop.md` (`--pi=5`). Added a top-level `## NTM pane priority` convention to `AGENTS.md` so reviewers reject regressions that reintroduce `--cod=` / `--type=cod` as the default.
+- `.claude-plugin/plugin.json` version bumped from `3.6.5` → `3.6.8` to re-align with `mcp-server/package.json` (had drifted by two patch releases).
+
 ## [3.6.7] - 2026-04-26
 
 Six reality-check beads from the v3.6.6 round closed in the same session — three rounds of right-sized auto-swarms (1 cc + 2 cod) executed `v8n`, `vc3`, `x6v`, `j0b`, `0e1`, `kxp`. All under macOS-portable build mutex shipped this round.

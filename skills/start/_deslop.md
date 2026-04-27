@@ -80,18 +80,20 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
 
 ```bash
 SESSION="${NTM_PROJECT}--deslop"
-ntm spawn "$NTM_PROJECT" --label deslop --no-user --cod=5 --stagger-mode=smart
+# Pane-type priority (user preference, see AGENTS.md "NTM pane priority"):
+#   prefer `pi` over `cod`. Only fall back to `--cod=5` if Pi is unavailable on this host.
+ntm spawn "$NTM_PROJECT" --label deslop --no-user --pi=5 --stagger-mode=smart
 ```
 
-Pane indices 1–5 are all Codex. Allocate 5 names from `mcp-server/src/adapters/agent-names.ts` via `allocateAgentNames(5, 'deslop-<sha>')`. Each pane gets a distinct **code area assignment** (e.g. "tools/", "adapters/", "tests/", "scripts/", "docs/" — adapt to the repo's structure).
+Pane indices 1–5 are all Pi. Allocate 5 names from `mcp-server/src/adapters/agent-names.ts` via `allocateAgentNames(5, 'deslop-<sha>')`. Each pane gets a distinct **code area assignment** (e.g. "tools/", "adapters/", "tests/", "scripts/", "docs/" — adapt to the repo's structure).
 
-### 4c. Per-pane prompt (Codex-tuned)
+### 4c. Per-pane prompt (Pi-tuned)
 
 For each pane `<N>` ∈ 1..5:
 
 ```bash
-ntm --robot-send="$SESSION" --panes=<N> --type=cod --msg='## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY)
-0a. macro_start_session(human_key=<cwd>, program=codex-cli, model=your-model, task_description="Deslop pane <N>: <area-assignment>"). Your name is <pane-N-name>.
+ntm --robot-send="$SESSION" --panes=<N> --type=pi --msg='## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY)
+0a. macro_start_session(human_key=<cwd>, program=pi-cli, model=your-model, task_description="Deslop pane <N>: <area-assignment>"). Your name is <pane-N-name>.
 0b. file_reservation_paths on the files inside <area-assignment>/. Refresh every 30 min via renew_file_reservations.
 0c. send_message to "<coordinator-name>" subject "[deslop] pane <N> started" with your area assignment.
 0d. Re-read AGENTS.md and README.md.

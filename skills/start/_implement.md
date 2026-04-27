@@ -200,23 +200,26 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
       # --no-user omits pane 0 entirely; lanes start at pane index 1.
       # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
+      # Pane-type priority (user preference, see AGENTS.md "NTM pane priority"):
+      #   prefer `pi` over `cod` as the second lane. Only fall back to `--cod=`
+      #   if Pi is unavailable on this host (no Pi CLI / quota exhausted).
       ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-        --cc=<N_claude> --cod=<N_codex> --gem=<N_gemini> --stagger-mode=smart
+        --cc=<N_claude> --pi=<N_pi> --gem=<N_gemini> --stagger-mode=smart
       ```
 
-      **Pane addressing is numeric** — `cc-1` / `cod-1` / `gem-1` style does NOT work. With `--no-user`, panes are laid out contiguously by spawn order:
+      **Pane addressing is numeric** — `cc-1` / `pi-1` / `gem-1` style does NOT work. With `--no-user`, panes are laid out contiguously by spawn order:
 
       | Lane    | Pane indices                                              |
       |---------|------------------------------------------------------------|
       | Claude  | `1` … `N_claude`                                          |
-      | Codex   | `N_claude+1` … `N_claude+N_codex`                         |
-      | Gemini  | `N_claude+N_codex+1` … `N_claude+N_codex+N_gemini`        |
+      | Pi      | `N_claude+1` … `N_claude+N_pi`                            |
+      | Gemini  | `N_claude+N_pi+1` … `N_claude+N_pi+N_gemini`              |
 
       Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
       ```bash
       ntm --robot-send="$SESSION" --panes=1 --type=cc  --msg="<claude-tuned prompt>"
-      ntm --robot-send="$SESSION" --panes=$((N_claude+1)) --type=cod --msg="<codex-tuned prompt>"
-      ntm --robot-send="$SESSION" --panes=$((N_claude+N_codex+1)) --type=gem --msg="<gemini-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_claude+1)) --type=pi  --msg="<pi-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_claude+N_pi+1)) --type=gem --msg="<gemini-tuned prompt>"
       ```
 
       ⚠ **Forbidden in automation:** `ntm view` (retiles the user's tmux layout and returns nothing useful) and `ntm dashboard` / `ntm palette` (human-only TUIs). The user can run them; the orchestrator must not.
