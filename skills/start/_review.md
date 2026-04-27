@@ -78,11 +78,25 @@ Actions:
 
 - **"Looks good" / "Looks good all"** -> call `flywheel_review` with `action: "looks-good"` and `beadId` for each accepted bead.
 
-- **"Self review `<id>`"** -> send the impl agent a message asking it to audit its own diff:
-  ```
-  SendMessage(to: "impl-<id>", message: "Self-review: run `git diff` on your changes, check for bugs, missing tests, and style issues. Report findings to <coordinator> via Agent Mail with subject '[review] <id> self-review'.")
-  ```
-  After the self-review report arrives, call `flywheel_review` with `action: "looks-good"` and `beadId` to close it.
+- **"Self review `<id>`"** -> hand the audit back to the same agent that implemented the bead. **DO NOT close, kill, restart, or retire that agent's NTM pane** — the whole point is that the original implementor (with full context) reviews their own diff. Pane teardown happens at wrap-up (Step 9.5 cycle-reset), not here.
+
+  1. Resolve the pane's actual Agent Mail identity. Impl agents spawned via NTM register adjective+noun names (e.g. `CoralDune`), NOT literal `impl-<id>`. Look up the right name:
+     ```bash
+     # Either map via the bead-to-identity index Agent Mail keeps for the project:
+     list_window_identities(project_key: <cwd>)
+     # Or tail the pane to read its own announced name:
+     ntm --robot-tail="$NTM_PROJECT" --panes=<pane-index> --lines=20
+     ```
+  2. Send the self-review request to that resolved name (NOT `impl-<id>`):
+     ```
+     SendMessage(to: "<resolved-agent-name>", message: "Self-review for bead <id>: run `git diff` on your worktree, check for bugs, missing tests, and style issues. Report findings to <coordinator> via Agent Mail with subject '[review] <id> self-review'. Stay in your pane — do not exit.")
+     ```
+  3. If Agent Mail delivery to a live pane is unreliable (no inbox ack within 2 min), nudge directly into the pane via NTM (use `--robot-send`, NOT `ntm send`):
+     ```bash
+     ntm --robot-send="$NTM_PROJECT" --panes=<pane-index> --msg="Self-review for bead <id>: ... (same body as above)"
+     ```
+  4. Wait for the `[review] <id> self-review` Agent Mail report. Only AFTER it arrives, call `flywheel_review` with `action: "looks-good"` and `beadId` to close the bead. Do NOT close the bead before the report; doing so causes the gates to auto-advance and may trigger downstream pane teardown before review actually happened.
+  5. If the pane has genuinely died or been recycled (verified via `ntm --robot-is-working` returning `gone` AND no Agent Mail traffic for >10 min AND not recoverable via the stuck-pane ladder in `_implement.md`), fall back to a coordinator-side `git diff` review of that bead's files only — do NOT spawn fresh reviewer agents and do NOT touch other panes.
 
 - **"Fresh-eyes `<id>`"** -> call `flywheel_review` with `action: "hit-me"` and `beadId`. The tool returns 5 agent task specs. Then:
   1. Create a review team: `TeamCreate(team_name: "review-<bead-id>")`
