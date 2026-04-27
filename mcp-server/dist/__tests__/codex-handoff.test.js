@@ -186,6 +186,16 @@ describe('countRescueEntriesWithin30Days', () => {
         const wrapped = { bullets: [{ text: `flywheel-rescue ts=${WITHIN} phase=impl` }] };
         expect(countRescueEntriesWithin30Days(JSON.stringify(wrapped), NOW)).toBe(1);
     });
+    it('accepts the cm context JSON shape from cm 0.2.x', () => {
+        const wrapped = {
+            success: true,
+            data: {
+                relevantBullets: [{ content: `flywheel-rescue ts=${WITHIN} phase=impl` }],
+                historySnippets: [{ snippet: `flywheel-rescue ts=${WITHIN} phase=review` }],
+            },
+        };
+        expect(countRescueEntriesWithin30Days(JSON.stringify(wrapped), NOW)).toBe(2);
+    });
     it('ignores rows with missing or malformed ts', () => {
         const bullets = [
             { content: 'flywheel-rescue phase=impl' }, // no ts

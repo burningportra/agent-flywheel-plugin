@@ -8,6 +8,7 @@ import {
   DOCTOR_CHECK_NAMES,
   parseCodexConfigTopLevelModel,
   isCodexIncompatibleModel,
+  countLocalTelemetryRescuesWithin30Days,
 } from '../../tools/doctor.js';
 import type { DoctorCheck } from '../../types.js';
 import type { ExecFn } from '../../exec.js';
@@ -95,12 +96,15 @@ function allGreenStubs(): ExecStub[] {
     { match: (cmd, args) => cmd === 'bv' && args[0] === '--version', respond: ok('bv 0.1.0') },
     { match: (cmd, args) => cmd === 'ntm' && args[0] === '--version', respond: ok('ntm 0.1.0') },
     { match: (cmd, args) => cmd === 'cm' && args[0] === '--version', respond: ok('cm 0.1.0') },
-    // `rescues_last_30d` synthesis row queries `cm search flywheel-rescue --json`.
+    // `rescues_last_30d` synthesis row queries `cm context flywheel-rescue --json`.
     // Empty array → 0 rescues → green.
     {
       match: (cmd, args) =>
-        cmd === 'cm' && args[0] === 'search' && args[1] === 'flywheel-rescue',
-      respond: ok('[]'),
+        cmd === 'cm' && args[0] === 'context' && args[1] === 'flywheel-rescue',
+      respond: ok(JSON.stringify({
+        success: true,
+        data: { relevantBullets: [], historySnippets: [] },
+      })),
     },
     { match: (cmd, args) => cmd === 'node' && args[0] === '--version', respond: ok('v22.0.0') },
     { match: (cmd, args) => cmd === 'git' && args[0] === 'rev-parse', respond: ok('abc123') },
@@ -151,6 +155,26 @@ describe('computeOverallSeverity', () => {
 
   it('returns green for an empty list', () => {
     expect(computeOverallSeverity([])).toBe('green');
+  });
+});
+
+describe('countLocalTelemetryRescuesWithin30Days', () => {
+  const now = Date.UTC(2026, 3, 27, 12, 0, 0);
+  const within = new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const outside = new Date(now - 45 * 24 * 60 * 60 * 1000).toISOString();
+
+  it('counts only rescue-coded local telemetry events in the 30-day window', () => {
+    expect(countLocalTelemetryRescuesWithin30Days({
+      version: 1,
+      sessionStartIso: within,
+      counts: { 'flywheel-rescue': 99 },
+      recentEvents: [
+        { code: 'flywheel-rescue', ts: within },
+        { code: 'codex_rescue', ts: within },
+        { code: 'flywheel-rescue', ts: outside },
+        { code: 'cli_failure', ts: within },
+      ],
+    }, now)).toBe(2);
   });
 });
 
@@ -401,6 +425,52 @@ describe('runDoctorChecks', () => {
       const report = await runDoctorChecks(cwd, undefined, { exec });
       const mail = report.checks.find((c) => c.name === 'agent_mail_liveness');
       expect(mail!.severity).toBe('yellow');
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
+  it('rescues_last_30d uses local telemetry fallback when cm context fails', async () => {
+    const cwd = makeTmpCwd();
+    const now = Date.UTC(2026, 3, 27, 12, 0, 0);
+    const within = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const outside = new Date(now - 45 * 24 * 60 * 60 * 1000).toISOString();
+    try {
+      mkdirSync(join(cwd, '.pi-flywheel'), { recursive: true });
+      writeFileSync(join(cwd, '.pi-flywheel', 'error-counts.json'), JSON.stringify({
+        version: 1,
+        sessionStartIso: within,
+        counts: {},
+        recentEvents: [
+          { code: 'flywheel-rescue', ts: within },
+          { code: 'codex_rescue', ts: within },
+          { code: 'flywheel-rescue', ts: outside },
+          { code: 'cli_failure', ts: within },
+        ],
+      }));
+
+      const stubs = allGreenStubs().filter(
+        (s) => !s.match('cm', ['context', 'flywheel-rescue', '--json']),
+      );
+      stubs.push({
+        match: (cmd, args) =>
+          cmd === 'cm' && args[0] === 'context' && args[1] === 'flywheel-rescue',
+        respond: { result: { code: 1, stdout: '', stderr: 'context failed' } },
+      });
+      const exec = makeStubbedExec(stubs);
+
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec,
+        codexConfigPath: null,
+        now: () => now,
+      });
+      const rescues = report.checks.find((c) => c.name === 'rescues_last_30d');
+
+      expect(rescues).toBeDefined();
+      expect(rescues!.severity).toBe('green');
+      expect(rescues!.message).toContain('2 codex rescues in last 30d');
+      expect(rescues!.message).toContain('local telemetry fallback');
+      expect(rescues!.message).not.toContain('counts unknown');
     } finally {
       cleanup(cwd);
     }

@@ -92,11 +92,14 @@ export function allGreenStubs(): ExecStub[] {
     { match: (cmd, args) => cmd === 'bv' && args[0] === '--version', respond: ok('bv 0.1.0') },
     { match: (cmd, args) => cmd === 'ntm' && args[0] === '--version', respond: ok('ntm 0.1.0') },
     { match: (cmd, args) => cmd === 'cm' && args[0] === '--version', respond: ok('cm 0.1.0') },
-    // `rescues_last_30d` synthesis row → `cm search flywheel-rescue --json`.
+    // `rescues_last_30d` synthesis row → `cm context flywheel-rescue --json`.
     {
       match: (cmd, args) =>
-        cmd === 'cm' && args[0] === 'search' && args[1] === 'flywheel-rescue',
-      respond: ok('[]'),
+        cmd === 'cm' && args[0] === 'context' && args[1] === 'flywheel-rescue',
+      respond: ok(JSON.stringify({
+        success: true,
+        data: { relevantBullets: [], historySnippets: [] },
+      })),
     },
     { match: (cmd, args) => cmd === 'node' && args[0] === '--version', respond: ok('v22.0.0') },
     { match: (cmd, args) => cmd === 'git' && args[0] === 'rev-parse', respond: ok('abc123') },

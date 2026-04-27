@@ -11,12 +11,13 @@
  * `red` / `yellow` entries in the returned `DoctorReport`. The tool-level
  * envelope is built by the I4 registration wrapper.
  */
-import { statSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { statSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { makeExec } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
+import { readTelemetry } from '../telemetry.js';
 import { detectCliCapabilities, describeCapabilities, } from '../adapters/model-diversity.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 const log = createLogger('doctor');
@@ -27,13 +28,6 @@ const PER_CHECK_TIMEOUT_MS = 2000;
 const TOTAL_SWEEP_BUDGET_MS = 10_000;
 /** Max concurrent child processes. */
 const MAX_CONCURRENCY = 6;
-/** Worktree dirs older than this and already merged to main are stale. */
-const STALE_WORKTREE_AGE_MS = 3 * 24 * 60 * 60 * 1000;
-const WORKTREE_SCAN_ROOTS = [
-    { relativePath: join('.claude', 'worktrees'), label: '.claude/worktrees', mode: 'direct' },
-    { relativePath: join('.ntm', 'worktrees'), label: '.ntm/worktrees', mode: 'gitfile' },
-    { relativePath: join('.pi-flywheel', 'worktrees'), label: '.pi-flywheel/worktrees', mode: 'direct' },
-];
 /** Canonical check names. Exported for test assertions. */
 export const DOCTOR_CHECK_NAMES = [
     'mcp_connectivity',
@@ -592,28 +586,27 @@ async function checkDistDrift(cwd, signal, now) {
         };
     }
 }
-/** 10. Orphaned/stale worktrees under managed worktree roots. */
+/** 10. Orphaned worktrees under .claude/worktrees/. */
 async function checkOrphanedWorktrees(exec, cwd, signal, timeout, now) {
     const start = now();
     if (signal.aborted)
         return abortedCheck('orphaned_worktrees');
     try {
-        const candidates = [];
-        for (const root of WORKTREE_SCAN_ROOTS) {
-            const dir = resolveDoctorPath(cwd, root.relativePath, root.label);
-            if (!dir.ok) {
-                if (dir.reason === 'not_found')
-                    continue;
-                return {
-                    name: 'orphaned_worktrees',
-                    severity: 'yellow',
-                    message: `worktree probe refused path: ${dir.message}`,
-                    durationMs: now() - start,
-                };
-            }
-            candidates.push(...collectWorktreeCandidates(dir.realPath, root.label, root.mode));
+        const dir = resolveDoctorPath(cwd, join('.claude', 'worktrees'), '.claude/worktrees');
+        if (!dir.ok) {
+            return {
+                name: 'orphaned_worktrees',
+                severity: dir.reason === 'not_found' ? 'green' : 'yellow',
+                message: dir.reason === 'not_found'
+                    ? 'no .claude/worktrees/ directory'
+                    : `worktree probe refused path: ${dir.message}`,
+                durationMs: now() - start,
+            };
         }
-        if (candidates.length === 0) {
+        const entries = readdirSync(dir.realPath, { withFileTypes: true })
+            .filter((e) => e.isDirectory())
+            .map((e) => e.name);
+        if (entries.length === 0) {
             return {
                 name: 'orphaned_worktrees',
                 severity: 'green',
@@ -635,51 +628,28 @@ async function checkOrphanedWorktrees(exec, cwd, signal, timeout, now) {
                 durationMs: now() - start,
             };
         }
-        const registered = parseGitWorktreeList(res.stdout);
-        const orphans = [];
-        const stale = [];
-        const lockedStale = [];
-        const nowMs = now();
-        for (const candidate of candidates) {
-            const record = registered.get(canonicalPath(candidate.path));
-            if (!record) {
-                orphans.push(candidate.displayName);
-                continue;
-            }
-            if (!record.head || nowMs - candidate.mtimeMs < STALE_WORKTREE_AGE_MS)
-                continue;
-            const onMain = await isCommitOnMain(exec, cwd, signal, timeout, record.head);
-            if (!onMain)
-                continue;
-            if (record.locked) {
-                lockedStale.push(candidate.displayName);
-            }
-            else {
-                stale.push(candidate.displayName);
+        const registered = new Set();
+        for (const line of res.stdout.split('\n')) {
+            if (line.startsWith('worktree ')) {
+                const path = line.slice('worktree '.length).trim();
+                const name = path.split('/').pop();
+                if (name)
+                    registered.add(name);
             }
         }
-        if (orphans.length === 0 && stale.length === 0 && lockedStale.length === 0) {
+        const orphans = entries.filter((name) => !registered.has(name));
+        if (orphans.length === 0) {
             return {
                 name: 'orphaned_worktrees',
                 severity: 'green',
-                message: `${candidates.length} worktree${candidates.length === 1 ? '' : 's'} all registered and none stale (>3d, HEAD on main)`,
+                message: `${entries.length} worktree${entries.length === 1 ? '' : 's'} all registered`,
                 durationMs: now() - start,
             };
-        }
-        const parts = [];
-        if (orphans.length > 0) {
-            parts.push(`${orphans.length} orphaned worktree dir${orphans.length === 1 ? '' : 's'}: ${orphans.join(', ')}`);
-        }
-        if (stale.length > 0) {
-            parts.push(`${stale.length} stale worktree dir${stale.length === 1 ? '' : 's'} (HEAD on main, untouched >3d): ${stale.join(', ')}`);
-        }
-        if (lockedStale.length > 0) {
-            parts.push(`${lockedStale.length} locked stale worktree dir${lockedStale.length === 1 ? '' : 's'} need${lockedStale.length === 1 ? 's' : ''} inspection: ${lockedStale.join(', ')}`);
         }
         return {
             name: 'orphaned_worktrees',
             severity: 'yellow',
-            message: parts.join('; '),
+            message: `${orphans.length} orphaned worktree dir${orphans.length === 1 ? '' : 's'}: ${orphans.join(', ')}`,
             hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
@@ -854,7 +824,7 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
  *   - red when 15+ (severe — indicates Claude lane degradation).
  *   - yellow if `cm` CLI is absent (cannot count, observability degraded).
  *
- * Read-only: only invokes `cm search`. Never mutates CASS.
+ * Read-only: only invokes `cm context`. Never mutates CASS.
  */
 /**
  * Pure parser for ~/.codex/config.toml. Looks for the top-level `model`
@@ -966,6 +936,15 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
         // First confirm cm is available — synthesis is best-effort.
         const probe = await exec('cm', ['--version'], { timeout, cwd, signal });
         if (probe.code !== 0) {
+            log.debug('rescues_last_30d cm version probe failed', {
+                command: 'cm --version',
+                exitCode: probe.code,
+                stderr: probe.stderr.trim(),
+            });
+            const fallback = await localRescueCountFallback(cwd, now());
+            if (fallback !== null) {
+                return rescueCountCheck(fallback, now() - start, ' (local telemetry fallback; cm unavailable)');
+            }
             return {
                 name: 'rescues_last_30d',
                 severity: 'yellow',
@@ -974,50 +953,44 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
                 durationMs: now() - start,
             };
         }
-        // `cm search` returns matching bullets as JSON; we count entries whose
+        // `cm context` returns matching bullets as JSON; we count entries whose
         // body carries the canonical `flywheel-rescue` prefix AND whose embedded
         // `ts=` ISO timestamp falls within the last 30 days.
-        const res = await exec('cm', ['search', 'flywheel-rescue', '--json'], {
+        const res = await exec('cm', ['context', 'flywheel-rescue', '--json'], {
             timeout,
             cwd,
             signal,
         });
         if (res.code !== 0) {
+            log.debug('rescues_last_30d cm context failed', {
+                command: 'cm context flywheel-rescue --json',
+                exitCode: res.code,
+                stderr: res.stderr.trim(),
+            });
+            const fallback = await localRescueCountFallback(cwd, now());
+            if (fallback !== null) {
+                return rescueCountCheck(fallback, now() - start, ' (local telemetry fallback; cm context failed)');
+            }
             return {
                 name: 'rescues_last_30d',
                 severity: 'yellow',
-                message: 'cm search failed — rescue counts unknown',
+                message: 'cm context failed — rescue counts unknown',
                 hint: CLI_FAILURE_HINT,
                 durationMs: now() - start,
             };
         }
         const count = countRescueEntriesWithin30Days(res.stdout, now());
-        if (count >= 15) {
-            return {
-                name: 'rescues_last_30d',
-                severity: 'red',
-                message: `${count} codex rescues in last 30d — Claude lane likely degraded`,
-                hint: DOCTOR_CHECK_FAILED_HINT,
-                durationMs: now() - start,
-            };
-        }
-        if (count >= 5) {
-            return {
-                name: 'rescues_last_30d',
-                severity: 'yellow',
-                message: `${count} codex rescues in last 30d — investigate stall hotspots`,
-                hint: DOCTOR_CHECK_FAILED_HINT,
-                durationMs: now() - start,
-            };
-        }
-        return {
-            name: 'rescues_last_30d',
-            severity: 'green',
-            message: `${count} codex rescues in last 30d`,
-            durationMs: now() - start,
-        };
+        return rescueCountCheck(count, now() - start);
     }
     catch (err) {
+        log.debug('rescues_last_30d probe threw', {
+            command: 'cm context flywheel-rescue --json',
+            error: errMsg(err),
+        });
+        const fallback = await localRescueCountFallback(cwd, now());
+        if (fallback !== null) {
+            return rescueCountCheck(fallback, now() - start, ' (local telemetry fallback; cm context threw)');
+        }
         return {
             name: 'rescues_last_30d',
             severity: 'yellow',
@@ -1027,8 +1000,62 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
         };
     }
 }
+function rescueCountCheck(count, durationMs, sourceNote = '') {
+    if (count >= 15) {
+        return {
+            name: 'rescues_last_30d',
+            severity: 'red',
+            message: `${count} codex rescues in last 30d${sourceNote} — Claude lane likely degraded`,
+            hint: DOCTOR_CHECK_FAILED_HINT,
+            durationMs,
+        };
+    }
+    if (count >= 5) {
+        return {
+            name: 'rescues_last_30d',
+            severity: 'yellow',
+            message: `${count} codex rescues in last 30d${sourceNote} — investigate stall hotspots`,
+            hint: DOCTOR_CHECK_FAILED_HINT,
+            durationMs,
+        };
+    }
+    return {
+        name: 'rescues_last_30d',
+        severity: 'green',
+        message: `${count} codex rescues in last 30d${sourceNote}`,
+        durationMs,
+    };
+}
+async function localRescueCountFallback(cwd, nowMs) {
+    const telemetry = await readTelemetry({ cwd });
+    if (telemetry === null)
+        return null;
+    return countLocalTelemetryRescuesWithin30Days(telemetry, nowMs);
+}
+function isRescueTelemetryCode(code) {
+    return /(?:^|[-_])(?:flywheel[-_])?(?:codex[-_])?rescue(?:[-_]|$)/i.test(code);
+}
+export function countLocalTelemetryRescuesWithin30Days(telemetry, nowMs) {
+    const cutoff = nowMs - 30 * 24 * 60 * 60 * 1000;
+    let count = 0;
+    for (const event of telemetry.recentEvents ?? []) {
+        if (!isRescueTelemetryCode(event.code))
+            continue;
+        const ts = Date.parse(event.ts);
+        if (Number.isFinite(ts) && ts >= cutoff)
+            count++;
+    }
+    if (count > 0)
+        return count;
+    const sessionStart = Date.parse(telemetry.sessionStartIso);
+    if (!Number.isFinite(sessionStart) || sessionStart < cutoff)
+        return 0;
+    return Object.entries(telemetry.counts ?? {}).reduce((acc, [code, n]) => {
+        return isRescueTelemetryCode(code) ? acc + n : acc;
+    }, 0);
+}
 /**
- * Count `flywheel-rescue` entries in a `cm search --json` payload whose
+ * Count `flywheel-rescue` entries in a `cm context --json` payload whose
  * embedded `ts=` ISO timestamp falls within the last 30 days. Pure (no
  * I/O) and defensive — ignores unparseable rows rather than throwing.
  *
@@ -1044,17 +1071,14 @@ export function countRescueEntriesWithin30Days(raw, nowMs) {
     catch {
         return 0;
     }
-    // Accept both payload shapes that `cm search --json` emits:
-    //   bare array, or { bullets: [...] }.
-    const bullets = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsed.bullets)
-            ? (parsed.bullets)
-            : [];
+    // Accept historical `cm search --json` shapes (bare array,
+    // { bullets: [...] }) plus the cm 0.2.3 `cm context --json` wrapper
+    // ({ data: { relevantBullets: [...], historySnippets: [...] } }).
+    const bullets = extractRescueCandidateRows(parsed);
     const cutoff = nowMs - 30 * 24 * 60 * 60 * 1000;
     let count = 0;
     for (const b of bullets) {
-        const body = b.content ?? b.text ?? '';
+        const body = b.content ?? b.text ?? b.snippet ?? '';
         if (!body.includes('flywheel-rescue'))
             continue;
         const tsMatch = /\bts=(\S+)/.exec(body);
@@ -1066,6 +1090,28 @@ export function countRescueEntriesWithin30Days(raw, nowMs) {
     }
     return count;
 }
+function extractRescueCandidateRows(parsed) {
+    if (Array.isArray(parsed))
+        return parsed;
+    if (typeof parsed !== 'object' || parsed === null)
+        return [];
+    const root = parsed;
+    const data = (typeof root.data === 'object' && root.data !== null
+        ? root.data
+        : {});
+    const sources = [
+        root.bullets,
+        root.relevantBullets,
+        root.historySnippets,
+        root.results,
+        data.bullets,
+        data.relevantBullets,
+        data.historySnippets,
+        data.results,
+    ];
+    return sources.flatMap((value) => (Array.isArray(value) ? value : []));
+}
+// ─── Helpers ──────────────────────────────────────────────────────────────
 function errMsg(err) {
     return err instanceof Error ? err.message : String(err);
 }
@@ -1075,151 +1121,6 @@ function resolveDoctorPath(cwd, relativePath, label) {
         label,
         rootLabel: 'cwd',
     });
-}
-function collectWorktreeCandidates(rootPath, label, mode) {
-    return mode === 'gitfile'
-        ? collectGitfileWorktreeCandidates(rootPath, label)
-        : collectDirectWorktreeCandidates(rootPath, label);
-}
-function collectDirectWorktreeCandidates(rootPath, label) {
-    let entries;
-    try {
-        entries = readdirSync(rootPath, { withFileTypes: true });
-    }
-    catch {
-        return [];
-    }
-    const candidates = [];
-    for (const entry of entries) {
-        if (!entry.isDirectory())
-            continue;
-        const candidatePath = join(rootPath, entry.name);
-        const candidate = makeWorktreeCandidate(candidatePath, `${label}/${entry.name}`);
-        if (candidate)
-            candidates.push(candidate);
-    }
-    return candidates;
-}
-function collectGitfileWorktreeCandidates(rootPath, label) {
-    const candidates = [];
-    const stack = [
-        { path: rootPath, relParts: [], depth: 0 },
-    ];
-    while (stack.length > 0) {
-        const current = stack.pop();
-        if (current.relParts.length > 0 && hasGitMetadataFile(current.path)) {
-            const candidate = makeWorktreeCandidate(current.path, `${label}/${current.relParts.join('/')}`);
-            if (candidate)
-                candidates.push(candidate);
-            continue;
-        }
-        if (current.depth >= 3)
-            continue;
-        let entries;
-        try {
-            entries = readdirSync(current.path, { withFileTypes: true });
-        }
-        catch {
-            continue;
-        }
-        for (const entry of entries) {
-            if (!entry.isDirectory())
-                continue;
-            if (entry.name === 'node_modules' || entry.name === '.git')
-                continue;
-            stack.push({
-                path: join(current.path, entry.name),
-                relParts: [...current.relParts, entry.name],
-                depth: current.depth + 1,
-            });
-        }
-    }
-    return candidates;
-}
-function makeWorktreeCandidate(path, displayName) {
-    try {
-        return {
-            path,
-            displayName,
-            mtimeMs: statSync(path).mtimeMs,
-        };
-    }
-    catch {
-        return null;
-    }
-}
-function hasGitMetadataFile(path) {
-    try {
-        const stat = statSync(join(path, '.git'));
-        return stat.isFile() || stat.isDirectory();
-    }
-    catch {
-        return false;
-    }
-}
-function parseGitWorktreeList(raw) {
-    const records = new Map();
-    let current = null;
-    const finish = () => {
-        if (!current)
-            return;
-        records.set(canonicalPath(current.path), {
-            head: current.head,
-            branch: current.branch,
-            locked: current.locked,
-        });
-        current = null;
-    };
-    for (const line of raw.split('\n')) {
-        if (line.trim().length === 0) {
-            finish();
-            continue;
-        }
-        if (line.startsWith('worktree ')) {
-            finish();
-            current = {
-                path: line.slice('worktree '.length).trim(),
-                locked: false,
-            };
-            continue;
-        }
-        if (!current)
-            continue;
-        if (line.startsWith('HEAD ')) {
-            current.head = line.slice('HEAD '.length).trim();
-        }
-        else if (line.startsWith('branch ')) {
-            current.branch = line.slice('branch '.length).trim();
-        }
-        else if (line.startsWith('locked')) {
-            current.locked = true;
-        }
-    }
-    finish();
-    return records;
-}
-function canonicalPath(path) {
-    try {
-        return realpathSync(path);
-    }
-    catch {
-        return path;
-    }
-}
-async function isCommitOnMain(exec, cwd, signal, timeout, head) {
-    if (signal.aborted)
-        return false;
-    try {
-        const res = await exec('git', ['merge-base', '--is-ancestor', head, 'main'], {
-            timeout,
-            cwd,
-            signal,
-        });
-        return res.code === 0;
-    }
-    catch {
-        return false;
-    }
 }
 /**
  * Walk a directory and return the newest mtime (ms) across matching files.

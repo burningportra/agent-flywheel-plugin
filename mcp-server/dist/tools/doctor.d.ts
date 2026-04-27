@@ -12,7 +12,7 @@
  * envelope is built by the I4 registration wrapper.
  */
 import { type ExecFn } from '../exec.js';
-import type { DoctorCheck, DoctorCheckSeverity, DoctorReport } from '../types.js';
+import type { DoctorCheck, DoctorCheckSeverity, DoctorReport, ErrorCodeTelemetry } from '../types.js';
 /** Canonical check names. Exported for test assertions. */
 export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "rescues_last_30d"];
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
@@ -60,7 +60,7 @@ export declare function computeOverallSeverity(checks: DoctorCheck[]): DoctorChe
  *   - red when 15+ (severe — indicates Claude lane degradation).
  *   - yellow if `cm` CLI is absent (cannot count, observability degraded).
  *
- * Read-only: only invokes `cm search`. Never mutates CASS.
+ * Read-only: only invokes `cm context`. Never mutates CASS.
  */
 /**
  * Pure parser for ~/.codex/config.toml. Looks for the top-level `model`
@@ -75,8 +75,9 @@ export declare function computeOverallSeverity(checks: DoctorCheck[]): DoctorChe
  */
 export declare function parseCodexConfigTopLevelModel(content: string): string | null;
 export declare function isCodexIncompatibleModel(model: string): boolean;
+export declare function countLocalTelemetryRescuesWithin30Days(telemetry: ErrorCodeTelemetry, nowMs: number): number;
 /**
- * Count `flywheel-rescue` entries in a `cm search --json` payload whose
+ * Count `flywheel-rescue` entries in a `cm context --json` payload whose
  * embedded `ts=` ISO timestamp falls within the last 30 days. Pure (no
  * I/O) and defensive — ignores unparseable rows rather than throwing.
  *

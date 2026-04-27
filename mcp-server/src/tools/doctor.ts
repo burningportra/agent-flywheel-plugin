@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
+import { readTelemetry } from '../telemetry.js';
 import {
   detectCliCapabilities,
   describeCapabilities,
@@ -29,6 +30,7 @@ import type {
   DoctorCheck,
   DoctorCheckSeverity,
   DoctorReport,
+  ErrorCodeTelemetry,
 } from '../types.js';
 
 const log = createLogger('doctor');
@@ -1028,7 +1030,7 @@ async function checkSwarmModelRatio(
  *   - red when 15+ (severe — indicates Claude lane degradation).
  *   - yellow if `cm` CLI is absent (cannot count, observability degraded).
  *
- * Read-only: only invokes `cm search`. Never mutates CASS.
+ * Read-only: only invokes `cm context`. Never mutates CASS.
  */
 /**
  * Pure parser for ~/.codex/config.toml. Looks for the top-level `model`
@@ -1148,6 +1150,19 @@ async function checkRescuesLast30d(
     // First confirm cm is available — synthesis is best-effort.
     const probe = await exec('cm', ['--version'], { timeout, cwd, signal });
     if (probe.code !== 0) {
+      log.debug('rescues_last_30d cm version probe failed', {
+        command: 'cm --version',
+        exitCode: probe.code,
+        stderr: probe.stderr.trim(),
+      });
+      const fallback = await localRescueCountFallback(cwd, now());
+      if (fallback !== null) {
+        return rescueCountCheck(
+          fallback,
+          now() - start,
+          ' (local telemetry fallback; cm unavailable)',
+        );
+      }
       return {
         name: 'rescues_last_30d',
         severity: 'yellow',
@@ -1156,49 +1171,51 @@ async function checkRescuesLast30d(
         durationMs: now() - start,
       };
     }
-    // `cm search` returns matching bullets as JSON; we count entries whose
+    // `cm context` returns matching bullets as JSON; we count entries whose
     // body carries the canonical `flywheel-rescue` prefix AND whose embedded
     // `ts=` ISO timestamp falls within the last 30 days.
-    const res = await exec('cm', ['search', 'flywheel-rescue', '--json'], {
+    const res = await exec('cm', ['context', 'flywheel-rescue', '--json'], {
       timeout,
       cwd,
       signal,
     });
     if (res.code !== 0) {
+      log.debug('rescues_last_30d cm context failed', {
+        command: 'cm context flywheel-rescue --json',
+        exitCode: res.code,
+        stderr: res.stderr.trim(),
+      });
+      const fallback = await localRescueCountFallback(cwd, now());
+      if (fallback !== null) {
+        return rescueCountCheck(
+          fallback,
+          now() - start,
+          ' (local telemetry fallback; cm context failed)',
+        );
+      }
       return {
         name: 'rescues_last_30d',
         severity: 'yellow',
-        message: 'cm search failed — rescue counts unknown',
+        message: 'cm context failed — rescue counts unknown',
         hint: CLI_FAILURE_HINT,
         durationMs: now() - start,
       };
     }
     const count = countRescueEntriesWithin30Days(res.stdout, now());
-    if (count >= 15) {
-      return {
-        name: 'rescues_last_30d',
-        severity: 'red',
-        message: `${count} codex rescues in last 30d — Claude lane likely degraded`,
-        hint: DOCTOR_CHECK_FAILED_HINT,
-        durationMs: now() - start,
-      };
-    }
-    if (count >= 5) {
-      return {
-        name: 'rescues_last_30d',
-        severity: 'yellow',
-        message: `${count} codex rescues in last 30d — investigate stall hotspots`,
-        hint: DOCTOR_CHECK_FAILED_HINT,
-        durationMs: now() - start,
-      };
-    }
-    return {
-      name: 'rescues_last_30d',
-      severity: 'green',
-      message: `${count} codex rescues in last 30d`,
-      durationMs: now() - start,
-    };
+    return rescueCountCheck(count, now() - start);
   } catch (err) {
+    log.debug('rescues_last_30d probe threw', {
+      command: 'cm context flywheel-rescue --json',
+      error: errMsg(err),
+    });
+    const fallback = await localRescueCountFallback(cwd, now());
+    if (fallback !== null) {
+      return rescueCountCheck(
+        fallback,
+        now() - start,
+        ' (local telemetry fallback; cm context threw)',
+      );
+    }
     return {
       name: 'rescues_last_30d',
       severity: 'yellow',
@@ -1209,8 +1226,69 @@ async function checkRescuesLast30d(
   }
 }
 
+function rescueCountCheck(
+  count: number,
+  durationMs: number,
+  sourceNote = '',
+): DoctorCheck {
+  if (count >= 15) {
+    return {
+      name: 'rescues_last_30d',
+      severity: 'red',
+      message: `${count} codex rescues in last 30d${sourceNote} — Claude lane likely degraded`,
+      hint: DOCTOR_CHECK_FAILED_HINT,
+      durationMs,
+    };
+  }
+  if (count >= 5) {
+    return {
+      name: 'rescues_last_30d',
+      severity: 'yellow',
+      message: `${count} codex rescues in last 30d${sourceNote} — investigate stall hotspots`,
+      hint: DOCTOR_CHECK_FAILED_HINT,
+      durationMs,
+    };
+  }
+  return {
+    name: 'rescues_last_30d',
+    severity: 'green',
+    message: `${count} codex rescues in last 30d${sourceNote}`,
+    durationMs,
+  };
+}
+
+async function localRescueCountFallback(cwd: string, nowMs: number): Promise<number | null> {
+  const telemetry = await readTelemetry({ cwd });
+  if (telemetry === null) return null;
+  return countLocalTelemetryRescuesWithin30Days(telemetry, nowMs);
+}
+
+function isRescueTelemetryCode(code: string): boolean {
+  return /(?:^|[-_])(?:flywheel[-_])?(?:codex[-_])?rescue(?:[-_]|$)/i.test(code);
+}
+
+export function countLocalTelemetryRescuesWithin30Days(
+  telemetry: ErrorCodeTelemetry,
+  nowMs: number,
+): number {
+  const cutoff = nowMs - 30 * 24 * 60 * 60 * 1000;
+  let count = 0;
+  for (const event of telemetry.recentEvents ?? []) {
+    if (!isRescueTelemetryCode(event.code)) continue;
+    const ts = Date.parse(event.ts);
+    if (Number.isFinite(ts) && ts >= cutoff) count++;
+  }
+  if (count > 0) return count;
+
+  const sessionStart = Date.parse(telemetry.sessionStartIso);
+  if (!Number.isFinite(sessionStart) || sessionStart < cutoff) return 0;
+  return Object.entries(telemetry.counts ?? {}).reduce((acc, [code, n]) => {
+    return isRescueTelemetryCode(code) ? acc + n : acc;
+  }, 0);
+}
+
 /**
- * Count `flywheel-rescue` entries in a `cm search --json` payload whose
+ * Count `flywheel-rescue` entries in a `cm context --json` payload whose
  * embedded `ts=` ISO timestamp falls within the last 30 days. Pure (no
  * I/O) and defensive — ignores unparseable rows rather than throwing.
  *
@@ -1227,17 +1305,14 @@ export function countRescueEntriesWithin30Days(
   } catch {
     return 0;
   }
-  // Accept both payload shapes that `cm search --json` emits:
-  //   bare array, or { bullets: [...] }.
-  const bullets: Array<{ content?: string; text?: string }> = Array.isArray(parsed)
-    ? (parsed as Array<{ content?: string; text?: string }>)
-    : Array.isArray((parsed as { bullets?: unknown }).bullets)
-    ? ((parsed as { bullets: Array<{ content?: string; text?: string }> }).bullets)
-    : [];
+  // Accept historical `cm search --json` shapes (bare array,
+  // { bullets: [...] }) plus the cm 0.2.3 `cm context --json` wrapper
+  // ({ data: { relevantBullets: [...], historySnippets: [...] } }).
+  const bullets = extractRescueCandidateRows(parsed);
   const cutoff = nowMs - 30 * 24 * 60 * 60 * 1000;
   let count = 0;
   for (const b of bullets) {
-    const body = b.content ?? b.text ?? '';
+    const body = b.content ?? b.text ?? b.snippet ?? '';
     if (!body.includes('flywheel-rescue')) continue;
     const tsMatch = /\bts=(\S+)/.exec(body);
     if (!tsMatch?.[1]) continue;
@@ -1245,6 +1320,47 @@ export function countRescueEntriesWithin30Days(
     if (Number.isFinite(ts) && ts >= cutoff) count++;
   }
   return count;
+}
+
+type RescueCandidateRow = {
+  content?: string;
+  text?: string;
+  snippet?: string;
+};
+
+function extractRescueCandidateRows(parsed: unknown): RescueCandidateRow[] {
+  if (Array.isArray(parsed)) return parsed as RescueCandidateRow[];
+  if (typeof parsed !== 'object' || parsed === null) return [];
+
+  const root = parsed as {
+    bullets?: unknown;
+    relevantBullets?: unknown;
+    historySnippets?: unknown;
+    results?: unknown;
+    data?: unknown;
+  };
+  const data = (
+    typeof root.data === 'object' && root.data !== null
+      ? root.data
+      : {}
+  ) as {
+    bullets?: unknown;
+    relevantBullets?: unknown;
+    historySnippets?: unknown;
+    results?: unknown;
+  };
+
+  const sources = [
+    root.bullets,
+    root.relevantBullets,
+    root.historySnippets,
+    root.results,
+    data.bullets,
+    data.relevantBullets,
+    data.historySnippets,
+    data.results,
+  ];
+  return sources.flatMap((value) => (Array.isArray(value) ? value as RescueCandidateRow[] : []));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
