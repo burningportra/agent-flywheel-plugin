@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.10] - 2026-04-26
+
+### Fixed
+
+- `skills/start/SKILL.md` frontmatter `name:` field was `flywheel` but the skill is invoked as `agent-flywheel:start` (directory-derived). The mismatch caused Claude Code's `Skill` tool to load the body as a "pointer/stub" rather than the canonical instructions — operators saw `Successfully loaded skill` followed by Claude reverting to manually `find`-ing the file. Frontmatter now reads `name: start`, matching the directory and the slash-command invocation. Per `superpowers:writing-skills`, the `name:` field MUST equal the parent directory name exactly; this had been latent for several releases. No content changes — only the frontmatter `name`.
+
 ## [3.6.9] - 2026-04-26
 
 ### Changed

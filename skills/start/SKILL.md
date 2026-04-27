@@ -1,5 +1,5 @@
 ---
-name: flywheel
+name: start
 description: "Start or resume the full agentic coding flywheel. Drives the complete workflow: scan → discover → plan → implement → review."
 ---
 
