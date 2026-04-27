@@ -199,6 +199,23 @@ This is advisory only — never gate on it. If CASS is unavailable, skip silentl
 
 This gives the user (and the agent-flywheel) context from past runs before making any decisions.
 
+If `DOCTOR_REPORT.checks` contains a yellow `orphaned_worktrees` row whose `message` mentions `orphaned worktree`, `stale worktree`, or `locked stale worktree`, run this cleanup gate before the main menu:
+
+```
+AskUserQuestion(questions: [{
+  question: "Doctor found stale or orphaned worktrees from prior sessions. Clean up before starting?",
+  header: "Cleanup",
+  options: [
+    { label: "Inspect first (Recommended)", description: "List the candidate worktrees and lock state before removing anything" },
+    { label: "Clean up", description: "Run the flywheel-cleanup command and confirm removals in its prompt" },
+    { label: "Skip", description: "Continue to the start menu and leave the worktrees untouched" }
+  ],
+  multiSelect: false
+}])
+```
+
+Route the choice immediately: **Inspect first** → show `git worktree list --porcelain`, summarize the candidates from the doctor row, then surface this same cleanup gate again; **Clean up** → run the flywheel-cleanup command, then continue to the main menu; **Skip** → continue to the main menu. Locked stale worktrees must be treated as inspect-first candidates unless the user explicitly chooses cleanup.
+
 ### 0d. Present the main menu
 
 Build the menu options dynamically based on detected state:

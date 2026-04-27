@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runDoctorChecks, computeOverallSeverity, DOCTOR_CHECK_NAMES, parseCodexConfigTopLevelModel, isCodexIncompatibleModel, } from '../../tools/doctor.js';
 // ─── Shared helpers ───────────────────────────────────────────────────────
+const DAY_MS = 24 * 60 * 60 * 1000;
 function makeTmpCwd() {
     const dir = mkdtempSync(join(tmpdir(), 'doctor-test-'));
     // Always create a minimal dist/server.js that is newer than any src so
@@ -368,6 +369,146 @@ describe('runDoctorChecks', () => {
             const worktrees = report.checks.find((c) => c.name === 'orphaned_worktrees');
             expect(worktrees.severity).toBe('yellow');
             expect(worktrees.message).toContain('ghost');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('registered worktree older than 3 days with HEAD on main → yellow stale entry', async () => {
+        const cwd = makeTmpCwd();
+        const nowMs = Date.parse('2026-04-26T12:00:00.000Z');
+        const worktreePath = join(cwd, '.ntm', 'worktrees', 'old-session', 'cod_1');
+        try {
+            mkdirSync(worktreePath, { recursive: true });
+            writeFileSync(join(worktreePath, '.git'), 'gitdir: ../../../../.git/worktrees/cod_1\n');
+            const old = new Date(nowMs - 4 * DAY_MS);
+            utimesSync(worktreePath, old, old);
+            const stubs = allGreenStubs().filter((s) => !s.match('git', ['worktree', 'list', '--porcelain']));
+            stubs.push({
+                match: (cmd, args) => cmd === 'git' && args[0] === 'worktree',
+                respond: {
+                    result: {
+                        code: 0,
+                        stdout: [
+                            `worktree ${cwd}`,
+                            'HEAD root',
+                            'branch refs/heads/main',
+                            '',
+                            `worktree ${worktreePath}`,
+                            'HEAD abc123',
+                            'branch refs/heads/ntm/old-session/cod_1',
+                            '',
+                        ].join('\n'),
+                        stderr: '',
+                    },
+                },
+            });
+            stubs.push({
+                match: (cmd, args) => cmd === 'git' && args[0] === 'merge-base' && args[1] === '--is-ancestor',
+                respond: { result: { code: 0, stdout: '', stderr: '' } },
+            });
+            const exec = makeStubbedExec(stubs);
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec,
+                now: () => nowMs,
+                codexConfigPath: null,
+            });
+            const worktrees = report.checks.find((c) => c.name === 'orphaned_worktrees');
+            expect(worktrees.severity).toBe('yellow');
+            expect(worktrees.message).toContain('stale worktree');
+            expect(worktrees.message).toContain('.ntm/worktrees/old-session/cod_1');
+            expect(worktrees.message).toContain('HEAD on main');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('registered fresh worktree on main stays green', async () => {
+        const cwd = makeTmpCwd();
+        const nowMs = Date.parse('2026-04-26T12:00:00.000Z');
+        const worktreePath = join(cwd, '.ntm', 'worktrees', 'active-session', 'cod_1');
+        try {
+            mkdirSync(worktreePath, { recursive: true });
+            writeFileSync(join(worktreePath, '.git'), 'gitdir: ../../../../.git/worktrees/cod_1\n');
+            const fresh = new Date(nowMs - DAY_MS);
+            utimesSync(worktreePath, fresh, fresh);
+            const stubs = allGreenStubs().filter((s) => !s.match('git', ['worktree', 'list', '--porcelain']));
+            stubs.push({
+                match: (cmd, args) => cmd === 'git' && args[0] === 'worktree',
+                respond: {
+                    result: {
+                        code: 0,
+                        stdout: [
+                            `worktree ${cwd}`,
+                            'HEAD root',
+                            'branch refs/heads/main',
+                            '',
+                            `worktree ${worktreePath}`,
+                            'HEAD abc123',
+                            'branch refs/heads/ntm/active-session/cod_1',
+                            '',
+                        ].join('\n'),
+                        stderr: '',
+                    },
+                },
+            });
+            const exec = makeStubbedExec(stubs);
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec,
+                now: () => nowMs,
+                codexConfigPath: null,
+            });
+            const worktrees = report.checks.find((c) => c.name === 'orphaned_worktrees');
+            expect(worktrees.severity).toBe('green');
+            expect(worktrees.message).toContain('none stale');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('locked stale worktree is flagged for inspection rather than normal cleanup', async () => {
+        const cwd = makeTmpCwd();
+        const nowMs = Date.parse('2026-04-26T12:00:00.000Z');
+        const worktreePath = join(cwd, '.claude', 'worktrees', 'agent-old');
+        try {
+            mkdirSync(worktreePath, { recursive: true });
+            const old = new Date(nowMs - 4 * DAY_MS);
+            utimesSync(worktreePath, old, old);
+            const stubs = allGreenStubs().filter((s) => !s.match('git', ['worktree', 'list', '--porcelain']));
+            stubs.push({
+                match: (cmd, args) => cmd === 'git' && args[0] === 'worktree',
+                respond: {
+                    result: {
+                        code: 0,
+                        stdout: [
+                            `worktree ${cwd}`,
+                            'HEAD root',
+                            'branch refs/heads/main',
+                            '',
+                            `worktree ${worktreePath}`,
+                            'HEAD abc123',
+                            'branch refs/heads/agent-old',
+                            'locked still reviewing',
+                            '',
+                        ].join('\n'),
+                        stderr: '',
+                    },
+                },
+            });
+            stubs.push({
+                match: (cmd, args) => cmd === 'git' && args[0] === 'merge-base' && args[1] === '--is-ancestor',
+                respond: { result: { code: 0, stdout: '', stderr: '' } },
+            });
+            const exec = makeStubbedExec(stubs);
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec,
+                now: () => nowMs,
+                codexConfigPath: null,
+            });
+            const worktrees = report.checks.find((c) => c.name === 'orphaned_worktrees');
+            expect(worktrees.severity).toBe('yellow');
+            expect(worktrees.message).toContain('locked stale worktree');
+            expect(worktrees.message).toContain('inspection');
         }
         finally {
             cleanup(cwd);
