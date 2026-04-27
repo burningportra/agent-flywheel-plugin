@@ -2,7 +2,7 @@
 
 **When to use:** the user invoked `/agent-flywheel:start` and picked **"Deslop pass"** from the Step 0d menu — they want to apply `/simplify-and-refactor-code-isomorphically` to the project as a proof-obligated, isomorphism-preserving refactor pass. This is meaningful on any repo (with or without open beads) and is the canonical "reduce AI-junk without changing behavior" workflow.
 
-**How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Codex swarm / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
+**How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
 
 ---
 
@@ -15,7 +15,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Single-pass (Recommended)", description: "One in-process invocation of /simplify-and-refactor-code-isomorphically. Fast; good for small/medium repos or initial exploration." },
     { label: "Single + fresh-eyes", description: "Single-pass, then a verbatim fresh-eyes review prompt to catch any isomorphism violations the first pass introduced." },
-    { label: "5-Codex swarm via NTM", description: "Spawn 5+ Codex panes, each tackling a different code area, with Claude (you) as controller doing fresh-eyes review. 5-min looper. Best for large repos." },
+    { label: "5-Pi swarm via NTM", description: "Spawn 5+ Pi panes (cod fallback if Pi unavailable on the host; see AGENTS.md NTM pane priority), each tackling a different code area, with Claude (you) as controller doing fresh-eyes review. 5-min looper. Best for large repos." },
     { label: "Iterative (10x via /repeatedly-apply-skill)", description: "Solo agent re-applies the skill 10 times with fresh-eyes review between passes. No NTM required. Good for slow-burn cleanup." }
   ],
   multiSelect: false
@@ -28,7 +28,7 @@ Route on the answer:
 |------|--------|
 | Single-pass | Run §2 only |
 | Single + fresh-eyes | Run §2, then §3 |
-| 5-Codex swarm | Run §4 |
+| 5-Pi swarm (cod fallback) | Run §4 |
 | Iterative | Run §5 |
 
 ---
@@ -58,7 +58,7 @@ The fresh-eyes review is the second-half of the proof obligation — the skill s
 
 ---
 
-## Step 4: 5-Codex swarm via NTM
+## Step 4: 5-Pi swarm via NTM (Codex fallback)
 
 This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refactor-not-feature work.
 
@@ -174,7 +174,7 @@ The wrapper handles the loop, fresh-eyes review interleaving, and termination. P
 | "no rewrites, no sed, no drive-by fixes" | Mechanical edits only — `Edit` tool one location at a time. If a candidate requires a rewrite, the skill's risk-scorer should reject it. |
 | "deletion without explicit permission" | The skill never deletes files autonomously; it surfaces deletion candidates for the operator to confirm. Surface via `AskUserQuestion`. |
 | "pathology catalog" | The skill ships a list of AI-junk patterns (defensive branches for impossible inputs, duplicated wrappers, _v2 files, orphaned helpers, stale types, comments-as-task-plans). It scans for these automatically. |
-| "5+ Codex instances on a 5-min /loop" | Implemented in §4 (Codex pane count + looper interval verbatim). |
+| "5+ Codex instances on a 5-min /loop" | Implemented in §4 as 5 Pi panes on a 5-min `/loop` (per AGENTS.md NTM pane priority — `--pi=` is preferred over `--cod=`; only fall back to 5 Codex panes if Pi is unavailable on the host). Pane count + looper interval are verbatim either way. |
 | "Claude Code as final fresh eyes" | Implemented in §4f (controller fresh-eyes between looper ticks). |
 
 ---

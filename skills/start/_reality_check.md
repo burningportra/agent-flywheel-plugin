@@ -17,7 +17,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Reality check only", description: "Run §2 — agent reads docs + investigates code + applies /reality-check-for-project exhaustively. Stop after the gap report. Best when you want to read the findings and decide manually." },
     { label: "Reality check + beads", description: "Run §2, then §3 — convert every gap into a granular self-contained bead graph via br, with comments capturing background/reasoning. Stops before implementation. (Recommended)" },
-    { label: "Full pipeline (check + beads + swarm)", description: "Run §2, then §3, then §4 — execute the gap-closure beads via NTM swarm (3 cod + 3 cc, 3-min looper). Best when you want to walk away and let it run." }
+    { label: "Full pipeline (check + beads + swarm)", description: "Run §2, then §3, then §4 — execute the gap-closure beads via NTM swarm (3 pi + 3 cc, 3-min looper; cod fallback if Pi unavailable, per AGENTS.md NTM pane priority). Best when you want to walk away and let it run." }
   ],
   multiSelect: false
 }])
@@ -105,7 +105,7 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 >
 > THEN: start systematically and methodically and meticulously and diligently executing those remaining beads tasks that you created in the optimal logical order!
 >
-> Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch 3 codex and 3 claude code instances to do this and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
+> Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch 3 pi and 3 claude code instances to do this (per AGENTS.md NTM pane priority — prefer pi over cod; only fall back to 3 codex if Pi is unavailable on this host) and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
 
 ### 4a. Pre-flight (mandatory — same as `_implement.md`)
 
@@ -119,7 +119,9 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 
 ### 4b. Spawn the swarm
 
-`ntm spawn $NTM_PROJECT --label reality-check-closure --no-user --cc=3 --cod=3 --stagger-mode=smart`. Pane indices: cc=1,2,3  cod=4,5,6.
+`ntm spawn $NTM_PROJECT --label reality-check-closure --no-user --cc=3 --pi=3 --stagger-mode=smart`. Pane indices: cc=1,2,3  pi=4,5,6.
+
+**Pane-type priority** (per AGENTS.md "NTM pane priority"): prefer `--pi=` over `--cod=`; only fall back to `--cc=3 --cod=3` (with pane indices `cod=4,5,6`) when Pi is unavailable on the host.
 
 ### 4c. Looper schedule
 

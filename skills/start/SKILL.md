@@ -227,9 +227,9 @@ AskUserQuestion(questions: [{
   question: "What would you like to do?",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
-    { label: "Deslop pass", description: "Apply the deslop refactor skill with isomorphism proofs — single-pass, fresh-eyes, 5-Codex swarm, or iterative 10x. See skills/start/_deslop.md" },
+    { label: "Deslop pass", description: "Apply the deslop refactor skill with isomorphism proofs — single-pass, fresh-eyes, 5-Pi swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), or iterative 10x. See skills/start/_deslop.md" },
     { label: "Other", description: "Work on beads manually, start a new goal, or research an external repo (sub-menu)" }
   ],
   multiSelect: false
@@ -243,7 +243,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do?",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Reality check", description: "Step back: gap-check actual implementation against AGENTS.md/README.md/plan vision using the reality-check skill, convert gaps to beads, optionally run swarm. The 'come-to-Jesus' steering pass. See skills/start/_reality_check.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "Other", description: "Deslop pass / new goal / research an external repo / audit (sub-menu)" }
@@ -274,9 +274,9 @@ AskUserQuestion(questions: [{
 
 | Choice | Action |
 |--------|--------|
-| **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 cod + 2 cc). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
+| **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 pi + 2 cc; fall back to 4 cod only if Pi is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
 | **Other** | Surface a follow-up `AskUserQuestion` with the state-appropriate sub-options (per UNIVERSAL RULE 1, never end the turn here). For previous-session-exists state: `Work on beads / New goal / Reality check / Research repo`. For open-beads-exist state: `Deslop pass / New goal / Research repo / Audit`. For fresh-start state: `Reality check / Research repo / Setup`. Reality check is top-level for `open-beads-exist` (where gap analysis matters most); Quick fix is reachable via `/agent-flywheel:flywheel-fix` directly and intentionally not in the sub-menu. Then route the chosen sub-option through the matching row below. |
-| **Deslop pass** | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Codex swarm / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the slash-named skills (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove preservation. |
+| **Deslop pass** | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the slash-named skills (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove preservation. |
 | **Reality check** | Read `skills/start/_reality_check.md` end-to-end and surface its depth-selection `AskUserQuestion` (Reality check only / Reality check + beads / Full pipeline). Do NOT pick a depth unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching section verbatim; the slash-named skill (`/reality-check-for-project`) is load-bearing. Phase 1 (the docs+code+gap-report prompt) typically takes 15–20 minutes — do NOT short-circuit it with a docs-only summary. Bead creation is `br`-only per `/beads-workflow`. |
 | **Resume session** | Run the **drift check** below before jumping to the saved phase |
 | **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |

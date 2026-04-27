@@ -17,7 +17,7 @@ Run a strategic reality-check pass on the current project — the "come-to-Jesus
 2. The skill is a thin pointer to `skills/start/_reality_check.md` (the canonical workflow). It surfaces a depth-selection `AskUserQuestion`:
    - **Reality check only** — gap report, stop after.
    - **Reality check + beads** — gap report + convert every gap into a tagged bead graph via `br`.
-   - **Full pipeline** — check + beads + 3 cod × 3 cc NTM swarm with 3-min looper.
+   - **Full pipeline** — check + beads + 3 pi × 3 cc NTM swarm with 3-min looper (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority).
 
 3. **Do NOT** re-implement the prompts, depth selection, CASS capture, or bead tagging logic inline. The sub-file at `skills/start/_reality_check.md` is the single source of truth — every change happens there.
 

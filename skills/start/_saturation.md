@@ -101,7 +101,7 @@ Procedure:
 
 ## Step 5: Dispatch into the existing swarm
 
-If the in-flight swarm panes are still alive, dispatch the new beads via `flywheel_advance_wave` — the existing 4 cod + 2 cc agents pick them up via `bv triage` on their next looper tick. No new pane spawning needed.
+If the in-flight swarm panes are still alive, dispatch the new beads via `flywheel_advance_wave` — the existing 4 pi + 2 cc agents (or 4 cod + 2 cc if Pi was unavailable at spawn time) pick them up via `bv triage` on their next looper tick. No new pane spawning needed.
 
 If the swarm has been torn down (post-saturation cleanup), surface:
 
@@ -110,9 +110,9 @@ AskUserQuestion(questions: [{
   question: "<N> saturation beads created but the swarm is offline. How should I proceed?",
   header: "Dispatch",
   options: [
-    { label: "Re-spawn swarm and dispatch", description: "Spin up 4 cod + 2 cc per _inflight_prompt.md and let them work the new beads" },
+    { label: "Re-spawn swarm and dispatch", description: "Spin up 4 pi + 2 cc per _inflight_prompt.md (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority) and let them work the new beads" },
     { label: "Save for next session", description: "Beads are tagged and queued — they'll show up at next /start as 'open beads exist'" },
-    { label: "Spawn smaller swarm", description: "2 cod + 1 cc — sufficient if the saturation bead count is small" }
+    { label: "Spawn smaller swarm", description: "2 pi + 1 cc (cod fallback if Pi unavailable) — sufficient if the saturation bead count is small" }
   ],
   multiSelect: false
 }])

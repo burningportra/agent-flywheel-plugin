@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.9] - 2026-04-26
+
+### Changed
+
+- **NTM pane priority — auto-swarm and friends now spawn `pi` by default.** v3.6.8 flipped the deep-plan/impl/deslop spawn skills but missed the canonical `/agent-flywheel:start` auto-swarm prompt and several other surfaces, so the Step 0d "Auto-swarm (Recommended)" option still showed `4 cod + 2 cc` to users. This release flips the remaining surfaces:
+  - `skills/start/_inflight_prompt.md`: verbatim auto-swarm prompt + operator-decoder row now say `4 pi + 2 cc` (`--cc=2 --pi=4`); fallback to `--cod=4` documented inline.
+  - `skills/start/SKILL.md`: Step 0d menu labels (both menus), routing-matrix Auto-swarm row, and Deslop-pass row updated to mention pi-first with cod fallback.
+  - `skills/start/_reality_check.md`: `--cc=3 --cod=3` spawn flipped to `--cc=3 --pi=3`; "Full pipeline" depth label and the verbatim user prompt now say `3 pi + 3 cc` / `3 pi and 3 claude code instances`.
+  - `skills/start/_saturation.md`: "existing 4 cod + 2 cc agents" + "Re-spawn swarm" / "Spawn smaller swarm" option labels updated.
+  - `skills/start/_deslop.md`: Step 4 heading flipped to "5-Pi swarm via NTM (Codex fallback)"; Step 1 mode menu, route table, and pathology-catalog table-row reference all updated.
+  - `skills/flywheel-reality-check/SKILL.md` + `commands/flywheel-reality-check.md`: "Full pipeline" descriptions now mention `3 pi + 3 cc` with the standard fallback pointer.
+
+  Every flipped surface includes the same fallback note ("only fall back to cod if Pi is unavailable on this host") so degraded-host operators still know the escape hatch. The AGENTS.md `## NTM pane priority` section added in v3.6.8 remains the single source of truth reviewers should cite when rejecting cod-default regressions.
+
 ## [3.6.8] - 2026-04-26
 
 ### Changed

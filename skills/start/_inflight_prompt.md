@@ -10,13 +10,13 @@
 
 > ❯ Reread [AGENTS.md](http://AGENTS.md) so it's still fresh in your mind.
 >
-> Then, I need you to use /ntm and /vibing-with-ntm to create a swarm comprising 4 cod instances and 2 cc instances. Make sure also that we don't run out of space by periodically clearing stale build artifacts. And make sure to use rch for all builds/tests (see /rch).
+> Then, I need you to use /ntm and /vibing-with-ntm to create a swarm comprising 4 pi instances and 2 cc instances (per the NTM pane priority in AGENTS.md, prefer pi over cod; only fall back to 4 cod if Pi is unavailable on this host). Make sure also that we don't run out of space by periodically clearing stale build artifacts. And make sure to use rch for all builds/tests (see /rch).
 >
 > Try to avoid excessive build contention from concurrent builds for the same project by multiple agents within the same project-level swarm. And use your looper tool every 4 minutes to pass fresh instructions to any agents in the swarms in need of further input (i.e., that are idle), guided by bv's (see /bv) triage command for open beads.
 >
 > Also look for beads that are clearly "stalled out"; that is, marked as being in progress (likely by long-dead agents), with no recent work on them whatsoever, and mark them as being open again.
 >
-> Keep going until all the beads are done; then transition into using the code review workflow in /vibing-with-ntm and using cc and cod instances from the swarm.
+> Keep going until all the beads are done; then transition into using the code review workflow in /vibing-with-ntm and using cc and pi instances from the swarm (or cod, if you fell back to Codex during the spawn).
 >
 > You can also use the various skills with names beginning with the string "testing-" to improve our testing posture (e.g., /testing-perfect-e2e-integration-tests-with-logging-and-no-mocks, /testing-conformance-harnesses, /testing-golden-artifacts, /testing-fuzzing, etc., as relevant and applicable).
 >
@@ -29,7 +29,7 @@
 | Phrase in prompt | Concrete action |
 |------------------|-----------------|
 | "use /ntm and /vibing-with-ntm" | Invoke both skills via `Skill` tool BEFORE spawning. They carry the canonical orchestrator decision tree, OC cards, stuck-pane ladder. |
-| "swarm comprising 4 cod instances and 2 cc instances" | `ntm spawn $NTM_PROJECT --label inflight-resume --no-user --cc=2 --cod=4 --stagger-mode=smart`. Pane indices: cc=1,2  cod=3,4,5,6. Run NTM readiness gate (Step 7 Pre-flight in `_implement.md`) first. |
+| "swarm comprising 4 pi instances and 2 cc instances" | `ntm spawn $NTM_PROJECT --label inflight-resume --no-user --cc=2 --pi=4 --stagger-mode=smart`. Pane indices: cc=1,2  pi=3,4,5,6. Run NTM readiness gate (Step 7 Pre-flight in `_implement.md`) first. **Pane-type priority** (per AGENTS.md): prefer `--pi=` over `--cod=`; only fall back to `--cod=4` (with pane indices `cod=3,4,5,6`) when Pi is unavailable on the host. |
 | "clearing stale build artifacts" | Every 30 min OR when disk free <5GB, run `git clean -fdX -- '<build-output-dirs>'` (respects gitignore, only removes ignored build artifacts). Never run `git clean -fdx` (lowercase x) — that nukes untracked source files. |
 | "use rch for all builds/tests (see /rch)" | Invoke `/rch` skill for the canonical build-runner contract. Pass `rch build` / `rch test` to each impl agent's prompt as the validate-gate command instead of a stack-specific `npm run build` / `cargo test`. |
 | "avoid excessive build contention" | Implement a project-level build mutex via the portable wrapper: `scripts/build-mutex.sh rch build` and `scripts/build-mutex.sh rch test`. Document this in each impl agent's STEP 2 prompt. The wrapper uses atomic `mkdir` locking and does not require the Linux-only `flock` binary. |
