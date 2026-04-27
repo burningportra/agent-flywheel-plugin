@@ -11,7 +11,7 @@
  * `red` / `yellow` entries in the returned `DoctorReport`. The tool-level
  * envelope is built by the I4 registration wrapper.
  */
-import { statSync, readdirSync, readFileSync } from 'node:fs';
+import { statSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { makeExec } from '../exec.js';
@@ -28,6 +28,13 @@ const PER_CHECK_TIMEOUT_MS = 2000;
 const TOTAL_SWEEP_BUDGET_MS = 10_000;
 /** Max concurrent child processes. */
 const MAX_CONCURRENCY = 6;
+/** Worktree dirs older than this and already merged to main are stale. */
+const STALE_WORKTREE_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+const WORKTREE_SCAN_ROOTS = [
+    { relativePath: join('.claude', 'worktrees'), label: '.claude/worktrees', mode: 'direct' },
+    { relativePath: join('.ntm', 'worktrees'), label: '.ntm/worktrees', mode: 'gitfile' },
+    { relativePath: join('.pi-flywheel', 'worktrees'), label: '.pi-flywheel/worktrees', mode: 'direct' },
+];
 /** Canonical check names. Exported for test assertions. */
 export const DOCTOR_CHECK_NAMES = [
     'mcp_connectivity',
@@ -586,27 +593,28 @@ async function checkDistDrift(cwd, signal, now) {
         };
     }
 }
-/** 10. Orphaned worktrees under .claude/worktrees/. */
+/** 10. Orphaned/stale worktrees under managed worktree roots. */
 async function checkOrphanedWorktrees(exec, cwd, signal, timeout, now) {
     const start = now();
     if (signal.aborted)
         return abortedCheck('orphaned_worktrees');
     try {
-        const dir = resolveDoctorPath(cwd, join('.claude', 'worktrees'), '.claude/worktrees');
-        if (!dir.ok) {
-            return {
-                name: 'orphaned_worktrees',
-                severity: dir.reason === 'not_found' ? 'green' : 'yellow',
-                message: dir.reason === 'not_found'
-                    ? 'no .claude/worktrees/ directory'
-                    : `worktree probe refused path: ${dir.message}`,
-                durationMs: now() - start,
-            };
+        const candidates = [];
+        for (const root of WORKTREE_SCAN_ROOTS) {
+            const dir = resolveDoctorPath(cwd, root.relativePath, root.label);
+            if (!dir.ok) {
+                if (dir.reason === 'not_found')
+                    continue;
+                return {
+                    name: 'orphaned_worktrees',
+                    severity: 'yellow',
+                    message: `worktree probe refused path: ${dir.message}`,
+                    durationMs: now() - start,
+                };
+            }
+            candidates.push(...collectWorktreeCandidates(dir.realPath, root.label, root.mode));
         }
-        const entries = readdirSync(dir.realPath, { withFileTypes: true })
-            .filter((e) => e.isDirectory())
-            .map((e) => e.name);
-        if (entries.length === 0) {
+        if (candidates.length === 0) {
             return {
                 name: 'orphaned_worktrees',
                 severity: 'green',
@@ -628,28 +636,51 @@ async function checkOrphanedWorktrees(exec, cwd, signal, timeout, now) {
                 durationMs: now() - start,
             };
         }
-        const registered = new Set();
-        for (const line of res.stdout.split('\n')) {
-            if (line.startsWith('worktree ')) {
-                const path = line.slice('worktree '.length).trim();
-                const name = path.split('/').pop();
-                if (name)
-                    registered.add(name);
+        const registered = parseGitWorktreeList(res.stdout);
+        const orphans = [];
+        const stale = [];
+        const lockedStale = [];
+        const nowMs = now();
+        for (const candidate of candidates) {
+            const record = registered.get(canonicalPath(candidate.path));
+            if (!record) {
+                orphans.push(candidate.displayName);
+                continue;
+            }
+            if (!record.head || nowMs - candidate.mtimeMs < STALE_WORKTREE_AGE_MS)
+                continue;
+            const onMain = await isCommitOnMain(exec, cwd, signal, timeout, record.head);
+            if (!onMain)
+                continue;
+            if (record.locked) {
+                lockedStale.push(candidate.displayName);
+            }
+            else {
+                stale.push(candidate.displayName);
             }
         }
-        const orphans = entries.filter((name) => !registered.has(name));
-        if (orphans.length === 0) {
+        if (orphans.length === 0 && stale.length === 0 && lockedStale.length === 0) {
             return {
                 name: 'orphaned_worktrees',
                 severity: 'green',
-                message: `${entries.length} worktree${entries.length === 1 ? '' : 's'} all registered`,
+                message: `${candidates.length} worktree${candidates.length === 1 ? '' : 's'} all registered and none stale (>3d, HEAD on main)`,
                 durationMs: now() - start,
             };
+        }
+        const parts = [];
+        if (orphans.length > 0) {
+            parts.push(`${orphans.length} orphaned worktree dir${orphans.length === 1 ? '' : 's'}: ${orphans.join(', ')}`);
+        }
+        if (stale.length > 0) {
+            parts.push(`${stale.length} stale worktree dir${stale.length === 1 ? '' : 's'} (HEAD on main, untouched >3d): ${stale.join(', ')}`);
+        }
+        if (lockedStale.length > 0) {
+            parts.push(`${lockedStale.length} locked stale worktree dir${lockedStale.length === 1 ? '' : 's'} need${lockedStale.length === 1 ? 's' : ''} inspection: ${lockedStale.join(', ')}`);
         }
         return {
             name: 'orphaned_worktrees',
             severity: 'yellow',
-            message: `${orphans.length} orphaned worktree dir${orphans.length === 1 ? '' : 's'}: ${orphans.join(', ')}`,
+            message: parts.join('; '),
             hint: CLI_FAILURE_HINT,
             durationMs: now() - start,
         };
@@ -1111,7 +1142,6 @@ function extractRescueCandidateRows(parsed) {
     ];
     return sources.flatMap((value) => (Array.isArray(value) ? value : []));
 }
-// ─── Helpers ──────────────────────────────────────────────────────────────
 function errMsg(err) {
     return err instanceof Error ? err.message : String(err);
 }
@@ -1121,6 +1151,151 @@ function resolveDoctorPath(cwd, relativePath, label) {
         label,
         rootLabel: 'cwd',
     });
+}
+function collectWorktreeCandidates(rootPath, label, mode) {
+    return mode === 'gitfile'
+        ? collectGitfileWorktreeCandidates(rootPath, label)
+        : collectDirectWorktreeCandidates(rootPath, label);
+}
+function collectDirectWorktreeCandidates(rootPath, label) {
+    let entries;
+    try {
+        entries = readdirSync(rootPath, { withFileTypes: true });
+    }
+    catch {
+        return [];
+    }
+    const candidates = [];
+    for (const entry of entries) {
+        if (!entry.isDirectory())
+            continue;
+        const candidatePath = join(rootPath, entry.name);
+        const candidate = makeWorktreeCandidate(candidatePath, `${label}/${entry.name}`);
+        if (candidate)
+            candidates.push(candidate);
+    }
+    return candidates;
+}
+function collectGitfileWorktreeCandidates(rootPath, label) {
+    const candidates = [];
+    const stack = [
+        { path: rootPath, relParts: [], depth: 0 },
+    ];
+    while (stack.length > 0) {
+        const current = stack.pop();
+        if (current.relParts.length > 0 && hasGitMetadataFile(current.path)) {
+            const candidate = makeWorktreeCandidate(current.path, `${label}/${current.relParts.join('/')}`);
+            if (candidate)
+                candidates.push(candidate);
+            continue;
+        }
+        if (current.depth >= 3)
+            continue;
+        let entries;
+        try {
+            entries = readdirSync(current.path, { withFileTypes: true });
+        }
+        catch {
+            continue;
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory())
+                continue;
+            if (entry.name === 'node_modules' || entry.name === '.git')
+                continue;
+            stack.push({
+                path: join(current.path, entry.name),
+                relParts: [...current.relParts, entry.name],
+                depth: current.depth + 1,
+            });
+        }
+    }
+    return candidates;
+}
+function makeWorktreeCandidate(path, displayName) {
+    try {
+        return {
+            path,
+            displayName,
+            mtimeMs: statSync(path).mtimeMs,
+        };
+    }
+    catch {
+        return null;
+    }
+}
+function hasGitMetadataFile(path) {
+    try {
+        const stat = statSync(join(path, '.git'));
+        return stat.isFile() || stat.isDirectory();
+    }
+    catch {
+        return false;
+    }
+}
+function parseGitWorktreeList(raw) {
+    const records = new Map();
+    let current = null;
+    const finish = () => {
+        if (!current)
+            return;
+        records.set(canonicalPath(current.path), {
+            head: current.head,
+            branch: current.branch,
+            locked: current.locked,
+        });
+        current = null;
+    };
+    for (const line of raw.split('\n')) {
+        if (line.trim().length === 0) {
+            finish();
+            continue;
+        }
+        if (line.startsWith('worktree ')) {
+            finish();
+            current = {
+                path: line.slice('worktree '.length).trim(),
+                locked: false,
+            };
+            continue;
+        }
+        if (!current)
+            continue;
+        if (line.startsWith('HEAD ')) {
+            current.head = line.slice('HEAD '.length).trim();
+        }
+        else if (line.startsWith('branch ')) {
+            current.branch = line.slice('branch '.length).trim();
+        }
+        else if (line.startsWith('locked')) {
+            current.locked = true;
+        }
+    }
+    finish();
+    return records;
+}
+function canonicalPath(path) {
+    try {
+        return realpathSync(path);
+    }
+    catch {
+        return path;
+    }
+}
+async function isCommitOnMain(exec, cwd, signal, timeout, head) {
+    if (signal.aborted)
+        return false;
+    try {
+        const res = await exec('git', ['merge-base', '--is-ancestor', head, 'main'], {
+            timeout,
+            cwd,
+            signal,
+        });
+        return res.code === 0;
+    }
+    catch {
+        return false;
+    }
 }
 /**
  * Walk a directory and return the newest mtime (ms) across matching files.

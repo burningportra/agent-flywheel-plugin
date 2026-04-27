@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.7] - 2026-04-26
+
+Six reality-check beads from the v3.6.6 round closed in the same session — three rounds of right-sized auto-swarms (1 cc + 2 cod) executed `v8n`, `vc3`, `x6v`, `j0b`, `0e1`, `kxp`. All under macOS-portable build mutex shipped this round.
+
+### Added
+
+- `scripts/build-mutex.sh`: portable build mutex shell wrapper (bead `agent-flywheel-plugin-x6v`). Replaces the briefing's `flock` reference, which silently failed on macOS (no `flock` binary). The wrapper uses `mkdir`-based atomic locking with a cleanup trap, plus an `flock` fast-path when available. New regression test at `mcp-server/src/__tests__/build-mutex-script.test.ts` exercises it on Darwin. `skills/start/_inflight_prompt.md` operator-decoder table and `.pi-flywheel/inflight-briefing.md` template both updated to call the wrapper.
+- `mcp-server/src/tools/doctor.ts` orphan-worktree check (bead `agent-flywheel-plugin-vc3`): doctor now detects stale flywheel worktrees (HEAD on main + dir untouched >3 days) and surfaces them via `flywheel_doctor`. `/agent-flywheel:start` Step 0d shows an `AskUserQuestion` to clean them up at session start when any are detected.
+
+### Fixed
+
+- `mcp-server/scripts/tender-daemon.ts` (bead `agent-flywheel-plugin-v8n`): `--project` now defaults to `process.cwd()` when omitted, so the example invocation in `skills/start/_inflight_prompt.md` works without an explicit `--project=` flag. The example was also updated to include the flag for clarity. First spawn during today's session FAILED on the original example; this fix removes that footgun.
+- `mcp-server/src/tools/doctor.ts` `rescues_last_30d` probe (bead `agent-flywheel-plugin-kxp`): the v3.4.0 telemetry feature regressed when `cm` 0.2.3 changed its search syntax. Doctor now falls back to reading `.pi-flywheel/error-counts.json` directly when `cm` exec fails, and emits a `[INFO]` line instead of a `[WARN]` when the fallback succeeds. Regression test stubs `cm` to non-zero and verifies the local fallback. `npm test`: 91 files / 1329 tests / 1 skipped.
+
+### Changed
+
+- `skills/start/_inflight_prompt.md` STEP 0 + `.pi-flywheel/inflight-briefing.md` template (bead `agent-flywheel-plugin-0e1`): when `NTM_AGENT_NAME` is present in the pane environment, briefing's `macro_start_session` now reuses that name as `agent_name`, AND uses the same value for `AGENT_NAME` in git commands. This eliminates the dual-identity-per-pane audit-trail confusion (today's session produced `RoseFalcon`/`StormyAnchor`/`MistyLynx`/`SilverDune`/`EmeraldRiver`/`PearlForest` alongside the NTM-side `PearlDog`/`HazyFinch`/etc). Forward-compatible: NTM does not currently export `NTM_AGENT_NAME`, but the briefing handles its absence cleanly and the change activates as soon as NTM grows that surface.
+
+### Documentation
+
+- `AGENTS.md` Agent Mail section (bead `agent-flywheel-plugin-j0b`): documents the Agent Mail exclusive-reservation enforcement gap. Two distinct identities can hold concurrent `exclusive` reservations on the same path; ntm status renders both. Until the upstream fix lands in `mcp-agent-mail`, coordinators should treat `exclusive` reservations as advisory and rely on worktree isolation as the primary collision-prevention mechanism. Bead body links to the reproduction methodology.
+
+### Removed
+
+- 9 orphan worktrees + 9 stale branches from this session's two NTM swarms (rounds 2 and 3) plus prior session leftovers; cherry-picked all 6 closed-bead commits to main before deletion.
+
+### Reality-check round 2026-04-26 progress
+
+| Severity | Bead | Status this session | Cherry-picked |
+|----------|------|--------------------|---------------|
+| HIGH | `agent-flywheel-plugin-paj` | open (strategic-deferred) | — |
+| HIGH | `agent-flywheel-plugin-wcp` | open (strategic-deferred) | — |
+| HIGH | `agent-flywheel-plugin-x6v` | **closed** | `69891fd` |
+| MEDIUM | `agent-flywheel-plugin-v8n` | **closed** | `9b118ac` |
+| MEDIUM | `agent-flywheel-plugin-j0b` | **closed** | `5563a53` |
+| MEDIUM | `agent-flywheel-plugin-0e1` | **closed** | `ca4fe7b` |
+| MEDIUM | `agent-flywheel-plugin-vc3` | **closed** | `fad3eac` |
+| MEDIUM | `agent-flywheel-plugin-kxp` | **closed** | `9ae3613` |
+| LOW | `agent-flywheel-plugin-u3r` | open | — |
+| LOW | `agent-flywheel-plugin-pbz` | open | — |
+| LOW | `agent-flywheel-plugin-z60` | open | — |
+| LOW | `agent-flywheel-plugin-lbm` | open | — |
+| LOW | `agent-flywheel-plugin-2ph` | open | — |
+
+Strategic decisions on `paj` (parallelism architecture) and `wcp` (single-branch model) require human direction and remain deferred. The 5 LOW doc-cleanup beads (`u3r`/`pbz`/`z60`/`lbm`/`2ph`) parallelize well and can ship as a single round in a future session.
+
 ## [3.6.6] - 2026-04-26
 
 Lint-skill portability fix, NTM-pane preservation during self-review, PLACE001/SLASH001 prose cleanup, plus a 13-bead reality-check round filed under `reality-check-2026-04-26`.
