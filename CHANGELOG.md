@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.6] - 2026-04-26
+
+Lint-skill portability fix, NTM-pane preservation during self-review, PLACE001/SLASH001 prose cleanup, plus a 13-bead reality-check round filed under `reality-check-2026-04-26`.
+
+### Fixed
+
+- `mcp-server/scripts/lint-skill.ts` + `mcp-server/src/lint/baseline.ts`: baseline file paths now stored repo-relative instead of absolute, so a baseline generated in worktree A applies cleanly in worktree B or a fresh clone (bead `agent-flywheel-plugin-lss`). `generateBaseline` and `applyBaseline` accept an optional `repoRoot` and normalize entry/finding `file` fields to POSIX paths relative to it; the CLI threads `repoRoot` (already computed via `findRepoRoot`) into both calls. New regression test at `mcp-server/src/__tests__/lint/baseline-portable.test.ts` covers helper shape, unit-level cross-worktree match, the legacy-mismatch regression guard, end-to-end `--update-baseline` producing only repo-relative paths, baseline applying when CLI is invoked from a tmp working dir, and a checked-in-baseline guard (9 assertions). Regenerated `mcp-server/.lintskill-baseline.json` from 8 entries to 9: the prior baseline was generated against a stale SKILL.md from a deleted worktree and never actually demoted findings in the current tree.
+
+### Changed
+
+- `skills/start/SKILL.md`: PLACE001/SLASH001 prose cleanup (bead `agent-flywheel-plugin-ns2`). Stripped leftover placeholder text and corrected slash-command-form references to the canonical `/start` style. `npm run lint:skill` from a fresh worktree now produces zero live warnings; the 9 baseline-allow entries are documented decisions only.
+- `mcp-server/src/gates.ts` + `skills/start/_review.md`: `runGuidedGates`'s self-review action now explicitly preserves live NTM panes. The audit gets dispatched back to the same pane that authored the diff via `ntm --robot-send` (NOT `ntm send`, which CASS-deduplicates and silently aborts), and the gate forbids pane teardown for the duration. Adds `preserveNtmPanes: true` to the gate's details object so downstream consumers know not to issue `--hard-kill` / `--robot-restart-pane` against responsive panes during this round. Pane teardown belongs to wrap-up's cycle-reset, not self-review. Includes the recovery ladder for genuinely-dead panes: `--robot-is-working` returning `gone` AND Agent Mail silent >10 min AND stuck-pane ladder exhausted, then fall back to coordinator-side `git diff` review of that bead's files only, never touching other panes.
+
+### Reality-check round 2026-04-26 (13 follow-up beads filed)
+
+Post-wave reality-check pass (per the new v3.6.5 saturation gate) surfaced 13 vision-vs-reality gaps now tracked in `br` under label `reality-check-2026-04-26` (CASS entry `b-mogiksz8-0dbnbx`):
+
+| Severity | Bead | Topic |
+|----------|------|-------|
+| HIGH | `agent-flywheel-plugin-paj` | Reconcile README "CC Agent tool handles all parallelism" claim with SKILL.md ntm-routing |
+| HIGH | `agent-flywheel-plugin-wcp` | Reconcile complete-guide single-branch git model with `--worktrees` usage in SKILL.md |
+| HIGH | `agent-flywheel-plugin-x6v` | Briefing template build-mutex (`flock`) silently fails on macOS; agents currently improvise via Ruby File#flock or Perl fcntl |
+| MEDIUM | `agent-flywheel-plugin-v8n` | `_inflight_prompt.md` tender-daemon example missing required `--project=<cwd>` flag |
+| MEDIUM | `agent-flywheel-plugin-j0b` | Agent Mail allows two identities to hold the same exclusive file reservation (display bug or actual cross-identity conflict) |
+| MEDIUM | `agent-flywheel-plugin-0e1` | Each ntm pane registers two Agent Mail identities (NTM-side + in-pane `macro_start_session`); confusing audit trails |
+| MEDIUM | `agent-flywheel-plugin-vc3` | Auto-detect + offer cleanup of orphaned ntm worktrees at session start (today's session start found 6 orphans never cleaned) |
+| MEDIUM | `agent-flywheel-plugin-kxp` | Doctor `rescues_last_30d` check fails: cm search path broken; v3.4.0 telemetry feature regression |
+| LOW | `agent-flywheel-plugin-u3r` | ntm assignment tracker doesn't reflect bead state changes (Stats: Working 0 / Completed 0 even after closure) |
+| LOW | `agent-flywheel-plugin-pbz` | README Models table doesn't match SKILL.md actual model routing |
+| LOW | `agent-flywheel-plugin-z60` | `docs/gap-analysis-flywheel-guide.md` falsely advertises 100% coverage; stale snapshot needs refresh-or-archive |
+| LOW | `agent-flywheel-plugin-lbm` | Document that auto-swarm `/loop` coordinator pulse is session-only (CronCreate dies with Claude session) |
+| LOW | `agent-flywheel-plugin-2ph` | Verify `flywheel_emit_codex` tool exists or remove README claim |
+
+### Cleanup
+
+- Removed 9 orphan git worktrees (6 locked `.claude/worktrees/agent-*` from prior sessions with dead PIDs 85533/55915, 3 `.ntm/worktrees/agent-flywheel-plugin--inflight-2604/*` from today's just-merged session) and their 9 corresponding branches. Preserved one trivial `package-lock.json` delta from `agent-a0ee0425` as `stash@{0}` rather than discarding outright. Today's swarm landed 2 cherry-picked commits onto main (`458bba5` ns2, `844738c` lss) before branch deletion.
+
 ## [3.6.5] - 2026-04-26
 
 Reality-check becomes a first-class flywheel surface — top-level menu option, slash command, auto-trigger at saturation, pre-wrap gate, CASS-driven freshness suggestion, drift-check escalation path, dedicated saturation pipeline, mandatory bead tagging, doctor advisory.
