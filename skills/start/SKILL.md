@@ -189,6 +189,12 @@ If telemetry is unavailable or empty, skip this block silently. The telemetry is
 
 > **Suggestion:** It's been <X> sessions since the last reality-check pass — consider running `/agent-flywheel:flywheel-reality-check` (or pick "Reality check" from the menu) to verify the implementation still matches the project's vision before continuing.
 
+Placeholder meanings used in the Step 0c display examples:
+
+- **detail**: One concise failure reason returned by the doctor check.
+- **count**: The number of occurrences for the displayed telemetry code.
+- **X**: The number of prior flywheel sessions since the last reality-check pass.
+
 This is advisory only — never gate on it. If CASS is unavailable, skip silently.
 
 This gives the user (and the agent-flywheel) context from past runs before making any decisions.
@@ -206,7 +212,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
-    { label: "Deslop pass", description: "Apply /simplify-and-refactor-code-isomorphically with isomorphism proofs — single-pass, fresh-eyes, 5-Codex swarm, or iterative 10x. See skills/start/_deslop.md" },
+    { label: "Deslop pass", description: "Apply the deslop refactor skill with isomorphism proofs — single-pass, fresh-eyes, 5-Codex swarm, or iterative 10x. See skills/start/_deslop.md" },
     { label: "Other", description: "Work on beads manually, start a new goal, or research an external repo (sub-menu)" }
   ],
   multiSelect: false
@@ -221,7 +227,7 @@ AskUserQuestion(questions: [{
   header: "Start",
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm, 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
-    { label: "Reality check", description: "Step back: gap-check actual implementation against AGENTS.md/README.md/plan vision via /reality-check-for-project, convert gaps to beads, optionally run swarm. The 'come-to-Jesus' steering pass. See skills/start/_reality_check.md" },
+    { label: "Reality check", description: "Step back: gap-check actual implementation against AGENTS.md/README.md/plan vision using the reality-check skill, convert gaps to beads, optionally run swarm. The 'come-to-Jesus' steering pass. See skills/start/_reality_check.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "Other", description: "Deslop pass / new goal / research an external repo / audit (sub-menu)" }
   ],
@@ -238,7 +244,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities" },
     { label: "Set a goal", description: "I already know what I want to build" },
-    { label: "Deslop pass", description: "Apply /simplify-and-refactor-code-isomorphically — proof-obligated refactor pass. Meaningful even on a clean repo with no beads. See skills/start/_deslop.md" },
+    { label: "Deslop pass", description: "Apply the deslop refactor skill — proof-obligated refactor pass. Meaningful even on a clean repo with no beads. See skills/start/_deslop.md" },
     { label: "Other", description: "Research an external repo or run /flywheel-setup (sub-menu)" }
   ],
   multiSelect: false
@@ -448,7 +454,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Fast (default)", description: "flywheel_discover one-shot — 5-10 ranked ideas (Recommended for repeat cycles)" },
     { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30→5→15 pipeline — matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
-    { label: "Market-validated", description: "Run /idea-wizard, then /xf to check X/Twitter signal on each top idea" },
+    { label: "Market-validated", description: "Run /idea-wizard, then the X/Twitter signal check flow on each top idea" },
     { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation for second-opinion scoring across Codex/Gemini/Grok" }
   ],
   multiSelect: false
