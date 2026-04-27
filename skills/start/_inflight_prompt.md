@@ -49,6 +49,8 @@
 
 1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight). If misconfigured, surface fix-or-fallback `AskUserQuestion`.
 2. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture your registration token.
+   - When writing `.pi-flywheel/inflight-briefing.md` for spawned panes, its STEP 0 must tell agents to reuse NTM's pane identity: if `$NTM_AGENT_NAME` is set, call `macro_start_session(..., agent_name: "$NTM_AGENT_NAME")` and use that same value for `AGENT_NAME` in git commands.
+   - If `$NTM_AGENT_NAME` is absent, call `macro_start_session` without `agent_name`, capture the generated name, and note that audit trails will remain split until NTM exports the pane identity. Current `ntm spawn --help` exposes `NTM_SPAWN_*` metadata but no `NTM_AGENT_NAME` / `--agent-name` support.
 3. **CLI capability check** — `which claude codex` (gemini optional). If `codex` missing, the 4-cod lane collapses; surface a degraded-mode `AskUserQuestion` before proceeding (override default cc:cod ratio? abort? proceed degraded?).
 4. **Disk-space guard** — `df -h $PWD`. If <5GB free, run the stale-artifact cleanup BEFORE spawning so agents don't die mid-build.
 5. **Tender-daemon spawn** — start `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --project=$PWD --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &` (v3.6.0+; `--project` defaults to `process.cwd()` in v3.6.7+, but pass it explicitly for compatibility). Capture PID for shutdown.
