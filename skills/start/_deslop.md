@@ -100,8 +100,8 @@ ntm --robot-send="$SESSION" --panes=<N> --type=cod --msg='## STEP 0 — AGENT MA
 Invoke /simplify-and-refactor-code-isomorphically scoped to <area-assignment>/. Follow the skill verbatim — baseline, duplication map, candidates, isomorphism cards, narrow edits, ledger. Do NOT touch files outside your reserved area; coordinate via Agent Mail if you need to.
 
 ## STEP 2 — VALIDATE (project-level build mutex — see Step 4d)
-flock $PWD/.pi-flywheel/build.lock rch build  # waits for sibling agents
-flock $PWD/.pi-flywheel/build.lock rch test
+scripts/build-mutex.sh rch build  # waits for sibling agents
+scripts/build-mutex.sh rch test
 Both must pass. If a test that passed at baseline now fails, your edit broke isomorphism — REVERT, do not commit.
 
 ## STEP 3 — COMMIT (one lever per commit — skill rule)
@@ -120,13 +120,13 @@ sleep 30   # stagger
 
 ### 4d. Project-level build mutex (anti-thundering-herd)
 
-Five Codex agents finishing edits simultaneously and all running `rch build` at once will saturate disk + CPU and cause spurious failures. Enforce serialization via `flock`:
+Five Codex agents finishing edits simultaneously and all running `rch build` at once will saturate disk + CPU and cause spurious failures. Enforce serialization via the portable wrapper:
 
 ```bash
-flock $PWD/.pi-flywheel/build.lock rch build
+scripts/build-mutex.sh rch build
 ```
 
-Bake the `flock` wrapper into every per-pane prompt's STEP 2 (above). The lock file lives in `.pi-flywheel/` so it auto-cleans with `flywheel-cleanup`. If a pane waits >5 min on the lock, escalate via `/slb` two-person approval before killing.
+Bake `scripts/build-mutex.sh` into every per-pane prompt's STEP 2 (above). The wrapper uses an atomic `mkdir` lock under `.pi-flywheel/` and does not require the Linux-only `flock` binary. If a pane waits >5 min on the lock, escalate via `/slb` two-person approval before killing.
 
 ### 4e. Looper (5-min cadence per user spec)
 
@@ -193,5 +193,5 @@ The wrapper handles the loop, fresh-eyes review interleaving, and termination. P
 - Skill reports "no more candidates worth pursuing" → final fresh-eyes review (per §3) → transition to Step 9.5 wrap-up.
 - User interrupts → pause politely; do NOT force-stop swarm panes until user confirms via `AskUserQuestion`.
 - Baseline test broken AND no pane responsible (e.g. environmental) → halt all panes via `ntm --robot-send` shutdown_request → diagnose before resuming.
-- Build mutex deadlock (>5min wait) → escalate via `/slb` two-person approval before any kill.
+- Build mutex wait/deadlock (>5min wait) → escalate via `/slb` two-person approval before any kill.
 - New beads created from deslop findings → enqueue via `flywheel_advance_wave` (v3.6.0); they enter the standard `bv triage` queue.

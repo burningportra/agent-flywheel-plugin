@@ -115,7 +115,7 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 4. **Disk-space guard** — `df -h $PWD`. <5GB → run stale-artifact cleanup (`git clean -fdX -- '<build-output-dirs>'` only — never `-fdx`) before spawning.
 5. **Tender-daemon spawn** — `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &`. Capture PID for shutdown.
 6. **Bead snapshot** — `br list --json` and `br ready --json`. Identify any stalled in-progress beads up front and reopen per the rule in `_inflight_prompt.md` (in_progress + no commit in 30min + agent absent from `list_window_identities`).
-7. **Build mutex documented** — every impl agent's STEP 2 prompt must use `flock $PWD/.pi-flywheel/build.lock rch build` so the 6 panes don't compile simultaneously.
+7. **Build mutex documented** — every impl agent's STEP 2 prompt must use `scripts/build-mutex.sh rch build` so the 6 panes don't compile simultaneously. Do not use bare `flock`; macOS does not ship it.
 
 ### 4b. Spawn the swarm
 
@@ -138,4 +138,4 @@ Enter the canonical monitor loop documented in `_implement.md` Pre-loop / Implem
 - All gap-closure beads closed AND review converged → `kill -TERM $tender_daemon_pid`, leave NTM session alive, transition to Step 9.5 wrap-up via `_wrapup.md`.
 - User interrupts via the looper or directly → pause politely; do NOT force-stop agents until user confirms.
 - New gaps surfaced mid-execution (Phase 3 implementation reveals more aspirational-vs-real divergence) → run another `Skill: reality-check-for-project` Phase 5 (refinement round). Do NOT silently expand scope; surface via `AskUserQuestion` first.
-- Build mutex deadlock detected (`flock` waits >5min) → escalate via `/slb` two-person approval before killing.
+- Build mutex wait/deadlock detected (`scripts/build-mutex.sh` waits >5min) → escalate via `/slb` two-person approval before killing.

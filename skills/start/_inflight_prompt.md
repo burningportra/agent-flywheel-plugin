@@ -32,7 +32,7 @@
 | "swarm comprising 4 cod instances and 2 cc instances" | `ntm spawn $NTM_PROJECT --label inflight-resume --no-user --cc=2 --cod=4 --stagger-mode=smart`. Pane indices: cc=1,2  cod=3,4,5,6. Run NTM readiness gate (Step 7 Pre-flight in `_implement.md`) first. |
 | "clearing stale build artifacts" | Every 30 min OR when disk free <5GB, run `git clean -fdX -- '<build-output-dirs>'` (respects gitignore, only removes ignored build artifacts). Never run `git clean -fdx` (lowercase x) — that nukes untracked source files. |
 | "use rch for all builds/tests (see /rch)" | Invoke `/rch` skill for the canonical build-runner contract. Pass `rch build` / `rch test` to each impl agent's prompt as the validate-gate command instead of a stack-specific `npm run build` / `cargo test`. |
-| "avoid excessive build contention" | Implement a project-level build mutex: `flock .pi-flywheel/build.lock rch build` so only one agent compiles at a time. Document this in each impl agent's STEP 2 prompt. |
+| "avoid excessive build contention" | Implement a project-level build mutex via the portable wrapper: `scripts/build-mutex.sh rch build` and `scripts/build-mutex.sh rch test`. Document this in each impl agent's STEP 2 prompt. The wrapper uses atomic `mkdir` locking and does not require the Linux-only `flock` binary. |
 | "use your looper tool every 4 minutes" | `Skill: loop` with `4m` interval, prompt = "tail .pi-flywheel/tender-events.log; check inbox; nudge idle panes guided by `bv triage`; reopen stalled in_progress beads". |
 | "guided by bv's triage command" | `bv --robot-triage` (or `bv triage` if --robot-* unsupported) returns the prioritized open-bead list. Feed top-N beads to idle agents via `ntm --robot-send`. |
 | "stalled out" beads | Reopen rule: bead status=in_progress AND no commit referencing bead in last 30 min AND assigned-agent absent from `list_window_identities`. Run `br update <id> --status open` and re-dispatch. |
@@ -63,4 +63,4 @@ After all 7 pass, dispatch the swarm and enter the monitor loop documented in `_
 
 - All beads closed AND review converged AND no new beads from saturation skills → `kill -TERM $tender_daemon_pid`, leave NTM session alive, transition to Step 9.5 wrap-up via `_wrapup.md`.
 - User interrupts via the looper or directly → pause politely; do NOT force-stop agents until user confirms.
-- Build mutex deadlock detected (`flock` waits >5min) → escalate via `/slb` two-person approval before killing.
+- Build mutex wait/deadlock detected (`scripts/build-mutex.sh` warns after ~5min by default) → escalate via `/slb` two-person approval before killing.

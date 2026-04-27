@@ -62,7 +62,7 @@ The skills are independent — invoke them in parallel via the `Agent` tool with
 | Reasoning gaps | `/modes-of-reasoning-project-analysis` | Whole project | Logic gaps, undefined edge cases, unproven invariants |
 | Code shape | `/simplify-and-refactor-code-isomorphically` | Subsystems with high LOC-to-behavior ratio | Isomorphism-preserving simplifications |
 
-**Build mutex caveat:** if any tactical lens invokes `rch build` or `rch test` to validate findings, it MUST use `flock $PWD/.pi-flywheel/build.lock rch <cmd>` so the lenses don't fight each other or the still-live swarm.
+**Build mutex caveat:** if any tactical lens invokes `rch build` or `rch test` to validate findings, it MUST use `scripts/build-mutex.sh rch <cmd>` so the lenses don't fight each other or the still-live swarm. The wrapper uses a portable atomic `mkdir` lock and does not require `flock`.
 
 After all lenses return, the scratchpad has every finding deduplicated by `{skill, area}` key.
 
