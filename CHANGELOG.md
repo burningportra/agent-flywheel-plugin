@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.1] - 2026-04-27
+
+### Fixed
+
+- **doctor `--help` fallback for binaries without `--version` (a91647e).** `checkBinary` in `mcp-server/src/tools/doctor.ts` now retries with `--help` when `--version` exits non-zero before declaring the CLI yellow. Previously, working `ntm` installs surfaced as `yellow` (`ntm --version returned code 1`) because ntm doesn't expose `--version`. Two regression tests added covering the fallback-success and both-fail paths.
+- **synthesizer tags beads with `Template: <id>` for calibration (06984da, claude-orchestrator-1v5).** `mcp-server/src/br-parser.ts` now extracts `Template: <id>` (and optional `Template: <id>@<version>`) from bead descriptions into a first-class `template` field. `mcp-server/src/prompts.ts` and `deep-plan.ts` instruct synthesized bead bodies to include a machine-readable `Template:` line for template-backed beads. Closes the v3.7.0 known issue where `flywheel_calibrate` only saw `__untemplated__` rows because `br create` doesn't natively tag beads. Acceptance: next 10 flywheel-driven beads will populate per-template aggregates.
+
 ## [3.7.0] - 2026-04-27
 
 ### Added — Ergonomic four-pack (18 beads, 4 waves, all closed in one session)
