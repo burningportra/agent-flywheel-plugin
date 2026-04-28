@@ -215,7 +215,8 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Standard plan", description: "Single planning pass — faster" },
     { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality, takes longer (Recommended)" },
-    { label: "Triangulated plan", description: "Deep plan + /multi-model-triangulation second-opinion on the synthesis before alignment check — highest quality, longest" }
+    { label: "Triangulated plan", description: "Deep plan + /multi-model-triangulation second-opinion on the synthesis before alignment check — highest quality, longest" },
+    { label: "planning-workflow", description: "Invoke /planning-workflow — 4-5 sequential Codex review rounds via NTM + optional multi-model blending. Highest quality for major new features" }
   ],
   multiSelect: false
 }])
@@ -231,6 +232,18 @@ if (code === "deep_plan_all_failed") return await flywheel_plan({ cwd, mode: "st
 if (code === "empty_plan" || code === "parse_failure") return requestPlanRegeneration();
 if (code === "cli_not_available") return showInstallGuide(planResult.structuredContent?.data?.error?.hint);
 ```
+
+**planning-workflow**: Invoke `/planning-workflow` to get the exact review prompt, then run 4-5 sequential Codex review rounds via NTM. Each round spawns a fresh Codex pane with the current plan and the planning-workflow review prompt; after it completes, integrate its revisions with `ultrathink` before spawning the next round. Optionally follow with multi-model blending (additional NTM panes for Gemini/Pi perspectives). After all rounds converge:
+1. Write the final plan to `docs/plans/<date>-<goal-slug>-planning-workflow.md`.
+2. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-planning-workflow.md"`.
+3. Jump to Step 5.55 (Plan alignment check).
+
+NTM spawn pattern for each review round (sequential, not parallel — each round reads the plan revised by the prior round):
+```
+ntm spawn --type=cod --name="plan-review-round-<N>" \
+  --prompt="$(cat /planning-workflow-review-prompt.txt)\n\n<paste current plan content>"
+```
+Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes, then integrate its output before spawning round N+1. Stop at convergence (minor wording changes only) or after 5 rounds.
 
 **Deep plan**:
 
@@ -618,7 +631,23 @@ AskUserQuestion(questions: [{
   Route the answer back into Step 5.6.
 - **"Start over"** → delete the plan file, clear `state.planDocument`, return to Step 3.
 
-**Iterative deepening recipe** (only when "Refine plan" is chosen): spawn a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
+**Iterative deepening recipe** (only when "Refine plan" is chosen): first ask the user which refinement mode to use:
+
+```
+AskUserQuestion(questions: [{
+  question: "How should we refine the plan?",
+  header: "Refinement mode",
+  options: [
+    { label: "Internal (Opus agent)", description: "Spawn a fresh-context Opus agent to critique and revise in-process — fast, no external tools needed (Recommended)" },
+    { label: "planning-workflow (Codex via NTM)", description: "Invoke /planning-workflow — spawn a Codex review round via NTM with the exact review prompt, integrate revisions with ultrathink, repeat until convergence" }
+  ],
+  multiSelect: false
+}])
+```
+
+**planning-workflow (Codex via NTM)**: invoke `/planning-workflow` to get the exact review prompt. Spawn a Codex pane via NTM (`ntm spawn --type=cod`) with the current plan and the planning-workflow review prompt. Wait with `ntm --robot-wait`, then integrate the returned revisions in-place using `ultrathink` — be meticulous. Repeat until convergence (minor wording changes only) or 5 rounds. After integration, return to the "Plan ready" menu above.
+
+**Internal (Opus agent)**: spawn a NEW agent (fresh context, no memory of prior rounds) that reviews and proposes improvements:
 
 ```
 Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_background: true,

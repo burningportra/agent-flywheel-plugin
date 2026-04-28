@@ -473,7 +473,6 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Fast (default)", description: "flywheel_discover one-shot — 5-10 ranked ideas (Recommended for repeat cycles)" },
     { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30→5→15 pipeline — matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
-    { label: "Market-validated", description: "Run /idea-wizard, then the X/Twitter signal check flow on each top idea" },
     { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation for second-opinion scoring across Codex/Gemini/Grok" }
   ],
   multiSelect: false
@@ -481,8 +480,7 @@ AskUserQuestion(questions: [{
 ```
 
 - **Fast** → continue below with `flywheel_discover`.
-- **Deep** → invoke `/idea-wizard`, feed its output into `flywheel_discover`, then continue with the standard goal-selection menu.
-- **Market-validated** → run `/idea-wizard`, then for each top-3 idea invoke `/xf` with a query like `"<idea title>" site:x.com`. Annotate each candidate with real-world signal before showing the goal menu.
+- **Deep** → invoke `/idea-wizard` (run phases 2–4: generate 30→5→15 ideas + check overlaps vs open beads; skip phases 5–6 bead creation — the flywheel handles that in Steps 5.5–6), then present the top ideas as goal options and continue with the standard goal-selection menu.
 - **Triangulated** → run `/idea-wizard`, then `/multi-model-triangulation` on the top-5 list to surface which ideas all models agree on vs which are one-model bets.
 
 If `MCP_DEGRADED` is false, call `flywheel_discover` with `cwd`.

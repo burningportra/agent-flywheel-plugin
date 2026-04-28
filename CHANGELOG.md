@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.2] - 2026-04-28
+
+### Changed
+
+- **`/planning-workflow` integrated into `_planning.md` Step 5 planning modes.** Added `"planning-workflow"` as a fourth planning mode option (alongside Standard, Deep, Triangulated). When selected, invokes `/planning-workflow` for the exact review prompt, then runs 4-5 sequential Codex review rounds via NTM (`ntm spawn --type=cod`), integrating revisions with `ultrathink` between rounds. Also wired into the Step 5.6 "Refine plan" path as a Codex-via-NTM alternative to the internal Opus agent.
+- **`/idea-wizard` and `/xf` references corrected in `SKILL.md` Step 3.** Removed the erroneous "Market-validated" discovery depth option (which called `xf` with `site:x.com` — a web search operator invalid for the local archive CLI). Clarified the "Deep" path: runs idea-wizard phases 2–4 only (idea generation + overlap check); phases 5–6 (bead creation) are skipped since the flywheel handles that in Steps 5.5–6.
+
 ## [3.7.1] - 2026-04-27
 
 ### Fixed
