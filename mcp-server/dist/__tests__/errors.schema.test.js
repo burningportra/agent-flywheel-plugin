@@ -43,11 +43,19 @@ const V3_4_CODES = [
     // agent-flywheel-plugin-f0j — review-mode matrix
     'review_mode_gate_failed',
     'review_headless_findings',
+    // claude-orchestrator-22i — remediation/bundle/viewer
+    'remediation_unavailable',
+    'remediation_requires_confirm',
+    'remediation_failed',
+    'remediate_already_running',
+    'bundle_integrity_failed',
+    'bundle_stale',
+    'viewer_port_in_use',
 ];
 describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
-    it('contains exactly the 16 legacy + 13 new codes (29 total)', () => {
+    it('contains exactly the 16 legacy + 20 new codes (36 total)', () => {
         expect(FLYWHEEL_ERROR_CODES).toHaveLength(LEGACY_CODES.length + V3_4_CODES.length);
-        expect(FLYWHEEL_ERROR_CODES).toHaveLength(29);
+        expect(FLYWHEEL_ERROR_CODES).toHaveLength(36);
     });
     it('preserves legacy codes in order for v3.3.0 back-compat', () => {
         for (let i = 0; i < LEGACY_CODES.length; i++) {
