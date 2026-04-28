@@ -1,5 +1,6 @@
 import type {
   BeadTemplate,
+  EstimatedEffort,
   ExpandTemplateResult,
   TemplateExpansionInput,
 } from "./types.js";
@@ -133,6 +134,7 @@ const BUILTIN_TEMPLATES: BeadTemplate[] = [
     version: 1,
     label: "Add API endpoint",
     summary: "Create a new endpoint with validation, error handling, and tests.",
+    estimatedEffort: "M" as EstimatedEffort,
     descriptionTemplate: `Implement a new API endpoint for {{endpointPath}} in the {{moduleName}} area. Add request validation, success/error responses, and any supporting wiring needed so the endpoint behaves consistently with the existing API surface.
 
 Why this bead exists:
@@ -186,6 +188,7 @@ Acceptance criteria:
     version: 1,
     label: "Refactor module",
     summary: "Restructure an existing module while preserving behavior and tests.",
+    estimatedEffort: "L" as EstimatedEffort,
     descriptionTemplate: `Refactor the {{moduleName}} module to improve {{refactorGoal}} while preserving existing behavior. Reorganize the code, update any touched call sites, and keep the resulting structure easier for future agents to extend.
 
 Why this bead exists:
@@ -225,6 +228,7 @@ Acceptance criteria:
     version: 1,
     label: "Add tests",
     summary: "Add missing unit or integration coverage for existing behavior.",
+    estimatedEffort: "M" as EstimatedEffort,
     descriptionTemplate: `Add automated tests for {{featureName}} so the current behavior is covered before future changes land. Focus on the highest-risk paths, document the expected behavior in assertions, and avoid relying on manual verification.
 
 Why this bead exists:
@@ -259,6 +263,7 @@ Acceptance criteria:
     version: 1,
     label: "Fix bug",
     summary: "Diagnose and fix a specific defect with a regression test.",
+    estimatedEffort: "S" as EstimatedEffort,
     descriptionTemplate: `Fix the {{bugSummary}} bug in {{moduleName}}. Write a regression test first, then apply the minimal code change that resolves the defect without breaking existing behavior.
 
 Why this bead exists:
@@ -294,6 +299,7 @@ Acceptance criteria:
     version: 1,
     label: "Add documentation",
     summary: "Write or update documentation for a feature or API.",
+    estimatedEffort: "S" as EstimatedEffort,
     descriptionTemplate: `Write documentation for {{docTopic}} targeting {{targetAudience}}. Cross-reference the source implementation to ensure accuracy, include at least one usage example, and avoid assuming context that is not documented elsewhere.
 
 Why this bead exists:
@@ -328,6 +334,7 @@ Acceptance criteria:
     version: 1,
     label: "Add integration",
     summary: "Connect two subsystems or services with error handling at the boundary.",
+    estimatedEffort: "L" as EstimatedEffort,
     descriptionTemplate: `Integrate {{sourceSystem}} with {{targetSystem}} to {{integrationPurpose}}. Implement the connection following the agreed interface contract, add error handling at the integration boundary, and cover the integration with automated tests.
 
 Why this bead exists:
@@ -364,6 +371,7 @@ Acceptance criteria:
     version: 1,
     label: "Improve performance",
     summary: "Optimize a slow path with measurable before/after evidence.",
+    estimatedEffort: "L" as EstimatedEffort,
     descriptionTemplate: `Optimize {{targetArea}} to meet a measurable performance target. The current baseline is: {{currentBehavior}}. The goal is to {{performanceGoal}} by applying the approach described below while preserving all existing behavior.
 
 Why this bead exists:
@@ -401,6 +409,7 @@ Acceptance criteria:
     version: 1,
     label: "Update configuration",
     summary: "Add or modify configuration with validation and migration notes.",
+    estimatedEffort: "S" as EstimatedEffort,
     descriptionTemplate: `Update the {{configArea}} configuration in {{configFile}} to {{changeReason}}. Add input validation for the new values, document migration steps, and ensure existing environments are not broken by the change.
 
 Why this bead exists:
@@ -441,6 +450,7 @@ Acceptance criteria:
     version: 1,
     label: "Foundation with fresh-eyes gate",
     summary: "Foundation bead guarded by a 5-reviewer cold-read before dependents may run.",
+    estimatedEffort: "L" as EstimatedEffort,
     descriptionTemplate: `{{TITLE}}
 
 Scope:
@@ -482,6 +492,7 @@ Test plan:
     version: 1,
     label: "Test coverage",
     summary: "Companion test bead that covers an adjacent implementation bead's public surface.",
+    estimatedEffort: "M" as EstimatedEffort,
     descriptionTemplate: `{{TITLE}}
 
 Scope:
@@ -522,6 +533,7 @@ Test plan:
     version: 1,
     label: "Documentation update",
     summary: "README / AGENTS.md / SKILL.md update accompanying behavior changes.",
+    estimatedEffort: "S" as EstimatedEffort,
     descriptionTemplate: `{{TITLE}}
 
 Scope:
@@ -562,6 +574,7 @@ Test plan:
     version: 1,
     label: "Refactor — carve module",
     summary: "Carve a large file into smaller domain submodules without behavior change.",
+    estimatedEffort: "L" as EstimatedEffort,
     descriptionTemplate: `{{TITLE}}
 
 Scope:
@@ -604,6 +617,7 @@ Test plan:
     version: 1,
     label: "Inter-wave fixup",
     summary: "Small fixup between waves once fresh-eyes review surfaces a P1.",
+    estimatedEffort: "S" as EstimatedEffort,
     descriptionTemplate: `{{TITLE}}
 
 Scope:
@@ -643,6 +657,7 @@ Test plan:
     version: 1,
     label: "New MCP tool",
     summary: "Register a new flywheel_* MCP tool end-to-end (schema, handler, tests, docs).",
+    estimatedEffort: "M" as EstimatedEffort,
     descriptionTemplate: `{{TITLE}}
 
 Scope:
@@ -687,6 +702,7 @@ Test plan:
     version: 1,
     label: "New skill",
     summary: "Add a new skills/<name>/SKILL.md plus matching commands/<name>.md.",
+    estimatedEffort: "M" as EstimatedEffort,
     descriptionTemplate: `{{TITLE}}
 
 Scope:
