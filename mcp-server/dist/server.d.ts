@@ -51,6 +51,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -166,6 +167,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -203,6 +205,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -248,6 +251,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -290,6 +294,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -340,6 +345,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -381,6 +387,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -425,6 +432,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -476,6 +484,7 @@ export declare const TOOLS: ({
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -510,6 +519,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -548,6 +558,48 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            sinceDays: {
+                type: string;
+                description: string;
+                minimum: number;
+                maximum: number;
+                default: number;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
         };
@@ -597,6 +649,7 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            sinceDays?: undefined;
         };
         required: string[];
     };

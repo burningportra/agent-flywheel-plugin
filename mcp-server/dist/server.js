@@ -18,6 +18,7 @@ import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
 import { runAdvanceWave } from './tools/advance-wave.js';
 import { runRemediate, RemediateInputSchema } from './tools/remediate.js';
+import { runCalibrate, CalibrateInputSchema } from './tools/calibrate.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -269,6 +270,24 @@ const PRIMARY_TOOLS = [
         },
     },
     {
+        name: 'flywheel_calibrate',
+        description: 'Aggregate closed-bead actual vs estimated durations per template. Prefers git first-commit ts as work-start proxy (capped at 200 git calls/run; falls back to created_ts when over cap or no commit). Drops samples with clock-skew. Writes report to .pi-flywheel/calibration.json and returns it.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                sinceDays: {
+                    type: 'number',
+                    description: 'Filter to beads created within this many days (1-365, default 90)',
+                    minimum: 1,
+                    maximum: 365,
+                    default: 90,
+                },
+            },
+            required: ['cwd'],
+        },
+    },
+    {
         name: 'flywheel_remediate',
         description: 'Apply the canonical fix for a failing doctor check. Default mode is dry_run; pass mode:\'execute\' + autoConfirm:true to actually mutate. Per-check mutex prevents concurrent calls.',
         inputSchema: {
@@ -355,6 +374,14 @@ const EXTENSION_RUNNERS = {
     orch_remediate: async (ctx, args) => {
         const parsed = RemediateInputSchema.parse(args);
         return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
+    },
+    flywheel_calibrate: async (ctx, args) => {
+        const parsed = CalibrateInputSchema.parse({ ...args, cwd: ctx.cwd });
+        return runCalibrate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
+    },
+    orch_calibrate: async (ctx, args) => {
+        const parsed = CalibrateInputSchema.parse({ ...args, cwd: ctx.cwd });
+        return runCalibrate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
     },
 };
 function isKnownToolName(name) {
