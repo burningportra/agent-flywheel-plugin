@@ -14,7 +14,16 @@ export declare function shouldUseSectionWise(repoFileCount: number): boolean;
 export interface SynthesizeOptions {
     /** Force whole-file fallback concatenation instead of section-wise merge. */
     whole?: boolean;
+    /** Working directory used to locate .pi-flywheel/calibration.json for prompt injection. */
+    cwd?: string;
 }
+/**
+ * Attempt to read calibration.json and build a "## Past calibration" prompt section.
+ *
+ * Returns an empty string when the file is missing, malformed, or has no
+ * high-confidence rows. Never throws.
+ */
+export declare function buildCalibrationPromptSection(cwd: string): Promise<string>;
 /**
  * Prepare a merged plan from multiple planner outputs.
  *

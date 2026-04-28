@@ -12,6 +12,8 @@
 //        - Otherwise → emit a "Synthesis required" block enumerating variants.
 //   4. Fallback to whole-file concatenation if requested or any plan lacks
 //      `##` structure.
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 /** Threshold above which section-wise synthesis is worth its overhead. */
 const SECTION_WISE_FILE_THRESHOLD = 500;
 /**
@@ -59,6 +61,47 @@ export function shouldUseSectionWise(repoFileCount) {
     return repoFileCount >= SECTION_WISE_FILE_THRESHOLD;
 }
 /**
+ * Attempt to read calibration.json and build a "## Past calibration" prompt section.
+ *
+ * Returns an empty string when the file is missing, malformed, or has no
+ * high-confidence rows. Never throws.
+ */
+export async function buildCalibrationPromptSection(cwd) {
+    try {
+        const filePath = join(cwd, ".pi-flywheel", "calibration.json");
+        const raw = await readFile(filePath, "utf8");
+        const report = JSON.parse(raw);
+        const confident = report.rows.filter((r) => !r.lowConfidence);
+        if (confident.length === 0)
+            return "";
+        const top5 = confident
+            .slice()
+            .sort((a, b) => b.sampleCount - a.sampleCount)
+            .slice(0, 5);
+        const header = "| template | estimated | actual mean | ratio | n |";
+        const divider = "|---|---|---|---|---|";
+        const dataRows = top5.map((r) => {
+            const estimated = r.estimatedEffort ?? "unknown";
+            const actualMin = Math.round(r.meanMinutes);
+            const ratioStr = `${r.ratio.toFixed(1)}×`;
+            return `| ${r.templateId} | ${estimated} (${r.estimatedMinutes} min) | ${actualMin} min | ${ratioStr} | ${r.sampleCount} |`;
+        });
+        const lines = [
+            "## Past calibration (from prior closed beads)",
+            "",
+            header,
+            divider,
+            ...dataRows,
+            "",
+            "**Note**: When ratio > 1.3×, the synthesizer should consider upgrading effort estimates on similar new beads (e.g. M → L). Do NOT mutate existing bead `estimatedEffort` values — only inform new estimates.",
+        ];
+        return lines.join("\n");
+    }
+    catch {
+        return "";
+    }
+}
+/**
  * Prepare a merged plan from multiple planner outputs.
  *
  * This function is synchronous at heart but returns a Promise so the signature
@@ -69,13 +112,17 @@ export async function synthesizePlans(plans, opts = {}) {
     if (plans.length === 0) {
         return "# Synthesized Plan\n\n(No planner outputs provided.)\n";
     }
+    const calibrationSection = opts.cwd
+        ? await buildCalibrationPromptSection(opts.cwd)
+        : "";
     const lacksStructure = plans.some((p) => !hasTopLevelSections(p.plan));
     if (opts.whole || lacksStructure) {
-        return renderWholeFallback(plans, {
+        const base = renderWholeFallback(plans, {
             reason: opts.whole
                 ? "whole mode requested"
                 : "one or more plans lack `##` section structure",
         });
+        return calibrationSection ? `${calibrationSection}\n\n${base}` : base;
     }
     // Build per-plan section maps and the union of section titles in first-seen order.
     const splits = plans.map((p) => ({
@@ -127,7 +174,8 @@ export async function synthesizePlans(plans, opts = {}) {
             chunks.push("```\n");
         }
     }
-    return chunks.join("\n");
+    const result = chunks.join("\n");
+    return calibrationSection ? `${calibrationSection}\n\n${result}` : result;
 }
 function hasTopLevelSections(markdown) {
     return /^##\s+\S/m.test(markdown);

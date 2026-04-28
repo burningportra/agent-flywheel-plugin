@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { splitBySections, synthesizePlans, shouldUseSectionWise, } from "../deep-plan-synthesis.js";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { splitBySections, synthesizePlans, shouldUseSectionWise, buildCalibrationPromptSection, } from "../deep-plan-synthesis.js";
 function mkPlan(name, plan, model = "sonnet") {
     return { name, model, plan, exitCode: 0, elapsed: 1 };
 }
@@ -82,6 +86,84 @@ describe("shouldUseSectionWise", () => {
     it("returns true at or above 500 files", () => {
         expect(shouldUseSectionWise(500)).toBe(true);
         expect(shouldUseSectionWise(10_000)).toBe(true);
+    });
+});
+describe("buildCalibrationPromptSection", () => {
+    function makeTmpCwd() {
+        return mkdtempSync(join(tmpdir(), "flywheel-test-"));
+    }
+    function writeCalibration(cwd, report) {
+        const dir = join(cwd, ".pi-flywheel");
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "calibration.json"), JSON.stringify(report), "utf8");
+    }
+    function makeReport(overrides = {}) {
+        return {
+            cwd: "/tmp/test",
+            sinceDays: 90,
+            generatedAt: new Date().toISOString(),
+            totalBeadsConsidered: 10,
+            droppedBeads: 0,
+            rows: [],
+            untemplated: { count: 0 },
+            ...overrides,
+        };
+    }
+    it("splices calibration into prompt when calibration.json has rows with lowConfidence:false", async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const report = makeReport({
+                rows: [
+                    {
+                        templateId: "add-tool",
+                        templateVersion: 1,
+                        estimatedEffort: "M",
+                        estimatedMinutes: 90,
+                        sampleCount: 12,
+                        meanMinutes: 126,
+                        medianMinutes: 110,
+                        p95Minutes: 200,
+                        ratio: 1.4,
+                        lowConfidence: false,
+                        proxyStartedCount: 2,
+                    },
+                    {
+                        templateId: "fix-bug",
+                        templateVersion: 1,
+                        estimatedEffort: "S",
+                        estimatedMinutes: 30,
+                        sampleCount: 3,
+                        meanMinutes: 25,
+                        medianMinutes: 22,
+                        p95Minutes: 45,
+                        ratio: 0.83,
+                        lowConfidence: true,
+                        proxyStartedCount: 0,
+                    },
+                ],
+            });
+            writeCalibration(cwd, report);
+            const section = await buildCalibrationPromptSection(cwd);
+            expect(section).toContain("## Past calibration");
+            expect(section).toContain("add-tool");
+            expect(section).toContain("1.4×");
+            expect(section).toContain("ratio > 1.3×");
+            // low-confidence row excluded
+            expect(section).not.toContain("fix-bug");
+        }
+        finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+    it("skips splice when calibration file is missing", async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const section = await buildCalibrationPromptSection(cwd);
+            expect(section).toBe("");
+        }
+        finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 });
 //# sourceMappingURL=deep-plan-synthesis.test.js.map
