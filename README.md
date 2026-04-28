@@ -94,13 +94,13 @@ claude --plugin-dir .
 │
 └── mcp-server/
      ├── src/                 ← TypeScript MCP server
-     │    ├── server.ts       ← 8 MCP tools registered
+     │    ├── server.ts       ← 13 MCP tools registered (was 10 in v3.6; +flywheel_remediate, +flywheel_calibrate, +flywheel_get_skill in v3.7)
      │    ├── state.ts        ← Load/save OrchestratorState via checkpoint
      │    ├── checkpoint.ts   ← Atomic disk persistence
      │    ├── beads.ts        ← br CLI wrapper + verifyBeadsClosed reconciliation
      │    ├── agent-mail.ts   ← agent-mail JSON-RPC client + checkAgentMailHealth()
      │    ├── exec.ts         ← ExecFn type; shell exec with timeout + AbortSignal
-     │    ├── errors.ts       ← FlywheelErrorCode enum (26 codes) + Zod schemas + FlywheelError class + classifyExecError + sanitizeCause
+     │    ├── errors.ts       ← FlywheelErrorCode enum (36 codes; +remediation_unavailable, remediation_requires_confirm, remediation_failed, remediate_already_running, bundle_integrity_failed, bundle_stale, viewer_port_in_use in v3.7) + Zod schemas + FlywheelError class + classifyExecError + sanitizeCause
      │    ├── mutex.ts        ← In-process per-bead/per-cwd mutex (concurrent_write code)
      │    ├── logger.ts       ← Structured stderr logger (createLogger)
      │    ├── profiler.ts     ← Repo profiler; collects file tree, commits, TODOs
@@ -109,15 +109,26 @@ claude --plugin-dir .
      │    ├── tender.ts       ← SwarmTender: agent health monitoring, nudge budget (maxNudgesPerPoll), auto-escalation
      │    ├── episodic-memory.ts ← draftPostmortem(): synthesizes session-learnings from checkpoint + git + agent-mail + telemetry
      │    ├── plan-simulation.ts ← hotspot matrix: per-file contention scoring across wave beads, swarm vs serial recommendation
-     │    ├── bead-templates.ts  ← 16 bead templates with @version pinning; plumbed through deep-plan synthesizer
+     │    ├── bead-templates.ts  ← 16 bead templates with @version pinning + estimatedEffort tier (S/M/L/XL → 30/90/240/720 min); plumbed through deep-plan synthesizer
+     │    ├── bead-graph.ts   ← pure data layer: buildBeadGraph + Tarjan SCC for cycle detection (used by bead-viewer)
+     │    ├── br-parser.ts    ← shared zod-validated parser for `br list --json` (used by calibrate + bead-viewer)
+     │    ├── calibration-store.ts ← pure stats fns: computeDurationStats (mean/median/p95) — handles empty/single/large
+     │    ├── skills-bundle.ts  ← bundle loader with 4-layer drift defense (build-time check + runtime manifestSha256 + per-entry srcSha256 stale-warn + FW_SKILL_BUNDLE=off bypass)
      │    ├── telemetry.ts    ← FlywheelErrorCode event aggregator; bounded ring buffer + atomic spool to .pi-flywheel/error-counts.json
      │    ├── lint/           ← SKILL.md linter (parser, 6 rules incl. errorCodeReferences, 4 reporters, baseline + manifest)
      │    └── tools/          ← flywheel_profile, flywheel_discover, flywheel_select,
      │                            flywheel_plan, flywheel_approve_beads, flywheel_review,
      │                            flywheel_verify_beads, flywheel_memory,
-     │                            flywheel_doctor (11-check toolchain diagnostic)
+     │                            flywheel_doctor (11-check toolchain diagnostic),
+     │                            flywheel_remediate (one-tap fix per failing doctor check, 5 handlers wired),
+     │                            flywheel_calibrate (per-template actual-vs-estimated duration aggregator),
+     │                            flywheel_get_skill (serves bundled skill markdown with disk fallback),
+     │                            tools/remediations/ (5 per-handler files: dist_drift, mcp_connectivity, agent_mail_liveness, orphaned_worktrees, checkpoint_validity)
      └── scripts/
-          └── lint-skill.ts   ← standalone CLI; CI runs compiled dist/scripts/lint-skill.js
+          ├── lint-skill.ts   ← standalone CLI; CI runs compiled dist/scripts/lint-skill.js
+          ├── build-skills-bundle.ts ← walks skills/ + skills/start/_*.md, emits dist/skills.bundle.json (47 entries, content-hashed)
+          ├── check-skills-bundle.ts ← CI gate: re-walks source, fails if srcSha256 doesn't match bundle entry
+          └── bead-viewer.ts  ← read-only HTTP server (127.0.0.1:0 default) renders Cytoscape graph of `br list --json` deps; npm run bead-viewer
 ```
 
 **Key design decisions:**
@@ -130,6 +141,7 @@ claude --plugin-dir .
 - **SwarmTender auto-escalation** - `SwarmTender` monitors agent health and automatically nudges stuck agents (up to `maxNudgesPerPoll` per poll cycle, default 3), then kills and emits `onSwarmComplete` after `killWaitMs`. Opt-in via `flywheelAgentName`; backward compatible when unset.
 - **Structured error contracts** - every `flywheel_*` tool returns errors as tagged `FlywheelErrorCode` codes (26 codes: `missing_prerequisite`, `invalid_input`, `cli_failure`, `exec_timeout`, `concurrent_write`, `empty_plan`, etc.) inside a Zod-validated envelope. The SKILL.md orchestrator branches on `result.data.error.code` instead of string-matching. `FlywheelError` class threads tagged errors through deep helper frames; `classifyExecError` maps raw exec rejections to the right code. `sanitizeCause` redacts absolute paths before embedding in MCP error content.
 - **v3.4.0 observability bundle** - `flywheel_doctor` MCP tool diagnoses 11 toolchain dependencies in one sweep. `plan-simulation.ts` emits a hotspot matrix so waves auto-route to swarm vs coordinator-serial. `episodic-memory.ts`'s `draftPostmortem()` synthesizes a session-learnings entry from checkpoint, git log, agent-mail, and error-code telemetry. `telemetry.ts` aggregates `FlywheelErrorCode` events across sessions via a bounded spool at `.pi-flywheel/error-counts.json`. Bead templates with `@version` pinning (`bead-templates.ts`) standardize bead bodies across deep-plan synthesizer output.
+- **v3.7.0 ergonomic four-pack** - (1) `flywheel_remediate({ checkName })` MCP tool with `assertExhaustive` registry; 5 per-handler files ship the canonical fix for each automatable doctor check (dist_drift, mcp_connectivity, agent_mail_liveness, orphaned_worktrees, checkpoint_validity); per-check mutex prevents concurrent runs; every handler's `verifyProbe` re-runs the original doctor check after apply so `verifiedGreen: false` fires even on shell-exit-zero. `skills/flywheel-doctor/SKILL.md` renders the "Fix it now?" AskUserQuestion inline next to each failing check row. (2) `flywheel_calibrate` aggregates closed-bead actual vs estimated durations per template, prefers `git log --grep=<bead-id>` first-commit ts as `started_ts` proxy (capped 200/run), drops clock-skew samples; `/flywheel-status` renders the per-template ratio table with ▲/▼ markers; deep-plan synthesizer prompt splices the top-5 high-confidence rows so future planners self-calibrate. (3) `npm run build` emits `mcp-server/dist/skills.bundle.json` (47 entries, content-hashed); `flywheel_get_skill({ name })` MCP tool serves the bundle with 4-layer drift defense (CI build-time check + runtime `manifestSha256` integrity + per-entry `srcSha256` stale-warn + `FW_SKILL_BUNDLE=off` env-bypass). (4) `npm run bead-viewer` opens a read-only HTTP server on `127.0.0.1:0` rendering a Cytoscape graph of `br list --json` deps with cycle highlighting + click-to-detail; hard loopback bind, conn/rate caps (16 conn, 30 req/s/IP, 2000 nodes, 60s timeout), parent-pid watch, JSON-only bead bodies (XSS-safe).
 
 ## Tool name deprecation
 

@@ -41,6 +41,13 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 - **`br`** — bead tracker CLI: create, list, update status, approve beads.
 - **`bv`** — bead visualizer: renders bead status dashboards, dependency graphs.
 - **`ccc`** — optional codebase indexing/search tool. Not required; the system falls back gracefully if unavailable.
+- **`npm run bead-viewer`** — (v3.7.0+) read-only browser-based bead-graph visualizer with cycle highlighting + click-to-detail. Hard-bound to `127.0.0.1`. Serves `br list --json` + `br dep list --json` as a Cytoscape graph. Use when `bv` terminal output is hard to scan (>50 nodes).
+
+## MCP tools added in v3.7.0
+
+- **`flywheel_remediate({ checkName, autoConfirm?, mode? })`** — applies the canonical fix for a failing doctor check. Default mode is `dry_run`; pass `mode: 'execute'` + `autoConfirm: true` to actually mutate. Per-check mutex prevents concurrent calls. Five handlers ship: `dist_drift`, `mcp_connectivity`, `agent_mail_liveness`, `orphaned_worktrees`, `checkpoint_validity`. Other doctor checks return `remediation_unavailable` (manual hint surfaced by SKILL.md). Result envelope includes `verifiedGreen: boolean` (re-runs the original probe after apply).
+- **`flywheel_calibrate({ cwd, sinceDays? })`** — aggregates `br list --json --status closed` rows by template, computes mean/median/p95 actual vs `EFFORT_TO_MINUTES[template.estimatedEffort]`. Prefers `git log --grep=<bead-id>` first-commit ts as `started_ts` proxy (capped 200/run). Drops clock-skew samples. Writes report to `.pi-flywheel/calibration.json`. **Note (v3.7.0):** `br create` doesn't yet tag beads with their template id, so the report is currently `__untemplated__`-only. See `claude-orchestrator-1v5` for the fix.
+- **`flywheel_get_skill({ name: "<plugin>:<skill>" })`** — serves a bundled skill markdown body in one MCP call. Bundle at `mcp-server/dist/skills.bundle.json` (built by `npm run build`). 4-layer drift defense: build-time `check:skills-bundle` CI gate, runtime `manifestSha256` integrity check (falls back to disk on mismatch), per-entry `srcSha256` stale-warn, `FW_SKILL_BUNDLE=off` env-bypass for contributors editing skills live. Returns `{ name, frontmatter, body, source: 'bundle' | 'disk', staleWarn? }`.
 
 ## NTM is mandatory for all spawned work
 
