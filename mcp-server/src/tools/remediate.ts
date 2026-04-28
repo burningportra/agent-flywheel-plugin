@@ -4,6 +4,11 @@ import { DOCTOR_CHECK_NAMES, type DoctorCheckName } from './doctor.js';
 import { makeFlywheelErrorResult, sanitizeCause, classifyExecError } from '../errors.js';
 import { acquireRemediateLock, releaseRemediateLock } from '../mutex.js';
 import type { FlywheelToolName } from '../types.js';
+import { distDriftHandler } from './remediations/dist_drift.js';
+import { mcpConnectivityHandler } from './remediations/mcp_connectivity.js';
+import { agentMailLivenessHandler } from './remediations/agent_mail_liveness.js';
+import { orphanedWorktreesHandler } from './remediations/orphaned_worktrees.js';
+import { checkpointValidityHandler } from './remediations/checkpoint_validity.js';
 
 const OUTPUT_CAP_BYTES = 4 * 1024;
 
@@ -58,17 +63,17 @@ export interface RemediationHandler {
  * adding a new check name to DOCTOR_CHECK_NAMES forces a TS error here.
  */
 export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | null> = {
-  mcp_connectivity: null,
-  agent_mail_liveness: null,
+  mcp_connectivity: mcpConnectivityHandler,
+  agent_mail_liveness: agentMailLivenessHandler,
   br_binary: null,
   bv_binary: null,
   ntm_binary: null,
   cm_binary: null,
   node_version: null,
   git_status: null,
-  dist_drift: null,
-  orphaned_worktrees: null,
-  checkpoint_validity: null,
+  dist_drift: distDriftHandler,
+  orphaned_worktrees: orphanedWorktreesHandler,
+  checkpoint_validity: checkpointValidityHandler,
   claude_cli: null,
   codex_cli: null,
   gemini_cli: null,

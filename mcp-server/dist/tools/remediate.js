@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { DOCTOR_CHECK_NAMES } from './doctor.js';
 import { makeFlywheelErrorResult, sanitizeCause, classifyExecError } from '../errors.js';
 import { acquireRemediateLock, releaseRemediateLock } from '../mutex.js';
+import { distDriftHandler } from './remediations/dist_drift.js';
+import { mcpConnectivityHandler } from './remediations/mcp_connectivity.js';
+import { agentMailLivenessHandler } from './remediations/agent_mail_liveness.js';
+import { orphanedWorktreesHandler } from './remediations/orphaned_worktrees.js';
+import { checkpointValidityHandler } from './remediations/checkpoint_validity.js';
 const OUTPUT_CAP_BYTES = 4 * 1024;
 export const RemediateInputSchema = z.object({
     cwd: z.string().min(1),
@@ -18,17 +23,17 @@ export const RemediateInputSchema = z.object({
  * adding a new check name to DOCTOR_CHECK_NAMES forces a TS error here.
  */
 export const REMEDIATION_REGISTRY = {
-    mcp_connectivity: null,
-    agent_mail_liveness: null,
+    mcp_connectivity: mcpConnectivityHandler,
+    agent_mail_liveness: agentMailLivenessHandler,
     br_binary: null,
     bv_binary: null,
     ntm_binary: null,
     cm_binary: null,
     node_version: null,
     git_status: null,
-    dist_drift: null,
-    orphaned_worktrees: null,
-    checkpoint_validity: null,
+    dist_drift: distDriftHandler,
+    orphaned_worktrees: orphanedWorktreesHandler,
+    checkpoint_validity: checkpointValidityHandler,
     claude_cli: null,
     codex_cli: null,
     gemini_cli: null,
