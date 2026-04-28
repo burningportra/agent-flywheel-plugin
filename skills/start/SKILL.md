@@ -32,6 +32,8 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 > | Wrap-up & post-flywheel | `_wrapup.md` | 9.5, 10, 11, 12 |
 >
 > Read the file **before** executing that phase. Do NOT guess or improvise the instructions — the sub-files contain critical gates, edge-case handling, and AskUserQuestion templates.
+>
+> **Faster path (optional optimization):** instead of `Read`, you can call `flywheel_get_skill({ cwd, name: "agent-flywheel:start_planning" })` (or `start_beads`, `start_implement`, `start_review`, `start_wrapup`) to fetch the body via the bundled MCP tool in one round-trip. Falls back to disk transparently if the bundle is stale or missing. Existing `Read` calls keep working — this is purely an optimization.
 
 ## Step 0: Opening Ceremony
 

@@ -50,6 +50,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -162,6 +163,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -196,6 +198,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -238,6 +241,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -277,6 +281,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -324,6 +329,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -362,6 +368,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -403,6 +410,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -451,6 +459,7 @@ export declare const TOOLS: ({
             beadIds?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
@@ -463,6 +472,43 @@ export declare const TOOLS: ({
             cwd: {
                 type: string;
                 description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            name: {
+                type: string;
+                description: string;
+                pattern: string;
             };
             goal?: undefined;
             force?: undefined;

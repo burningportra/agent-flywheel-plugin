@@ -436,7 +436,7 @@ export interface ToolContext {
     clearState: () => void;
     signal?: AbortSignal;
 }
-export type FlywheelToolName = 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review' | 'flywheel_verify_beads' | 'flywheel_advance_wave' | 'flywheel_memory' | 'flywheel_doctor' | 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review' | 'orch_verify_beads' | 'orch_advance_wave' | 'orch_memory';
+export type FlywheelToolName = 'flywheel_profile' | 'flywheel_discover' | 'flywheel_select' | 'flywheel_plan' | 'flywheel_approve_beads' | 'flywheel_review' | 'flywheel_verify_beads' | 'flywheel_advance_wave' | 'flywheel_memory' | 'flywheel_doctor' | 'flywheel_get_skill' | 'orch_profile' | 'orch_discover' | 'orch_select' | 'orch_plan' | 'orch_approve_beads' | 'orch_review' | 'orch_verify_beads' | 'orch_advance_wave' | 'orch_memory' | 'orch_get_skill';
 export interface ToolChoiceOption {
     id: string;
     label: string;

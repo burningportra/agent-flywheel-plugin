@@ -11,6 +11,7 @@ import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
 import { runDoctor } from './tools/doctor-tool.js';
 import { runEmitCodex } from './tools/emit-codex.js';
+import { runGetSkill } from './tools/get-skill.js';
 import { runMemory } from './tools/memory-tool.js';
 import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
@@ -277,6 +278,22 @@ const PRIMARY_TOOLS = [
       required: ['cwd'],
     },
   },
+  {
+    name: 'flywheel_get_skill',
+    description: 'Return a skill\'s frontmatter + body in one round-trip. Backed by a deterministic build-time bundle with 4-layer drift defense (manifest integrity check, per-entry stale warn, FW_SKILL_BUNDLE=off bypass, transparent disk fallback). Pass name as `<plugin>:<skill-name>` (e.g. `agent-flywheel:start`, `agent-flywheel:start_planning`). Returns `{ name, frontmatter, body, source: "bundle"|"disk", staleWarn? }`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+        name: {
+          type: 'string',
+          description: 'Skill identifier in `<plugin>:<skill-name>` form, e.g. `agent-flywheel:start`.',
+          pattern: '^[a-z0-9_-]+:[a-z0-9_-]+$',
+        },
+      },
+      required: ['cwd', 'name'],
+    },
+  },
 ];
 
 /**
@@ -305,6 +322,7 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   flywheel_advance_wave: runAdvanceWave as ToolRunner,
   flywheel_memory: runMemory as ToolRunner,
   flywheel_doctor: runDoctor as ToolRunner,
+  flywheel_get_skill: runGetSkill as ToolRunner,
   // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
   orch_profile: runProfile as ToolRunner,
   orch_discover: runDiscover as ToolRunner,
@@ -315,6 +333,7 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   orch_verify_beads: runVerifyBeads as ToolRunner,
   orch_advance_wave: runAdvanceWave as ToolRunner,
   orch_memory: runMemory as ToolRunner,
+  orch_get_skill: runGetSkill as ToolRunner,
 };
 
 /**

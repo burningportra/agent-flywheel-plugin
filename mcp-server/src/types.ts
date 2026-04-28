@@ -560,6 +560,7 @@ export type FlywheelToolName =
   | 'flywheel_advance_wave'
   | 'flywheel_memory'
   | 'flywheel_doctor'
+  | 'flywheel_get_skill'
   // Deprecated orch_* aliases — kept for back-compat, removed in v4.0.
   | 'orch_profile'
   | 'orch_discover'
@@ -569,7 +570,8 @@ export type FlywheelToolName =
   | 'orch_review'
   | 'orch_verify_beads'
   | 'orch_advance_wave'
-  | 'orch_memory';
+  | 'orch_memory'
+  | 'orch_get_skill';
 
 export interface ToolChoiceOption {
   id: string;

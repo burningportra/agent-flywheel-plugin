@@ -9,6 +9,7 @@ import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
 import { runDoctor } from './tools/doctor-tool.js';
 import { runEmitCodex } from './tools/emit-codex.js';
+import { runGetSkill } from './tools/get-skill.js';
 import { runMemory } from './tools/memory-tool.js';
 import { runPlan } from './tools/plan.js';
 import { runProfile } from './tools/profile.js';
@@ -250,6 +251,22 @@ const PRIMARY_TOOLS = [
             required: ['cwd'],
         },
     },
+    {
+        name: 'flywheel_get_skill',
+        description: 'Return a skill\'s frontmatter + body in one round-trip. Backed by a deterministic build-time bundle with 4-layer drift defense (manifest integrity check, per-entry stale warn, FW_SKILL_BUNDLE=off bypass, transparent disk fallback). Pass name as `<plugin>:<skill-name>` (e.g. `agent-flywheel:start`, `agent-flywheel:start_planning`). Returns `{ name, frontmatter, body, source: "bundle"|"disk", staleWarn? }`.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                name: {
+                    type: 'string',
+                    description: 'Skill identifier in `<plugin>:<skill-name>` form, e.g. `agent-flywheel:start`.',
+                    pattern: '^[a-z0-9_-]+:[a-z0-9_-]+$',
+                },
+            },
+            required: ['cwd', 'name'],
+        },
+    },
 ];
 /**
  * Deprecated `orch_*` aliases for each primary `flywheel_*` tool.
@@ -275,6 +292,7 @@ const DEFAULT_RUNNERS = {
     flywheel_advance_wave: runAdvanceWave,
     flywheel_memory: runMemory,
     flywheel_doctor: runDoctor,
+    flywheel_get_skill: runGetSkill,
     // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
     orch_profile: runProfile,
     orch_discover: runDiscover,
@@ -285,6 +303,7 @@ const DEFAULT_RUNNERS = {
     orch_verify_beads: runVerifyBeads,
     orch_advance_wave: runAdvanceWave,
     orch_memory: runMemory,
+    orch_get_skill: runGetSkill,
 };
 /**
  * Extension runners — tools added by beads that don't (or can't) widen
