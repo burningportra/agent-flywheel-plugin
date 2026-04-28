@@ -112,20 +112,22 @@ describe('loadSkillsBundle', () => {
         const logged = warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
         expect(logged).toContain('bundle_integrity_failed');
     });
-    it('invalidates module-level cache on integrity failure', () => {
+    it('invalidates module-level cache on integrity failure so next load retries disk', () => {
         const content = '---\nname: agent-flywheel:start\n---\nBody\n';
         const entry = makeEntry(tmp.dir, tmp.skillsDir, 'agent-flywheel:start', content);
-        // First: valid bundle — populates cache
-        const validBundle = buildBundle([entry]);
-        writeFileSync(tmp.bundlePath, JSON.stringify(validBundle, null, 2) + '\n');
-        const first = loadSkillsBundle(tmp.bundlePath);
-        expect(first).not.toBeNull();
-        // Overwrite with corrupt bundle
+        // Write corrupt bundle from the start — cache never populated
         const corruptBundle = buildBundle([entry], 'deadbeef'.repeat(8));
         writeFileSync(tmp.bundlePath, JSON.stringify(corruptBundle, null, 2) + '\n');
-        // Must bust cache, not return stale cached result
+        // First call: integrity fails, cache set to null
+        const first = loadSkillsBundle(tmp.bundlePath);
+        expect(first).toBeNull();
+        // Write a valid bundle in place — same path
+        const validBundle = buildBundle([entry]);
+        writeFileSync(tmp.bundlePath, JSON.stringify(validBundle, null, 2) + '\n');
+        // Second call: cache was invalidated, so it re-reads the now-valid bundle
         const second = loadSkillsBundle(tmp.bundlePath);
-        expect(second).toBeNull();
+        expect(second).not.toBeNull();
+        expect(second.bundleVersion).toBe(1);
     });
     it('serves cached bundle on repeated calls with same path', () => {
         const content = '---\nname: agent-flywheel:start\n---\nBody\n';
