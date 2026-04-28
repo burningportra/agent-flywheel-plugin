@@ -58,21 +58,49 @@ Render the `DoctorReport` envelope as:
 
 Glyph mapping: `green → [OK]`, `yellow → [WARN]`, `red → [FAIL]`. If `partial: true`, prefix the header with `[PARTIAL — sweep budget exhausted]` and list only the checks that finished.
 
-## Remediation flowchart
+## Inline remediation
 
-For each failing check, the skill prints the canonical one-line fix below the report:
+After rendering the report, for **each** failing check (yellow or red severity), immediately present a prompt **inline** — spatially adjacent to that check's row — before moving to the next failing check.
 
-- `mcp_connectivity` → `/reload-plugins` in Claude Code, then re-run doctor. If still red, rebuild: `cd mcp-server && npm ci && npm run build`.
-- `agent_mail_liveness` → run `/agent-flywheel:flywheel-setup` (it installs and starts agent-mail; the Rust port [`mcp_agent_mail_rust`](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) is the primary distribution). Manual start: `nohup am serve-http > /dev/null 2>&1 &` (Rust, preferred) or `nohup mcp-agent-mail serve > /dev/null 2>&1 &`. Legacy Python fallback: `nohup uv run python -m mcp_agent_mail.cli serve-http > /dev/null 2>&1 &`.
-- `br_binary` missing → `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh" | bash`.
-- `bv_binary` missing → `brew install dicklesworthstone/tap/bv` (Homebrew) or the beads_viewer install script.
-- `ntm_binary` missing → yellow only; install via `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/ntm/main/install.sh" | bash` if you plan to use parallel swarms.
-- `cm_binary` missing → yellow only; install via the cass_memory_system install script.
-- `node_version` below min → upgrade node to the version pinned in `mcp-server/package.json` engines.
-- `git_status` failure → cwd is not a git repo or `.git/` is corrupted; re-clone or re-init.
-- `dist_drift` → `cd mcp-server && npm run build`. Never edit `dist/` directly.
-- `orphaned_worktrees` → `/agent-flywheel:flywheel-cleanup` to prune them.
-- `checkpoint_validity` → stale checkpoint; run `/agent-flywheel:flywheel-stop` to reset, or delete `.pi-flywheel/checkpoint.json` manually if you know the session is dead.
+**Automated remediation is available for 5 checks:** `dist_drift`, `mcp_connectivity`, `agent_mail_liveness`, `orphaned_worktrees`, `checkpoint_validity`. For these, present:
+
+```
+AskUserQuestion(questions: [{
+  question: "[<CHECK_NAME>] failed: <DETAIL>. Apply the canonical fix now?",
+  header: "Fix it?",
+  options: [
+    { label: "Yes, dry-run first (Recommended)", description: "Call flywheel_remediate({ checkName: '<CHECK_NAME>', mode: 'dry_run' }) — shows the steps without mutating" },
+    { label: "Yes, execute", description: "Call flywheel_remediate({ checkName: '<CHECK_NAME>', mode: 'execute', autoConfirm: true }) — applies the fix immediately" },
+    { label: "Skip", description: "Leave this check failing for now; the manual hint is below" }
+  ],
+  multiSelect: false
+}])
+```
+
+After the user picks "Yes, execute" and `flywheel_remediate` returns, log the time-to-healthy event to CASS for the calibration loop:
+
+```
+flywheel_memory(operation: "store", content: {
+  type: "doctor-remediation",
+  checkName: "<CHECK_NAME>",
+  mode: "execute",
+  startedAt: <pre-call-iso>,
+  completedAt: <post-call-iso>,
+  durationMs: <ms>,
+  verifiedGreen: <bool from result>,
+  reversible: <from result.plan>,
+  date: "<YYYY-MM-DD>"
+})
+```
+
+This entry feeds the "time-to-healthy" rollup in a future calibration enhancement (Feature 2).
+
+**Checks with no automated handler** — fall through to the manual hint below the check row:
+
+- `node_version` → "Upgrade node to >=18.18 (per `mcp-server/package.json` engines)"
+- `git_status` → "cwd is not a git repo or `.git/` corrupted; re-clone or re-init"
+- `br_binary` / `bv_binary` / `ntm_binary` / `cm_binary` / `claude_cli` / `codex_cli` / `gemini_cli` missing → run `/agent-flywheel:flywheel-setup`
+- `swarm_model_ratio`, `codex_config_compat`, `rescues_last_30d` → manual investigation required
 
 If `overall` is `red`, do NOT run `/start` until the red checks are fixed — downstream gates will fail with more confusing errors.
 
