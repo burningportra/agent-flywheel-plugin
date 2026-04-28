@@ -1,7 +1,9 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`expandBeadPlanSpec — happy path > expands a well-formed foundation hint into a rendered body 1`] = `
-"Introduce BeadTemplateContract at the MCP boundary.
+"Template: foundation-with-fresh-eyes-gate
+
+Introduce BeadTemplateContract at the MCP boundary.
 
 Scope:
 Add BeadTemplateContract to types.ts.

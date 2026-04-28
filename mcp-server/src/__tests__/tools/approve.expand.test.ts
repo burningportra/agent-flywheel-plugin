@@ -48,6 +48,7 @@ describe("expandBeadPlanSpec — happy path", () => {
       id: "foundation-with-fresh-eyes-gate",
       version: 1,
     });
+    expect(outcome.description).toContain("Template: foundation-with-fresh-eyes-gate");
     expect(outcome.description).toContain("I8, I9");
     expect(outcome.description).toContain("mcp-server/src/types.ts");
     expect(outcome.title).toBe(FOUNDATION_SPEC.title);
@@ -68,6 +69,7 @@ describe("expandBeadPlanSpec — happy path", () => {
     );
     expect(outcome.status).toBe("expanded");
     if (outcome.status !== "expanded") return;
+    expect(outcome.description).toContain("Template: add-feature");
     expect(outcome.description).toContain("Add verbose flag.");
     expect(outcome.description).toContain("src/tools/status.ts");
   });

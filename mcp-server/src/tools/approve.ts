@@ -288,7 +288,7 @@ export function expandBeadPlanSpec(spec: BeadPlanSpec, phase: FlywheelPhase): Be
     return {
       status: 'expanded',
       title: spec.title,
-      description: result.description,
+      description: `Template: ${parsed.id}\n\n${result.description}`,
       usedTemplate: parsed,
     };
   }

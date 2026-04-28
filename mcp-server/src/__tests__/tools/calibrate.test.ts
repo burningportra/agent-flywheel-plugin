@@ -189,6 +189,32 @@ describe('tools/calibrate — runCalibrate', () => {
     expect(row.ratio).toBeCloseTo(1.0, 5);
   });
 
+  it('aggregates Template metadata extracted from br descriptions with br timestamp fields', async () => {
+    const cwd = makeCwd();
+    const beads = [
+      {
+        id: 'desc-template-0',
+        title: 'Add endpoint from description metadata',
+        status: 'closed',
+        description: 'Template: add-api-endpoint\n\nImplement the endpoint.\n\n### Files:\n- src/api/users.ts',
+        created_at: CREATED_5D,
+        closed_at: closedTs(CREATED_5D, 90 * 60_000),
+      },
+    ];
+    const exec = makeExecFn([makeBrStub(beads), gitNoMatchStub]);
+    const signal = new AbortController().signal;
+
+    const report = await runCalibrate({ cwd, sinceDays: 90 }, exec, signal);
+
+    expect(report.untemplated.count).toBe(0);
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]).toMatchObject({
+      templateId: 'add-api-endpoint',
+      estimatedEffort: 'M',
+      sampleCount: 1,
+    });
+  });
+
   it('proxy_started = false when git returns a timestamp', async () => {
     const cwd = makeCwd();
     const bead = makeTemplatedBead('git-bead-0', 'add-api-endpoint', CREATED_5D, 60 * 60_000);

@@ -102,10 +102,12 @@ describe("parseTemplateHint — backward-compat / passthrough", () => {
 });
 
 describe("synthesizerTemplateHintGuidance", () => {
-  it("documents the hint syntax", () => {
+  it("documents the hint syntax and final calibration metadata", () => {
     const text = synthesizerTemplateHintGuidance();
     expect(text).toContain("template: <id>@<version>");
     expect(text).toContain("expandTemplate");
+    expect(text).toContain("Template: <id>");
+    expect(text).toContain("flywheel_calibrate");
   });
 
   it("shows the regex for agent reference", () => {

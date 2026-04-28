@@ -217,6 +217,7 @@ ${constraints.length > 0 ? constraints.map((c) => `- ${c}`).join("\n") : "None s
 For each bead, run in bash:
 \`\`\`
 br create "Title" -t task -p <priority 1-5> -d "Detailed description including:
+Template: <id> (only when the bead is drafted from a built-in template; omit for custom beads)
 - What to implement
 - Why it matters
 - Acceptance criteria (as checklist):
@@ -254,8 +255,12 @@ ${formatTemplatesForPrompt()}
 
 Templates are optional shortcuts for common bead shapes, not requirements. If a template fits, use its ID as a drafting aid, substitute concrete placeholder values, and expand it into a fully self-contained bead description before running \`br create\`.
 
+When a built-in template fits, include a machine-readable metadata line exactly \`Template: <id>\` near the top of the final bead description. This line feeds \`flywheel_calibrate\` per-template aggregates. If no template fits, omit the line.
+
 Example - starting from template \`add-api-endpoint\` with all placeholders substituted (\`{{endpointPath}} -> /api/users\`, \`{{moduleName}} -> user-management\`, \`{{endpointPurpose}} -> return a filtered user list\`, \`{{httpMethod}} -> GET\`, \`{{implementationFile}} -> src/api/users.ts\`, \`{{testFile}} -> src/api/users.test.ts\`):
 
+> Template: add-api-endpoint
+>
 > Implement a new API endpoint for /api/users in the user-management area.
 > Add request validation, success/error responses, and any supporting wiring
 > needed so the endpoint behaves consistently with the existing API surface.
@@ -273,9 +278,9 @@ Example - starting from template \`add-api-endpoint\` with all placeholders subs
 > - src/api/users.ts
 > - src/api/users.test.ts
 
-Notice: every placeholder is resolved and the final text is fully expanded - no template IDs, no placeholders.
+Notice: every placeholder is resolved and the final text is fully expanded - the only template ID left in the final body is the machine-readable \`Template: <id>\` line. No unresolved placeholders remain.
 
-If no template fits, write a custom bead normally. Final beads must not say \`[Use template: ...]\`, \`see template\`, or leave unresolved \`{{placeholderName}}\` markers behind.
+If no template fits, write a custom bead normally and omit \`Template: <id>\`. Final beads must not say \`[Use template: ...]\`, \`see template\`, or leave unresolved \`{{placeholderName}}\` markers behind.
 
 ${synthesizerTemplateHintGuidance()}
 
@@ -319,6 +324,7 @@ The approved plan lives at: \`${planPath}\`
 2. Treat that artifact as the source of truth for scope, sequencing, architecture, edge cases, and testing.
 3. Convert the plan into executable beads with \`br create\` and dependency edges with \`br dep add\`.
 4. Embed the relevant context from the plan directly into each bead description:
+   - include \`Template: <id>\` near the top when the bead is drafted from a built-in template, so calibration can aggregate future closed beads by template
    - summarize the implementation intent
    - capture the rationale and important constraints
    - include acceptance criteria and verification expectations
@@ -330,6 +336,7 @@ The approved plan lives at: \`${planPath}\`
 For each bead, run in bash:
 \`\`\`
 br create "Title" -t task -p <priority 1-5> -d "Detailed description including:
+Template: <id> (only when the bead is drafted from a built-in template; omit for custom beads)
 - What to implement
 - Why it matters
 - Key context pulled forward from the approved plan
@@ -356,8 +363,8 @@ br dep add <child-id> <parent-id>
 ${formatTemplatesForPrompt()}
 
 The plan is your primary source. Use templates only to accelerate structure, not replace plan details.
-Templates are optional: if one fits, expand it with plan-specific details; if none fit, write a custom bead normally.
-Do not emit final beads that say \`[Use template: ...]\`, raw template IDs, \`see template\`, or unresolved \`{{placeholderName}}\` markers.
+Templates are optional: if one fits, expand it with plan-specific details and include a machine-readable \`Template: <id>\` line in the final \`br create\` body (for example, \`Template: add-api-endpoint\`); if none fit, write a custom bead normally and omit that line.
+Do not emit final beads that say \`[Use template: ...]\`, raw template IDs outside the \`Template: <id>\` metadata line, \`see template\`, or unresolved \`{{placeholderName}}\` markers.
 
 ${synthesizerTemplateHintGuidance()}
 
