@@ -226,6 +226,24 @@ export interface BeadReview {
   revisionInstructions?: string;
 }
 
+/**
+ * Estimated effort for a bead, used by the calibration system.
+ * @since v3.7.0
+ */
+export const EFFORT_LEVELS = ['S', 'M', 'L', 'XL'] as const;
+export type EstimatedEffort = (typeof EFFORT_LEVELS)[number];
+
+/**
+ * Mapping from effort tier to expected minutes-of-work.
+ * @since v3.7.0
+ */
+export const EFFORT_TO_MINUTES: Record<EstimatedEffort, number> = {
+  S: 30,
+  M: 90,
+  L: 240,
+  XL: 720,
+};
+
 export interface BeadTemplatePlaceholder {
   name: string;
   description: string;
@@ -253,6 +271,8 @@ export interface BeadTemplate {
   filePatterns: string[];
   dependencyHints?: string;
   examples: BeadTemplateExample[];
+  /** @since v3.7.0 */
+  estimatedEffort?: EstimatedEffort;
 }
 
 /**
