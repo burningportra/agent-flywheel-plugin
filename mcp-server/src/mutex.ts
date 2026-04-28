@@ -1,3 +1,5 @@
+import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { makeFlywheelErrorResult } from './errors.js';
 import type { FlywheelToolName, FlywheelPhase } from './types.js';
 
@@ -29,4 +31,33 @@ export function makeConcurrentWriteError(
 
 export function _resetForTest(): void {
   _inFlight.clear();
+}
+
+/**
+ * File-lock-aware mutex for `flywheel_remediate`. Uses both an in-process Set
+ * and an exclusive `.pi-flywheel/remediate.lock` file (atomic O_EXCL create).
+ * Returns the absolute lock-file path on success, or null on contention.
+ */
+export async function acquireRemediateLock(cwd: string, checkName: string): Promise<string | null> {
+  const memKey = `remediate:${checkName}`;
+  if (!acquireBeadMutex(memKey)) return null;
+  const lockPath = join(cwd, '.pi-flywheel', 'remediate.lock');
+  try {
+    await mkdir(dirname(lockPath), { recursive: true });
+    // wx flag = O_EXCL | O_CREAT; throws EEXIST if file exists.
+    await writeFile(lockPath, JSON.stringify({ checkName, pid: process.pid, ts: new Date().toISOString() }), { flag: 'wx' });
+    return lockPath;
+  } catch (err: unknown) {
+    releaseBeadMutex(memKey);
+    if ((err as NodeJS.ErrnoException)?.code === 'EEXIST') return null;
+    throw err;
+  }
+}
+
+export async function releaseRemediateLock(checkName: string, lockPath: string | null): Promise<void> {
+  releaseBeadMutex(`remediate:${checkName}`);
+  if (lockPath == null) return;
+  try {
+    await unlink(lockPath);
+  } catch { /* best-effort cleanup */ }
 }
