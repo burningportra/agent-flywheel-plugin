@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>bead-viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Cytoscape served from CDN. SRI hash omitted for v1; crossorigin keeps
+     the resource opaque-cross-origin so it cannot read other origins.
+     Future: pin a SHA384 hash from the npm-published 3.28.1 tarball. -->
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 1fr 360px;
+    grid-template-areas: "banner banner" "graph detail";
+  }
+  #banner {
+    grid-area: banner;
+    padding: 8px 12px;
+    background: #fff8c4;
+    color: #5a4500;
+    border-bottom: 1px solid #e6d77a;
+    display: none;
+  }
+  #banner.visible { display: block; }
+  #banner ul { margin: 4px 0 0; padding-left: 20px; }
+  #cy {
+    grid-area: graph;
+    width: 100%;
+    height: 100%;
+    background: #fafafa;
+  }
+  #bead-detail {
+    grid-area: detail;
+    border-left: 1px solid #ddd;
+    padding: 12px;
+    overflow: auto;
+    background: #fff;
+  }
+  #bead-detail h2 {
+    margin: 0 0 8px;
+    font-size: 14px;
+  }
+  #bead-detail pre {
+    background: #f4f4f4;
+    padding: 10px;
+    border-radius: 4px;
+    overflow: auto;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #bead-detail .empty {
+    color: #888;
+    font-style: italic;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #ddd; }
+    #cy { background: #222; }
+    #bead-detail { background: #1f1f1f; border-color: #333; }
+    #bead-detail pre { background: #111; }
+    #banner { background: #3a2f00; color: #ffe27a; border-color: #6b5200; }
+  }
+</style>
+</head>
+<body>
+  <div id="banner"></div>
+  <div id="cy"></div>
+  <aside id="bead-detail">
+    <h2>Bead detail</h2>
+    <p class="empty">Click a node to load its body.</p>
+  </aside>
+<script>
+"use strict";
+
+const STATUS_COLOR = {
+  open: "#9aa0a6",
+  in_progress: "#3b82f6",
+  closed: "#22c55e",
+  deferred: "#f59e0b",
+};
+
+function setBanner(messages) {
+  const el = document.getElementById("banner");
+  el.textContent = "";
+  if (!messages.length) {
+    el.classList.remove("visible");
+    return;
+  }
+  const ul = document.createElement("ul");
+  for (const m of messages) {
+    const li = document.createElement("li");
+    li.textContent = m;
+    ul.appendChild(li);
+  }
+  el.appendChild(ul);
+  el.classList.add("visible");
+}
+
+function renderBead(body) {
+  const root = document.getElementById("bead-detail");
+  root.textContent = "";
+  const h = document.createElement("h2");
+  h.textContent = "Bead: " + (body && body.id ? body.id : "(unknown)");
+  root.appendChild(h);
+  const pre = document.createElement("pre");
+  // textContent — never innerHTML. XSS defense.
+  pre.textContent = JSON.stringify(body, null, 2);
+  root.appendChild(pre);
+}
+
+function renderEmpty(msg) {
+  const root = document.getElementById("bead-detail");
+  root.textContent = "";
+  const h = document.createElement("h2");
+  h.textContent = "Bead detail";
+  root.appendChild(h);
+  const p = document.createElement("p");
+  p.className = "empty";
+  p.textContent = msg;
+  root.appendChild(p);
+}
+
+async function loadBead(id) {
+  renderEmpty("Loading " + id + "...");
+  try {
+    const r = await fetch("/api/bead/" + encodeURIComponent(id));
+    const body = await r.json();
+    if (!r.ok) {
+      renderEmpty("Error: " + (body && body.error ? body.error : r.status));
+      return;
+    }
+    renderBead(body);
+  } catch (e) {
+    renderEmpty("Fetch failed: " + (e && e.message ? e.message : String(e)));
+  }
+}
+
+async function main() {
+  let data;
+  try {
+    const r = await fetch("/api/graph");
+    data = await r.json();
+    if (!r.ok) {
+      setBanner(["Failed to load graph: " + (data && data.error ? data.error : r.status)]);
+      return;
+    }
+  } catch (e) {
+    setBanner(["Fetch failed: " + (e && e.message ? e.message : String(e))]);
+    return;
+  }
+
+  const cycleEdgeKeys = new Set();
+  if (Array.isArray(data.cycles)) {
+    for (const c of data.cycles) {
+      if (!c || !Array.isArray(c.beadIds)) continue;
+      const inCycle = new Set(c.beadIds);
+      for (const e of data.edges) {
+        if (inCycle.has(e.from) && inCycle.has(e.to)) {
+          cycleEdgeKeys.add(e.from + "->" + e.to);
+        }
+      }
+    }
+  }
+
+  const cyNodes = data.nodes.map((n) => ({
+    data: {
+      id: n.id,
+      label: n.id,
+      title: n.title || "",
+      status: n.status,
+      color: STATUS_COLOR[n.status] || "#9aa0a6",
+    },
+  }));
+  const cyEdges = data.edges.map((e, i) => ({
+    data: {
+      id: "e" + i + "-" + e.from + "-" + e.to,
+      source: e.from,
+      target: e.to,
+      cycle: cycleEdgeKeys.has(e.from + "->" + e.to),
+      type: e.type || "blocks",
+    },
+  }));
+
+  const cy = window.cytoscape({
+    container: document.getElementById("cy"),
+    elements: { nodes: cyNodes, edges: cyEdges },
+    style: [
+      {
+        selector: "node",
+        style: {
+          "background-color": "data(color)",
+          label: "data(label)",
+          color: "#222",
+          "font-size": 10,
+          "text-valign": "center",
+          "text-halign": "center",
+          width: 24,
+          height: 24,
+          "border-width": 1,
+          "border-color": "#444",
+        },
+      },
+      {
+        selector: "edge",
+        style: {
+          width: 1.4,
+          "line-color": "#9aa0a6",
+          "target-arrow-color": "#9aa0a6",
+          "target-arrow-shape": "triangle",
+          "curve-style": "bezier",
+        },
+      },
+      {
+        selector: "edge[?cycle]",
+        style: {
+          "line-style": "dashed",
+          "line-color": "#dc2626",
+          "target-arrow-color": "#dc2626",
+          width: 2,
+        },
+      },
+    ],
+    layout: { name: "cose", animate: false, fit: true, padding: 30 },
+  });
+
+  cy.on("tap", "node", (evt) => {
+    const id = evt.target.id();
+    loadBead(id);
+  });
+
+  const messages = [];
+  if (data.truncated) {
+    messages.push("Graph truncated to 2000 nodes.");
+  }
+  if (Array.isArray(data.cycles) && data.cycles.length > 0) {
+    for (const c of data.cycles) {
+      if (c && Array.isArray(c.beadIds)) {
+        messages.push("Cycle: " + c.beadIds.join(" -> "));
+      }
+    }
+  }
+  setBanner(messages);
+}
+
+main();
+</script>
+</body>
+</html>

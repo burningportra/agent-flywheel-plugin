@@ -7,6 +7,7 @@
     "build": "tsc && tsc -p tsconfig.scripts.json && npm run build:bundle",
     "build:bundle": "node dist/scripts/build-skills-bundle.js",
     "check:skills-bundle": "node dist/scripts/check-skills-bundle.js",
+    "bead-viewer": "node dist/scripts/bead-viewer.js",
     "dev": "tsc --watch",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
