@@ -47,6 +47,14 @@ export const FLYWHEEL_ERROR_CODES = [
   // agent-flywheel-plugin-f0j — review-mode matrix
   'review_mode_gate_failed',
   'review_headless_findings',
+  // claude-orchestrator-22i — remediation/bundle/viewer
+  'remediation_unavailable',
+  'remediation_requires_confirm',
+  'remediation_failed',
+  'remediate_already_running',
+  'bundle_integrity_failed',
+  'bundle_stale',
+  'viewer_port_in_use',
 ] as const;
 
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
@@ -151,6 +159,20 @@ export const DEFAULT_HINTS: Record<FlywheelErrorCode, string> = {
     'The review-mode autofix gate refused the change — inspect the gate findings, address each one manually, and re-run review.',
   review_headless_findings:
     'Headless review surfaced findings that require human attention — read the findings list and act on each before closing the bead.',
+  remediation_unavailable:
+    'No automated remediation exists for this check; follow the manual hint in the doctor report.',
+  remediation_requires_confirm:
+    'Mutating remediation refused without explicit consent. Set `autoConfirm: true` after the user approves.',
+  remediation_failed:
+    'The remediation handler exited non-zero. Inspect the captured stderr; re-run the original doctor check.',
+  remediate_already_running:
+    'Another remediation for this check is in flight. Wait for the lock to release or call again with a different `checkName`.',
+  bundle_integrity_failed:
+    'skills.bundle.json failed its manifestSha256 integrity check. Falling back to disk reads. Re-run `npm run build` to regenerate.',
+  bundle_stale:
+    "A bundled skill's source `.md` has changed on disk. The bundle is still served (stable-by-default); set FW_SKILL_BUNDLE=off to read live or rebuild.",
+  viewer_port_in_use:
+    'All retried bead-viewer ports are in use. Try `--port <N>` with a free port or kill the existing viewer.',
 };
 
 export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
@@ -187,6 +209,14 @@ export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
   // findings are a signal to the caller, not a retryable condition.
   review_mode_gate_failed: false,
   review_headless_findings: false,
+  // claude-orchestrator-22i — remediation/bundle/viewer
+  remediation_unavailable: false,
+  remediation_requires_confirm: false,
+  remediation_failed: false,
+  remediate_already_running: true,
+  bundle_integrity_failed: true,
+  bundle_stale: false,
+  viewer_port_in_use: false,
 };
 
 export class FlywheelError extends Error {
