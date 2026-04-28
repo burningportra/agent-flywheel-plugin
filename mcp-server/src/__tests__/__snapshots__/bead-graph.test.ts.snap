@@ -1,0 +1,59 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildBeadGraph — deterministic ordering > produces stable output for same input (snapshot) 1`] = `
+{
+  "cycles": [
+    {
+      "beadIds": [
+        "A",
+        "B",
+      ],
+    },
+  ],
+  "edges": [
+    {
+      "from": "A",
+      "to": "B",
+      "type": "blocks",
+    },
+    {
+      "from": "C",
+      "to": "D",
+      "type": "blocks",
+    },
+    {
+      "from": "B",
+      "to": "A",
+      "type": "blocks",
+    },
+  ],
+  "nodes": [
+    {
+      "id": "B",
+      "priority": 2,
+      "status": "open",
+      "title": "B",
+    },
+    {
+      "id": "A",
+      "priority": 1,
+      "status": "open",
+      "title": "A",
+    },
+    {
+      "id": "D",
+      "status": "closed",
+      "title": "D",
+    },
+    {
+      "id": "C",
+      "labels": [
+        "x",
+        "y",
+      ],
+      "status": "in_progress",
+      "title": "C",
+    },
+  ],
+}
+`;

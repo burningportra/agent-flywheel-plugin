@@ -23,8 +23,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/jsdom": "^28.0.1",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^2.0.0",
+    "jsdom": "^29.1.0",
     "remark-parse": "^11.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
