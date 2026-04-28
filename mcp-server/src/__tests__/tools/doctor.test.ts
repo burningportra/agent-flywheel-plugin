@@ -369,6 +369,58 @@ describe('runDoctorChecks', () => {
     }
   });
 
+  it('binary that rejects --version but accepts --help → green via fallback', async () => {
+    // Regression: ntm doesn't expose --version but is fully functional. The
+    // doctor must fall back to --help before reporting yellow.
+    const cwd = makeTmpCwd();
+    try {
+      const stubs = allGreenStubs().filter(
+        (s) => !s.match('ntm', ['--version']),
+      );
+      stubs.push({
+        match: (cmd, args) => cmd === 'ntm' && args[0] === '--version',
+        respond: { result: { code: 1, stdout: '', stderr: 'Error: unknown flag: --version' } },
+      });
+      stubs.push({
+        match: (cmd, args) => cmd === 'ntm' && args[0] === '--help',
+        respond: { result: { code: 0, stdout: 'ntm: Named Tmux Manager', stderr: '' } },
+      });
+      const exec = makeStubbedExec(stubs);
+
+      const report = await runDoctorChecks(cwd, undefined, { exec });
+      const ntm = report.checks.find((c) => c.name === 'ntm_binary');
+      expect(ntm!.severity).toBe('green');
+      expect(ntm!.message).toMatch(/no --version flag/);
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
+  it('binary that fails both --version and --help → yellow', async () => {
+    const cwd = makeTmpCwd();
+    try {
+      const stubs = allGreenStubs().filter(
+        (s) => !s.match('ntm', ['--version']),
+      );
+      stubs.push({
+        match: (cmd, args) => cmd === 'ntm' && args[0] === '--version',
+        respond: { result: { code: 1, stdout: '', stderr: 'broken' } },
+      });
+      stubs.push({
+        match: (cmd, args) => cmd === 'ntm' && args[0] === '--help',
+        respond: { result: { code: 2, stdout: '', stderr: 'broken' } },
+      });
+      const exec = makeStubbedExec(stubs);
+
+      const report = await runDoctorChecks(cwd, undefined, { exec });
+      const ntm = report.checks.find((c) => c.name === 'ntm_binary');
+      expect(ntm!.severity).toBe('yellow');
+      expect(ntm!.message).toMatch(/returned code 1/);
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
   it('dirty git working tree → yellow git_status entry', async () => {
     const cwd = makeTmpCwd();
     try {

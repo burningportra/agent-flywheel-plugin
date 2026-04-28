@@ -533,7 +533,18 @@ async function checkBinary(
         durationMs: now() - start,
       };
     }
-    // Non-zero but not ENOENT — binary exists but --version failed.
+    // Non-zero exit: some CLIs (e.g. ntm) don't accept --version. Fall back to
+    // --help to confirm liveness before reporting the binary as broken.
+    if (signal.aborted) return abortedCheck(checkName);
+    const help = await exec(binary, ['--help'], { timeout, cwd, signal });
+    if (help.code === 0) {
+      return {
+        name: checkName,
+        severity: 'green',
+        message: `${binary} present (no --version flag)`,
+        durationMs: now() - start,
+      };
+    }
     return {
       name: checkName,
       severity: 'yellow',
