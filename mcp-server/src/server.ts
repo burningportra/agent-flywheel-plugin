@@ -19,6 +19,7 @@ import { runReview } from './tools/review.js';
 import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
 import { runAdvanceWave } from './tools/advance-wave.js';
+import { runRemediate, RemediateInputSchema } from './tools/remediate.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -294,6 +295,38 @@ const PRIMARY_TOOLS = [
       required: ['cwd', 'name'],
     },
   },
+  {
+    name: 'flywheel_remediate',
+    description: 'Apply the canonical fix for a failing doctor check. Default mode is dry_run; pass mode:\'execute\' + autoConfirm:true to actually mutate. Per-check mutex prevents concurrent calls.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+        checkName: {
+          type: 'string',
+          enum: [
+            'mcp_connectivity', 'agent_mail_liveness', 'br_binary', 'bv_binary',
+            'ntm_binary', 'cm_binary', 'node_version', 'git_status', 'dist_drift',
+            'orphaned_worktrees', 'checkpoint_validity', 'claude_cli', 'codex_cli',
+            'gemini_cli', 'swarm_model_ratio', 'codex_config_compat', 'rescues_last_30d',
+          ],
+          description: 'The doctor check name to remediate',
+        },
+        autoConfirm: {
+          type: 'boolean',
+          default: false,
+          description: 'Required to be true when mode=execute and the remediation is mutating',
+        },
+        mode: {
+          type: 'string',
+          enum: ['dry_run', 'execute'],
+          default: 'dry_run',
+          description: 'dry_run=return plan only, execute=apply the fix',
+        },
+      },
+      required: ['cwd', 'checkName'],
+    },
+  },
 ];
 
 /**
@@ -342,9 +375,18 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
  * doesn't require touching the shared union.
  *
  * bead `agent-flywheel-plugin-zbx` — `flywheel_emit_codex`.
+ * bead `claude-orchestrator-2tl` (T8) — `flywheel_remediate` + `orch_remediate` alias.
  */
 const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
   flywheel_emit_codex: runEmitCodex as ToolRunner,
+  flywheel_remediate: async (ctx, args) => {
+    const parsed = RemediateInputSchema.parse(args);
+    return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal) as Promise<McpToolResult>;
+  },
+  orch_remediate: async (ctx, args) => {
+    const parsed = RemediateInputSchema.parse(args);
+    return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal) as Promise<McpToolResult>;
+  },
 };
 
 function isKnownToolName(name: string): name is FlywheelToolName {

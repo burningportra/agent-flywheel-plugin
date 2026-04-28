@@ -51,6 +51,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -164,6 +166,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -199,6 +203,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -242,6 +248,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -282,6 +290,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -330,6 +340,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -369,6 +381,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -411,6 +425,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -460,6 +476,8 @@ export declare const TOOLS: ({
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -492,6 +510,8 @@ export declare const TOOLS: ({
             entryId?: undefined;
             refreshRoot?: undefined;
             name?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };
@@ -528,6 +548,55 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            checkName: {
+                type: string;
+                enum: string[];
+                description: string;
+            };
+            autoConfirm: {
+                type: string;
+                default: boolean;
+                description: string;
+            };
+            mode: {
+                type: string;
+                enum: string[];
+                default: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
         };
         required: string[];
     };
