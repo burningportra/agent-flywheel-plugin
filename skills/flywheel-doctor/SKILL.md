@@ -62,7 +62,7 @@ Glyph mapping: `green → [OK]`, `yellow → [WARN]`, `red → [FAIL]`. If `part
 
 After rendering the report, for **each** failing check (yellow or red severity), immediately present a prompt **inline** — spatially adjacent to that check's row — before moving to the next failing check.
 
-**Automated remediation is available for 5 checks:** `dist_drift`, `mcp_connectivity`, `agent_mail_liveness`, `orphaned_worktrees`, `checkpoint_validity`. For these, present:
+**Automated remediation is available for 9 checks:** `dist_drift`, `mcp_connectivity`, `agent_mail_liveness`, `orphaned_worktrees`, `checkpoint_validity`, `br_binary`, `bv_binary`, `ntm_binary`, `cm_binary`. For these, present:
 
 ```
 AskUserQuestion(questions: [{
@@ -99,8 +99,14 @@ This entry feeds the "time-to-healthy" rollup in a future calibration enhancemen
 
 - `node_version` → "Upgrade node to >=18.18 (per `mcp-server/package.json` engines)"
 - `git_status` → "cwd is not a git repo or `.git/` corrupted; re-clone or re-init"
-- `br_binary` / `bv_binary` / `ntm_binary` / `cm_binary` / `claude_cli` / `codex_cli` / `gemini_cli` missing → run `/agent-flywheel:flywheel-setup`
+- `claude_cli` / `codex_cli` / `gemini_cli` missing → run `/agent-flywheel:flywheel-setup` (system AI CLIs install paths vary by user)
 - `swarm_model_ratio`, `codex_config_compat`, `rescues_last_30d` → manual investigation required
+
+The four flywheel-owned CLI checks (`br_binary`, `bv_binary`, `ntm_binary`, `cm_binary`) are now auto-remediated via the canonical curl|bash installers. `flywheel_remediate` runs the install command and re-probes `<binary> --version` afterwards. If the install fails (network/permission), the result envelope reports `verifiedGreen:false` with stderr captured for inspection.
+
+### `--auto` / unattended mode
+
+For CI or scripted runs, pass `--auto` to `/flywheel-doctor` (or to the underlying tool: `flywheel_remediate({ mode: 'execute', autoConfirm: true })`). This skips the AskUserQuestion gate and applies all automated remediations whose handlers are non-blocking. Use sparingly — it WILL run shell installers without confirmation.
 
 If `overall` is `red`, do NOT run `/start` until the red checks are fixed — downstream gates will fail with more confusing errors.
 
