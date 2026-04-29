@@ -12,9 +12,10 @@
  * envelope is built by the I4 registration wrapper.
  */
 
-import { statSync, readdirSync, readFileSync, realpathSync, type Dirent } from 'node:fs';
+import { statSync, readdirSync, readFileSync, realpathSync, existsSync, type Dirent } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
@@ -329,10 +330,12 @@ function abortedCheck(name: string): DoctorCheck {
 /**
  * 1. MCP connectivity.
  *
- * Calling `flywheel_profile` directly from inside this module would create a
- * circular import (server → doctor → profile → server types). Instead we
- * check that the compiled `dist/server.js` exists and is at least as fresh as
- * the source. This is a structural proxy, not a true round-trip.
+ * If this code is running, the MCP server is connected by definition — no
+ * round-trip needed. We resolve the running module's own file via
+ * `import.meta.url` and report its location. This works for both contributor
+ * checkouts (running from `cwd/mcp-server/dist/`) and plugin installs (running
+ * from `~/.claude/plugins/.../mcp-server/dist/`). Source/dist drift is a
+ * separate check (`dist_drift`) — this one is purely proof-of-life.
  */
 async function checkMcpConnectivity(
   cwd: string,
@@ -342,56 +345,35 @@ async function checkMcpConnectivity(
   const start = now();
   if (signal.aborted) return abortedCheck('mcp_connectivity');
 
-  const distServer = resolveDoctorPath(
-    cwd,
-    join('mcp-server', 'dist', 'server.js'),
-    'mcp-server/dist/server.js',
-  );
-  const srcServer = resolveDoctorPath(
-    cwd,
-    join('mcp-server', 'src', 'server.ts'),
-    'mcp-server/src/server.ts',
-  );
-
   try {
-    if (!distServer.ok) {
-      return {
-        name: 'mcp_connectivity',
-        severity: distServer.reason === 'not_found' ? 'red' : 'yellow',
-        message:
-          distServer.reason === 'not_found'
-            ? 'mcp-server/dist/server.js not found — run `npm run build`'
-            : `mcp connectivity probe refused path: ${distServer.message}`,
-        hint: DOCTOR_CHECK_FAILED_HINT,
-        durationMs: now() - start,
-      };
-    }
-    if (!srcServer.ok && srcServer.reason !== 'not_found') {
+    const runningModule = fileURLToPath(import.meta.url);
+    if (!existsSync(runningModule)) {
       return {
         name: 'mcp_connectivity',
         severity: 'yellow',
-        message: `mcp connectivity probe refused path: ${srcServer.message}`,
+        message: `running module path not on disk: ${runningModule}`,
         hint: DOCTOR_CHECK_FAILED_HINT,
         durationMs: now() - start,
       };
     }
-    if (srcServer.ok) {
-      const distMtime = statSync(distServer.realPath).mtimeMs;
-      const srcMtime = statSync(srcServer.realPath).mtimeMs;
-      if (srcMtime > distMtime) {
-        return {
-          name: 'mcp_connectivity',
-          severity: 'yellow',
-          message: 'server.ts newer than dist/server.js — rebuild recommended',
-          hint: DOCTOR_CHECK_FAILED_HINT,
-          durationMs: now() - start,
-        };
-      }
+    const localDist = resolveDoctorPath(
+      cwd,
+      join('mcp-server', 'dist', 'server.js'),
+      'mcp-server/dist/server.js',
+    );
+    let cwdReal: string | null = null;
+    try {
+      cwdReal = realpathSync(cwd);
+    } catch {
+      cwdReal = null;
     }
+    const isPluginInstall = !localDist.ok || cwdReal === null || !runningModule.startsWith(cwdReal);
     return {
       name: 'mcp_connectivity',
       severity: 'green',
-      message: 'mcp-server build artefacts present and current',
+      message: isPluginInstall
+        ? 'server responded (plugin install)'
+        : 'server responded (local checkout)',
       durationMs: now() - start,
     };
   } catch (err) {

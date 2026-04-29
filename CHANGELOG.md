@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.1] - 2026-04-29
+
+### Fixed
+
+- **`flywheel_doctor` mcp_connectivity false positive on plugin installs.** The check was a structural proxy that looked for `cwd/mcp-server/dist/server.js`, which doesn't exist when users run via the installed plugin (the dist lives under `~/.claude/plugins/...`). It now uses `import.meta.url` proof-of-life: if the doctor code is running, MCP is connected by definition. Reports `green` with `"server responded (plugin install)"` or `"server responded (local checkout)"` based on running module location. Source/dist drift remains a separate check (`dist_drift`). ([mcp-server/src/tools/doctor.ts:329-380](mcp-server/src/tools/doctor.ts:329))
+
 ## [3.8.0] - 2026-04-28
 
 ### Added — High-stakes track (`/dueling-idea-wizards` integration)
