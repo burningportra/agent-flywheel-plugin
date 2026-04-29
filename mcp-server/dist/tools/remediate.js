@@ -7,6 +7,7 @@ import { mcpConnectivityHandler } from './remediations/mcp_connectivity.js';
 import { agentMailLivenessHandler } from './remediations/agent_mail_liveness.js';
 import { orphanedWorktreesHandler } from './remediations/orphaned_worktrees.js';
 import { checkpointValidityHandler } from './remediations/checkpoint_validity.js';
+import { brBinaryHandler, bvBinaryHandler, ntmBinaryHandler, cmBinaryHandler, } from './remediations/cli_binary.js';
 const OUTPUT_CAP_BYTES = 4 * 1024;
 export const RemediateInputSchema = z.object({
     cwd: z.string().min(1),
@@ -25,10 +26,10 @@ export const RemediateInputSchema = z.object({
 export const REMEDIATION_REGISTRY = {
     mcp_connectivity: mcpConnectivityHandler,
     agent_mail_liveness: agentMailLivenessHandler,
-    br_binary: null,
-    bv_binary: null,
-    ntm_binary: null,
-    cm_binary: null,
+    br_binary: brBinaryHandler,
+    bv_binary: bvBinaryHandler,
+    ntm_binary: ntmBinaryHandler,
+    cm_binary: cmBinaryHandler,
     node_version: null,
     git_status: null,
     dist_drift: distDriftHandler,
