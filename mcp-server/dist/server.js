@@ -99,16 +99,16 @@ const PRIMARY_TOOLS = [
     },
     {
         name: 'flywheel_plan',
-        description: 'Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. Provide planFile (preferred) or planContent to register a completed plan and transition to bead creation.',
+        description: 'Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. mode=duel triggers /dueling-idea-wizards for adversarial 2-agent cross-scoring. Provide planFile (preferred) or planContent to register a completed plan and transition to bead creation.',
         inputSchema: {
             type: 'object',
             properties: {
                 cwd: { type: 'string', description: 'Project working directory' },
                 mode: {
                     type: 'string',
-                    enum: ['standard', 'deep'],
+                    enum: ['standard', 'deep', 'duel'],
                     default: 'standard',
-                    description: 'standard=single-model plan prompt, deep=multi-model agent configs',
+                    description: 'standard=single-model plan prompt, deep=multi-model angle agents, duel=/dueling-idea-wizards adversarial cross-scoring',
                 },
                 planFile: {
                     type: 'string',

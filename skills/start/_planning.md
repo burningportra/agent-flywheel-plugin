@@ -213,14 +213,17 @@ AskUserQuestion(questions: [{
   question: "How would you like to plan?",
   header: "Plan mode",
   options: [
-    { label: "Standard plan", description: "Single planning pass — faster" },
-    { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality, takes longer (Recommended)" },
+    { label: "Standard plan", description: "Single planning pass — faster (~5 min)" },
+    { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality (~15 min, Recommended)" },
+    { label: "Duel plan", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards --mode=architecture — surviving design choices + contested-decision narrative (~30 min; needs ntm + 2 healthy CLIs)" },
     { label: "Triangulated plan", description: "Deep plan + /multi-model-triangulation second-opinion on the synthesis before alignment check — highest quality, longest" },
     { label: "planning-workflow", description: "Invoke /planning-workflow — 4-5 sequential Codex review rounds via NTM + optional multi-model blending. Highest quality for major new features" }
   ],
   multiSelect: false
 }])
 ```
+
+**When to pick Duel plan**: high-stakes architectural decisions where reasonable people disagree (rewrite vs. iterate, framework choice, data-model shape), contested existing code, or no obvious right answer. Cost is a budget choice, not a failure mode — see the high-stakes track in AGENTS.md. If only one of {cc, cod, gmi} is healthy at duel pre-flight, the plan tool downgrades to Deep automatically and emits a warning.
 
 **Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`. `flywheel_plan` auto-detects the most-recent `docs/brainstorms/<goal-slug>-*.md` (written by Phase 0.5) and threads its synthesized framing into the planner prompt; no extra argument is required. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
@@ -232,6 +235,16 @@ if (code === "deep_plan_all_failed") return await flywheel_plan({ cwd, mode: "st
 if (code === "empty_plan" || code === "parse_failure") return requestPlanRegeneration();
 if (code === "cli_not_available") return showInstallGuide(planResult.structuredContent?.data?.error?.hint);
 ```
+
+**Duel plan**: Call `flywheel_plan` with `cwd` and `mode: "duel"`. The tool returns the verbatim `/dueling-idea-wizards` invocation it expects (with `--mode=architecture --top=3 --rounds=1 --focus="<goal>" --output=docs/plans/<date>-<slug>-duel.md`) and stamps `state.planSource = "duel"` so bead-creation injects the Provenance block automatically.
+
+Pre-flight (MANDATORY before invoking the duel skill):
+
+1. **NTM readiness gate** — same script as Deep plan above (auto-symlinks nested repos; refuses on name-collision). On `NTM_AVAILABLE=false`, fall back to `mode: "deep"` and emit `Duel-plan downgraded to Deep — NTM unavailable` to the user.
+2. **Agent inventory** — run `which cc cod gmi 2>/dev/null` (or the duel skill's Phase 1 detection if it exposes `--robot-detect`). Need at least 2 of the 3. If only 1 is available, fall back to `mode: "deep"`.
+3. **Brainstorm handoff** — same auto-detection as Deep plan. The duel agents read `docs/brainstorms/<goal-slug>-*.md` in their study phase.
+
+When the duel completes, the synthesized plan lands at the `--output` path. Re-call `flywheel_plan({ cwd, mode: "duel", planFile: "<that path>" })` to register and advance phase to `awaiting_plan_approval`. Then jump directly to Step 5.55 (Plan alignment check) — the duel surfaces tensions the alignment check exists to surface; do NOT skip it.
 
 **planning-workflow**: Invoke `/planning-workflow` to get the exact review prompt, then run 4-5 sequential Codex review rounds via NTM. Each round spawns a fresh Codex pane with the current plan and the planning-workflow review prompt; after it completes, integrate its revisions with `ultrathink` before spawning the next round. Optionally follow with multi-model blending (additional NTM panes for Gemini/Pi perspectives). After all rounds converge:
 1. Write the final plan to `docs/plans/<date>-<goal-slug>-planning-workflow.md`.

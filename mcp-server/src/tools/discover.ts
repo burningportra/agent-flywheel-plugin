@@ -34,6 +34,8 @@ export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise
   // Write artifact for reference
   const topIdeas = ideas.filter(i => i.tier === 'top');
   const honorableIdeas = ideas.filter(i => i.tier === 'honorable' || !i.tier);
+  const duelIdeas = ideas.filter(i => i.provenance?.source === 'duel' || i.provenance?.source === 'reality-check-duel');
+  const contestedIdeas = duelIdeas.filter(i => i.provenance?.contested === true);
   const artifactLines: string[] = [
     `# Discovery Ideas — ${new Date().toISOString().slice(0, 10)}`,
     '',
@@ -78,19 +80,31 @@ export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise
   const ideaList = ideas.map((idea, i) => {
     let line = `${i + 1}. **[${idea.category}] ${idea.title}** (effort: ${idea.effort}, impact: ${idea.impact})`;
     if (idea.tier === 'honorable') line += ' _(honorable mention)_';
+    if (idea.provenance?.contested) line += ' ⚔️ _contested_';
     line += `\n   ${idea.description}`;
     if (idea.scores) {
       const s = idea.scores;
       const weighted = s.useful * 2 + s.pragmatic * 2 + s.accretive * 1.5 + s.robust + s.ergonomic;
       line += `\n   Score: ${weighted.toFixed(1)}/37.5`;
     }
+    if (idea.provenance?.agentScores) {
+      const parts = Object.entries(idea.provenance.agentScores).map(([k, v]) => `${k}=${v}`);
+      line += `\n   Cross-scores (0-1000): ${parts.join(', ')}`;
+    }
+    if (idea.provenance?.survivingCritique) {
+      line += `\n   ⚠ Surviving critique: ${idea.provenance.survivingCritique}`;
+    }
     if (idea.rationale) line += `\n   _${idea.rationale}_`;
     return line;
   }).join('\n\n');
 
+  const provenanceHint = duelIdeas.length > 0
+    ? `\n\nThis discovery batch came out of a /dueling-idea-wizards run (${duelIdeas.length} adversarially cross-scored idea${duelIdeas.length === 1 ? '' : 's'}, ${contestedIdeas.length} contested). When you present these to the user, group them as **Consensus winners** (provenance.contested=false) and **Contested** (provenance.contested=true) so the user sees where the agents disagreed. Carry the surviving critique into the bead body's Provenance block at bead-creation time.`
+    : '';
+
   const text = `**NEXT: Call \`flywheel_select\` with the user's chosen goal.**
 
-Present these ${ideas.length} ideas to the user (${topIdeas.length} top, ${honorableIdeas.length} honorable) and ask them to choose one. Then call \`flywheel_select\` with their chosen goal.
+Present these ${ideas.length} ideas to the user (${topIdeas.length} top, ${honorableIdeas.length} honorable) and ask them to choose one. Then call \`flywheel_select\` with their chosen goal.${provenanceHint}
 
 ---
 
@@ -119,7 +133,10 @@ ${ideaList}`;
         impact: idea.impact,
         tier: idea.tier,
         rationale: idea.rationale,
+        provenance: idea.provenance,
       })),
+      duelIdeas: duelIdeas.length,
+      contestedIdeas: contestedIdeas.length,
     },
   });
 }

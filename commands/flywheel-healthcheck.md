@@ -25,6 +25,15 @@ Check all systems and produce a health score.
 - Run `br list --json` — count open/closed/in-progress/deferred
 - Run `bv --json` — check for cycles or orphaned beads
 
+**Duel artifact hygiene** (cwd-scoped, read-only):
+- `find . -maxdepth 1 -name 'WIZARD_*.md' -mtime +7 -print` — list duel transcripts older than 7 days
+- `find . -maxdepth 1 -name 'DUELING_WIZARDS_REPORT.md' -mtime +7 -print` — stale synthesis reports
+- For each match, surface in the report under a STALE DUEL ARTIFACTS section. Do **not** auto-delete — these contain irreplaceable adversarial-debate transcripts and feed the bead Provenance block. Suggest running `/flywheel-cleanup` if the user wants to archive or remove them.
+
+**Duel readiness** (one line in the report):
+- Count of healthy {cc, cod, gmi} CLIs from doctor's last run + ntm presence.
+- Render: `Duel-ready: yes (cc+cod+gmi healthy, ntm ok)` / `partial (cc+cod only)` / `no (ntm missing)` / `no (only 1 CLI healthy)`.
+
 **Display health report**:
 ```
 DEPENDENCIES

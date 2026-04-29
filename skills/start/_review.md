@@ -42,6 +42,18 @@ Pass the chosen mode into every `flywheel_review` `hit-me` call this wave (`mode
 
 Once the full wave is in, present a consolidated review prompt. Never ask per-bead if multiple beads finished together.
 
+### 8.0a — Risky-bead detection (offer Duel review automatically)
+
+Before asking the user how to review, classify each just-finished bead. A bead is **risky** if any of:
+
+- `priority === 0` (P0)
+- `br show <id>` reports >5 changed files in the bead's working diff
+- the bead body or labels mention any of: `security`, `auth`, `crypto`, `secret`, `permission`, `migration`, `breaking-change`
+- `state.beadResults[<id>].status === "partial"` (impl agent reported it didn't fully land)
+- the bead's `provenance.contested === true` (came from a Duel discovery and was the contested winner the user picked anyway)
+
+For risky beads, the review menu below gains a **Duel review** row that replaces the 5-agent fresh-eyes path with a 2-agent adversarial review via `/dueling-idea-wizards --mode=security` (for security/auth/crypto/secret/permission signals) or `--mode=reliability` (for everything else). Non-risky beads keep the original 3-row menu — running a duel on every bead in a 200-bead project burns budget for no signal.
+
 If a **single bead** finishes, use `AskUserQuestion`:
 
 ```
@@ -52,6 +64,8 @@ AskUserQuestion(questions: [{
     { label: "Looks good", description: "Accept and move on" },
     { label: "Self review", description: "Send the impl agent back to audit its own diff" },
     { label: "Fresh-eyes", description: "5 parallel review agents give independent feedback" }
+    // If the bead is risky (per §8.0a), add a 4th option:
+    // , { label: "Duel review", description: "2 agents (cc + cod) cross-critique via /dueling-idea-wizards --mode=security|reliability — adversarial signal for high-stakes beads (~20 min)" }
   ],
   multiSelect: false
 }])
@@ -112,6 +126,29 @@ Actions:
      **Persistent inbox failure fallback**: If inbox remains empty after all nudges, do not block. Read findings files directly from disk (`docs/reviews/<perspective>-<date>.md`) using the Read tool. If no disk file exists either, synthesize from `git diff <base-sha>..HEAD` directly.
   4. Shutdown each reviewer individually after collecting results — do NOT broadcast structured messages to `"*"`
   5. Collect and summarize results. If fewer than 5 reviewers delivered via inbox, synthesize from disk files + `git diff` — do NOT wait indefinitely for unresponsive reviewers.
+
+- **"Duel review `<id>`"** (only offered for risky beads per §8.0a) -> invoke `/dueling-idea-wizards` against the bead's diff:
+  1. Resolve the bead's primary signal class:
+     - security/auth/crypto/secret/permission keyword in body or labels → `--mode=security`
+     - everything else risky → `--mode=reliability`
+  2. Stage the bead's diff into a review-input file the duel agents can study:
+     ```bash
+     mkdir -p docs/reviews
+     git diff <pre-bead-sha>..HEAD -- $(br show <id> --files) > docs/reviews/<id>-duel-input.diff
+     ```
+  3. Invoke the duel skill with the bead context as focus:
+     ```
+     /dueling-idea-wizards --mode=<security|reliability> \
+       --top=3 --rounds=1 \
+       --focus="Review bead <id> diff at docs/reviews/<id>-duel-input.diff for <signal>" \
+       --output=docs/reviews/<id>-duel-report.md
+     ```
+  4. Pre-flight: `which ntm` + `which cc cod gmi 2>/dev/null` must yield ntm + ≥2 agents. On failure, fall back to Fresh-eyes (5-agent) automatically and emit `Duel review downgraded to Fresh-eyes — <reason>`.
+  5. After the report lands at `docs/reviews/<id>-duel-report.md`, read it and route on its **consensus** verdicts only:
+     - **Consensus issues** (both agents flagged) → block the bead with `flywheel_review action: "hit-me"` and prepend the consensus issue list to the per-bead review notes.
+     - **Contested findings** (one agent flagged, the other defended) → surface via `AskUserQuestion` with the two arguments side-by-side; the user arbitrates. Do NOT auto-block on contested findings.
+     - **No findings** → call `flywheel_review action: "looks-good"` for the bead.
+  6. Why this is cheaper than 5-agent: 2 agents adversarially cross-checked beats 5 agents independently brainstorming when the question is "is THIS specific bead safe to ship?". Duel review is targeted, not exploratory.
 
   > **Closed-bead handling:** `flywheel_review` now reconciles the bead state itself — `looks-good` is idempotent (advances to the next bead/gates), `hit-me` runs a post-close audit (payload tagged `postClose: true`), and `skip` returns `already_closed`. No manual workaround needed.
 

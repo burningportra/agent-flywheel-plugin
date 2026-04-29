@@ -77,6 +77,9 @@ function errorResult(phase, code, message, details, hint) {
  * mode="standard": Returns a prompt for the agent to generate a single plan
  * mode="deep": Returns spawn configs for 3 parallel planning agents (correctness, robustness, ergonomics)
  *              If planContent is provided, uses it directly to create beads.
+ * mode="duel":  Returns instructions to invoke /dueling-idea-wizards --mode=architecture for 2-agent
+ *               adversarial planning (CC + COD/GMI cross-scoring). Synthesis lands at
+ *               docs/plans/<date>-<slug>-duel.md and is registered via planFile on the next call.
  */
 export async function runPlan(ctx, args) {
     const { state, saveState, cwd } = ctx;
@@ -242,6 +245,51 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
             planDocument: planPath,
             constraints: state.constraints,
             brainstormDocument: brainstorm?.path,
+        });
+    }
+    // ── Duel plan (adversarial cross-scoring via /dueling-idea-wizards) ──────
+    if (mode === 'duel') {
+        const brainstorm = readLatestBrainstorm(cwd, planSlug);
+        const planPath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}-duel.md`;
+        state.planDocument = planPath;
+        saveState(state);
+        const brainstormHint = brainstorm
+            ? `\n  - Pre-seed each agent with the brainstorm artifact at \`${brainstorm.path}\` (read FIRST in their study phase) so both planners share scope-floor / 10x-ceiling / adjacent-ask framing.`
+            : '\n  - No Phase 0.5 brainstorm artifact found — both agents will study the repo profile only.';
+        const text = `**NEXT: Invoke \`/dueling-idea-wizards --mode=architecture --top=3 --rounds=1\` for adversarial planning.**
+
+Goal: "${goal}"${constraintsSummary}
+
+## Duel-plan orchestration
+
+This mode runs two independent planning agents (Claude Code + Codex, plus Gemini if available) through the full duel pipeline: study → independent plans → cross-scoring (0-1000) → reveal → synthesis. Surviving design choices land in a single synthesized plan with an "Adversarial review" section capturing consensus design choices, contested design choices (with both arguments), and any steelman reframings.
+
+### Steps for the orchestrator
+
+1. **Pre-flight** — verify ntm is installed and at least 2 of {cc, cod, gmi} are healthy. If only one agent is available, fall back to \`mode=deep\` (single-model angle agents) and emit a one-line warning.${brainstormHint}
+2. **Invoke** the skill via \`Skill\` with:
+   \`\`\`
+   /dueling-idea-wizards --mode=architecture --top=3 --rounds=1 --focus="${goal.replace(/"/g, '\\"')}" --output=${planPath}
+   \`\`\`
+3. **Synthesis pickup** — when the duel completes, the skill writes its final report to the \`--output\` path. The orchestrator should then call \`flywheel_plan({ cwd, mode: "duel", planFile: "${planPath}" })\` to register the synthesized plan and advance phase to \`awaiting_plan_approval\`.
+4. **Provenance carry-through** — when beads are created from this plan in Step 5.5, every bead's body MUST include a \`## Provenance\` block with: \`Source: dueling-wizards (mode=architecture)\`, agent cross-scores, the strongest surviving critique, and (if Phase 6.75 ran) the steelman one-liner. The flywheel_approve_beads tool autoinjects this when state.planSource = "duel".
+
+### When to use this vs. deep plan
+
+- **Duel plan** decorrelates generation from evaluation — best for high-stakes architectural decisions where reasonable people disagree. Cost: ~30 min per run.
+- **Deep plan** spawns 3 same-team angle-agents (correctness/robustness/ergonomics). Faster (~15 min) but no adversarial cross-score. Best for refinement when the architectural shape is already clear.
+
+After the duel completes and you call \`flywheel_plan\` again with \`planFile\`, jump directly to Step 5.55 (Plan alignment check). Do NOT skip 5.55 — the duel surfaces tensions the alignment check exists to surface.`;
+        state.planSource = 'duel';
+        saveState(state);
+        return okResult(text, 'planning', {
+            kind: 'duel_plan_spawn',
+            mode: 'duel',
+            goal,
+            constraints: state.constraints,
+            brainstormDocument: brainstorm?.path,
+            planDocument: planPath,
+            duelCommand: `/dueling-idea-wizards --mode=architecture --top=3 --rounds=1 --focus="${goal}" --output=${planPath}`,
         });
     }
     // ── Deep plan (multi-model) ───────────────────────────────────

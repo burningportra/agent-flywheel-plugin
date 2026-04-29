@@ -23,6 +23,19 @@ Show flywheel status for this project.
 
 5. **Next recommended bead**: Run `bv --robot-next` via Bash to get the next optimal bead to work on.
 
+5.5. **Active duel detection**: Check for `WIZARD_*.md` artifacts in cwd:
+   ```bash
+   ls WIZARD_IDEAS_*.md WIZARD_SCORES_*.md WIZARD_REACTIONS_*.md DUELING_WIZARDS_REPORT.md 2>/dev/null
+   ```
+   If any exist, surface a one-line indicator with the inferred phase:
+   - `WIZARD_IDEAS_*.md` only → `Active duel: ideation in progress (<N> agents posted)`
+   - `WIZARD_SCORES_*.md` present → `Active duel: cross-scoring`
+   - `WIZARD_REACTIONS_*.md` present → `Active duel: reveal phase`
+   - `DUELING_WIZARDS_REPORT.md` present and >1KB → `Duel complete: see <path> for synthesis`
+   - Mtime of newest WIZARD_*.md is >7 days old → append `(stale — run /flywheel-cleanup to flag)`
+
+   Pull `--mode=` from the last line of the most recent `WIZARD_IDEAS_*.md` (the duel skill writes its mode in a header line) and surface it. Do NOT auto-clean or delete artifacts — this is read-only status.
+
 For per-template calibration ratios, see the Calibration section below.
 
 6. **Calibration**: Read `.pi-flywheel/calibration.json`. When it exists AND `totalBeadsConsidered ≥ 3`, render the top 3 rows sorted by `sampleCount` descending:

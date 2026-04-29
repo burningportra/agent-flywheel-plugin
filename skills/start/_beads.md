@@ -22,6 +22,33 @@ Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create t
    br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority 2 --type task
    ```
 
+   **Provenance block (MANDATORY when source is a duel).** If `state.planSource === "duel"` (set by `flywheel_plan mode="duel"`) OR the source idea's `provenance.source === "duel"` / `"reality-check-duel"` (set by `flywheel_discover` from a duel run), append a `## Provenance` section to every bead's `--description` payload. This is the highest-leverage, lowest-cost piece of the high-stakes track — every downstream agent (implementer, reviewer, swarm) inherits the adversarial context for free. Template:
+
+   ```markdown
+   ## Provenance
+   - **Source:** dueling-wizards (mode=<ideas|architecture|security|reliability>, run=<ISO timestamp>)
+   - **Agent scores:** cc=<0-1000>, cod=<0-1000>, gmi=<0-1000 or n/a>
+   - **Strongest surviving critique:** "<one-line critique from the opponent's reveal-phase that the originator did NOT successfully defend against>"
+   - **Steelman summary:** "<one-line steelman from Phase 6.75 if it ran; omit the line if no steelman phase>"
+   - **Contested:** <true|false> — true means the agents disagreed >300 pts on cross-score; the user explicitly accepted the contested winner.
+   ```
+
+   Pull the values from `idea.provenance` (for discovery-sourced beads) or from the parsed `DUELING_WIZARDS_REPORT.md` synthesis section (for plan-sourced beads). When the duel report is at `docs/plans/<date>-<slug>-duel.md` or `docs/duels/<phase>-<slug>-<date>.md`, scan the "Consensus winners" / "Contested decisions" / "Steelman" sections for the right values; never invent scores. Heredoc form (escape backticks where needed):
+
+   ```bash
+   br create --title "<title>" --type task --priority 2 --description "$(cat <<'EOF'
+   <body>
+
+   ## Provenance
+   - Source: dueling-wizards (mode=architecture, run=2026-04-28T14:22Z)
+   - Agent scores: cc=920, cod=860, gmi=n/a
+   - Strongest surviving critique: "<one-line>"
+   - Steelman summary: "<one-line, or omit the line>"
+   - Contested: false
+   EOF
+   )"
+   ```
+
 2. **Auto-generate test beads:** If a bead's acceptance criteria include testing requirements (unit tests, e2e tests, integration tests), create a companion test bead that depends on the implementation bead:
    ```
    br create --title "Test: <impl bead title>" --description "Write tests for <bead-id>: <specific test requirements from acceptance criteria>" --priority 2 --type task

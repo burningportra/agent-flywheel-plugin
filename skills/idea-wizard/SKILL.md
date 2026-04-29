@@ -9,6 +9,19 @@ description: >-
 
 > Generate many → winnow ruthlessly → operationalize into self-documenting beads.
 
+## When to escalate to a duel
+
+Use `/dueling-idea-wizards` (or `/flywheel-duel` for state-aware routing) instead of this skill when:
+
+- The decision is **high-stakes architectural** — rewrite vs. iterate, framework choice, data-model shape, anything that's expensive to undo.
+- The space is **contested** — reasonable engineers would disagree, or the existing code already represents a decision someone else made for unclear reasons.
+- There's **no obvious right answer** — competing approaches all have credible cases.
+- The question is **blue-sky** — no implementation precedent to copy, evaluation criteria themselves are unclear.
+
+The duel decorrelates generation from evaluation: two agents independently brainstorm, then cross-score each other's ideas 0–1000, reveal, and synthesize. Surviving ideas survived adversarial pressure; dead ideas got killed cheaply on paper instead of expensively in code. Cost: ~20–55 min per run; needs ntm + ≥2 of {cc, cod, gmi}.
+
+This skill (`/idea-wizard`) is the right call when the question is well-shaped, you trust a single model's judgment, or you don't have the budget for a duel — most discovery cycles fall here. Default to single-agent; escalate to duel deliberately.
+
 ## Quick Start
 
 ```

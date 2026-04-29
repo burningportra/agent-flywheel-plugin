@@ -190,6 +190,8 @@ describe('runDiscover', () => {
         totalIdeas: 2,
         topIdeas: 1,
         honorableIdeas: 1,
+        duelIdeas: 0,
+        contestedIdeas: 0,
         ideaIds: ['idea-1', 'idea-2'],
         ideas: [
           {
@@ -200,6 +202,7 @@ describe('runDiscover', () => {
             impact: 'high',
             tier: 'top',
             rationale: 'High traffic endpoints need protection',
+            provenance: undefined,
           },
           {
             id: 'idea-2',
@@ -209,6 +212,7 @@ describe('runDiscover', () => {
             impact: 'high',
             tier: 'honorable',
             rationale: 'High traffic endpoints need protection',
+            provenance: undefined,
           },
         ],
       },

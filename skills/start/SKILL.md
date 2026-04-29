@@ -473,6 +473,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Fast (default)", description: "flywheel_discover one-shot — 5-10 ranked ideas (Recommended for repeat cycles)" },
     { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30→5→15 pipeline — matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
+    { label: "Duel (dueling-idea-wizards)", description: "Two agents (cc + cod, plus gmi if available) independently brainstorm, cross-score 0-1000, reveal, and synthesize — adversarial decorrelation; ~20-30 min; needs ntm" },
     { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation for second-opinion scoring across Codex/Gemini/Grok" }
   ],
   multiSelect: false
@@ -481,6 +482,7 @@ AskUserQuestion(questions: [{
 
 - **Fast** → continue below with `flywheel_discover`.
 - **Deep** → invoke `/idea-wizard` (run phases 2–4: generate 30→5→15 ideas + check overlaps vs open beads; skip phases 5–6 bead creation — the flywheel handles that in Steps 5.5–6), then present the top ideas as goal options and continue with the standard goal-selection menu.
+- **Duel** → invoke `/dueling-idea-wizards --mode=ideas --top=5 --rounds=1`. Pre-flight: confirm `ntm deps -v` succeeds and at least 2 of {cc, cod, gmi} are healthy (the duel skill's Phase 1 detection runs this for you; if it returns only 1 agent, fall back to Deep with a one-line warning). After the duel emits `DUELING_WIZARDS_REPORT.md`, parse the report's consensus winners + contested ideas and feed them into `flywheel_discover` with each idea's `provenance` populated (`source: "duel"`, `agentScores`, `contested`, `survivingCritique`). When you present the goal-selection menu, group options under three headers: **Consensus winners** (4 highest combined cross-scores, all `contested: false`), **Contested** (highest combined score with any agent disagreement >300 pts), and surface a "Dead ideas (FYI)" footnote line listing the lowest 3 by title only — NOT in the menu options. Auto-recommend the Duel row when the repo profile signals high uncertainty: README is <500 chars, no clear product direction in the top-of-tree files, or ≥3 contested TODOs in `profile.todos`.
 - **Triangulated** → run `/idea-wizard`, then `/multi-model-triangulation` on the top-5 list to surface which ideas all models agree on vs which are one-model bets.
 
 If `MCP_DEGRADED` is false, call `flywheel_discover` with `cwd`.

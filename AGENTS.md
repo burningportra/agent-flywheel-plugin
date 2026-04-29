@@ -6,6 +6,27 @@ Guidance for sub-agents working in this repository.
 
 agent-flywheel is an MCP server that drives a multi-phase development workflow: scan, discover, plan, implement, review. The MCP server runs over stdio (JSON-RPC) from `mcp-server/src/server.ts`.
 
+## High-stakes track (dueling-idea-wizards integration)
+
+The flywheel has a **standard track** (single-agent at every phase) and a **high-stakes track** that surfaces adversarial cross-scoring at four seams. Both tracks share the same checkpoint state, beads, and downstream tools — only the generator changes.
+
+The duel is one extra row in the menus the user already sees when running `/agent-flywheel:start`. No CLI flags to remember.
+
+| Seam              | Standard generator                  | Duel-track replacement                                     | Trigger                                                |
+|-------------------|-------------------------------------|------------------------------------------------------------|--------------------------------------------------------|
+| Step 3 Discover   | `flywheel_discover` / `/idea-wizard`| `/dueling-idea-wizards --mode=ideas`                       | "Duel" row in the discovery-depth menu                 |
+| Step 5 Plan       | `flywheel_plan(mode=standard\|deep)`| `flywheel_plan(mode=duel)` → `--mode=architecture`         | "Duel plan" row in the plan-mode menu                  |
+| Reality-check     | single-agent gap report             | `--duel` → `--mode=reliability --focus=vision-vs-code drift`| "Duel reality-check" row in `/flywheel-reality-check`  |
+| Step 9 Review     | 5-agent fresh-eyes                  | 2-agent `--mode=security\|reliability`                     | Auto-routed for risky beads (p0, security path, etc.)  |
+
+Plus a direct entry point: `/agent-flywheel:flywheel-duel` (state-aware — picks `--mode` from the current phase, routes artifacts into the right `docs/` folder, and chains into `flywheel_discover` / `flywheel_plan` / per-bead review automatically).
+
+**Pre-conditions for any duel.** ntm + ≥2 of {cc, cod, gmi} must be healthy. The doctor's `ntm_binary`, `claude_cli`, `codex_cli`, `gemini_cli`, and `swarm_model_ratio` checks together cover this. Cost: ~20–55 min per run.
+
+**Bead provenance.** Every bead created from a duel-sourced idea or duel-generated plan carries a `## Provenance` block (template in `skills/start/_beads.md` Step 5.5) listing source mode, agent cross-scores (0–1000), the strongest surviving critique that survived the reveal phase, and (if Phase 6.75 ran) a steelman one-liner. Downstream implementers and reviewers inherit the adversarial context without extra prompting — this is the highest-leverage piece of the integration.
+
+**Artifacts.** Duel transcripts (`WIZARD_IDEAS_*.md`, `WIZARD_SCORES_*.md`, `WIZARD_REACTIONS_*.md`, `DUELING_WIZARDS_REPORT.md`) live in the project root by default; the flywheel routes the synthesis report into `docs/discovery/`, `docs/plans/`, `docs/duels/`, or `docs/reviews/` based on phase. `flywheel-cleanup` flags WIZARD_*.md older than 7 days; never auto-deletes — these are the irreplaceable adversarial-debate record.
+
 ## Build
 
 ```bash

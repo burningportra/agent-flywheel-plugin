@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-04-28
+
+### Added — High-stakes track (`/dueling-idea-wizards` integration)
+
+Surfaces the global `/dueling-idea-wizards` skill as one extra row in the menus the user already sees in `/agent-flywheel:start`. Adversarial 2-agent (cc + cod, plus gmi when available) cross-scoring is now a first-class generator at four seams: discovery, planning, reality-check, and review-of-risky-beads. Single-agent paths remain default; the duel is opt-in.
+
+- **Step 3 Discover menu** — new `Duel (dueling-idea-wizards)` row alongside Fast / Deep / Triangulated. Two agents independently brainstorm 5 ideas each, cross-score 0–1000, reveal, and synthesize. Results feed `flywheel_discover` with `provenance.source = "duel"` per idea; selection menu groups options under **Consensus winners** / **Contested** / "Dead ideas (FYI)".
+- **Step 5 Plan menu** — new `Duel plan` row alongside Standard / Deep / Triangulated / planning-workflow. `flywheel_plan(mode="duel")` returns the verbatim `/dueling-idea-wizards --mode=architecture --top=3 --rounds=1 --focus="<goal>"` invocation, sets `state.planSource = "duel"`, and synthesizes into `docs/plans/<date>-<slug>-duel.md` with an "Adversarial review" section.
+- **`/flywheel-reality-check` `--duel` flag / depth-menu row** — `--mode=reliability --focus="vision-vs-code drift"`. Consensus gaps become beads with `provenance.source = "reality-check-duel"`; contested gaps surface to the user via `AskUserQuestion` for explicit decision.
+- **Step 9 Review** — risky-bead heuristic (priority p0, security/auth/crypto/secret/permission/migration/breaking-change keywords, partial impl, contested upstream provenance) auto-routes to a 2-agent `/dueling-idea-wizards --mode=security|reliability` review against the bead's diff. Non-risky beads keep the existing 5-agent fresh-eyes review.
+
+**Cross-cutting plumbing:**
+
+- New `IdeaProvenance` type (`mcp-server/src/types.ts`) with `source`, `runAt`, `agentScores`, `contested`, `survivingCritique`, `steelman` fields. `CandidateIdea.provenance?` and `FlywheelState.planSource?` added; `PlanArgs.mode` extended to `"standard" | "deep" | "duel"`.
+- `flywheel_discover` (`mcp-server/src/tools/discover.ts`) surfaces `duelIdeas` / `contestedIdeas` counts, agent cross-scores, and the surviving-critique line in the rendered idea list. Returns the `provenance` object in structured content for downstream tools.
+- `flywheel_plan` (`mcp-server/src/tools/plan.ts`) gains a `mode="duel"` branch returning a `duel_plan_spawn` payload with the exact `/dueling-idea-wizards` invocation, brainstorm-artifact handoff, and pre-flight gate documentation.
+- Bead provenance template (`skills/start/_beads.md` Step 5.5) — every bead created from a duel-sourced idea or plan carries a `## Provenance` block with agent cross-scores, the strongest surviving critique, and (if Phase 6.75 ran) a steelman one-liner. Downstream implementers and reviewers inherit the adversarial context without extra prompting.
+- New `/agent-flywheel:flywheel-duel` direct entry point (`commands/flywheel-duel.md` + `skills/flywheel-duel/SKILL.md`) — state-aware: picks `--mode` from `state.phase`, routes the `DUELING_WIZARDS_REPORT.md` synthesis into the right `docs/` subfolder, and chains into `flywheel_discover` / `flywheel_plan` / per-bead review automatically.
+- `/flywheel-status` detects `WIZARD_*.md` artifacts and surfaces the inferred duel phase (ideation / cross-scoring / reveal / complete) plus stale-artifact age.
+- `/flywheel-doctor` documents how the existing `ntm_binary` + `claude_cli` + `codex_cli` + `gemini_cli` + `swarm_model_ratio` checks together cover duel-readiness (no new probe needed).
+- `/flywheel-healthcheck` flags `WIZARD_*.md` and `DUELING_WIZARDS_REPORT.md` older than 7 days for review (never auto-deletes — these contain irreplaceable adversarial-debate transcripts).
+- `/idea-wizard` SKILL.md adds a "When to escalate to a duel" decision rule (high-stakes architecture, contested code, no obvious right answer, blue-sky exploration).
+- `AGENTS.md` + `README.md` document the high-stakes track with a 4-seam table.
+
+**Pre-conditions for any duel.** ntm + ≥2 of {cc, cod, gmi} healthy. Cost: ~20–55 min per run. If only 1 CLI is available, the duel skill aborts in Phase 1 detection and the flywheel falls back to single-agent paths automatically.
+
 ## [3.7.2] - 2026-04-28
 
 ### Changed

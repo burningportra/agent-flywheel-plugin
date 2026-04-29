@@ -295,6 +295,22 @@ export interface CandidateIdea {
     synergies?: string[];
     /** Rubric scores (1-5 per axis). */
     scores?: IdeaScores;
+    /** Origin metadata when this idea came out of an adversarial duel run. Undefined for single-wizard / fast-path ideas. */
+    provenance?: IdeaProvenance;
+}
+export interface IdeaProvenance {
+    /** Where the idea came from. */
+    source: "single-wizard" | "duel" | "reality-check-duel" | "manual";
+    /** ISO timestamp of the duel run (or generator). */
+    runAt?: string;
+    /** Per-agent cross-scores out of 1000, keyed by agent shorthand (cc/cod/gmi). */
+    agentScores?: Record<string, number>;
+    /** True when the duel scored this idea inconsistently across agents (see references/SCORING.md threshold). */
+    contested?: boolean;
+    /** One-line summary of the strongest opponent critique that survived the reveal phase — feed straight into bead bodies. */
+    survivingCritique?: string;
+    /** Optional steelman framing produced in Phase 6.75; usually one line. */
+    steelman?: string;
 }
 export type IdeaCategory = "feature" | "refactor" | "docs" | "dx" | "performance" | "reliability" | "security" | "testing";
 export type FlywheelPhase = "idle" | "profiling" | "discovering" | "awaiting_selection" | "planning" | "researching" | "awaiting_plan_approval" | "creating_beads" | "refining_beads" | "awaiting_bead_approval" | "implementing" | "reviewing" | "iterating" | "complete" | "doctor";
@@ -370,6 +386,8 @@ export interface FlywheelState {
     planConvergenceScore?: number;
     /** Plan quality readiness score from the Plan Quality Oracle. */
     planReadinessScore?: unknown;
+    /** How the plan was generated. Drives downstream Provenance-block injection at bead-creation time. */
+    planSource?: "standard" | "deep" | "duel" | "planning-workflow" | "external";
     /**
      * Persisted across phases so a session restart can resume from the last
      * completed phase rather than rerunning the full 7-phase pipeline.
@@ -476,7 +494,7 @@ export interface SelectArgs {
 }
 export interface PlanArgs {
     cwd: string;
-    mode?: "standard" | "deep";
+    mode?: "standard" | "deep" | "duel";
     planContent?: string;
     planFile?: string;
 }

@@ -77,7 +77,19 @@ If a first-time user asks "which do I run?" the answer is `/flywheel-doctor` —
 | `/agent-flywheel:flywheel-tool-feedback` | Submit feedback on agent-flywheel behavior |
 | `/agent-flywheel:flywheel-healthcheck` | Full dependency and codebase health check |
 | `/agent-flywheel:flywheel-doctor` | One-shot diagnostic of toolchain deps (MCP, Agent Mail, br/bv/ntm/cm, node, git, dist-drift, orphaned worktrees, checkpoint) |
+| `/agent-flywheel:flywheel-duel` | State-aware adversarial duel — wraps `/dueling-idea-wizards` and routes artifacts into the active flywheel phase (discovery/plan/review) |
 | `/agent-flywheel:memory` | Search or store CASS long-term memory |
+
+### High-stakes track
+
+The flywheel surfaces `/dueling-idea-wizards` as one extra row in the menus you already see when running `/agent-flywheel:start`:
+
+- **Discover (Step 3):** "Duel" row in the depth menu — two agents independently brainstorm 5 ideas each, cross-score 0–1000, reveal, and synthesize. Consensus winners + contested ideas land in the goal-selection menu with provenance attached.
+- **Plan (Step 5):** "Duel plan" row in the plan-mode menu — `/dueling-idea-wizards --mode=architecture` for adversarial planning. The synthesized plan goes into `docs/plans/<date>-<slug>-duel.md` with an "Adversarial review" section.
+- **Reality check:** "Duel reality-check" row — two agents independently produce gap reports vs. AGENTS.md / README.md / plans, cross-rate severity. Consensus gaps become beads; contested gaps surface to you for explicit decision.
+- **Review (Step 9):** Auto-routed for risky beads (p0, security path, breaking change). Two agents adversarially review the diff via `/dueling-idea-wizards --mode=security|reliability`. Non-risky beads keep the standard 5-agent fresh-eyes review.
+
+Beads created from duel-sourced ideas carry a `## Provenance` block (agent cross-scores, the strongest surviving critique, optional steelman one-liner) that downstream implementers and reviewers inherit for free. Pre-conditions: ntm + ≥2 of {cc, cod, gmi} healthy (run `/flywheel-doctor` to verify). Cost: ~20–55 min per duel run.
 
 ## Architecture
 
