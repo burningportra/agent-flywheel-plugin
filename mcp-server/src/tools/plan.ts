@@ -332,7 +332,7 @@ This mode runs two independent planning agents (Claude Code + Codex, plus Gemini
 
 ### Steps for the orchestrator
 
-1. **Pre-flight** — verify ntm is installed and at least 2 of {cc, cod, gmi} are healthy. If only one agent is available, fall back to \`mode=deep\` (single-model angle agents) and emit a one-line warning.${brainstormHint}
+1. **Pre-flight** — verify ntm is installed and at least 2 of {claude, codex, gemini} are on \`$PATH\` (the real binaries behind the \`cc/cod/gmi\` ntm pane types — do NOT \`which cc\` literally; it matches \`/usr/bin/cc\`). If only one agent is available, fall back to \`mode=deep\` (single-model angle agents) and emit a one-line warning.${brainstormHint}
 2. **Invoke** the skill via \`Skill\` with:
    \`\`\`
    /dueling-idea-wizards --mode=architecture --top=3 --rounds=1 --focus="${goal.replace(/"/g, '\\"')}" --output=${planPath}

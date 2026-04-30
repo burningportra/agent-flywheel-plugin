@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.2] - 2026-04-30
+
+### Fixed
+
+- **Duel pre-flight false-negative.** `cc/cod/gmi` are ntm pane-type labels, not local binary names — the underlying CLIs are `claude`, `codex`, `gemini`. Previous pre-flight scripts ran `which cc` (matches `/usr/bin/cc`, the C compiler) and `which cod` / `which gmi` (always missing), so `/agent-flywheel:flywheel-duel` aborted with `DUEL_BLOCKED reason=insufficient-agents` even when all three CLIs were healthy via ntm. Pre-flight now checks `claude`, `codex`, `gemini` directly across `skills/flywheel-duel/SKILL.md`, `skills/start/{SKILL,_planning,_review}.md`, `skills/flywheel-swarm/SKILL.md`, `commands/flywheel-{swarm,duel,reality-check}.md`, and the duel-plan instruction string emitted by `mcp-server/src/tools/plan.ts`. Doctor's `claude_cli` / `codex_cli` / `gemini_cli` checks were already correct and are unchanged.
+
 ## [3.10.1] - 2026-04-30
 
 ### Changed

@@ -26,7 +26,7 @@ Run a strategic reality-check pass on the current project — the "come-to-Jesus
 
 When the user picks **Duel reality-check** (or invokes `/flywheel-reality-check --duel`):
 
-1. Pre-flight identical to `/flywheel-duel`: `command -v ntm && ntm deps -v` and ≥2 of {cc, cod, gmi}. On failure, fall back to **Reality check + beads** with a one-line warning.
+1. Pre-flight identical to `/flywheel-duel`: `command -v ntm && ntm deps -v` and ≥2 of {claude, codex, gemini} on `$PATH` (the real binaries behind the `cc/cod/gmi` ntm pane types — do not `which cc` literally; it matches `/usr/bin/cc`). On failure, fall back to **Reality check + beads** with a one-line warning.
 2. Invoke `/dueling-idea-wizards --mode=reliability --top=5 --rounds=1 --focus="vision-vs-code drift" --output=docs/reality-checks/<date>-duel.md`. Each agent reads AGENTS.md / README.md / docs/plans/ first, then walks the codebase, then writes its independent gap list before any cross-talk.
 3. After the duel completes, parse the synthesis:
    - **Consensus gaps** (both agents flagged the same gap) → `br create` per gap with `provenance.source = "reality-check-duel"` and the standard `## Provenance` block (per `_beads.md` Step 5.5). Tag each bead with the bead-graph label `reality-check`.

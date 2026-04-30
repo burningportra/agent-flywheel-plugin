@@ -241,7 +241,7 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
 Pre-flight (MANDATORY before invoking the duel skill):
 
 1. **NTM readiness gate** — same script as Deep plan above (auto-symlinks nested repos; refuses on name-collision). On `NTM_AVAILABLE=false`, fall back to `mode: "deep"` and emit `Duel-plan downgraded to Deep — NTM unavailable` to the user.
-2. **Agent inventory** — run `which cc cod gmi 2>/dev/null` (or the duel skill's Phase 1 detection if it exposes `--robot-detect`). Need at least 2 of the 3. If only 1 is available, fall back to `mode: "deep"`.
+2. **Agent inventory** — run `which claude codex gemini 2>/dev/null` (these are the real binaries behind the `cc/cod/gmi` ntm pane types; do NOT `which cc` — it matches `/usr/bin/cc`). Need at least 2 of the 3. If only 1 is available, fall back to `mode: "deep"`.
 3. **Brainstorm handoff** — same auto-detection as Deep plan. The duel agents read `docs/brainstorms/<goal-slug>-*.md` in their study phase.
 
 When the duel completes, the synthesized plan lands at the `--output` path. Re-call `flywheel_plan({ cwd, mode: "duel", planFile: "<that path>" })` to register and advance phase to `awaiting_plan_approval`. Then jump directly to Step 5.55 (Plan alignment check) — the duel surfaces tensions the alignment check exists to surface; do NOT skip it.

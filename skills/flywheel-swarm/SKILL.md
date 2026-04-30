@@ -21,7 +21,7 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    - Bootstrap Agent Mail: `macro_start_session(human_key: cwd, program: "claude-code", model: your-model, task_description: "Swarm: <goal>")`
    - Create a team: `TeamCreate(team_name: "swarm-<goal-slug>")`
    - Resolve NTM project: read `projects_base` from `ntm config show` and confirm `$projects_base/$(basename $PWD)` resolves (per the readiness gate in `_inflight_prompt.md`). On miss, follow the symlink/config path from `flywheel-setup` §6 before continuing.
-   - Apply the **AGENTS.md NTM pane priority** for swarm composition: prefer **4 pi + 2 cc** when both are healthy; fall back to **4 cod** if Pi is unavailable. Run `which cc cod gmi pi 2>/dev/null` and `ntm deps -v` to pick the live mix; never spawn agents whose CLI is missing.
+   - Apply the **AGENTS.md NTM pane priority** for swarm composition: prefer **4 pi + 2 cc** when both are healthy; fall back to **4 cod** if Pi is unavailable. Run `which claude codex gemini pi 2>/dev/null` (real binaries behind the `cc/cod/gmi/pi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) and `ntm deps -v` to pick the live mix; never spawn agents whose CLI is missing.
 
 5. For each ready bead (up to the user's limit), create a task and spawn an NTM-backed impl agent:
    - `TaskCreate(subject: "Impl: <bead-id> <title>", status: "in_progress")`

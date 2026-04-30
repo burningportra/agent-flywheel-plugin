@@ -18,10 +18,12 @@ This skill is the flywheel's wrapper around the global `/dueling-idea-wizards` s
 command -v ntm >/dev/null 2>&1 || { echo "DUEL_BLOCKED reason=ntm-missing"; exit 1; }
 ntm deps -v >/dev/null 2>&1 || { echo "DUEL_BLOCKED reason=ntm-deps-failed"; exit 1; }
 
-# 2. Agent inventory — need at least 2 of {cc, cod, gmi}
+# 2. Agent inventory — need at least 2 of the {cc, cod, gmi} ntm pane types,
+#    which map to real binaries `claude`, `codex`, `gemini`. Do NOT check `cc`
+#    literally — that matches `/usr/bin/cc` (the C compiler) on most systems.
 AVAIL=0
-for bin in cc cod gmi; do command -v "$bin" >/dev/null 2>&1 && AVAIL=$((AVAIL+1)); done
-[ "$AVAIL" -ge 2 ] || { echo "DUEL_BLOCKED reason=insufficient-agents found=$AVAIL"; exit 1; }
+for bin in claude codex gemini; do command -v "$bin" >/dev/null 2>&1 && AVAIL=$((AVAIL+1)); done
+[ "$AVAIL" -ge 2 ] || { echo "DUEL_BLOCKED reason=insufficient-agents found=$AVAIL needed=2-of-{claude,codex,gemini}"; exit 1; }
 ```
 
 If any check fails, surface the blocker via `AskUserQuestion`:

@@ -143,7 +143,7 @@ Actions:
        --focus="Review bead <id> diff at docs/reviews/<id>-duel-input.diff for <signal>" \
        --output=docs/reviews/<id>-duel-report.md
      ```
-  4. Pre-flight: `which ntm` + `which cc cod gmi 2>/dev/null` must yield ntm + ≥2 agents. On failure, fall back to Fresh-eyes (5-agent) automatically and emit `Duel review downgraded to Fresh-eyes — <reason>`.
+  4. Pre-flight: `which ntm` + `which claude codex gemini 2>/dev/null` (the real binaries behind the `cc/cod/gmi` ntm pane types — do NOT `which cc` literally; it matches `/usr/bin/cc`) must yield ntm + ≥2 agents. On failure, fall back to Fresh-eyes (5-agent) automatically and emit `Duel review downgraded to Fresh-eyes — <reason>`.
   5. After the report lands at `docs/reviews/<id>-duel-report.md`, read it and route on its **consensus** verdicts only:
      - **Consensus issues** (both agents flagged) → block the bead with `flywheel_review action: "hit-me"` and prepend the consensus issue list to the per-bead review notes.
      - **Contested findings** (one agent flagged, the other defended) → surface via `AskUserQuestion` with the two arguments side-by-side; the user arbitrates. Do NOT auto-block on contested findings.

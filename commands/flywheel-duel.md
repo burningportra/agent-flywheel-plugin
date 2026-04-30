@@ -40,5 +40,8 @@ This is the direct entry point for ad-hoc adversarial duels inside the flywheel.
    ```bash
    command -v ntm >/dev/null || { echo "ntm not installed — duel cannot run"; exit 1; }
    ntm deps -v >/dev/null 2>&1 || { echo "ntm deps check failed — run /flywheel-doctor"; exit 1; }
+   AVAIL=0
+   for bin in claude codex gemini; do command -v "$bin" >/dev/null 2>&1 && AVAIL=$((AVAIL+1)); done
+   [ "$AVAIL" -ge 2 ] || { echo "duel needs ≥2 of {claude,codex,gemini}; found=$AVAIL"; exit 1; }
    ```
-   Plus confirm at least 2 of {cc, cod, gmi} are on `$PATH`. If only 1 is available, abort with a one-line message; the duel needs ≥2 different model types.
+   The {cc, cod, gmi} labels are ntm pane types, not local binary names. Check `claude`, `codex`, `gemini` instead — `which cc` matches `/usr/bin/cc` (the C compiler) on most systems and gives a false positive. If fewer than 2 of the real binaries are present, abort; the duel needs ≥2 different model types.
