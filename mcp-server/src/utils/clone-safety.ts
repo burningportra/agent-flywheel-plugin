@@ -19,6 +19,7 @@
  * and we pass args via array spawn (no shell).
  */
 
+import { FlywheelError } from '../errors.js';
 import type { ExecFn } from '../exec.js';
 
 // ─── Types ──────────────────────────────────────────────────
@@ -52,11 +53,14 @@ export interface CloneSafetyResult {
   source: string;
 }
 
-export class CloneSafetyError extends Error {
-  constructor(message: string, public readonly code: string) {
-    super(message);
-    this.name = 'CloneSafetyError';
-  }
+export const CloneSafetyError = FlywheelError;
+
+function cloneSafetyError(message: string, cloneSafetyCode: string): FlywheelError {
+  return new FlywheelError({
+    code: cloneSafetyCode.endsWith('_failed') ? 'cli_failure' : 'invalid_input',
+    message,
+    details: { cloneSafetyCode },
+  });
 }
 
 // ─── Allowlist ─────────────────────────────────────────────
@@ -84,33 +88,33 @@ export function validateCloneUrl(
   opts: { extraAllowedHosts?: string[]; env?: NodeJS.ProcessEnv } = {}
 ): { url: URL; source: string } {
   if (typeof rawUrl !== 'string' || rawUrl.length === 0) {
-    throw new CloneSafetyError('Clone URL is empty or not a string', 'invalid_url');
+    throw cloneSafetyError('Clone URL is empty or not a string', 'invalid_url');
   }
 
   // Reject obviously-dangerous patterns before URL parsing. `git` accepts a
   // lot of URL-like shapes (scp-like `user@host:path`, local paths, etc.);
   // we only allow well-formed https URLs.
   if (rawUrl.includes('\x00') || rawUrl.includes('\n') || rawUrl.includes('\r')) {
-    throw new CloneSafetyError('Clone URL contains control characters', 'invalid_url');
+    throw cloneSafetyError('Clone URL contains control characters', 'invalid_url');
   }
 
   // Reject args-masquerading-as-URL (e.g. `--upload-pack=...`).
   if (rawUrl.startsWith('-')) {
-    throw new CloneSafetyError('Clone URL must not start with "-"', 'invalid_url');
+    throw cloneSafetyError('Clone URL must not start with "-"', 'invalid_url');
   }
 
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
   } catch {
-    throw new CloneSafetyError(`Clone URL is not a valid URL: ${rawUrl}`, 'invalid_url');
+    throw cloneSafetyError(`Clone URL is not a valid URL: ${rawUrl}`, 'invalid_url');
   }
 
   const env = opts.env ?? process.env;
   const allowInsecure = env.FLYWHEEL_ALLOW_INSECURE_CLONE === '1';
 
   if (parsed.protocol !== 'https:' && !allowInsecure) {
-    throw new CloneSafetyError(
+    throw cloneSafetyError(
       `Clone URL must use https:// (got ${parsed.protocol}). ` +
         `Set FLYWHEEL_ALLOW_INSECURE_CLONE=1 to bypass.`,
       'insecure_protocol'
@@ -121,7 +125,7 @@ export function validateCloneUrl(
   // anything that isn't http/https/git/ssh.
   const allowedProtocols = new Set(['https:', 'http:', 'git:', 'ssh:']);
   if (!allowedProtocols.has(parsed.protocol)) {
-    throw new CloneSafetyError(
+    throw cloneSafetyError(
       `Clone URL protocol not allowed: ${parsed.protocol}`,
       'invalid_protocol'
     );
@@ -130,7 +134,7 @@ export function validateCloneUrl(
   // Strip any embedded credentials (`https://user:pass@host/...`) — we don't
   // want them in logs or error messages.
   if (parsed.username || parsed.password) {
-    throw new CloneSafetyError(
+    throw cloneSafetyError(
       'Clone URL must not contain embedded credentials',
       'invalid_url'
     );
@@ -143,7 +147,7 @@ export function validateCloneUrl(
   const host = parsed.hostname.toLowerCase();
 
   if (!allowed.has(host)) {
-    throw new CloneSafetyError(
+    throw cloneSafetyError(
       `Clone host not in allowlist: ${host}. ` +
         `Allowed: ${[...allowed].join(', ')}. ` +
         `Pass extraAllowedHosts to extend (e.g. GitHub Enterprise).`,
@@ -160,17 +164,17 @@ export function validateCloneUrl(
 /** Validate a git ref (branch/tag) — reject arg-like or path-like refs. */
 export function validateGitRef(ref: string): void {
   if (typeof ref !== 'string' || ref.length === 0) {
-    throw new CloneSafetyError('Git ref is empty', 'invalid_ref');
+    throw cloneSafetyError('Git ref is empty', 'invalid_ref');
   }
   if (ref.startsWith('-')) {
-    throw new CloneSafetyError(`Git ref must not start with "-": ${ref}`, 'invalid_ref');
+    throw cloneSafetyError(`Git ref must not start with "-": ${ref}`, 'invalid_ref');
   }
   if (/[\s\x00\n\r]/.test(ref)) {
-    throw new CloneSafetyError(`Git ref contains whitespace or control chars: ${ref}`, 'invalid_ref');
+    throw cloneSafetyError(`Git ref contains whitespace or control chars: ${ref}`, 'invalid_ref');
   }
   // git check-ref-format rejects these too but we pre-validate to fail fast.
   if (ref.includes('..') || ref.includes(':')) {
-    throw new CloneSafetyError(`Git ref contains invalid sequence: ${ref}`, 'invalid_ref');
+    throw cloneSafetyError(`Git ref contains invalid sequence: ${ref}`, 'invalid_ref');
   }
 }
 
@@ -200,7 +204,7 @@ export async function safeClone(
 
   const depth = options.depth ?? 1;
   if (!Number.isInteger(depth) || depth < 1) {
-    throw new CloneSafetyError(`Clone depth must be a positive integer, got ${depth}`, 'invalid_depth');
+    throw cloneSafetyError(`Clone depth must be a positive integer, got ${depth}`, 'invalid_depth');
   }
 
   const args = [
@@ -223,7 +227,7 @@ export async function safeClone(
     signal: options.signal,
   });
   if (clone.code !== 0) {
-    throw new CloneSafetyError(
+    throw cloneSafetyError(
       `git clone failed (code ${clone.code}): ${clone.stderr || clone.stdout}`,
       'clone_failed'
     );
@@ -235,14 +239,14 @@ export async function safeClone(
     signal: options.signal,
   });
   if (rev.code !== 0) {
-    throw new CloneSafetyError(
+    throw cloneSafetyError(
       `git rev-parse HEAD failed (code ${rev.code}): ${rev.stderr || rev.stdout}`,
       'rev_parse_failed'
     );
   }
   const head_sha = rev.stdout.trim();
   if (!/^[0-9a-f]{7,64}$/i.test(head_sha)) {
-    throw new CloneSafetyError(
+    throw cloneSafetyError(
       `HEAD SHA does not look like a git object id: "${head_sha}"`,
       'invalid_sha'
     );
