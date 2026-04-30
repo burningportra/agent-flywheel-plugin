@@ -152,17 +152,13 @@ Check these silently via `<tool> --version` and report in the health checklist. 
 
 ## Post-install configuration
 
-### 10. Pre-commit guard
-
-Call `install_precommit_guard` via `agent-mail` MCP tool with `project_key` and `code_repo_path` set to the current working directory.
-
-### 11. Register agent
+### 10. Register agent
 
 Call `register_agent` via `agent-mail` MCP tool with `project_key` set to the current working directory and `agent_name: "Orchestrator"`.
 
 ---
 
-## 12. Health checklist
+## 11. Health checklist
 
 Display a summary with all tools grouped by tier:
 
@@ -186,7 +182,6 @@ OPTIONAL
   ms — not installed
 
 CONFIGURATION
-  pre-commit guard installed
   MCP server loaded
   agent registered as "Orchestrator"
 ```
