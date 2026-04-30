@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.3] - 2026-04-30
+
+### Changed
+
+- **`/start` skill body loading: MCP-first.** UNIVERSAL RULE 3 in `skills/start/SKILL.md` promoted `flywheel_get_skill` from "optional optimization" to PRIMARY path, with `Read` as disk-fallback only. Sub-skill table expanded to all 10 bundled `agent-flywheel:start*` entries (`start_planning`, `start_beads`, `start_implement`, `start_review`, `start_wrapup`, `start_reality_check`, `start_deslop`, `start_saturation`, `start_inflight_prompt`).
+- **Skill-stub recovery rule.** When the harness returns just the frontmatter / pointer text instead of the canonical body (the "skill already loaded — follow it directly" ack), agents now call `flywheel_get_skill` for a single MCP round-trip instead of falling back to `Read`. Documented in both `skills/start/SKILL.md` UNIVERSAL RULE 3 and `AGENTS.md` "Fast path for skill bodies (PRIMARY)" section.
+
 ## [3.8.1] - 2026-04-29
 
 ### Fixed

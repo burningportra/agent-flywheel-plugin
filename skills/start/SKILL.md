@@ -19,21 +19,33 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 >
 > Equally important: if a step does NOT name a skill but you notice one applies to the situation (e.g. a React component bead and `/react-component-generator` exists), invoke it anyway. Skills are hints-with-authority — use them by default, skip only when they clearly don't fit.
 
-> ## ⚠️ UNIVERSAL RULE 3 — load phase instructions on demand
+> ## ⚠️ UNIVERSAL RULE 3 — load phase instructions on demand (PRIMARY: `flywheel_get_skill`)
 >
-> Steps 5–12 are stored in separate files to keep this prompt within token limits. When you reach a phase boundary, **Read** the corresponding file from `skills/start/`:
+> Steps 5–12 are stored in separate files to keep this prompt within token limits. When you reach a phase boundary, fetch the corresponding body via the bundled MCP tool — **do not default to `Read`**:
 >
-> | Phase | File | Steps |
-> |-------|------|-------|
-> | Planning | `_planning.md` | 5, 5.55, 5.6 |
-> | Bead creation & approval | `_beads.md` | 5.5, 6 |
-> | Implementation | `_implement.md` | 7 |
-> | Review & loop | `_review.md` | 8, 9, 9.25, 9.4 |
-> | Wrap-up & post-flywheel | `_wrapup.md` | 9.5, 10, 11, 12 |
+> ```
+> flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })
+> ```
 >
-> Read the file **before** executing that phase. Do NOT guess or improvise the instructions — the sub-files contain critical gates, edge-case handling, and AskUserQuestion templates.
+> | Phase | Skill name | Sub-file (fallback) | Steps |
+> |-------|-----------|---------------------|-------|
+> | Planning | `agent-flywheel:start_planning` | `_planning.md` | 5, 5.55, 5.6 |
+> | Bead creation & approval | `agent-flywheel:start_beads` | `_beads.md` | 5.5, 6 |
+> | Implementation | `agent-flywheel:start_implement` | `_implement.md` | 7 |
+> | Review & loop | `agent-flywheel:start_review` | `_review.md` | 8, 9, 9.25, 9.4 |
+> | Wrap-up & post-flywheel | `agent-flywheel:start_wrapup` | `_wrapup.md` | 9.5, 10, 11, 12 |
+> | Reality check | `agent-flywheel:start_reality_check` | `_reality_check.md` | (referenced from _wrapup, _saturation) |
+> | Deslop pass | `agent-flywheel:start_deslop` | `_deslop.md` | (Step 9.5 routing) |
+> | Saturation suite | `agent-flywheel:start_saturation` | `_saturation.md` | (saturation-pipeline routing) |
+> | In-flight resume | `agent-flywheel:start_inflight_prompt` | `_inflight_prompt.md` | (auto-swarm) |
 >
-> **Faster path (optional optimization):** instead of `Read`, you can call `flywheel_get_skill({ cwd, name: "agent-flywheel:start_planning" })` (or `start_beads`, `start_implement`, `start_review`, `start_wrapup`) to fetch the body via the bundled MCP tool in one round-trip. Falls back to disk transparently if the bundle is stale or missing. Existing `Read` calls keep working — this is purely an optimization.
+> Why MCP-first: one round-trip, served from the bundled body at `mcp-server/dist/skills.bundle.json` with `srcSha256` integrity check + transparent disk fallback. `Read` is two-step (path resolution then file I/O) and burns more context on listing noise.
+>
+> **Skill-stub recovery.** If invoking the `Skill` tool itself ever returns just the description / pointer text instead of the canonical body (the harness sometimes ack's instead of inlining for already-loaded skills), do NOT fall back to `Read` — call `flywheel_get_skill({ name: "agent-flywheel:start" })` for the entry-point or the relevant `start_<phase>` for sub-phases. Single MCP round-trip, served from the same bundle, no path-resolution noise.
+>
+> Fetch the body **before** executing that phase. Do NOT guess or improvise — the sub-files contain critical gates, edge-case handling, and `AskUserQuestion` templates.
+>
+> **Disk fallback.** If `flywheel_get_skill` errors (e.g. `FW_SKILL_BUNDLE=off`, missing bundle, MCP transport down), then `Read skills/start/_<phase>.md` from disk. Existing `Read` references throughout this skill are valid fallbacks — but try MCP first.
 
 ## Step 0: Opening Ceremony
 

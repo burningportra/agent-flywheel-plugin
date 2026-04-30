@@ -70,6 +70,18 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 - **`flywheel_calibrate({ cwd, sinceDays? })`** — aggregates `br list --json --status closed` rows by template, computes mean/median/p95 actual vs `EFFORT_TO_MINUTES[template.estimatedEffort]`. Prefers `git log --grep=<bead-id>` first-commit ts as `started_ts` proxy (capped 200/run). Drops clock-skew samples. Writes report to `.pi-flywheel/calibration.json`. **Note (v3.7.0):** `br create` doesn't yet tag beads with their template id, so the report is currently `__untemplated__`-only. See `claude-orchestrator-1v5` for the fix.
 - **`flywheel_get_skill({ name: "<plugin>:<skill>" })`** — serves a bundled skill markdown body in one MCP call. Bundle at `mcp-server/dist/skills.bundle.json` (built by `npm run build`). 4-layer drift defense: build-time `check:skills-bundle` CI gate, runtime `manifestSha256` integrity check (falls back to disk on mismatch), per-entry `srcSha256` stale-warn, `FW_SKILL_BUNDLE=off` env-bypass for contributors editing skills live. Returns `{ name, frontmatter, body, source: 'bundle' | 'disk', staleWarn? }`.
 
+### Fast path for skill bodies (PRIMARY)
+
+When loading any flywheel skill — entry-point (`/start`) or sub-phase (`_planning.md`, `_implement.md`, etc.) — **prefer `flywheel_get_skill` over `Read`**. Single MCP round-trip, served from the bundled body, ~10× less context noise than `Read` (no directory listing, no path resolution).
+
+**Skill-stub recovery.** If invoking the `Skill` tool returns only the frontmatter / pointer text instead of the canonical body (the harness sometimes ack's "skill already loaded — follow it directly" instead of inlining for re-invocations), **do NOT fall back to `Read`**. Call `flywheel_get_skill({ name: "agent-flywheel:<skill>" })` instead. Examples:
+
+- `/start` returned a stub → `flywheel_get_skill({ name: "agent-flywheel:start" })`
+- Phase boundary needs `_planning.md` → `flywheel_get_skill({ name: "agent-flywheel:start_planning" })`
+- Same for `start_beads`, `start_implement`, `start_review`, `start_wrapup`, `start_reality_check`, `start_deslop`, `start_saturation`, `start_inflight_prompt`.
+
+`Read` is the disk-fallback path — only use it if the MCP call errors (bundle disabled via `FW_SKILL_BUNDLE=off`, transport down, or skill not in bundle).
+
 ## NTM is mandatory for all spawned work
 
 **Hard rule.** Every multi-agent spawn — planning fan-out, swarm waves, deslop sweeps, reality-check follow-ups, scrutiny passes, parallel reviewers, ad-hoc "do these N things in parallel" requests — **must go through NTM** (`ntm spawn` + `ntm --robot-send`). No exceptions.
