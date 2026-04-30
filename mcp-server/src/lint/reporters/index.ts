@@ -37,3 +37,19 @@ export function filterBySeverity(findings: Finding[], minSeverity?: Severity): F
   const max = SEVERITY_RANK[minSeverity];
   return findings.filter((f) => SEVERITY_RANK[f.severity] <= max);
 }
+
+export function visibleFindings(result: LintResult, opts: ReporterOptions = {}): Finding[] {
+  return filterBySeverity(sortFindings(result.findings), opts.minSeverity);
+}
+
+export function severityLabel(severity: Severity, warnLabel: "warn" | "warning" = "warn"): string {
+  return severity === "warn" ? warnLabel : severity;
+}
+
+export function countBySeverity(findings: Finding[]): { errors: number; warnings: number; infos: number } {
+  return {
+    errors: findings.filter((f) => f.severity === "error").length,
+    warnings: findings.filter((f) => f.severity === "warn").length,
+    infos: findings.filter((f) => f.severity === "info").length,
+  };
+}

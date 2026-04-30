@@ -1,5 +1,5 @@
 import type { LintResult, ReporterOptions, Severity } from "../types.js";
-import { sortFindings, filterBySeverity } from "./index.js";
+import { visibleFindings } from "./index.js";
 
 function commandFor(sev: Severity): string {
   if (sev === "error") return "error";
@@ -12,7 +12,7 @@ function encode(s: string): string {
 }
 
 export function format(result: LintResult, opts: ReporterOptions = {}): string {
-  const findings = filterBySeverity(sortFindings(result.findings), opts.minSeverity);
+  const findings = visibleFindings(result, opts);
   const lines = findings.map((f) => {
     const cmd = commandFor(f.severity);
     const title = encode(f.ruleId);
