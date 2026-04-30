@@ -18,6 +18,7 @@
  * We do NOT recurse submodules by default (another supply-chain vector),
  * and we pass args via array spawn (no shell).
  */
+import { FlywheelError } from '../errors.js';
 import type { ExecFn } from '../exec.js';
 export interface CloneSafetyOptions {
     /** Extra hosts to add to the allowlist (e.g. GitHub Enterprise). */
@@ -46,10 +47,7 @@ export interface CloneSafetyResult {
     /** Human-readable source identifier, e.g. "github.com/owner/repo". */
     source: string;
 }
-export declare class CloneSafetyError extends Error {
-    readonly code: string;
-    constructor(message: string, code: string);
-}
+export declare const CloneSafetyError: typeof FlywheelError;
 /**
  * Default host allowlist. Expand carefully — each entry is a trust
  * decision for user-supplied URLs flowing through the plugin.

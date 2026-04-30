@@ -1,4 +1,4 @@
-import { sortFindings, filterBySeverity } from "./index.js";
+import { countBySeverity, severityLabel, visibleFindings } from "./index.js";
 const ANSI = {
     reset: "\x1b[0m",
     bold: "\x1b[1m",
@@ -14,18 +14,11 @@ function colorFor(sev) {
         return ANSI.yellow;
     return ANSI.cyan;
 }
-function labelFor(sev) {
-    if (sev === "error")
-        return "error";
-    if (sev === "warn")
-        return "warn";
-    return "info";
-}
 function strip(s) {
     return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 export function format(result, opts = {}) {
-    const findings = filterBySeverity(sortFindings(result.findings), opts.minSeverity);
+    const findings = visibleFindings(result, opts);
     if (findings.length === 0 && result.internalErrors.length === 0) {
         return "";
     }
@@ -38,14 +31,14 @@ export function format(result, opts = {}) {
             groups.set(f.file, [f]);
     }
     const maxLoc = findings.reduce((m, f) => Math.max(m, `${f.line}:${f.column}`.length), 0);
-    const maxLabel = findings.reduce((m, f) => Math.max(m, labelFor(f.severity).length), 0);
+    const maxLabel = findings.reduce((m, f) => Math.max(m, severityLabel(f.severity).length), 0);
     const maxRule = findings.reduce((m, f) => Math.max(m, f.ruleId.length), 0);
     const lines = [];
     for (const [file, group] of groups) {
         lines.push(`${ANSI.bold}${file}${ANSI.reset}`);
         for (const f of group) {
             const loc = `${f.line}:${f.column}`.padStart(maxLoc);
-            const sev = `${colorFor(f.severity)}${labelFor(f.severity).padEnd(maxLabel)}${ANSI.reset}`;
+            const sev = `${colorFor(f.severity)}${severityLabel(f.severity).padEnd(maxLabel)}${ANSI.reset}`;
             const rule = f.ruleId.padEnd(maxRule);
             let line = `  ${loc}  ${sev}  ${rule}  ${f.message}`;
             if (f.hint) {
@@ -55,15 +48,7 @@ export function format(result, opts = {}) {
         }
         lines.push("");
     }
-    let errors = 0, warnings = 0, infos = 0;
-    for (const f of findings) {
-        if (f.severity === "error")
-            errors++;
-        else if (f.severity === "warn")
-            warnings++;
-        else
-            infos++;
-    }
+    const { errors, warnings, infos } = countBySeverity(findings);
     const summaryParts = [];
     if (errors > 0)
         summaryParts.push(`${errors} ${errors === 1 ? "error" : "errors"}`);

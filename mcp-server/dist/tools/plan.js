@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { slugifyGoal } from './shared.js';
+import { makeOkToolResult, slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
@@ -52,16 +52,7 @@ function formatBrainstormSection(brainstorm) {
     return `\n## Phase 0.5 Brainstorm (read FIRST)\n\nSource: \`${brainstorm.path}\` — pressure-test outcome from Phase 0.5 of the planning skill. Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.\n\n\`\`\`markdown\n${brainstorm.content.trim()}\n\`\`\`\n`;
 }
 function okResult(text, phase, data) {
-    return {
-        content: [{ type: 'text', text }],
-        structuredContent: {
-            tool: 'flywheel_plan',
-            version: 1,
-            status: 'ok',
-            phase,
-            data,
-        },
-    };
+    return makeOkToolResult('flywheel_plan', phase, text, data);
 }
 function errorResult(phase, code, message, details, hint) {
     return makeFlywheelErrorResult('flywheel_plan', phase, {

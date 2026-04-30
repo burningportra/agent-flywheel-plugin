@@ -1,4 +1,4 @@
-import { sortFindings, filterBySeverity } from "./index.js";
+import { visibleFindings } from "./index.js";
 function commandFor(sev) {
     if (sev === "error")
         return "error";
@@ -10,7 +10,7 @@ function encode(s) {
     return s.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/,/g, "%2C");
 }
 export function format(result, opts = {}) {
-    const findings = filterBySeverity(sortFindings(result.findings), opts.minSeverity);
+    const findings = visibleFindings(result, opts);
     const lines = findings.map((f) => {
         const cmd = commandFor(f.severity);
         const title = encode(f.ruleId);

@@ -1,19 +1,10 @@
 import { verifyBeadsClosed } from '../beads.js';
-import { makeToolError } from './shared.js';
+import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
 const log = createLogger('verify-beads');
 function okResult(phase, text, data) {
-    return {
-        content: [{ type: 'text', text }],
-        structuredContent: {
-            tool: 'flywheel_verify_beads',
-            version: 1,
-            status: 'ok',
-            phase,
-            data,
-        },
-    };
+    return makeOkToolResult('flywheel_verify_beads', phase, text, data);
 }
 /**
  * flywheel_verify_beads — Reconcile a wave of beads after impl agents report back.

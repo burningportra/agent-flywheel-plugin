@@ -1,3 +1,5 @@
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { makeFlywheelErrorResult } from '../errors.js';
 export function formatModelRef(model) {
     return model.provider ? `${model.provider}/${model.id}` : model.id;
@@ -21,6 +23,15 @@ export function makeToolResult(text, structuredContent) {
         content: [{ type: 'text', text }],
         structuredContent,
     };
+}
+export function makeOkToolResult(tool, phase, text, data) {
+    return makeToolResult(text, {
+        tool,
+        version: 1,
+        status: 'ok',
+        phase,
+        data,
+    });
 }
 export function makeToolError(tool, phase, code, message, options = {}) {
     return makeFlywheelErrorResult(tool, phase, { code, message, ...options });
@@ -74,6 +85,43 @@ const REFINEMENT_MODELS = [
 ];
 export function pickRefinementModel(round) {
     return REFINEMENT_MODELS[round % REFINEMENT_MODELS.length];
+}
+/**
+ * Walk a directory and return the newest mtime (ms) across matching files.
+ * Skips node_modules and dot-directories. Returns null if nothing matched.
+ */
+export function newestMtime(root, filter = () => true) {
+    let max = null;
+    const stack = [root];
+    while (stack.length > 0) {
+        const dir = stack.pop();
+        let entries;
+        try {
+            entries = readdirSync(dir, { withFileTypes: true });
+        }
+        catch {
+            continue;
+        }
+        for (const e of entries) {
+            const full = join(dir, e.name);
+            if (e.isDirectory()) {
+                if (e.name === 'node_modules' || e.name.startsWith('.'))
+                    continue;
+                stack.push(full);
+            }
+            else if (e.isFile() && filter(e.name)) {
+                try {
+                    const m = statSync(full).mtimeMs;
+                    if (max === null || m > max)
+                        max = m;
+                }
+                catch {
+                    // ignore unreadable files
+                }
+            }
+        }
+    }
+    return max;
 }
 /** Default deep plan model assignments. */
 export const DEEP_PLAN_MODELS = {

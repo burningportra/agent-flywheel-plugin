@@ -1,5 +1,6 @@
 import { makeFlywheelErrorResult } from '../errors.js';
 import { createLogger } from '../logger.js';
+import { makeOkToolResult } from './shared.js';
 const log = createLogger('review');
 // ─── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────────────
 //
@@ -52,16 +53,7 @@ async function autofixGateOk(ctx) {
     return { ok: true };
 }
 function okResult(phase, text, data) {
-    return {
-        content: [{ type: 'text', text }],
-        structuredContent: {
-            tool: 'flywheel_review',
-            version: 1,
-            status: 'ok',
-            phase,
-            data,
-        },
-    };
+    return makeOkToolResult('flywheel_review', phase, text, data);
 }
 function errorResult(phase, code, message, details, hint) {
     return makeFlywheelErrorResult('flywheel_review', phase, {

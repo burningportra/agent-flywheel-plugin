@@ -1,15 +1,14 @@
-import { sortFindings, filterBySeverity } from "./index.js";
+import { countBySeverity, visibleFindings } from "./index.js";
 export const JSON_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
 export function format(result, opts = {}) {
-    const sorted = filterBySeverity(sortFindings(result.findings), opts.minSeverity);
+    const sorted = visibleFindings(result, opts);
+    const summary = countBySeverity(sorted);
     return JSON.stringify({
         schemaVersion: JSON_SCHEMA_VERSION,
         rulesetVersion: RULESET_VERSION,
         summary: {
-            errors: sorted.filter((f) => f.severity === "error").length,
-            warnings: sorted.filter((f) => f.severity === "warn").length,
-            infos: sorted.filter((f) => f.severity === "info").length,
+            ...summary,
             internalErrors: result.internalErrors.length,
         },
         findings: sorted.map((f) => ({

@@ -6,7 +6,7 @@ import { allocateAgentNames } from '../adapters/agent-names.js';
 import { adaptPromptForClaude } from '../adapters/claude-prompt.js';
 import { adaptPromptForCodex } from '../adapters/codex-prompt.js';
 import { adaptPromptForGemini } from '../adapters/gemini-prompt.js';
-import { makeToolError } from './shared.js';
+import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
 import * as path from 'node:path';
@@ -18,16 +18,7 @@ const LANE_ADAPTERS = {
     gem: adaptPromptForGemini,
 };
 function okResult(phase, text, data) {
-    return {
-        content: [{ type: 'text', text }],
-        structuredContent: {
-            tool: 'flywheel_advance_wave',
-            version: 1,
-            status: 'ok',
-            phase,
-            data,
-        },
-    };
+    return makeOkToolResult('flywheel_advance_wave', phase, text, data);
 }
 function beadToDispatchContext(bead, complexity, agentName, coordinatorName, projectKey) {
     const descLines = bead.description.split('\n');

@@ -6,6 +6,7 @@ export declare function formatModelRef(model: {
 export declare function makeChoiceOption(id: string, label: string, options?: Omit<ToolChoiceOption, 'id' | 'label'>): ToolChoiceOption;
 export declare function makeNextToolStep(type: ToolNextStep['type'], message: string, options?: Omit<ToolNextStep, 'type' | 'message'>): ToolNextStep;
 export declare function makeToolResult<TStructured>(text: string, structuredContent: TStructured): McpToolResult<TStructured>;
+export declare function makeOkToolResult<TData>(tool: FlywheelToolName, phase: FlywheelPhase | string, text: string, data: TData): McpToolResult;
 export declare function makeToolError(tool: FlywheelToolName, phase: FlywheelPhase, code: FlywheelErrorCode, message: string, options?: Omit<FlywheelToolError, 'code' | 'message' | 'tool' | 'phase' | 'timestamp'>): McpToolResult<FlywheelStructuredError>;
 /**
  * Pick execution mode: single-branch (shared checkout) or worktree (isolated checkouts).
@@ -17,6 +18,11 @@ export declare function resolveExecutionMode(coordinationMode: FlywheelState['co
  */
 export declare function computeConvergenceScore(polishChanges: number[], outputSizes?: number[]): number;
 export declare function pickRefinementModel(round: number): string;
+/**
+ * Walk a directory and return the newest mtime (ms) across matching files.
+ * Skips node_modules and dot-directories. Returns null if nothing matched.
+ */
+export declare function newestMtime(root: string, filter?: (name: string) => boolean): number | null;
 /** Default deep plan model assignments. */
 export declare const DEEP_PLAN_MODELS: {
     readonly correctness: "claude-opus-4-7";
