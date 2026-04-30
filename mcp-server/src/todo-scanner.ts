@@ -255,9 +255,7 @@ const PY_MARKER_RE = /\b(TODO|FIXME|HACK|XXX)\b\s*:?\s*(.*)/;
  *   contents replaced with blanks (keeping line breaks intact so line numbers
  *   stay accurate).
  */
-function stripPyStrings(source: string): string {
-  const lines = source.split("\n");
-  // First pass: mark line indexes that are inside "docstring" triple-quoted blocks.
+function findPyDocstringLines(lines: string[]): Set<number> {
   const docstringLines = new Set<number>();
   let inDoc = false;
   let docQuote = "";
@@ -275,31 +273,30 @@ function stripPyStrings(source: string): string {
     // and (top-of-file or previous non-blank line ends with ":") — module/class/func docstring.
     const trimmed = line.trimStart();
     const startsTriple = trimmed.startsWith('"""') || trimmed.startsWith("'''");
-    if (startsTriple) {
-      const quote = trimmed.startsWith('"""') ? '"""' : "'''";
-      // Look back for previous non-blank line
-      let prev = i - 1;
-      while (prev >= 0 && lines[prev].trim() === "") prev--;
-      const prevLine = prev >= 0 ? lines[prev].trimEnd() : "";
-      const isDocstring =
-        prev < 0 || // top of file
-        prevLine.endsWith(":"); // after def/class
-      if (isDocstring) {
-        docstringLines.add(i);
-        // Check if closes on same line
-        const rest = trimmed.slice(3);
-        if (rest.includes(quote)) {
-          // single-line docstring
-        } else {
-          inDoc = true;
-          docQuote = quote;
-        }
-        continue;
-      }
+    if (!startsTriple) continue;
+
+    const quote = trimmed.startsWith('"""') ? '"""' : "'''";
+    // Look back for previous non-blank line.
+    let prev = i - 1;
+    while (prev >= 0 && lines[prev].trim() === "") prev--;
+    const prevLine = prev >= 0 ? lines[prev].trimEnd() : "";
+    const isDocstring = prev < 0 || prevLine.endsWith(":");
+    if (!isDocstring) continue;
+
+    docstringLines.add(i);
+    if (!trimmed.slice(3).includes(quote)) {
+      inDoc = true;
+      docQuote = quote;
     }
   }
+  return docstringLines;
+}
 
-  // Second pass: blank out string contents on non-docstring lines.
+function stripPyStrings(source: string): string {
+  const lines = source.split("\n");
+  const docstringLines = findPyDocstringLines(lines);
+
+  // Blank out string contents on non-docstring lines.
   // Simple regex-based stripping — preserves line count by not touching newlines.
   const stripped = lines.map((line, i) => {
     if (docstringLines.has(i)) return line;
@@ -326,41 +323,7 @@ async function scanPyFile(filePath: string, relPath: string): Promise<TodoItem[]
   // We need to preserve docstring contents (so markers inside them are found)
   // and strip non-docstring strings (so markers inside them are NOT found).
   const lines = source.split("\n");
-  // Determine which lines are docstring lines.
-  const docstringLines = new Set<number>();
-  {
-    let inDoc = false;
-    let docQuote = "";
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (inDoc) {
-        docstringLines.add(i);
-        if (line.includes(docQuote)) {
-          inDoc = false;
-          docQuote = "";
-        }
-        continue;
-      }
-      const trimmed = line.trimStart();
-      const startsTriple = trimmed.startsWith('"""') || trimmed.startsWith("'''");
-      if (startsTriple) {
-        const quote = trimmed.startsWith('"""') ? '"""' : "'''";
-        let prev = i - 1;
-        while (prev >= 0 && lines[prev].trim() === "") prev--;
-        const prevLine = prev >= 0 ? lines[prev].trimEnd() : "";
-        const isDocstring = prev < 0 || prevLine.endsWith(":");
-        if (isDocstring) {
-          docstringLines.add(i);
-          const rest = trimmed.slice(3);
-          if (!rest.includes(quote)) {
-            inDoc = true;
-            docQuote = quote;
-          }
-          continue;
-        }
-      }
-    }
-  }
+  const docstringLines = findPyDocstringLines(lines);
 
   const strippedSource = stripPyStrings(source);
   const strippedLines = strippedSource.split("\n");
