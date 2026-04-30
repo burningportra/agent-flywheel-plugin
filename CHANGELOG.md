@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.1] - 2026-04-30
+
+### Changed
+
+- **Wave-1 deslop pass.** 5-pane NTM swarm (FoggyRabbit / SilverReef / StormyRaven / RoseLark / WhiteCedar) applied `/simplify-and-refactor-code-isomorphically` across `mcp-server/src/tools/`, `mcp-server/src/` infra, `mcp-server/src/` domain, `mcp-server/scripts/` + `src/lint/`, and `skills/` + `commands/`. Six narrow isomorphism-preserving levers landed; tests at 1492 passing held; net -94 LOC across regenerated `dist/`.
+  - `share ok tool result helper` (pane 1) — collapses 4 copies of the success-envelope idiom in `mcp-server/src/tools/{advance-wave,plan,review,verify-beads}.ts` into `tools/shared.ts`.
+  - `share newest mtime walker` (pane 1) — dedup between `tools/doctor.ts` and `tools/remediations/dist_drift.ts`.
+  - `use FlywheelError for clone safety` (pane 2) — replaces the only ad-hoc `Error` subclass (`CloneSafetyError`) with a `FlywheelError` factory while keeping the class as a backwards-compat alias; aligns with AGENTS.md error contract.
+  - `share python docstring detection` (pane 3) — extracts `findPyDocstringLines()` from `todo-scanner.ts` (-37 LOC).
+  - `centralize lint reporter helpers` (pane 4) — shared `visibleFindings` / `severityLabel` / `countBySeverity` across 4 reporters.
+  - `tighten healthcheck prose` (pane 5) — markdown-only deslop in `commands/flywheel-healthcheck.md` and `skills/flywheel-healthcheck/SKILL.md`.
+
+### Known issues (carried forward)
+
+- `live-flywheel.test.ts › lint-skill --ci --baseline` canary still failing on pre-existing `skills/start/SKILL.md` lint findings — separate issue, not deslop-induced.
+
 ## [3.10.0] - 2026-04-30
 
 ### Added
