@@ -3,9 +3,9 @@ name: flywheel-healthcheck
 description: Full health check of the codebase and flywheel dependencies.
 ---
 
-Run a comprehensive health check. $ARGUMENTS
+Run a health check. $ARGUMENTS
 
-Check all systems and produce a health score.
+Produce a health score across dependencies, codebase state, and beads.
 
 **Dependency checks** (run in parallel via Bash):
 - `br --version` — bead tracker
@@ -48,6 +48,6 @@ HEALTH SCORE: N/10
 
 Healthcheck is the **third** of three diagnostic commands. Run them in order:
 
-1. **`/agent-flywheel:flywheel-doctor`** — read-only snapshot, always safe. Run first when toolchain drift is suspected.
+1. **`/agent-flywheel:flywheel-doctor`** — read-only snapshot. Run first when toolchain drift is suspected.
 2. **`/agent-flywheel:flywheel-setup`** — apply-fixes stage; installs tools, registers MCP, configures hooks.
-3. **`/agent-flywheel:flywheel-healthcheck`** (this skill) — deep periodic audit of codebase + bead graph + dependencies. Run on a cadence; do not use it to remedy a fresh-clone setup problem (use doctor → setup for that).
+3. **`/agent-flywheel:flywheel-healthcheck`** (this skill) — deep periodic audit of codebase, bead graph, and dependencies. Run it on a cadence, not for fresh-clone setup problems (use doctor → setup for that).

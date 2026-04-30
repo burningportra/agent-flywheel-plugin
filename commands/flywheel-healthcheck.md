@@ -2,11 +2,11 @@
 description: Full health check of the codebase and flywheel dependencies.
 ---
 
-**See also (triage chain):** `flywheel-healthcheck` is the **third** step — a deep periodic audit (codebase + bead graph + dependencies). For a fast, read-only toolchain snapshot, run `/flywheel-doctor` first — it's always safe and completes in under 2s. To install missing tools or repair configuration that doctor flagged, run `/flywheel-setup`. Do not reach for healthcheck to fix a fresh-clone setup problem — that's `flywheel-doctor` → `flywheel-setup`.
+**See also (triage chain):** `flywheel-healthcheck` is the **third** step: a deep periodic audit of the codebase, bead graph, and dependencies. For a fast, read-only toolchain snapshot, run `/flywheel-doctor` first; it is safe and finishes in under 2s. To install missing tools or repair configuration flagged by doctor, run `/flywheel-setup`. Do not use healthcheck for fresh-clone setup problems; use `flywheel-doctor` → `flywheel-setup`.
 
-Run a comprehensive health check. $ARGUMENTS
+Run a health check. $ARGUMENTS
 
-Check all systems and produce a health score.
+Produce a health score across dependencies, codebase state, beads, duel artifacts, and duel readiness.
 
 **Dependency checks** (run in parallel via Bash):
 - `br --version` — bead tracker
@@ -28,7 +28,7 @@ Check all systems and produce a health score.
 **Duel artifact hygiene** (cwd-scoped, read-only):
 - `find . -maxdepth 1 -name 'WIZARD_*.md' -mtime +7 -print` — list duel transcripts older than 7 days
 - `find . -maxdepth 1 -name 'DUELING_WIZARDS_REPORT.md' -mtime +7 -print` — stale synthesis reports
-- For each match, surface in the report under a STALE DUEL ARTIFACTS section. Do **not** auto-delete — these contain irreplaceable adversarial-debate transcripts and feed the bead Provenance block. Suggest running `/flywheel-cleanup` if the user wants to archive or remove them.
+- For each match, surface it under STALE DUEL ARTIFACTS. Do **not** auto-delete; these transcripts feed the bead Provenance block. Suggest `/flywheel-cleanup` if the user wants to archive or remove them.
 
 **Duel readiness** (one line in the report):
 - Count of healthy {cc, cod, gmi} CLIs from doctor's last run + ntm presence.
