@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
-import { slugifyGoal } from './shared.js';
+import { makeOkToolResult, slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
@@ -55,16 +55,7 @@ function formatBrainstormSection(brainstorm: { path: string; content: string } |
 }
 
 function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', data: Record<string, unknown>): McpToolResult {
-  return {
-    content: [{ type: 'text', text }],
-    structuredContent: {
-      tool: 'flywheel_plan',
-      version: 1,
-      status: 'ok',
-      phase,
-      data,
-    },
-  };
+  return makeOkToolResult('flywheel_plan', phase, text, data);
 }
 
 function errorResult(

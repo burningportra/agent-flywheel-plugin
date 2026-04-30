@@ -9,7 +9,7 @@ import { adaptPromptForClaude } from '../adapters/claude-prompt.js';
 import { adaptPromptForCodex } from '../adapters/codex-prompt.js';
 import { adaptPromptForGemini } from '../adapters/gemini-prompt.js';
 import type { BeadDispatchContext, AdaptedPrompt } from '../adapters/codex-prompt.js';
-import { makeToolError } from './shared.js';
+import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
 import * as path from 'node:path';
@@ -36,16 +36,7 @@ export interface AdvanceWaveOutcome {
 }
 
 function okResult(phase: string, text: string, data: AdvanceWaveOutcome): McpToolResult {
-  return {
-    content: [{ type: 'text', text }],
-    structuredContent: {
-      tool: 'flywheel_advance_wave',
-      version: 1,
-      status: 'ok',
-      phase,
-      data,
-    },
-  };
+  return makeOkToolResult('flywheel_advance_wave', phase, text, data);
 }
 
 function beadToDispatchContext(

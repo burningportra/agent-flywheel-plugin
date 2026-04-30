@@ -1,6 +1,6 @@
 import type { McpToolResult, ToolContext, VerifyBeadsArgs } from '../types.js';
 import { verifyBeadsClosed, type BeadStraggler } from '../beads.js';
-import { makeToolError } from './shared.js';
+import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
 
@@ -18,16 +18,7 @@ export interface VerifyBeadsOutcome {
 }
 
 function okResult(phase: string, text: string, data: VerifyBeadsOutcome): McpToolResult {
-  return {
-    content: [{ type: 'text', text }],
-    structuredContent: {
-      tool: 'flywheel_verify_beads',
-      version: 1,
-      status: 'ok',
-      phase,
-      data,
-    },
-  };
+  return makeOkToolResult('flywheel_verify_beads', phase, text, data);
 }
 
 /**

@@ -48,6 +48,21 @@ export function makeToolResult<TStructured>(text: string, structuredContent: TSt
   };
 }
 
+export function makeOkToolResult<TData>(
+  tool: FlywheelToolName,
+  phase: FlywheelPhase | string,
+  text: string,
+  data: TData,
+): McpToolResult {
+  return makeToolResult(text, {
+    tool,
+    version: 1 as const,
+    status: 'ok' as const,
+    phase,
+    data,
+  });
+}
+
 export function makeToolError(
   tool: FlywheelToolName,
   phase: FlywheelPhase,

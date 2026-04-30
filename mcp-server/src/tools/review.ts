@@ -2,6 +2,7 @@ import type { ToolContext, McpToolResult, Bead, ReviewArgs, FlywheelPhase, Revie
 import type { FlywheelErrorCode } from '../errors.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { createLogger } from '../logger.js';
+import { makeOkToolResult } from './shared.js';
 
 const log = createLogger('review');
 
@@ -62,16 +63,7 @@ async function autofixGateOk(ctx: ToolContext): Promise<{ ok: boolean; reason?: 
 }
 
 function okResult(phase: string, text: string, data: Record<string, unknown>): McpToolResult {
-  return {
-    content: [{ type: 'text', text }],
-    structuredContent: {
-      tool: 'flywheel_review',
-      version: 1,
-      status: 'ok',
-      phase,
-      data,
-    },
-  };
+  return makeOkToolResult('flywheel_review', phase, text, data);
 }
 
 function errorResult(
