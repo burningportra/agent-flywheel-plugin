@@ -9,6 +9,8 @@ import type {
   ToolNextStep,
   FlywheelErrorCode,
 } from '../types.js';
+import { readdirSync, statSync, type Dirent } from 'node:fs';
+import { join } from 'node:path';
 import { makeFlywheelErrorResult } from '../errors.js';
 
 export function formatModelRef(model: { provider?: string; id: string }): string {
@@ -117,6 +119,39 @@ const REFINEMENT_MODELS = [
 
 export function pickRefinementModel(round: number): string {
   return REFINEMENT_MODELS[round % REFINEMENT_MODELS.length];
+}
+
+/**
+ * Walk a directory and return the newest mtime (ms) across matching files.
+ * Skips node_modules and dot-directories. Returns null if nothing matched.
+ */
+export function newestMtime(root: string, filter: (name: string) => boolean = () => true): number | null {
+  let max: number | null = null;
+  const stack: string[] = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true }) as Dirent[];
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+        stack.push(full);
+      } else if (e.isFile() && filter(e.name)) {
+        try {
+          const m = statSync(full).mtimeMs;
+          if (max === null || m > max) max = m;
+        } catch {
+          // ignore unreadable files
+        }
+      }
+    }
+  }
+  return max;
 }
 
 /** Default deep plan model assignments. */

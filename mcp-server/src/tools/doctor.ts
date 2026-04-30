@@ -16,6 +16,7 @@ import { statSync, readdirSync, readFileSync, realpathSync, existsSync, type Dir
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { newestMtime } from './shared.js';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
@@ -1549,39 +1550,3 @@ async function isCommitOnMain(
   }
 }
 
-/**
- * Walk a directory and return the newest mtime (ms) across matching files.
- * Skips node_modules, .git, and dot-directories.
- * Returns null if nothing matched.
- */
-function newestMtime(
-  root: string,
-  filter: (name: string) => boolean = () => true,
-): number | null {
-  let max: number | null = null;
-  const stack: string[] = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop()!;
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(dir, { withFileTypes: true }) as Dirent[];
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      const full = join(dir, e.name);
-      if (e.isDirectory()) {
-        if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
-        stack.push(full);
-      } else if (e.isFile() && filter(e.name)) {
-        try {
-          const m = statSync(full).mtimeMs;
-          if (max === null || m > max) max = m;
-        } catch {
-          // ignore unreadable files
-        }
-      }
-    }
-  }
-  return max;
-}

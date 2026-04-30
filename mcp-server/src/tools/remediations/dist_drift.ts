@@ -8,44 +8,15 @@
  * autoConfirm:false in execute mode (enforced by dispatcher in remediate.ts).
  */
 
-import { readdirSync, statSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 import type { HandlerCtx, RemediationHandler } from '../remediate.js';
+import { newestMtime } from '../shared.js';
 import { createLogger } from '../../logger.js';
 import { resolveRealpathWithinRoot } from '../../utils/path-safety.js';
 
 const log = createLogger('remediation.dist_drift');
 
 const BUILD_TIMEOUT_MS = 120_000;
-
-function newestMtime(root: string, filter: (name: string) => boolean = () => true): number | null {
-  let max: number | null = null;
-  const stack: string[] = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop()!;
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(dir, { withFileTypes: true }) as Dirent[];
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      const full = join(dir, e.name);
-      if (e.isDirectory()) {
-        if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
-        stack.push(full);
-      } else if (e.isFile() && filter(e.name)) {
-        try {
-          const m = statSync(full).mtimeMs;
-          if (max === null || m > max) max = m;
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }
-  return max;
-}
 
 export const distDriftHandler: RemediationHandler = {
   description: 'Rebuild mcp-server/dist after src changes',
