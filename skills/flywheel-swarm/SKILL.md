@@ -48,8 +48,26 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
        ## Acceptance criteria
        <criteria>
 
+       ## Pre-Completion Quality Gate (MANDATORY — do not skip)
+       Before sending the completion message you MUST run, in this order, and fix what
+       you find before reporting done:
+         1. Invoke the \`/ubs-workflow\` skill scoped to your changed files
+            (changed-files mode, not full-repo). Triage every finding: fix, file as a
+            new bead with rationale, or explicitly justify ignoring it in your
+            completion message. Do not silently drop UBS findings.
+         2. Run the repo's verify commands per AGENTS.md (build/test/typecheck/lint
+            for the surfaces you touched). If AGENTS.md offloads heavy verification
+            to a helper (e.g. \`rch\`), use that — do not skip.
+         3. Self-review with fresh eyes: re-read your own diff for regressions,
+            unsafe assumptions, missing tests, and edge cases. Fix before completing.
+       Completion messages without evidence of these three steps will be bounced
+       back by the coordinator's review gate.
+
        ## On completion
-       Send a completion message to <your-coordinator-name> via send_message.
+       Send a completion message to <your-coordinator-name> via send_message that
+       includes: (a) UBS result summary (clean / fixed / deferred-with-bead-ids),
+       (b) verify command outputs (or the helper handle), (c) one-line self-review
+       summary. Then close the bead per AGENTS.md.
      "
      ```
    **Save each agent's task ID and pane name** — needed for `ntm --robot-restart-pane` and `TaskStop` if they become unresponsive.

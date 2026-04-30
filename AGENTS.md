@@ -122,6 +122,18 @@ If the second call shows anything else, retry the update once before reporting c
 
 `flywheel_review` reconciles the bead state automatically: `looks-good` is idempotent on already-closed beads, `hit-me` runs a post-close audit, and `skip` returns `already_closed`. Do not skip `flywheel_review` for closed beads — the legacy "spawn reviewers from `git diff <sha>~1 <sha>`" workaround is no longer required.
 
+## Pre-Completion Quality Gate (MANDATORY for every spawned implementor)
+
+Before any swarm/NTM agent reports a bead complete (or sends its completion message), it MUST execute, in order:
+
+1. **UBS scan on changed files.** Invoke the `/ubs-workflow` skill in changed-files mode (not full-repo). Every finding must be fixed, filed as a new bead with rationale, or explicitly justified in the completion message. Silently dropping UBS findings is a review-bounce condition.
+2. **Repo verify commands.** Run the build/test/typecheck/lint commands relevant to the surfaces touched, per this file's specific rules. If a remote-execution helper (e.g. `rch`) is the canonical path, use it — do not skip with "looks fine locally".
+3. **Self-review with fresh eyes.** Re-read your own diff for regressions, unsafe assumptions, missing tests, and edge cases. Fix before sending the completion message.
+
+The completion message itself must include: (a) UBS result summary (`clean` / `fixed N` / `deferred to bead ids …`), (b) verify command outcome (or the helper handle), (c) one-line self-review summary. Coordinator and `flywheel_review` reject completions missing this evidence.
+
+This rule is binding on every NTM-spawned implementor (swarm waves, deslop sweeps, reality-check follow-ups, parallel "do these N things" requests) and is the canonical contract for `skills/flywheel-swarm/SKILL.md`'s marching-orders payload. Do not weaken it inline; if a specific bead truly cannot run UBS or verify (e.g. docs-only diff), say so explicitly in the completion message instead of skipping silently.
+
 ## Agent Coordination
 
 - Bootstrap your agent-mail session with `macro_start_session` at the start of each task.

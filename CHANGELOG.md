@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-04-30
+
+### Added
+
+- **Pre-Completion Quality Gate for swarm implementors.** Every NTM-spawned implementor pane now receives a `## Pre-Completion Quality Gate` block in its `ntm --robot-send` marching-orders payload (`skills/flywheel-swarm/SKILL.md` Step 5) requiring, in order: (1) `/ubs-workflow` scoped to changed files with explicit triage of every finding (fix / new bead / justify), (2) repo verify commands per AGENTS.md (build/test/typecheck/lint or canonical helper like `rch`), (3) self-review with fresh eyes. Completion messages must carry UBS result + verify outcome + one-line self-review summary, or the coordinator's review gate bounces them.
+- **Durable AGENTS.md contract.** New `Pre-Completion Quality Gate` section in `AGENTS.md` codifies the same three-step rule as a repo-wide binding contract for every NTM-spawned implementor (swarm waves, deslop sweeps, reality-check follow-ups, ad-hoc parallel work). Anchors the swarm skill's marching-orders payload so future skill rewrites cannot weaken the gate silently.
+
 ## [3.9.3] - 2026-04-30
 
 ### Changed
