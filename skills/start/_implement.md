@@ -491,12 +491,44 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        and the coordinator will catch them via `flywheel_verify_beads`, but
        verifying here keeps the wave clean.
 
+       ## STEP 3.5 — WRITE COMPLETION ATTESTATION (MANDATORY)
+       Write `.pi-flywheel/completion/<bead-id>.json` matching `CompletionReportSchemaV1`
+       in `mcp-server/src/completion-report.ts`. This attestation is the ledger entry
+       that `flywheel_verify_beads` reads and `flywheel_advance_wave` gates on
+       (warn-only by default; hard-block when `FW_ATTESTATION_REQUIRED=1`).
+       Worked example:
+
+       ```json
+       {
+         \"version\": 1,
+         \"beadId\": \"<bead-id>\",
+         \"agentName\": \"<your-agent-name>\",
+         \"paneName\": \"<your-pane-name-or-omit>\",
+         \"status\": \"closed\",
+         \"changedFiles\": [\"path/relative/to/repo.ts\"],
+         \"commits\": [\"<short-sha>\"],
+         \"ubs\": { \"ran\": true, \"summary\": \"clean\", \"findingsFixed\": 0, \"deferredBeadIds\": [] },
+         \"verify\": [{ \"command\": \"npm test\", \"exitCode\": 0, \"summary\": \"all green\" }],
+         \"selfReview\": { \"ran\": true, \"summary\": \"no regressions\" },
+         \"beadClosedVerified\": true,
+         \"reservationsReleased\": true,
+         \"createdAt\": \"<ISO-8601 timestamp>\"
+       }
+       ```
+
+       Docs-only diffs: set `ubs.ran=false` and a non-empty `ubs.skippedReason`.
+       Status `closed` requires `beadClosedVerified=true`. Schema rejects absolute
+       paths or `..`-traversal in `changedFiles`. The schema is `version: 1` and
+       additive forever — never remove keys.
+
        ## STEP 4 — RELEASE + REPORT (MANDATORY)
        4a. Release all file reservations via release_file_reservations.
        4b. Send a completion summary to '<coordinator-agent-name>' via send_message
            with subject '[impl] <bead-id> done' (target <completion-length>) including:
            - Files changed
            - Tests added/modified
+           - UBS result + verify outcomes + one-line self-review
+           - Confirmation that `.pi-flywheel/completion/<bead-id>.json` is written
            - Any open concerns or follow-ups
      "
    )

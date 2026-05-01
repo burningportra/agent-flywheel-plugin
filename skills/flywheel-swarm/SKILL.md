@@ -60,14 +60,44 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
             to a helper (e.g. \`rch\`), use that — do not skip.
          3. Self-review with fresh eyes: re-read your own diff for regressions,
             unsafe assumptions, missing tests, and edge cases. Fix before completing.
-       Completion messages without evidence of these three steps will be bounced
+         4. Write \`.pi-flywheel/completion/<bead-id>.json\` matching
+            \`CompletionReportSchemaV1\` in \`mcp-server/src/completion-report.ts\`.
+            This attestation is the ledger entry that \`flywheel_verify_beads\` reads
+            and \`flywheel_advance_wave\` gates on (warn-only by default; hard-block
+            when \`FW_ATTESTATION_REQUIRED=1\`). Worked example:
+
+            \`\`\`json
+            {
+              \"version\": 1,
+              \"beadId\": \"<bead-id>\",
+              \"agentName\": \"<your-agent-name>\",
+              \"paneName\": \"<your-pane-name-or-omit>\",
+              \"status\": \"closed\",
+              \"changedFiles\": [\"path/relative/to/repo.ts\"],
+              \"commits\": [\"<short-sha>\"],
+              \"ubs\": { \"ran\": true, \"summary\": \"clean\", \"findingsFixed\": 0, \"deferredBeadIds\": [] },
+              \"verify\": [{ \"command\": \"npm test\", \"exitCode\": 0, \"summary\": \"all green\" }],
+              \"selfReview\": { \"ran\": true, \"summary\": \"no regressions\" },
+              \"beadClosedVerified\": true,
+              \"reservationsReleased\": true,
+              \"createdAt\": \"<ISO-8601 timestamp>\"
+            }
+            \`\`\`
+
+            Docs-only diffs: set \`ubs.ran=false\` and a non-empty \`ubs.skippedReason\`.
+            Status \`closed\` requires \`beadClosedVerified=true\`. Schema rejects
+            absolute paths or \`..\`-traversal in \`changedFiles\`. The schema is
+            \`version: 1\` and additive forever — never remove keys.
+
+       Completion messages without evidence of these four steps will be bounced
        back by the coordinator's review gate.
 
        ## On completion
        Send a completion message to <your-coordinator-name> via send_message that
        includes: (a) UBS result summary (clean / fixed / deferred-with-bead-ids),
        (b) verify command outputs (or the helper handle), (c) one-line self-review
-       summary. Then close the bead per AGENTS.md.
+       summary, (d) confirmation that \`.pi-flywheel/completion/<bead-id>.json\` is
+       written. Then close the bead per AGENTS.md.
      "
      ```
    **Save each agent's task ID and pane name** — needed for `ntm --robot-restart-pane` and `TaskStop` if they become unresponsive.
