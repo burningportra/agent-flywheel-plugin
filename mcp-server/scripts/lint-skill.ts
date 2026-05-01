@@ -96,8 +96,9 @@ async function loadLintModules(): Promise<{
   const placeMod = (await import(`${lintBase}/rules/placeholders.js`)) as unknown as { place001: unknown };
   const implMod = (await import(`${lintBase}/rules/implicitDecisions.js`)) as unknown as { impl001: unknown };
   const errMod = (await import(`${lintBase}/rules/errorCodeReferences.js`)) as unknown as { err001: unknown };
+  const reserveMod = (await import(`${lintBase}/rules/reserve001.js`)) as unknown as { reserve001: unknown };
   const rules: RulesModule = {
-    rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001],
+    rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001],
   };
   return { lintMod, registryMod, baselineMod, manifestMod, reportersMod, rules };
 }
@@ -245,6 +246,7 @@ function helpText(version: string): string {
     "  PLACE001 Placeholder tags must have a referent in the same step.",
     "  IMPL001  Implicit-decision phrases that should be AskUserQuestion calls.",
     "  ERR001   String-matching on error text; branch on data.error.code instead.",
+    "  RESERVE001 Direct agentMailRPC(\"file_reservation_paths\") calls outside agent-mail-helpers.ts.",
     "",
     "Exit codes:",
     "  0  Clean (no error-severity findings).",
@@ -370,7 +372,7 @@ export async function main(argv: string[]): Promise<number> {
       source,
       filePath,
       rules: ruleSet,
-      ruleContextExtras: { registry, source },
+      ruleContextExtras: { registry, source, repoRoot },
     });
   } catch (err) {
     process.stderr.write(`lint-skill: lint failed: ${String(err)}\n`);

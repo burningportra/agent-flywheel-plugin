@@ -148,13 +148,16 @@ describe("lint-skill CLI baseline portability (end-to-end)", () => {
             const text = await readFile(baselinePath, "utf8");
             const parsed = JSON.parse(text);
             expect(parsed.entries.length).toBeGreaterThan(0);
+            // Every entry — regardless of rule — must be repo-relative POSIX. The
+            // path-equality check only applies to findings attributed to the input
+            // SKILL.md fixture; cross-file rules (RESERVE001) attribute findings to
+            // src files instead, so filter before asserting fixture identity.
             for (const e of parsed.entries) {
-                // File MUST be repo-relative POSIX, not absolute.
                 expect(path.isAbsolute(e.file)).toBe(false);
                 expect(e.file.includes("\\")).toBe(false);
-                // And the path must resolve back to the fixture under repo root.
-                expect(e.file).toBe("mcp-server/src/__tests__/lint/fixtures/auq001-too-few.md");
             }
+            const fixtureEntries = parsed.entries.filter((e) => e.file === "mcp-server/src/__tests__/lint/fixtures/auq001-too-few.md");
+            expect(fixtureEntries.length).toBeGreaterThan(0);
         }
         finally {
             await rm(dir, { recursive: true, force: true });
