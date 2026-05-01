@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { FLYWHEEL_ERROR_CODES, FlywheelErrorCodeSchema, FlywheelToolErrorSchema, FlywheelStructuredErrorSchema, DEFAULT_RETRYABLE, DEFAULT_HINTS, FlywheelError, throwFlywheelError, makeFlywheelErrorResult, classifyExecError, } from '../errors.js';
 describe('FLYWHEEL_ERROR_CODES', () => {
-    it('has exactly 36 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode + 7 22i remediation/bundle/viewer)', () => {
-        expect(FLYWHEEL_ERROR_CODES).toHaveLength(36);
+    it('has exactly 38 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode + 7 22i remediation/bundle/viewer + 2 xsz attestation)', () => {
+        expect(FLYWHEEL_ERROR_CODES).toHaveLength(38);
     });
     it('DEFAULT_RETRYABLE covers every code', () => {
         expect(Object.keys(DEFAULT_RETRYABLE).sort()).toEqual([...FLYWHEEL_ERROR_CODES].sort());
@@ -247,7 +247,7 @@ describe('hint propagation through the Zod envelope', () => {
 //   (c) hint is not the literal code name (case-insensitive) — guards
 //       against the doctor.ts regression where `hint: 'cli_failure'`
 //       was shipped as a placeholder.
-describe('FlywheelError hint contract (all 36 codes)', () => {
+describe('FlywheelError hint contract (all 38 codes)', () => {
     it('DEFAULT_HINTS covers every FlywheelErrorCode', () => {
         expect(Object.keys(DEFAULT_HINTS).sort()).toEqual([...FLYWHEEL_ERROR_CODES].sort());
     });

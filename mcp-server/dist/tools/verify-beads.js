@@ -2,6 +2,7 @@ import { verifyBeadsClosed } from '../beads.js';
 import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
+import { readCompletionReport, validateCompletionReport } from '../completion-report.js';
 const log = createLogger('verify-beads');
 function okResult(phase, text, data) {
     return makeOkToolResult('flywheel_verify_beads', phase, text, data);
@@ -72,11 +73,44 @@ export async function runVerifyBeads(ctx, args) {
         }
         saveState(state);
     }
+    // Attestation evidence — read `.pi-flywheel/completion/<beadId>.json` for
+    // every bead the implementor reports closed (whether `br` already confirmed
+    // closed or we auto-closed via commit grep). Stragglers without commits are
+    // skipped — no implementor has claimed completion yet.
+    const missingEvidence = [];
+    const invalidEvidence = [];
+    for (const beadId of verified) {
+        const read = await readCompletionReport(cwd, beadId);
+        if (!read.ok) {
+            if (read.error.code === 'not_found') {
+                missingEvidence.push(beadId);
+            }
+            else {
+                invalidEvidence.push({
+                    beadId,
+                    code: read.error.code,
+                    message: read.error.message,
+                });
+            }
+            continue;
+        }
+        const validated = validateCompletionReport(read.report, { id: beadId }, { cwd });
+        if (!validated.ok) {
+            const issue = validated.issues[0];
+            invalidEvidence.push({
+                beadId,
+                code: issue.code,
+                message: validated.issues.map((i) => i.message).join('; '),
+            });
+        }
+    }
     const outcome = {
         verified,
         autoClosed,
         unclosedNoCommit,
         errors: report.errors,
+        missingEvidence,
+        invalidEvidence,
     };
     const lines = [];
     lines.push(`Verified ${verified.length}/${args.beadIds.length} bead(s) closed.`);
@@ -96,6 +130,18 @@ export async function runVerifyBeads(ctx, args) {
         lines.push(`Errors:`);
         for (const [id, msg] of Object.entries(report.errors)) {
             lines.push(`  - ${id}: ${msg}`);
+        }
+    }
+    if (missingEvidence.length > 0) {
+        lines.push(`⚠️  ${missingEvidence.length} closed bead(s) missing completion attestation:`);
+        for (const id of missingEvidence) {
+            lines.push(`  - ${id} (.pi-flywheel/completion/${id}.json not found)`);
+        }
+    }
+    if (invalidEvidence.length > 0) {
+        lines.push(`⚠️  ${invalidEvidence.length} closed bead(s) with invalid completion attestation:`);
+        for (const e of invalidEvidence) {
+            lines.push(`  - ${e.beadId}: ${e.code} — ${e.message}`);
         }
     }
     return okResult(state.phase, lines.join('\n'), outcome);

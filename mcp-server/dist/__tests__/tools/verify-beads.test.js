@@ -1,5 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { runVerifyBeads } from '../../tools/verify-beads.js';
+import { writeCompletionReport } from '../../completion-report.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 // ─── Helpers ──────────────────────────────────────────────────
 function makeBead(overrides = {}) {
@@ -197,6 +201,117 @@ describe('runVerifyBeads', () => {
         expect(data.unclosedNoCommit).toEqual([{ id: 'op-3', status: 'in_progress' }]);
         expect(data.errors['op-3']).toContain('auto-close failed');
         expect(state.beadResults['op-3']).toBeUndefined();
+    });
+});
+// ─── Completion Evidence Attestation (T2) ─────────────────
+describe('runVerifyBeads — attestation evidence', () => {
+    let cwd;
+    function validReport(beadId, overrides = {}) {
+        return {
+            version: 1,
+            beadId,
+            agentName: 'TestAgent',
+            status: 'closed',
+            changedFiles: ['src/foo.ts'],
+            commits: ['abc1234'],
+            ubs: { ran: true, summary: 'clean', findingsFixed: 0, deferredBeadIds: [] },
+            verify: [{ command: 'npm test', exitCode: 0, summary: 'ok' }],
+            selfReview: { ran: true, summary: 'looks good' },
+            beadClosedVerified: true,
+            reservationsReleased: true,
+            createdAt: '2026-04-30T23:00:00.000Z',
+            ...overrides,
+        };
+    }
+    function makeCtxAt(tmpCwd, execCalls = []) {
+        const state = makeState({ phase: 'reviewing', beadResults: {} });
+        const exec = createMockExec(execCalls);
+        return {
+            exec,
+            cwd: tmpCwd,
+            state,
+            saveState: (_s) => { },
+            clearState: () => { },
+        };
+    }
+    function brShowClosedReal(id) {
+        return {
+            cmd: 'br',
+            args: ['show', id, '--json'],
+            result: { code: 0, stdout: JSON.stringify(makeBead({ id, status: 'closed' })), stderr: '' },
+        };
+    }
+    beforeEach(async () => {
+        cwd = await mkdtemp(path.join(tmpdir(), 'fw-verify-attest-'));
+    });
+    afterEach(async () => {
+        await rm(cwd, { recursive: true, force: true });
+    });
+    it('reports missing attestation for closed beads with no JSON file', async () => {
+        const ctx = makeCtxAt(cwd, [brShowClosedReal('done-1'), brShowClosedReal('done-2')]);
+        const result = await runVerifyBeads(ctx, { cwd, beadIds: ['done-1', 'done-2'] });
+        expect(result.isError).toBeUndefined();
+        const data = result.structuredContent.data;
+        expect(data.verified).toEqual(['done-1', 'done-2']);
+        expect(data.missingEvidence).toEqual(['done-1', 'done-2']);
+        expect(data.invalidEvidence).toEqual([]);
+        expect(result.content[0].text).toContain('missing completion attestation');
+    });
+    it('reports no missing attestation when valid reports exist for every bead', async () => {
+        await writeCompletionReport(cwd, validReport('done-1'));
+        await writeCompletionReport(cwd, validReport('done-2'));
+        const ctx = makeCtxAt(cwd, [brShowClosedReal('done-1'), brShowClosedReal('done-2')]);
+        const result = await runVerifyBeads(ctx, { cwd, beadIds: ['done-1', 'done-2'] });
+        const data = result.structuredContent.data;
+        expect(data.missingEvidence).toEqual([]);
+        expect(data.invalidEvidence).toEqual([]);
+    });
+    it('reports schema_invalid for malformed JSON', async () => {
+        const filePath = path.join(cwd, '.pi-flywheel/completion/done-1.json');
+        await mkdir(path.dirname(filePath), { recursive: true });
+        await writeFile(filePath, JSON.stringify({ version: 1, beadId: 'done-1' }), 'utf8');
+        const ctx = makeCtxAt(cwd, [brShowClosedReal('done-1')]);
+        const result = await runVerifyBeads(ctx, { cwd, beadIds: ['done-1'] });
+        const data = result.structuredContent.data;
+        expect(data.invalidEvidence).toHaveLength(1);
+        expect(data.invalidEvidence[0]).toMatchObject({ beadId: 'done-1', code: 'schema_invalid' });
+    });
+    it('reports invalid_json for unparseable JSON', async () => {
+        const filePath = path.join(cwd, '.pi-flywheel/completion/done-1.json');
+        await mkdir(path.dirname(filePath), { recursive: true });
+        await writeFile(filePath, '{ not json', 'utf8');
+        const ctx = makeCtxAt(cwd, [brShowClosedReal('done-1')]);
+        const result = await runVerifyBeads(ctx, { cwd, beadIds: ['done-1'] });
+        const data = result.structuredContent.data;
+        expect(data.invalidEvidence).toHaveLength(1);
+        expect(data.invalidEvidence[0].code).toBe('invalid_json');
+    });
+    it('reports closed_without_verification when status=closed but beadClosedVerified=false', async () => {
+        await writeCompletionReport(cwd, validReport('done-1', { beadClosedVerified: false }));
+        const ctx = makeCtxAt(cwd, [brShowClosedReal('done-1')]);
+        const result = await runVerifyBeads(ctx, { cwd, beadIds: ['done-1'] });
+        const data = result.structuredContent.data;
+        expect(data.invalidEvidence).toHaveLength(1);
+        expect(data.invalidEvidence[0].code).toBe('closed_without_verification');
+    });
+    it('does NOT check attestation for stragglers without commits', async () => {
+        const ctx = makeCtxAt(cwd, [
+            {
+                cmd: 'br',
+                args: ['show', 'strag-1', '--json'],
+                result: { code: 0, stdout: JSON.stringify(makeBead({ id: 'strag-1', status: 'open' })), stderr: '' },
+            },
+            {
+                cmd: 'git',
+                args: ['log', '--grep=strag-1', '--oneline', '-1'],
+                result: { code: 0, stdout: '', stderr: '' },
+            },
+        ]);
+        const result = await runVerifyBeads(ctx, { cwd, beadIds: ['strag-1'] });
+        const data = result.structuredContent.data;
+        expect(data.missingEvidence).toEqual([]);
+        expect(data.invalidEvidence).toEqual([]);
+        expect(data.unclosedNoCommit).toHaveLength(1);
     });
 });
 //# sourceMappingURL=verify-beads.test.js.map

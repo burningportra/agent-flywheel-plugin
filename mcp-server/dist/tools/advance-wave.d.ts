@@ -15,6 +15,16 @@ export interface AdvanceWaveOutcome {
         complexity: Record<string, BeadComplexity>;
     } | null;
     waveComplete: boolean;
+    /**
+     * Stage 1 attestation rollout flag. `true` when one or more closed beads
+     * have missing or invalid completion attestation AND the
+     * `FW_ATTESTATION_REQUIRED` env var is NOT set. Surfaces the warning to
+     * the caller without blocking advance.
+     *
+     * When `FW_ATTESTATION_REQUIRED=1`, missing/invalid evidence becomes a
+     * hard error (`attestation_missing` / `attestation_invalid`) instead.
+     */
+    needsEvidence: boolean;
 }
 export declare function runAdvanceWave(ctx: ToolContext, args: AdvanceWaveArgs): Promise<McpToolResult>;
 export {};

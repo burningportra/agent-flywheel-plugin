@@ -55,6 +55,9 @@ export const FLYWHEEL_ERROR_CODES = [
   'bundle_integrity_failed',
   'bundle_stale',
   'viewer_port_in_use',
+  // claude-orchestrator-xsz — Completion Evidence Attestation gate (T2)
+  'attestation_missing',
+  'attestation_invalid',
 ] as const;
 
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
@@ -173,6 +176,10 @@ export const DEFAULT_HINTS: Record<FlywheelErrorCode, string> = {
     "A bundled skill's source `.md` has changed on disk. The bundle is still served (stable-by-default); set FW_SKILL_BUNDLE=off to read live or rebuild.",
   viewer_port_in_use:
     'All retried bead-viewer ports are in use. Try `--port <N>` with a free port or kill the existing viewer.',
+  attestation_missing:
+    'A bead reported closed but no completion attestation found at `.pi-flywheel/completion/<beadId>.json` — the implementor must write the CompletionReport JSON before the wave can advance.',
+  attestation_invalid:
+    'A completion attestation failed schema or cross-bead validation — re-read the bead, fix the report shape (or the underlying invariant violation like status=closed without beadClosedVerified=true), and rewrite `.pi-flywheel/completion/<beadId>.json`.',
 };
 
 export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
@@ -217,6 +224,10 @@ export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
   bundle_integrity_failed: true,
   bundle_stale: false,
   viewer_port_in_use: false,
+  // claude-orchestrator-xsz — attestation gate; missing/invalid is on the
+  // implementor to fix, not transient
+  attestation_missing: false,
+  attestation_invalid: false,
 };
 
 export class FlywheelError extends Error {

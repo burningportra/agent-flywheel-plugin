@@ -62,12 +62,15 @@ const V3_4_CODES = [
   'bundle_integrity_failed',
   'bundle_stale',
   'viewer_port_in_use',
+  // claude-orchestrator-xsz — Completion Evidence Attestation gate (T2)
+  'attestation_missing',
+  'attestation_invalid',
 ] as const;
 
 describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
-  it('contains exactly the 16 legacy + 20 new codes (36 total)', () => {
+  it('contains exactly the 16 legacy + 22 new codes (38 total)', () => {
     expect(FLYWHEEL_ERROR_CODES).toHaveLength(LEGACY_CODES.length + V3_4_CODES.length);
-    expect(FLYWHEEL_ERROR_CODES).toHaveLength(36);
+    expect(FLYWHEEL_ERROR_CODES).toHaveLength(38);
   });
 
   it('preserves legacy codes in order for v3.3.0 back-compat', () => {

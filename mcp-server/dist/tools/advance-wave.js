@@ -17,6 +17,13 @@ const LANE_ADAPTERS = {
     cod: adaptPromptForCodex,
     gem: adaptPromptForGemini,
 };
+function isAttestationRequired() {
+    // Treat any non-empty value besides "0"/"false" as enabled. Empty / unset
+    // means warn-only (Stage 1 default — duel-agreed: PI2 reveal-phase
+    // concession that hard-blocking on day-one breaks in-flight workflows).
+    const v = process.env.FW_ATTESTATION_REQUIRED?.trim().toLowerCase();
+    return v != null && v !== '' && v !== '0' && v !== 'false';
+}
 function okResult(phase, text, data) {
     return makeOkToolResult('flywheel_advance_wave', phase, text, data);
 }
@@ -56,6 +63,7 @@ export async function runAdvanceWave(ctx, args) {
             verification,
             nextWave: null,
             waveComplete: false,
+            needsEvidence: false,
         };
         const lines = [
             `Wave incomplete: ${verification.unclosedNoCommit.length} bead(s) still open without commits.`,
@@ -64,6 +72,27 @@ export async function runAdvanceWave(ctx, args) {
         ];
         return okResult(state.phase, lines.join('\n'), outcome);
     }
+    // Step 1.5: attestation gate (Stage 1 — warn-only by default).
+    // `FW_ATTESTATION_REQUIRED=1` flips to hard-block.
+    const required = isAttestationRequired();
+    if (verification.invalidEvidence.length > 0 && required) {
+        const ids = verification.invalidEvidence.map((e) => e.beadId);
+        const summary = verification.invalidEvidence
+            .map((e) => `${e.beadId}: ${e.code}`)
+            .join('; ');
+        return makeToolError('flywheel_advance_wave', state.phase, 'attestation_invalid', `Cannot advance wave — ${verification.invalidEvidence.length} bead(s) have invalid completion attestation: ${summary}`, {
+            hint: 'Re-read the offending CompletionReport JSON, fix the schema or invariant violation (e.g. status=closed without beadClosedVerified=true), and rewrite the file before re-invoking flywheel_advance_wave.',
+            details: { beadIds: ids, invalidEvidence: verification.invalidEvidence },
+        });
+    }
+    if (verification.missingEvidence.length > 0 && required) {
+        return makeToolError('flywheel_advance_wave', state.phase, 'attestation_missing', `Cannot advance wave — ${verification.missingEvidence.length} closed bead(s) missing completion attestation: ${verification.missingEvidence.join(', ')}`, {
+            hint: 'Each closed bead must have a `.pi-flywheel/completion/<beadId>.json` file matching CompletionReportSchemaV1. Have the implementor write the report (see mcp-server/src/completion-report.ts) before re-invoking.',
+            details: { beadIds: verification.missingEvidence },
+        });
+    }
+    const needsEvidence = !required &&
+        (verification.missingEvidence.length > 0 || verification.invalidEvidence.length > 0);
     // Step 2: get ready beads for the next wave
     let ready;
     try {
@@ -82,6 +111,7 @@ export async function runAdvanceWave(ctx, args) {
             verification,
             nextWave: null,
             waveComplete: true,
+            needsEvidence,
         };
         return okResult(state.phase, 'Wave verified. Queue drained — no more beads to dispatch.', outcome);
     }
@@ -114,12 +144,21 @@ export async function runAdvanceWave(ctx, args) {
             complexity: complexityMap,
         },
         waveComplete: true,
+        needsEvidence,
     };
     const lines = [
         `Wave verified (${verification.verified.length}/${args.closedBeadIds.length} closed).`,
-        `Next wave: ${waveCandidates.length} bead(s) dispatched across ${LANES.length} lanes.`,
-        ...waveCandidates.map((b, i) => `  - ${b.id} → ${LANES[i % LANES.length]} (${complexityMap[b.id]})`),
     ];
+    if (needsEvidence) {
+        if (verification.missingEvidence.length > 0) {
+            lines.push(`⚠️  ${verification.missingEvidence.length} bead(s) advanced without completion attestation (Stage 1 warn-only — set FW_ATTESTATION_REQUIRED=1 to block).`);
+        }
+        if (verification.invalidEvidence.length > 0) {
+            lines.push(`⚠️  ${verification.invalidEvidence.length} bead(s) advanced with invalid completion attestation (Stage 1 warn-only — set FW_ATTESTATION_REQUIRED=1 to block).`);
+        }
+    }
+    lines.push(`Next wave: ${waveCandidates.length} bead(s) dispatched across ${LANES.length} lanes.`);
+    lines.push(...waveCandidates.map((b, i) => `  - ${b.id} → ${LANES[i % LANES.length]} (${complexityMap[b.id]})`));
     return okResult(state.phase, lines.join('\n'), outcome);
 }
 //# sourceMappingURL=advance-wave.js.map

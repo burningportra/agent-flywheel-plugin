@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { runAdvanceWave } from '../../tools/advance-wave.js';
+import { writeCompletionReport } from '../../completion-report.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 // ─── Helpers ──────────────────────────────────────────────────
 function makeBead(overrides = {}) {
@@ -209,6 +213,112 @@ describe('runAdvanceWave', () => {
         const data = result.structuredContent.data;
         const lanes = data.nextWave.prompts.map((p) => p.lane);
         expect(lanes).toEqual(['cc', 'cod', 'gem', 'cc', 'cod']);
+    });
+});
+// ─── Completion Evidence Attestation gate (T2) ───────────
+describe('runAdvanceWave — attestation gate', () => {
+    let cwd;
+    const origRequired = process.env.FW_ATTESTATION_REQUIRED;
+    function validReport(beadId, overrides = {}) {
+        return {
+            version: 1,
+            beadId,
+            agentName: 'TestAgent',
+            status: 'closed',
+            changedFiles: ['src/foo.ts'],
+            commits: ['abc1234'],
+            ubs: { ran: true, summary: 'clean', findingsFixed: 0, deferredBeadIds: [] },
+            verify: [{ command: 'npm test', exitCode: 0, summary: 'ok' }],
+            selfReview: { ran: true, summary: 'looks good' },
+            beadClosedVerified: true,
+            reservationsReleased: true,
+            createdAt: '2026-04-30T23:00:00.000Z',
+            ...overrides,
+        };
+    }
+    function makeCtxAt(tmpCwd, execCalls = []) {
+        const state = makeState({ phase: 'implementing', beadResults: {} });
+        const exec = createMockExec(execCalls);
+        return {
+            exec,
+            cwd: tmpCwd,
+            state,
+            saveState: (_s) => { },
+            clearState: () => { },
+        };
+    }
+    beforeEach(async () => {
+        cwd = await mkdtemp(path.join(tmpdir(), 'fw-advance-attest-'));
+        delete process.env.FW_ATTESTATION_REQUIRED;
+    });
+    afterEach(async () => {
+        await rm(cwd, { recursive: true, force: true });
+        if (origRequired === undefined)
+            delete process.env.FW_ATTESTATION_REQUIRED;
+        else
+            process.env.FW_ATTESTATION_REQUIRED = origRequired;
+    });
+    it('default mode: warns but advances when attestation is missing (needsEvidence=true)', async () => {
+        const nextBeads = [makeBead({ id: 'next-1' })];
+        const ctx = makeCtxAt(cwd, [brShowClosed('done-1'), brReadyCall(nextBeads)]);
+        const result = await runAdvanceWave(ctx, { cwd, closedBeadIds: ['done-1'] });
+        expect(result.isError).toBeUndefined();
+        const data = result.structuredContent.data;
+        expect(data.waveComplete).toBe(true);
+        expect(data.nextWave).not.toBeNull();
+        expect(data.needsEvidence).toBe(true);
+        expect(data.verification.missingEvidence).toEqual(['done-1']);
+        expect(result.content[0].text).toContain('without completion attestation');
+    });
+    it('default mode: needsEvidence=false when valid attestation present', async () => {
+        await writeCompletionReport(cwd, validReport('done-1'));
+        const nextBeads = [makeBead({ id: 'next-1' })];
+        const ctx = makeCtxAt(cwd, [brShowClosed('done-1'), brReadyCall(nextBeads)]);
+        const result = await runAdvanceWave(ctx, { cwd, closedBeadIds: ['done-1'] });
+        const data = result.structuredContent.data;
+        expect(data.needsEvidence).toBe(false);
+        expect(data.verification.missingEvidence).toEqual([]);
+    });
+    it('FW_ATTESTATION_REQUIRED=1: blocks with attestation_missing error when no JSON', async () => {
+        process.env.FW_ATTESTATION_REQUIRED = '1';
+        const ctx = makeCtxAt(cwd, [brShowClosed('done-1')]);
+        const result = await runAdvanceWave(ctx, { cwd, closedBeadIds: ['done-1'] });
+        expect(result.isError).toBe(true);
+        const sc = result.structuredContent;
+        expect(sc.status).toBe('error');
+        expect(sc.data.error.code).toBe('attestation_missing');
+        expect(sc.data.error.hint).toBeTruthy();
+        expect(sc.data.error.details.beadIds).toEqual(['done-1']);
+    });
+    it('FW_ATTESTATION_REQUIRED=1: blocks with attestation_invalid when schema fails', async () => {
+        process.env.FW_ATTESTATION_REQUIRED = '1';
+        await writeCompletionReport(cwd, validReport('done-1', { beadClosedVerified: false }));
+        const ctx = makeCtxAt(cwd, [brShowClosed('done-1')]);
+        const result = await runAdvanceWave(ctx, { cwd, closedBeadIds: ['done-1'] });
+        expect(result.isError).toBe(true);
+        const sc = result.structuredContent;
+        expect(sc.data.error.code).toBe('attestation_invalid');
+        expect(sc.data.error.hint).toBeTruthy();
+    });
+    it('FW_ATTESTATION_REQUIRED=1: passes through when valid attestation present', async () => {
+        process.env.FW_ATTESTATION_REQUIRED = '1';
+        await writeCompletionReport(cwd, validReport('done-1'));
+        const ctx = makeCtxAt(cwd, [brShowClosed('done-1'), brReadyCall([])]);
+        const result = await runAdvanceWave(ctx, { cwd, closedBeadIds: ['done-1'] });
+        expect(result.isError).toBeUndefined();
+        const data = result.structuredContent.data;
+        expect(data.needsEvidence).toBe(false);
+        expect(data.waveComplete).toBe(true);
+    });
+    it('FW_ATTESTATION_REQUIRED=0/false/empty: warn-only (Stage 1 default)', async () => {
+        for (const v of ['0', 'false', '']) {
+            process.env.FW_ATTESTATION_REQUIRED = v;
+            const ctx = makeCtxAt(cwd, [brShowClosed('done-1'), brReadyCall([])]);
+            const result = await runAdvanceWave(ctx, { cwd, closedBeadIds: ['done-1'] });
+            expect(result.isError, `FW_ATTESTATION_REQUIRED=${JSON.stringify(v)} should be warn-only`).toBeUndefined();
+            const data = result.structuredContent.data;
+            expect(data.needsEvidence).toBe(true);
+        }
     });
 });
 //# sourceMappingURL=advance-wave.test.js.map

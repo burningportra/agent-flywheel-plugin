@@ -3,8 +3,28 @@ import { verifyBeadsClosed, type BeadStraggler } from '../beads.js';
 import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
+import { readCompletionReport, validateCompletionReport } from '../completion-report.js';
 
 const log = createLogger('verify-beads');
+
+/**
+ * One entry per bead whose attestation failed schema or cross-bead validation.
+ * `code` is the underlying read/validate error code; downstream `advance-wave`
+ * surfaces this in its `attestation_invalid` error envelope.
+ */
+export type InvalidEvidenceCode =
+  | 'invalid_json'
+  | 'schema_invalid'
+  | 'bead_id_mismatch'
+  | 'closed_without_verification'
+  | 'path_escapes_cwd'
+  | 'status_mismatch';
+
+export interface InvalidEvidenceEntry {
+  beadId: string;
+  code: InvalidEvidenceCode;
+  message: string;
+}
 
 export interface VerifyBeadsOutcome {
   /** Bead IDs that `br show` confirms as closed. */
@@ -15,6 +35,24 @@ export interface VerifyBeadsOutcome {
   unclosedNoCommit: BeadStraggler[];
   /** Bead IDs whose `br show` failed, mapped to error message. */
   errors: Record<string, string>;
+  /**
+   * Bead IDs that are closed (or auto-closed) but have no
+   * `.pi-flywheel/completion/<beadId>.json` attestation file.
+   *
+   * Stage 1 surface — `flywheel_advance_wave` warns by default and only blocks
+   * when `FW_ATTESTATION_REQUIRED=1`. Empty array means every closed bead has
+   * a present attestation file (parse/validation status reported separately
+   * in `invalidEvidence`).
+   */
+  missingEvidence: string[];
+  /**
+   * Bead IDs whose attestation file exists but failed schema or cross-bead
+   * validation. See `InvalidEvidenceEntry.code` for the specific failure.
+   *
+   * Empty array means every present attestation parsed cleanly and matched
+   * its bead.
+   */
+  invalidEvidence: InvalidEvidenceEntry[];
 }
 
 function okResult(phase: string, text: string, data: VerifyBeadsOutcome): McpToolResult {
@@ -113,11 +151,44 @@ export async function runVerifyBeads(
     saveState(state);
   }
 
+  // Attestation evidence — read `.pi-flywheel/completion/<beadId>.json` for
+  // every bead the implementor reports closed (whether `br` already confirmed
+  // closed or we auto-closed via commit grep). Stragglers without commits are
+  // skipped — no implementor has claimed completion yet.
+  const missingEvidence: string[] = [];
+  const invalidEvidence: InvalidEvidenceEntry[] = [];
+  for (const beadId of verified) {
+    const read = await readCompletionReport(cwd, beadId);
+    if (!read.ok) {
+      if (read.error.code === 'not_found') {
+        missingEvidence.push(beadId);
+      } else {
+        invalidEvidence.push({
+          beadId,
+          code: read.error.code,
+          message: read.error.message,
+        });
+      }
+      continue;
+    }
+    const validated = validateCompletionReport(read.report, { id: beadId }, { cwd });
+    if (!validated.ok) {
+      const issue = validated.issues[0];
+      invalidEvidence.push({
+        beadId,
+        code: issue.code,
+        message: validated.issues.map((i) => i.message).join('; '),
+      });
+    }
+  }
+
   const outcome: VerifyBeadsOutcome = {
     verified,
     autoClosed,
     unclosedNoCommit,
     errors: report.errors,
+    missingEvidence,
+    invalidEvidence,
   };
 
   const lines: string[] = [];
@@ -138,6 +209,18 @@ export async function runVerifyBeads(
     lines.push(`Errors:`);
     for (const [id, msg] of Object.entries(report.errors)) {
       lines.push(`  - ${id}: ${msg}`);
+    }
+  }
+  if (missingEvidence.length > 0) {
+    lines.push(`⚠️  ${missingEvidence.length} closed bead(s) missing completion attestation:`);
+    for (const id of missingEvidence) {
+      lines.push(`  - ${id} (.pi-flywheel/completion/${id}.json not found)`);
+    }
+  }
+  if (invalidEvidence.length > 0) {
+    lines.push(`⚠️  ${invalidEvidence.length} closed bead(s) with invalid completion attestation:`);
+    for (const e of invalidEvidence) {
+      lines.push(`  - ${e.beadId}: ${e.code} — ${e.message}`);
     }
   }
 
