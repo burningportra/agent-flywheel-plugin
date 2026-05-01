@@ -32,3 +32,14 @@ storage.sqlite3-wal
 
 # Vendored dev copy of mcp-agent-mail (not part of the plugin distribution)
 /mcp_agent_mail/
+
+# Duel-skill scratch transcripts (kept on disk for 7-day Provenance window per
+# `skills/flywheel-duel/SKILL.md`; the synthesis report at `docs/duels/<date>.md`
+# captures the durable summary).
+/WIZARD_IDEAS_*.md
+/WIZARD_SCORES_*.md
+/WIZARD_REACTIONS_*.md
+/WIZARD_REBUTTAL_*.md
+/WIZARD_STEELMAN_*.md
+/WIZARD_BLINDSPOTS_*.md
+/DUELING_WIZARDS_REPORT.md
