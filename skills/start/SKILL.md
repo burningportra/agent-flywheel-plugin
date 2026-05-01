@@ -21,11 +21,7 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 > ## ⚠️ UNIVERSAL RULE 3 — load phase instructions on demand (PRIMARY: `flywheel_get_skill`)
 >
-> Steps 5–12 are stored in separate files to keep this prompt within token limits. When you reach a phase boundary, fetch the corresponding body via the bundled MCP tool — **do not default to `Read`**:
->
-> ```
-> flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })
-> ```
+> Steps 5–12 are stored in separate files to keep this prompt within token limits. When you reach a phase boundary, fetch the corresponding body via the bundled MCP tool — **do not default to `Read`**. Call: `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })`.
 >
 > | Phase | Skill name | Sub-file (fallback) | Steps |
 > |-------|-----------|---------------------|-------|
@@ -244,8 +240,7 @@ AskUserQuestion(questions: [{
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
     { label: "Deslop pass", description: "Apply the deslop refactor skill with isomorphism proofs — single-pass, fresh-eyes, 5-Pi swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), or iterative 10x. See skills/start/_deslop.md" },
-    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel ideas, plan, or review the current bead set. Auto-routes to the right mode based on phase. ~20-30 min; needs ntm + 2 healthy CLIs" },
-    { label: "Other", description: "Work on beads manually, start a new goal, or research an external repo (sub-menu)" }
+    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel ideas, plan, or review the current bead set. Auto-routes to the right mode based on phase. ~20-30 min; needs ntm + 2 healthy CLIs" }
   ],
   multiSelect: false
 }])
@@ -261,8 +256,7 @@ AskUserQuestion(questions: [{
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Reality check", description: "Step back: gap-check actual implementation against AGENTS.md/README.md/plan vision using the reality-check skill, convert gaps to beads, optionally run swarm. The 'come-to-Jesus' steering pass. See skills/start/_reality_check.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
-    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel new ideas, the current plan, or steelman the open-bead set. Auto-routes by phase. ~20-30 min; needs ntm + 2 healthy CLIs" },
-    { label: "Other", description: "Deslop pass / new goal / research an external repo / audit (sub-menu)" }
+    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel new ideas, the current plan, or steelman the open-bead set. Auto-routes by phase. ~20-30 min; needs ntm + 2 healthy CLIs" }
   ],
   multiSelect: false
 }])
@@ -278,8 +272,7 @@ AskUserQuestion(questions: [{
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities" },
     { label: "Set a goal", description: "I already know what I want to build" },
     { label: "Deslop pass", description: "Apply the deslop refactor skill — proof-obligated refactor pass. Meaningful even on a clean repo with no beads. See skills/start/_deslop.md" },
-    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards --mode=ideas — bypass single-model brainstorm, generate decorrelated goal options. ~20-30 min; needs ntm + 2 healthy CLIs" },
-    { label: "Other", description: "Research an external repo or run /flywheel-setup (sub-menu)" }
+    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards --mode=ideas — bypass single-model brainstorm, generate decorrelated goal options. ~20-30 min; needs ntm + 2 healthy CLIs" }
   ],
   multiSelect: false
 }])
