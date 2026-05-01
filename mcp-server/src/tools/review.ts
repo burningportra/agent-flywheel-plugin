@@ -1,6 +1,6 @@
 import type { ToolContext, McpToolResult, Bead, ReviewArgs, FlywheelPhase, ReviewMode } from '../types.js';
 import type { FlywheelErrorCode } from '../errors.js';
-import { makeFlywheelErrorResult } from '../errors.js';
+import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { createLogger } from '../logger.js';
 import { makeOkToolResult } from './shared.js';
 
@@ -50,7 +50,7 @@ async function autofixGateOk(ctx: ToolContext): Promise<{ ok: boolean; reason?: 
       return { ok: false, reason: 'working tree is dirty (uncommitted changes present)' };
     }
   } catch (err: unknown) {
-    return { ok: false, reason: `git status threw: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, reason: `git status threw: ${errMsg(err)}` };
   }
   // Doctor signal: if the session has a recent DoctorReport cached and any
   // check is "red", refuse. Absence of a cached report is tolerated — the
@@ -283,7 +283,7 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
         } catch (err: unknown) {
           log.warn('Failed to parse sibling beads for parent auto-close', {
             code: 'parse_failure', tool: 'flywheel_review', phase: state.phase,
-            cause: err instanceof Error ? err.message : String(err),
+            cause: errMsg(err),
             parentId: bead.parent,
           });
         }

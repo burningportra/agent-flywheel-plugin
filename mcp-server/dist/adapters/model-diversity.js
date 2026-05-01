@@ -12,6 +12,7 @@
  * The public surface is the primary consumer contract for downstream
  * bead `1qn` (codex-rescue handoff). Treat it as stable.
  */
+import { errMsg } from '../errors.js';
 import { adaptPromptForClaude } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
 import { adaptPromptForGemini } from './gemini-prompt.js';
@@ -54,7 +55,7 @@ export async function detectCliCapabilities(exec, opts = {}) {
             return {
                 provider,
                 available: false,
-                reason: err instanceof Error ? err.message : String(err),
+                reason: errMsg(err),
             };
         }
     };

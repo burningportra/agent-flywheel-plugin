@@ -50,6 +50,7 @@ import {
   type SolutionDoc,
   type SolutionDocFrontmatter,
 } from './solution-doc-schema.js';
+import { errMsg } from './errors.js';
 import { normalizeText } from './utils/text-normalize.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -500,7 +501,7 @@ export async function refreshLearnings(
     } catch (err) {
       unparseable.push({
         path: rel,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: errMsg(err),
       });
       continue;
     }

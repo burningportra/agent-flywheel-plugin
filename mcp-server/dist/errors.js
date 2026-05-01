@@ -101,7 +101,7 @@ export const DEFAULT_HINTS = {
     exec_aborted: 'The operation was aborted via AbortSignal — this is usually a caller-initiated cancellation and is NOT retried automatically.',
     blocked_state: 'The flywheel is in a phase that does not permit this action — check current phase via `flywheel_status` and run the appropriate transition first.',
     concurrent_write: 'Another invocation holds the write lock — wait briefly and retry, or run `/flywheel-cleanup` if you suspect a stuck lock from a crashed session.',
-    agent_mail_unreachable: 'The agent-mail MCP server at http://127.0.0.1:8765/mcp did not respond — start it with `npx agent-mail-server` and verify with `lsof -i :8765`.',
+    agent_mail_unreachable: 'The agent-mail MCP server at http://127.0.0.1:8765/mcp did not respond — start the Rust port with `am serve-http` (or `mcp-agent-mail serve`) and verify with `lsof -i :8765`.',
     deep_plan_all_failed: 'All deep-plan model providers failed — check API credentials and rate limits, then retry; consider /flywheel-doctor to inspect provider health.',
     empty_plan: 'The planner produced zero beads — refine the goal description with more concrete acceptance criteria and re-run `flywheel_plan`.',
     already_closed: 'The target bead is already in `closed` status — this is idempotent; no action needed unless you intended to re-open via `br update --status open`.',
@@ -209,6 +209,14 @@ export function throwFlywheelError(input) {
     throw new FlywheelError(input);
 }
 /**
+ * Coerce an `unknown` caught error to its message string. Equivalent to the
+ * inline `err instanceof Error ? err.message : String(err)` pattern but keeps
+ * call sites readable. Pure, total over `unknown`, never throws.
+ */
+export function errMsg(err) {
+    return err instanceof Error ? err.message : String(err);
+}
+/**
  * Redact absolute filesystem paths and cap length before embedding raw error
  * messages in MCP-visible structured output. Prevents local-path leakage via
  * FlywheelToolError.cause without losing signal value for debugging.
@@ -222,7 +230,7 @@ export function sanitizeCause(raw, maxLen = 200) {
     return unixRedacted.length > maxLen ? `${unixRedacted.slice(0, maxLen - 1)}…` : unixRedacted;
 }
 export function classifyExecError(err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     const cause = sanitizeCause(msg);
     if (/Timed out after \d+ms/.test(msg))
         return { code: 'exec_timeout', retryable: true, cause };

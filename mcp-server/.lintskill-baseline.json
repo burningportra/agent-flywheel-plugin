@@ -79,9 +79,9 @@
       "ruleId": "RESERVE001",
       "rulesetVersion": 1,
       "file": "mcp-server/src/agent-mail.ts",
-      "line": 228,
+      "line": 229,
       "fingerprint": "sha256:d9d37ceaaf48ae6747c666738c3b0182db5aac4b2f3336aaabe8c4f8504c26cb",
-      "reason": "Orphan reserveFileReservations() helper, zero callers. Kept as RESERVE001 baseline per duel-plan T4. Remove with the orphan when promoting RESERVE001 to error in v3.12."
+      "reason": "Orphan reserveFileReservations() helper, zero callers. Kept as RESERVE001 baseline per duel-plan T4. Remove with the orphan when promoting RESERVE001 to error in v3.12. (line shifted +1 by the errMsg import added during the 2026-04-30 single-pass deslop run.)"
     }
   ]
 }

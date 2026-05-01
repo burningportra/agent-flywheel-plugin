@@ -4,6 +4,7 @@ import { PostmortemDraftSchema, } from "./types.js";
 import { resilientExec } from "./cli-exec.js";
 import { agentMailRPC, unwrapRPC } from "./agent-mail.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { SolutionDocSchema, inferSolutionCategory, slugifySolutionTitle, } from "./solution-doc-schema.js";
 const log = createLogger("episodic-memory");
 // ─── MemPalace Detection ─────────────────────────────────────
@@ -338,7 +339,7 @@ async function fetchInboxSummary(ctx) {
     }
     catch (err) {
         log.debug("agent-mail fetch_inbox threw; skipping", {
-            err: err instanceof Error ? err.message : String(err),
+            err: errMsg(err),
         });
         return { completions: [], blockers: [], coordinatorAgent: null };
     }

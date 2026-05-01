@@ -2,6 +2,7 @@ import type { ExecFn } from "./exec.js";
 import { join } from "path";
 import { writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
+import { errMsg } from "./errors.js";
 import { loadCachedProfile, profileRepo, saveCachedProfile } from "./profiler.js";
 import { assertSafeSegment } from "./utils/path-safety.js";
 
@@ -34,7 +35,7 @@ export async function writeProfileSnapshot(
     return snapshotPath;
   } catch (err) {
     process.stderr.write(
-      `[deep-plan] WARNING: Could not compute profile snapshot: ${err instanceof Error ? err.message : String(err)}\n`
+      `[deep-plan] WARNING: Could not compute profile snapshot: ${errMsg(err)}\n`
     );
     return null;
   }
@@ -135,7 +136,7 @@ export async function runDeepPlanAgents(
       try {
         writeFileSync(outputFile, plan, "utf8");
       } catch (writeErr) {
-        process.stderr.write(`[deep-plan] WARNING: Could not write output file ${outputFile}: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}\n`);
+        process.stderr.write(`[deep-plan] WARNING: Could not write output file ${outputFile}: ${errMsg(writeErr)}\n`);
       }
 
       return {
@@ -149,10 +150,10 @@ export async function runDeepPlanAgents(
       return {
         name: agent.name,
         model: agent.model ?? "default",
-        plan: `(AGENT FAILED — exclude from synthesis: ${err instanceof Error ? err.message : String(err)})`,
+        plan: `(AGENT FAILED — exclude from synthesis: ${errMsg(err)})`,
         exitCode: 1,
         elapsed: Math.floor((Date.now() - startTime) / 1000),
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg(err),
       } as DeepPlanResult;
     }
   });

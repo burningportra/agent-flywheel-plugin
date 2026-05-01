@@ -4,7 +4,7 @@ import { makeOkToolResult, slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
-import { makeFlywheelErrorResult } from '../errors.js';
+import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { assertSafeRelativePath, resolveRealpathWithinRoot, } from '../utils/path-safety.js';
 import { normalizeText } from '../utils/text-normalize.js';
 /**
@@ -166,7 +166,7 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
             writeFileSync(planFilePath, args.planContent, 'utf8');
         }
         catch (err) {
-            return errorResult('planning', 'cli_failure', `Failed to write plan file: ${err instanceof Error ? err.message : String(err)}`, { planFilePath }, 'Check filesystem permissions on docs/plans/ and free disk space, then retry.');
+            return errorResult('planning', 'cli_failure', `Failed to write plan file: ${errMsg(err)}`, { planFilePath }, 'Check filesystem permissions on docs/plans/ and free disk space, then retry.');
         }
         state.planDocument = relativePath;
         state.planRefinementRound = 0;

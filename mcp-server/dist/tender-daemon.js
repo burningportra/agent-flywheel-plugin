@@ -5,6 +5,7 @@ import process from "node:process";
 import { promisify } from "node:util";
 import { fetchInbox } from "./agent-mail.js";
 import { makeExec } from "./exec.js";
+import { errMsg } from "./errors.js";
 import { DEFAULT_TENDER_DAEMON_AGENT, DEFAULT_TENDER_DAEMON_INTERVAL_MS, makeTenderDaemonStoppedEvent, runTenderDaemonOnce, } from "./tender.js";
 import { createLogger } from "./logger.js";
 const execAsync = promisify(execCb);
@@ -64,7 +65,7 @@ export function parseTenderDaemonArgs(argv) {
                     parsed.interval = parsePositiveInt(value, "--interval");
                 }
                 catch (err) {
-                    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+                    return { ok: false, error: errMsg(err) };
                 }
                 break;
             case "logfile":
@@ -78,7 +79,7 @@ export function parseTenderDaemonArgs(argv) {
                     parsed.ntmTimeoutMs = parsePositiveInt(value, "--ntm-timeout");
                 }
                 catch (err) {
-                    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+                    return { ok: false, error: errMsg(err) };
                 }
                 break;
             default:
@@ -284,7 +285,7 @@ export async function startTenderDaemon(args, deps = {}) {
             return pollInFlight;
         pollInFlight = doPoll()
             .catch((err) => {
-            log.error("Daemon poll failed", { error: err instanceof Error ? err.message : String(err) });
+            log.error("Daemon poll failed", { error: errMsg(err) });
         })
             .finally(() => {
             pollInFlight = null;

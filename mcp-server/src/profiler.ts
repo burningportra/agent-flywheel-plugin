@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ExecFn } from "./exec.js";
 import type { RepoProfile, TodoItem, CommitSummary } from "./types.js";
 import { createLogger } from './logger.js';
+import { errMsg } from './errors.js';
 import { selectScanners, mergeAndDedup } from './todo-scanner.js';
 import { normalizeText } from './utils/text-normalize.js';
 
@@ -53,7 +54,7 @@ export async function loadCachedProfile(exec: ExecFn, cwd: string): Promise<Repo
     log.info("Profile cache hit", { head: currentHead.slice(0, 8), cachedAt: cache.cachedAt });
     return cache.profile;
   } catch (err) {
-    log.warn("Failed to read profile cache", { error: err instanceof Error ? err.message : String(err) });
+    log.warn("Failed to read profile cache", { error: errMsg(err) });
     return null;
   }
 }
@@ -86,7 +87,7 @@ export async function saveCachedProfile(exec: ExecFn, cwd: string, profile: Repo
     writeFileSync(join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2), "utf8");
     log.info("Profile cached", { head: head.slice(0, 8) });
   } catch (err) {
-    log.warn("Failed to write profile cache", { error: err instanceof Error ? err.message : String(err) });
+    log.warn("Failed to write profile cache", { error: errMsg(err) });
   }
 }
 

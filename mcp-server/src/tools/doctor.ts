@@ -20,6 +20,7 @@ import { newestMtime } from './shared.js';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
+import { errMsg } from '../errors.js';
 import { readTelemetry } from '../telemetry.js';
 import {
   detectCliCapabilities,
@@ -223,7 +224,7 @@ export async function runDoctorChecks(
         // any leak as a red row instead of rejecting.
         log.warn('doctor check threw', {
           check: DOCTOR_CHECK_NAMES[idx],
-          err: err instanceof Error ? err.message : String(err),
+          err: errMsg(err),
         });
         return {
           name: DOCTOR_CHECK_NAMES[idx]!,
@@ -1369,10 +1370,6 @@ interface GitWorktreeRecord {
   head?: string;
   branch?: string;
   locked: boolean;
-}
-
-function errMsg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 function resolveDoctorPath(

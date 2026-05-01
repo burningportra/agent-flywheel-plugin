@@ -23,6 +23,7 @@
 
 import { realpathSync } from "node:fs";
 import { isAbsolute, normalize, resolve, relative, sep } from "node:path";
+import { errMsg } from "../errors.js";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ function isEnoent(err: unknown): boolean {
   if (typeof err === "object" && err !== null && "code" in err) {
     return (err as { code?: unknown }).code === "ENOENT";
   }
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = errMsg(err);
   return /\bENOENT\b/i.test(msg);
 }
 
@@ -328,7 +329,7 @@ export function resolveRealpath(
     return {
       ok: false,
       reason: "resolve_failed",
-      message: `${label} resolve failed: ${err instanceof Error ? err.message : String(err)}`,
+      message: `${label} resolve failed: ${errMsg(err)}`,
       absolutePath: input,
     };
   }
@@ -345,7 +346,7 @@ export function resolveRealpath(
       reason: isEnoent(err) ? "not_found" : "resolve_failed",
       message: isEnoent(err)
         ? `${label} not found: ${absolutePath}`
-        : `${label} resolve failed: ${err instanceof Error ? err.message : String(err)}`,
+        : `${label} resolve failed: ${errMsg(err)}`,
       absolutePath,
     };
   }

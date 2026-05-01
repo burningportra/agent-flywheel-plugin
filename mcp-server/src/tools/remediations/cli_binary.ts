@@ -27,6 +27,7 @@
 
 import type { HandlerCtx, RemediationHandler } from '../remediate.js';
 import { createLogger } from '../../logger.js';
+import { errMsg } from '../../errors.js';
 
 const INSTALL_TIMEOUT_MS = 180_000;
 const VERIFY_TIMEOUT_MS = 5_000;
@@ -119,7 +120,7 @@ function buildHandler(checkName: keyof typeof CONFIGS): RemediationHandler {
         return helpRes.code === 0;
       } catch (err) {
         log.warn(`${cfg.binary} verifyProbe threw`, {
-          error: err instanceof Error ? err.message : String(err),
+          error: errMsg(err),
         });
         return false;
       }

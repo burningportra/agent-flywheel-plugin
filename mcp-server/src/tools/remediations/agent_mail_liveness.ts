@@ -10,6 +10,7 @@
 
 import type { HandlerCtx, RemediationHandler } from '../remediate.js';
 import { createLogger } from '../../logger.js';
+import { errMsg } from '../../errors.js';
 
 const log = createLogger('remediation.agent_mail_liveness');
 
@@ -58,7 +59,7 @@ export const agentMailLivenessHandler: RemediationHandler = {
       return alive;
     } catch (err) {
       log.warn('verifyProbe: curl threw', {
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg(err),
       });
       return false;
     }

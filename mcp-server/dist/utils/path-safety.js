@@ -22,6 +22,7 @@
  */
 import { realpathSync } from "node:fs";
 import { isAbsolute, normalize, resolve, relative, sep } from "node:path";
+import { errMsg } from "../errors.js";
 // ─── Constants ──────────────────────────────────────────────
 const DEFAULT_MAX_PATH_LENGTH = 1024;
 const DEFAULT_MAX_SEGMENT_LENGTH = 128;
@@ -44,7 +45,7 @@ function isEnoent(err) {
     if (typeof err === "object" && err !== null && "code" in err) {
         return err.code === "ENOENT";
     }
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     return /\bENOENT\b/i.test(msg);
 }
 function isSameOrChildPath(candidate, root) {
@@ -159,7 +160,7 @@ export function resolveRealpath(input, opts = {}) {
         return {
             ok: false,
             reason: "resolve_failed",
-            message: `${label} resolve failed: ${err instanceof Error ? err.message : String(err)}`,
+            message: `${label} resolve failed: ${errMsg(err)}`,
             absolutePath: input,
         };
     }
@@ -176,7 +177,7 @@ export function resolveRealpath(input, opts = {}) {
             reason: isEnoent(err) ? "not_found" : "resolve_failed",
             message: isEnoent(err)
                 ? `${label} not found: ${absolutePath}`
-                : `${label} resolve failed: ${err instanceof Error ? err.message : String(err)}`,
+                : `${label} resolve failed: ${errMsg(err)}`,
             absolutePath,
         };
     }

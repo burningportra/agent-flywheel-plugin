@@ -2,6 +2,7 @@ import type { ExecFn } from "./exec.js";
 import type { Bead, BvInsights, BvNextPick } from "./types.js";
 import { resilientExec, brExec, brExecJson } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { parseBvInsights, parseBvNextPicks, parseBvNextPick } from "./parsers.js";
 
 const log = createLogger("beads");
@@ -549,7 +550,7 @@ export async function validateBeads(
     } catch (err: unknown) {
       log.warn('dependency detection failed', {
         code: 'parse_failure',
-        cause: err instanceof Error ? err.message : String(err),
+        cause: errMsg(err),
       });
     }
   }
@@ -630,7 +631,7 @@ export async function validateBeads(
   } catch (err: unknown) {
     log.warn('template hygiene detection failed', {
       code: 'parse_failure',
-      cause: err instanceof Error ? err.message : String(err),
+      cause: errMsg(err),
     });
   }
 

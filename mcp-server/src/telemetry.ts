@@ -26,7 +26,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, open, rename, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLogger } from './logger.js';
-import { FlywheelErrorCodeSchema, registerTelemetryHook } from './errors.js';
+import { errMsg, FlywheelErrorCodeSchema, registerTelemetryHook } from './errors.js';
 import type { FlywheelErrorCode } from './errors.js';
 import { registerCliExecTelemetryHook } from './cli-exec.js';
 import { ErrorCodeTelemetrySchema } from './types.js';
@@ -417,7 +417,7 @@ export async function flushTelemetry(opts: TelemetryOptions): Promise<boolean> {
     return result;
   } catch (err) {
     log.warn('telemetry_store_failed: unexpected error during flush', {
-      err: err instanceof Error ? err.message : String(err),
+      err: errMsg(err),
     });
     return false;
   }

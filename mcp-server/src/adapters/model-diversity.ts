@@ -14,6 +14,7 @@
  */
 
 import type { ExecFn } from '../exec.js';
+import { errMsg } from '../errors.js';
 import { adaptPromptForClaude } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
 import { adaptPromptForGemini } from './gemini-prompt.js';
@@ -101,7 +102,7 @@ export async function detectCliCapabilities(
       return {
         provider,
         available: false,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: errMsg(err),
       };
     }
   };

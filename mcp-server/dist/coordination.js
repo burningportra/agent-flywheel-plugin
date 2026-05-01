@@ -73,31 +73,51 @@ async function isAgentMailReachable(exec) {
         return result.value.code === 0 && result.value.stdout.length > 0;
     }
 }
-async function detectAgentMail(exec) {
-    // Check if already running
-    if (await isAgentMailReachable(exec))
-        return true;
-    // Not running — check if installed and try to start it
-    const whichResult = await resilientExec(exec, "uv", ["run", "python", "-c", "import mcp_agent_mail"], {
+async function commandExists(exec, command) {
+    const result = await resilientExec(exec, "bash", ["-c", `command -v ${command} >/dev/null 2>&1`], {
+        timeout: 3000,
+        maxRetries: 0,
+        logWarnings: false,
+    });
+    return result.ok && result.value.code === 0;
+}
+async function startAgentMail(exec, command) {
+    const startResult = await resilientExec(exec, "bash", ["-c", command], {
         timeout: 5000,
         maxRetries: 0,
     });
-    if (!whichResult.ok || whichResult.value.code !== 0)
-        return false; // not installed
-    // Installed but not running — start in background
-    const startResult = await resilientExec(exec, "bash", ["-c",
-        "nohup uv run python -m mcp_agent_mail.cli serve-http > /dev/null 2>&1 &"
-    ], { timeout: 5000, maxRetries: 0 });
-    if (!startResult.ok)
+    if (!startResult.ok || startResult.value.code !== 0)
         return false;
     // Wait up to ~5 seconds with exponential backoff (50ms → 100ms → 200ms → 400ms → 800ms → 1600ms)
-    // Breaks immediately on success instead of polling full window
+    // Breaks immediately on success instead of polling full window.
     for (const delayMs of [50, 100, 200, 400, 800, 1600]) {
         await new Promise((r) => setTimeout(r, delayMs));
         if (await isAgentMailReachable(exec))
             return true;
     }
     return false;
+}
+async function detectAgentMail(exec) {
+    // Check if already running
+    if (await isAgentMailReachable(exec))
+        return true;
+    // Prefer the Rust port. `am` is the operator CLI; `mcp-agent-mail` is the
+    // server binary. Both speak the same HTTP MCP protocol on port 8765.
+    if (await commandExists(exec, "am")) {
+        return startAgentMail(exec, "nohup am serve-http > /dev/null 2>&1 &");
+    }
+    if (await commandExists(exec, "mcp-agent-mail")) {
+        return startAgentMail(exec, "nohup mcp-agent-mail serve > /dev/null 2>&1 &");
+    }
+    // Legacy Python fallback for existing installs.
+    const pythonResult = await resilientExec(exec, "uv", ["run", "python", "-c", "import mcp_agent_mail"], {
+        timeout: 5000,
+        maxRetries: 0,
+        logWarnings: false,
+    });
+    if (!pythonResult.ok || pythonResult.value.code !== 0)
+        return false;
+    return startAgentMail(exec, "nohup uv run python -m mcp_agent_mail.cli serve-http > /dev/null 2>&1 &");
 }
 // ─── Pre-Commit Guard ──────────────────────────────────────────
 /**

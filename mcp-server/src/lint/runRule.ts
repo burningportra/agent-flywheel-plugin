@@ -1,4 +1,5 @@
 import type { Document, Finding, Rule, RuleContext } from "./types.js";
+import { errMsg } from "../errors.js";
 
 export interface RunRuleResult {
   findings: Finding[];
@@ -49,7 +50,7 @@ export async function runRule(
     return { findings: findings ?? [] };
   } catch (err) {
     if (timer) clearTimeout(timer);
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errMsg(err);
     return {
       findings: [],
       internalError: { ruleId: rule.id, message },

@@ -1,4 +1,5 @@
 import type { ExecFn } from "./exec.js";
+import { errMsg } from "./errors.js";
 import { profileRepo, createEmptyRepoProfile } from "./profiler.js";
 import type {
   RepoProfile,
@@ -95,7 +96,7 @@ export async function scanRepo(
     } catch (fallbackError) {
       // Double fault: both providers failed. Return emergency minimal result.
       process.stderr.write(
-        `[scan] builtin profiler also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}\n`
+        `[scan] builtin profiler also failed: ${errMsg(fallbackError)}\n`
       );
       const emptyProfile = createEmptyRepoProfile(cwd);
       const result = createFallbackScanResult(emptyProfile, "ccc", errorInfo);
@@ -104,7 +105,7 @@ export async function scanRepo(
       if (result.sourceMetadata) {
         result.sourceMetadata.warnings = [
           ...(result.sourceMetadata.warnings ?? []),
-          `Profiler also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+          `Profiler also failed: ${errMsg(fallbackError)}`,
         ];
       }
       return result;

@@ -10,7 +10,7 @@
 
 import { z } from "zod";
 
-import { FlywheelError, classifyExecError, makeFlywheelErrorResult } from "../errors.js";
+import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
 import { getSkill, type GetSkillResult } from "../skills-bundle.js";
 import type { McpToolResult, ToolContext } from "../types.js";
 import { makeToolResult } from "./shared.js";
@@ -83,7 +83,7 @@ export async function runGetSkill(
     const classified = classifyExecError(err);
     return makeFlywheelErrorResult("flywheel_get_skill", "idle", {
       code: classified.code,
-      message: err instanceof Error ? err.message : String(err),
+      message: errMsg(err),
       retryable: classified.retryable,
       cause: classified.cause,
     });

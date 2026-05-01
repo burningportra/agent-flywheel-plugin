@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ExecFn } from '../exec.js';
 import { DOCTOR_CHECK_NAMES, type DoctorCheckName } from './doctor.js';
-import { makeFlywheelErrorResult, sanitizeCause, classifyExecError } from '../errors.js';
+import { errMsg, makeFlywheelErrorResult, sanitizeCause, classifyExecError } from '../errors.js';
 import { acquireRemediateLock, releaseRemediateLock } from '../mutex.js';
 import type { FlywheelToolName } from '../types.js';
 import { distDriftHandler } from './remediations/dist_drift.js';
@@ -139,7 +139,7 @@ export async function runRemediate(
       return makeFlywheelErrorResult('flywheel_remediate' as FlywheelToolName, phase, {
         code: 'remediation_failed',
         message: `Failed to build remediation plan for '${args.checkName}'.`,
-        cause: err instanceof Error ? err.message : String(err),
+        cause: errMsg(err),
         details: { checkName: args.checkName, stage: 'buildPlan' },
       });
     }
@@ -172,7 +172,7 @@ export async function runRemediate(
       return makeFlywheelErrorResult('flywheel_remediate' as FlywheelToolName, phase, {
         code: 'remediation_failed',
         message: `Remediation handler for '${args.checkName}' failed during execute.`,
-        cause: classified?.cause ?? sanitizeCause(err instanceof Error ? err.message : String(err)),
+        cause: classified?.cause ?? sanitizeCause(errMsg(err)),
         details: { checkName: args.checkName, stage: 'execute' },
       });
     }

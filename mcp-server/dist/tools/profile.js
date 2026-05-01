@@ -4,7 +4,7 @@ import { parseBrList } from '../parsers.js';
 import { createLogger } from '../logger.js';
 import { runOpeningCeremony } from '../opening-ceremony.js';
 import { VERSION } from '../version.js';
-import { makeFlywheelErrorResult } from '../errors.js';
+import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 const log = createLogger('profile');
 /**
  * flywheel_profile — Scan the current repo and build a profile.
@@ -36,7 +36,7 @@ export async function runProfile(ctx, args) {
                 message: 'Failed to load cached profile.',
                 retryable: true,
                 hint: 'Pass force:true to bypass cache',
-                cause: err instanceof Error ? err.message : String(err),
+                cause: errMsg(err),
             });
         }
         if (cached) {
@@ -52,7 +52,7 @@ export async function runProfile(ctx, args) {
                     code: 'cli_failure',
                     message: 'Failed to profile repository.',
                     hint: 'Verify required CLIs (`git`, `find`, `grep`, `head`) are available, then retry.',
-                    cause: err instanceof Error ? err.message : String(err),
+                    cause: errMsg(err),
                 });
             }
             // Fire-and-forget: don't block return on cache write
@@ -68,7 +68,7 @@ export async function runProfile(ctx, args) {
                 code: 'cli_failure',
                 message: 'Failed to profile repository.',
                 hint: 'Verify required CLIs (`git`, `find`, `grep`, `head`) are available, then retry.',
-                cause: err instanceof Error ? err.message : String(err),
+                cause: errMsg(err),
             });
         }
         saveCachedProfile(exec, cwd, profile).catch(() => { });

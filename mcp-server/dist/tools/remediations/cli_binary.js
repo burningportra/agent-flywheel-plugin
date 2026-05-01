@@ -25,6 +25,7 @@
  * remediated here — those stay manual, in line with the bead's non-goals.
  */
 import { createLogger } from '../../logger.js';
+import { errMsg } from '../../errors.js';
 const INSTALL_TIMEOUT_MS = 180_000;
 const VERIFY_TIMEOUT_MS = 5_000;
 const CONFIGS = {
@@ -90,7 +91,7 @@ function buildHandler(checkName) {
             }
             catch (err) {
                 log.warn(`${cfg.binary} verifyProbe threw`, {
-                    error: err instanceof Error ? err.message : String(err),
+                    error: errMsg(err),
                 });
                 return false;
             }

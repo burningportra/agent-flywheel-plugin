@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger } from './logger.js';
+import { errMsg } from './errors.js';
 import { selectScanners, mergeAndDedup } from './todo-scanner.js';
 import { normalizeText } from './utils/text-normalize.js';
 const log = createLogger('profiler');
@@ -41,7 +42,7 @@ export async function loadCachedProfile(exec, cwd) {
         return cache.profile;
     }
     catch (err) {
-        log.warn("Failed to read profile cache", { error: err instanceof Error ? err.message : String(err) });
+        log.warn("Failed to read profile cache", { error: errMsg(err) });
         return null;
     }
 }
@@ -72,7 +73,7 @@ export async function saveCachedProfile(exec, cwd, profile, gitHead) {
         log.info("Profile cached", { head: head.slice(0, 8) });
     }
     catch (err) {
-        log.warn("Failed to write profile cache", { error: err instanceof Error ? err.message : String(err) });
+        log.warn("Failed to write profile cache", { error: errMsg(err) });
     }
 }
 /**

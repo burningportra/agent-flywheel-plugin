@@ -10,6 +10,7 @@ import {
 import { resilientExec } from "./cli-exec.js";
 import { agentMailRPC, unwrapRPC } from "./agent-mail.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import {
   type SolutionDoc,
   SolutionDocSchema,
@@ -470,7 +471,7 @@ async function fetchInboxSummary(
     );
   } catch (err) {
     log.debug("agent-mail fetch_inbox threw; skipping", {
-      err: err instanceof Error ? err.message : String(err),
+      err: errMsg(err),
     });
     return { completions: [], blockers: [], coordinatorAgent: null };
   }

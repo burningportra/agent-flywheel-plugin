@@ -10,7 +10,7 @@
  */
 
 import type { DoctorArgs, DoctorReport, McpToolResult, ToolContext } from '../types.js';
-import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
+import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { makeToolResult } from './shared.js';
 import { runDoctorChecks } from './doctor.js';
 
@@ -100,7 +100,7 @@ export async function runDoctor(
     const classified = classifyExecError(err);
     return makeFlywheelErrorResult('flywheel_doctor', 'doctor', {
       code: classified.code,
-      message: err instanceof Error ? err.message : String(err),
+      message: errMsg(err),
       retryable: classified.retryable,
       hint:
         classified.code === 'exec_timeout'

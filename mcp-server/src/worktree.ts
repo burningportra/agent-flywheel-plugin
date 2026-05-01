@@ -1,6 +1,7 @@
 import type { ExecFn } from "./exec.js";
 import { join } from "path";
 import { existsSync, readdirSync } from "fs";
+import { errMsg } from "./errors.js";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export async function createWorktree(
   } catch (err) {
     return {
       ok: false,
-      error: `worktree create failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `worktree create failed: ${errMsg(err)}`,
     };
   }
 }
@@ -110,7 +111,7 @@ export async function removeWorktree(
   } catch (err) {
     return {
       ok: false,
-      error: `worktree remove failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `worktree remove failed: ${errMsg(err)}`,
     };
   }
 }
@@ -181,7 +182,7 @@ export async function autoCommitWorktree(
   } catch (err) {
     return {
       ok: false,
-      error: `autoCommitWorktree failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `autoCommitWorktree failed: ${errMsg(err)}`,
     };
   }
 }

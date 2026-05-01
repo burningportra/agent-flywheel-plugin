@@ -121,6 +121,6 @@ describe("RESERVE001 — production scan against repo (smoke)", () => {
     const findings = await reserve001.check(emptyDoc, ctx);
     expect(findings).toHaveLength(1);
     expect(findings[0].file).toBe("mcp-server/src/agent-mail.ts");
-    expect(findings[0].line).toBe(228);
+    expect(findings[0].line).toBe(229);
   });
 });

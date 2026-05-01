@@ -3,6 +3,7 @@ import path from "node:path";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { forceReleaseFileReservation, sendMessage, whoisAgent, } from "./agent-mail.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { normalizeText } from "./utils/text-normalize.js";
 export const TELEMETRY_DIR = ".pi-flywheel";
 export const TELEMETRY_FILE = "tender-events.log";
@@ -24,7 +25,7 @@ export function emitTelemetry(event, cwd) {
     catch (err) {
         telemetryLog.error("Failed to emit telemetry event", {
             kind: event.kind,
-            error: err instanceof Error ? err.message : String(err),
+            error: errMsg(err),
         });
     }
 }
@@ -256,7 +257,7 @@ export function loadTenderConfig(cwd) {
         catch (err) {
             log.warn("Failed to read/parse tender.config.json", {
                 filePath,
-                error: err instanceof Error ? err.message : String(err),
+                error: errMsg(err),
             });
         }
     }
@@ -433,7 +434,7 @@ export class SwarmTender {
                         })
                             .catch(err => {
                             nudgesThisCycle--; // rollback on failure
-                            process.stderr.write(`[tender] Nudge delivery failed for step ${agent.stepIndex}: ${err instanceof Error ? err.message : String(err)}\n`);
+                            process.stderr.write(`[tender] Nudge delivery failed for step ${agent.stepIndex}: ${errMsg(err)}\n`);
                         });
                     }
                     else if (shouldKill) {

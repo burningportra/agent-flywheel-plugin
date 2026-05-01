@@ -1,6 +1,7 @@
 import type { ExecFn } from "./exec.js";
 import type { AgentMailResult } from "./types.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { parseAgentMailResponse } from "./parsers.js";
 
 const log = createLogger("agent-mail");
@@ -980,7 +981,7 @@ export async function bootstrapCoordinator(
       } catch (err) {
         // Defensive: unwrapRPC itself should not throw, but any unexpected
         // failure must not kill the coordinator session.
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = errMsg(err);
         log.warn('set_contact_policy failed', { code: 'agent_mail_unreachable', agent: agentName, cause: msg });
         warnings.push(`set_contact_policy failed: ${msg}`);
       }

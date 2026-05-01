@@ -125,7 +125,7 @@ export const DEFAULT_HINTS: Record<FlywheelErrorCode, string> = {
   concurrent_write:
     'Another invocation holds the write lock — wait briefly and retry, or run `/flywheel-cleanup` if you suspect a stuck lock from a crashed session.',
   agent_mail_unreachable:
-    'The agent-mail MCP server at http://127.0.0.1:8765/mcp did not respond — start it with `npx agent-mail-server` and verify with `lsof -i :8765`.',
+    'The agent-mail MCP server at http://127.0.0.1:8765/mcp did not respond — start the Rust port with `am serve-http` (or `mcp-agent-mail serve`) and verify with `lsof -i :8765`.',
   deep_plan_all_failed:
     'All deep-plan model providers failed — check API credentials and rate limits, then retry; consider /flywheel-doctor to inspect provider health.',
   empty_plan:
@@ -266,6 +266,15 @@ export function throwFlywheelError(input: { code: FlywheelErrorCode; message: st
 }
 
 /**
+ * Coerce an `unknown` caught error to its message string. Equivalent to the
+ * inline `err instanceof Error ? err.message : String(err)` pattern but keeps
+ * call sites readable. Pure, total over `unknown`, never throws.
+ */
+export function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
  * Redact absolute filesystem paths and cap length before embedding raw error
  * messages in MCP-visible structured output. Prevents local-path leakage via
  * FlywheelToolError.cause without losing signal value for debugging.
@@ -284,7 +293,7 @@ export function classifyExecError(err: unknown): {
   retryable: boolean;
   cause: string;
 } {
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = errMsg(err);
   const cause = sanitizeCause(msg);
   if (/Timed out after \d+ms/.test(msg)) return { code: 'exec_timeout', retryable: true, cause };
   if (/aborted|AbortError/i.test(msg)) return { code: 'exec_aborted', retryable: false, cause };

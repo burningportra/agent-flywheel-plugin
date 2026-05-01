@@ -1,5 +1,6 @@
 import { join } from "path";
 import { existsSync, readdirSync } from "fs";
+import { errMsg } from "./errors.js";
 // ─── Constants ─────────────────────────────────────────────────
 const WORKTREE_DIR = ".pi-flywheel/worktrees";
 function worktreePath(repoRoot, stepIndex) {
@@ -22,7 +23,7 @@ export async function createWorktree(exec, cwd, branch, path) {
     catch (err) {
         return {
             ok: false,
-            error: `worktree create failed: ${err instanceof Error ? err.message : String(err)}`,
+            error: `worktree create failed: ${errMsg(err)}`,
         };
     }
 }
@@ -51,7 +52,7 @@ export async function removeWorktree(exec, cwd, path) {
     catch (err) {
         return {
             ok: false,
-            error: `worktree remove failed: ${err instanceof Error ? err.message : String(err)}`,
+            error: `worktree remove failed: ${errMsg(err)}`,
         };
     }
 }
@@ -106,7 +107,7 @@ export async function autoCommitWorktree(exec, worktreePath, message) {
     catch (err) {
         return {
             ok: false,
-            error: `autoCommitWorktree failed: ${err instanceof Error ? err.message : String(err)}`,
+            error: `autoCommitWorktree failed: ${errMsg(err)}`,
         };
     }
 }

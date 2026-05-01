@@ -1,3 +1,4 @@
+import { errMsg } from "../errors.js";
 /**
  * Run a single rule with isolation + timeout. Never throws.
  * - try/catch around rule.check(): caught errors become internalError.
@@ -27,7 +28,7 @@ export async function runRule(rule, doc, ctx, opts = {}) {
     catch (err) {
         if (timer)
             clearTimeout(timer);
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errMsg(err);
         return {
             findings: [],
             internalError: { ruleId: rule.id, message },

@@ -9,6 +9,7 @@
 import { createHash } from "crypto";
 import { execSync } from "child_process";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { VERSION } from "./version.js";
 
 const log = createLogger("checkpoint");
@@ -67,7 +68,7 @@ function getGitHead(cwd: string): string | undefined {
       .toString()
       .trim();
   } catch (err: unknown) {
-    log.warn("git HEAD detection failed", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
+    log.warn("git HEAD detection failed", { code: "cli_failure", cause: errMsg(err) });
     return undefined;
   }
 }
@@ -187,7 +188,7 @@ function writeCheckpointInner(
 
     return true;
   } catch (err) {
-    log.warn("checkpoint write failed", { err: err instanceof Error ? err.message : String(err) });
+    log.warn("checkpoint write failed", { err: errMsg(err) });
     return false;
   }
 }
@@ -239,7 +240,7 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
     try {
       parsed = JSON.parse(raw);
     } catch (err: unknown) {
-      log.warn("corrupt checkpoint JSON", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
+      log.warn("corrupt checkpoint JSON", { code: "parse_failure", cause: errMsg(err) });
       moveToCorrupt(cwd, mainFile);
       return null;
     }
@@ -265,7 +266,7 @@ export function readCheckpoint(cwd: string): ReadCheckpointResult | null {
 
     return { envelope, warnings };
   } catch (err) {
-    log.warn("checkpoint read failed", { err: err instanceof Error ? err.message : String(err) });
+    log.warn("checkpoint read failed", { err: errMsg(err) });
     return null;
   }
 }
@@ -289,7 +290,7 @@ export function clearCheckpoint(cwd: string): void {
     // Also clean up any orphaned tmp
     cleanupOrphanedTmp(cwd);
   } catch (err) {
-    log.warn("checkpoint clear failed", { err: err instanceof Error ? err.message : String(err) });
+    log.warn("checkpoint clear failed", { err: errMsg(err) });
   }
 }
 
@@ -319,7 +320,7 @@ function moveToCorrupt(cwd: string, filePath: string): void {
       cause: r.detail ?? r.reason,
     });
   } catch (err: unknown) {
-    log.warn("checkpoint rename failed, attempting delete", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
+    log.warn("checkpoint rename failed, attempting delete", { code: "cli_failure", cause: errMsg(err) });
   }
 
   const del = guardedUnlink(filePath, cwd);
@@ -343,6 +344,6 @@ export function cleanupOrphanedTmp(cwd: string): void {
       });
     }
   } catch (err: unknown) {
-    log.warn("orphaned tmp cleanup failed", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
+    log.warn("orphaned tmp cleanup failed", { code: "cli_failure", cause: errMsg(err) });
   }
 }

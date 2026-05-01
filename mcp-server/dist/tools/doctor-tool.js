@@ -8,7 +8,7 @@
  * READ-ONLY: this tool MUST NOT mutate `.pi-flywheel/checkpoint.json` or
  * write any file. It does not call `saveState` / `clearState`.
  */
-import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
+import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { makeToolResult } from './shared.js';
 import { runDoctorChecks } from './doctor.js';
 // ─── Rendering ────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ export async function runDoctor(ctx, args) {
         const classified = classifyExecError(err);
         return makeFlywheelErrorResult('flywheel_doctor', 'doctor', {
             code: classified.code,
-            message: err instanceof Error ? err.message : String(err),
+            message: errMsg(err),
             retryable: classified.retryable,
             hint: classified.code === 'exec_timeout'
                 ? 'A doctor probe timed out — rerun flywheel_doctor; if persistent, set FW_LOG_LEVEL=debug and inspect the slow check.'

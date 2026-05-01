@@ -8,6 +8,7 @@
  * liveness probe so the caller still gets `verifiedGreen` truthfully.
  */
 import { createLogger } from '../../logger.js';
+import { errMsg } from '../../errors.js';
 const log = createLogger('remediation.agent_mail_liveness');
 const CURL_TIMEOUT_MS = 30_000;
 const START_HINT = 'Run `nohup am serve-http > /dev/null 2>&1 &` from your shell, then re-run flywheel_doctor.';
@@ -45,7 +46,7 @@ export const agentMailLivenessHandler = {
         }
         catch (err) {
             log.warn('verifyProbe: curl threw', {
-                error: err instanceof Error ? err.message : String(err),
+                error: errMsg(err),
             });
             return false;
         }

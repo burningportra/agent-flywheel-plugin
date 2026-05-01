@@ -1,5 +1,6 @@
 import { resilientExec, brExec, brExecJson } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { parseBvInsights, parseBvNextPicks, parseBvNextPick } from "./parsers.js";
 const log = createLogger("beads");
 // ─── Session Cache ─────────────────────────────────────────────
@@ -454,7 +455,7 @@ export async function validateBeads(exec, cwd) {
         catch (err) {
             log.warn('dependency detection failed', {
                 code: 'parse_failure',
-                cause: err instanceof Error ? err.message : String(err),
+                cause: errMsg(err),
             });
         }
     }
@@ -531,7 +532,7 @@ export async function validateBeads(exec, cwd) {
     catch (err) {
         log.warn('template hygiene detection failed', {
             code: 'parse_failure',
-            cause: err instanceof Error ? err.message : String(err),
+            cause: errMsg(err),
         });
     }
     return { ok: !cycles && orphaned.length === 0 && templateIssues.length === 0, orphaned, cycles, warnings, shallowBeads, templateIssues };

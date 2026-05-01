@@ -2,7 +2,7 @@ import { promises as fsPromises } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 
 import type { ToolContext, McpToolResult, MemoryArgs, PostmortemDraft } from '../types.js';
-import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
+import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { draftPostmortem, draftSolutionDoc, formatPostmortemMarkdown } from '../episodic-memory.js';
 import { renderSolutionDoc, type SolutionDoc } from '../solution-doc-schema.js';
 import {
@@ -68,7 +68,7 @@ async function listMarkdownRecursive(root: string): Promise<string[]> {
       throw new Error(`refreshRoot not found: ${root}`);
     }
     throw new Error(
-      `refreshRoot realpath failed: ${err instanceof Error ? err.message : String(err)}`,
+      `refreshRoot realpath failed: ${errMsg(err)}`,
     );
   }
   const out: string[] = [];
@@ -149,7 +149,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
       const classified = classifyExecError(err);
       return makeFlywheelErrorResult('flywheel_memory', phase, {
         code: classified.code,
-        message: err instanceof Error ? err.message : String(err),
+        message: errMsg(err),
         retryable: classified.retryable,
         hint:
           classified.code === 'exec_timeout'
@@ -203,7 +203,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
       const classified = classifyExecError(err);
       return makeFlywheelErrorResult('flywheel_memory', phase, {
         code: classified.code,
-        message: err instanceof Error ? err.message : String(err),
+        message: errMsg(err),
         retryable: classified.retryable,
         hint:
           'Solution-doc drafting failed. Rerun once; if persistent, set FW_LOG_LEVEL=debug and check that draft_postmortem succeeds on its own.',
@@ -268,7 +268,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
       const classified = classifyExecError(err);
       return makeFlywheelErrorResult('flywheel_memory', phase, {
         code: classified.code,
-        message: err instanceof Error ? err.message : String(err),
+        message: errMsg(err),
         retryable: classified.retryable,
         hint:
           'refresh_learnings sweep failed. Check that <cwd>/docs/solutions exists and is readable; pass refreshRoot to override the default location.',
@@ -286,7 +286,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
       code: 'cli_not_available',
       message: 'CASS memory (cm CLI) is not available.',
       hint: 'Install cm with `npm install -g @cass/cm` (or your team-approved installer), then retry `flywheel_memory`.',
-      cause: err instanceof Error ? err.message : String(err),
+      cause: errMsg(err),
       details: { command: 'cm --version' },
     });
   }
@@ -324,7 +324,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
         code: 'cli_failure',
         message: 'Failed to store memory.',
         hint: 'Run `cm add "<content>"` manually to inspect the CLI failure, then retry.',
-        cause: err instanceof Error ? err.message : String(err),
+        cause: errMsg(err),
         details: { command: 'cm add' },
       });
     }
@@ -357,7 +357,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
         code: 'cli_failure',
         message: 'Failed to list memory.',
         hint: 'Run `cm ls --limit 10` manually to verify CASS storage health, then retry.',
-        cause: err instanceof Error ? err.message : String(err),
+        cause: errMsg(err),
         details: { command: 'cm ls --limit 10' },
       });
     }
@@ -396,7 +396,7 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
       code: 'cli_failure',
       message: 'Search failed.',
       hint: 'Run `cm context "<query>" --json` manually to inspect the failure, then retry.',
-      cause: err instanceof Error ? err.message : String(err),
+      cause: errMsg(err),
       details: {
         command: 'cm context --json',
         query: args.query.trim(),

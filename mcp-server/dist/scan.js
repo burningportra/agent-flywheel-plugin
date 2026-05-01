@@ -1,3 +1,4 @@
+import { errMsg } from "./errors.js";
 import { profileRepo, createEmptyRepoProfile } from "./profiler.js";
 const CCC_SCAN_QUERIES = [
     {
@@ -73,7 +74,7 @@ export async function scanRepo(exec, cwd, signal) {
         }
         catch (fallbackError) {
             // Double fault: both providers failed. Return emergency minimal result.
-            process.stderr.write(`[scan] builtin profiler also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}\n`);
+            process.stderr.write(`[scan] builtin profiler also failed: ${errMsg(fallbackError)}\n`);
             const emptyProfile = createEmptyRepoProfile(cwd);
             const result = createFallbackScanResult(emptyProfile, "ccc", errorInfo);
             result.codebaseAnalysis.summary =
@@ -81,7 +82,7 @@ export async function scanRepo(exec, cwd, signal) {
             if (result.sourceMetadata) {
                 result.sourceMetadata.warnings = [
                     ...(result.sourceMetadata.warnings ?? []),
-                    `Profiler also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+                    `Profiler also failed: ${errMsg(fallbackError)}`,
                 ];
             }
             return result;

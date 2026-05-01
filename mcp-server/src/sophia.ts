@@ -1,5 +1,6 @@
 import type { ExecFn } from './exec.js';
 import { createLogger } from './logger.js';
+import { errMsg } from './errors.js';
 import { parseSophiaResult } from './parsers.js';
 
 const log = createLogger("sophia");
@@ -103,7 +104,7 @@ async function runSophia<T = unknown>(
   } catch (err) {
     return {
       ok: false,
-      error: `Sophia exec failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Sophia exec failed: ${errMsg(err)}`,
     };
   }
 }
@@ -450,7 +451,7 @@ export async function mergeWorktreeChanges(
     return {
       ok: false,
       conflict: false,
-      error: `merge failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `merge failed: ${errMsg(err)}`,
     };
   }
 }

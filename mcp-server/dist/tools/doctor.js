@@ -19,6 +19,7 @@ import { newestMtime } from './shared.js';
 import { makeExec } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
+import { errMsg } from '../errors.js';
 import { readTelemetry } from '../telemetry.js';
 import { detectCliCapabilities, describeCapabilities, } from '../adapters/model-diversity.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
@@ -156,7 +157,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             // any leak as a red row instead of rejecting.
             log.warn('doctor check threw', {
                 check: DOCTOR_CHECK_NAMES[idx],
-                err: err instanceof Error ? err.message : String(err),
+                err: errMsg(err),
             });
             return {
                 name: DOCTOR_CHECK_NAMES[idx],
@@ -1143,9 +1144,6 @@ function extractRescueCandidateRows(parsed) {
         data.results,
     ];
     return sources.flatMap((value) => (Array.isArray(value) ? value : []));
-}
-function errMsg(err) {
-    return err instanceof Error ? err.message : String(err);
 }
 function resolveDoctorPath(cwd, relativePath, label) {
     return resolveRealpathWithinRoot(relativePath, {

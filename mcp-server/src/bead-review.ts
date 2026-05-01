@@ -3,6 +3,7 @@ import type { Bead } from "./types.js";
 import { join } from "path";
 import { writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
+import { errMsg } from "./errors.js";
 import { FLYWHEEL_TMP_PREFIX, guardedRemoveDir } from "./utils/fs-safety.js";
 
 export interface CrossModelReviewResult {
@@ -99,7 +100,7 @@ Check for: parallel-ready beads that modify the same files, closure extraction f
     // Clean up temp files on error too
     try { guardedRemoveDir(outputDir, cwd); } catch { /* ignore */ }
 
-    const errorMessage = err instanceof Error ? err.message : String(err);
+    const errorMessage = errMsg(err);
     return {
       suggestions: [],
       rawOutput: errorMessage,

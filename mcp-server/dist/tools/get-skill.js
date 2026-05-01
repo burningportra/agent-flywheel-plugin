@@ -8,7 +8,7 @@
  * READ-ONLY: never mutates state or checkpoint.
  */
 import { z } from "zod";
-import { FlywheelError, classifyExecError, makeFlywheelErrorResult } from "../errors.js";
+import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
 import { getSkill } from "../skills-bundle.js";
 import { makeToolResult } from "./shared.js";
 const GetSkillInputSchema = z.object({
@@ -60,7 +60,7 @@ export async function runGetSkill(ctx, args) {
         const classified = classifyExecError(err);
         return makeFlywheelErrorResult("flywheel_get_skill", "idle", {
             code: classified.code,
-            message: err instanceof Error ? err.message : String(err),
+            message: errMsg(err),
             retryable: classified.retryable,
             cause: classified.cause,
         });

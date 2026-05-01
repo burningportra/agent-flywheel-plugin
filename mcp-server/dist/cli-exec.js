@@ -1,6 +1,6 @@
 import { createLogger } from "./logger.js";
 import { BrStructuredErrorSchema } from "./parsers.js";
-import { classifyExecError } from "./errors.js";
+import { classifyExecError, errMsg } from "./errors.js";
 const log = createLogger("cli-exec");
 /**
  * Side-channel telemetry hook for cli-exec failure recording.
@@ -333,7 +333,7 @@ export async function brExecJson(exec, args, opts) {
             args,
             exitCode: 0,
             stdout: result.value.stdout,
-            stderr: `JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+            stderr: `JSON parse error: ${errMsg(parseErr)}`,
             isTransient: false,
             attempts: 1,
             lastError: parseErr,

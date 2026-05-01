@@ -1,4 +1,5 @@
 import { VERSION } from "./version.js";
+import { errMsg } from "./errors.js";
 const DEFAULT_MAX_DURATION_MS = 900;
 const MIN_TERMINAL_WIDTH_FOR_ANIMATION = 56;
 const DEFAULT_RUNTIME = {
@@ -115,7 +116,7 @@ export async function runOpeningCeremony(writer, options = {}) {
             mode,
             frameCount: 0,
             durationMs: Math.min(maxDurationMs, Math.max(0, runtime.now() - startedAt)),
-            error: error instanceof Error ? error.message : String(error),
+            error: errMsg(error),
         };
     }
 }

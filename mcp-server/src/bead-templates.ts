@@ -5,6 +5,7 @@ import type {
   TemplateExpansionInput,
 } from "./types.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 
 const log = createLogger("bead-templates");
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_]+)\s*}}/g;
@@ -924,7 +925,7 @@ export function expandTemplate(
 
     return { success: true, description };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMsg(err);
     return {
       success: false,
       error: "template_expansion_failed",

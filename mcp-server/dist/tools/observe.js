@@ -23,7 +23,7 @@ import { runDoctorChecks } from './doctor.js';
 import { parseBrList } from '../br-parser.js';
 import { createLogger } from '../logger.js';
 import { makeToolResult } from './shared.js';
-import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
+import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { readCompletionReport } from '../completion-report.js';
 const log = createLogger('observe');
 // ─── Constants ────────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ async function probeBeads(ctx) {
         return {
             initialized: false,
             unavailable: true,
-            warning: `br unavailable: ${err instanceof Error ? err.message : String(err)}`,
+            warning: `br unavailable: ${errMsg(err)}`,
             counts: emptyCounts,
             ready: [],
         };
@@ -253,7 +253,7 @@ async function probeBeads(ctx) {
     catch (err) {
         return {
             initialized: true,
-            warning: `br list parse failed: ${err instanceof Error ? err.message : String(err)}`,
+            warning: `br list parse failed: ${errMsg(err)}`,
             counts: emptyCounts,
             ready: [],
         };
@@ -320,7 +320,7 @@ async function probeAgentMail(ctx) {
     catch (err) {
         return {
             reachable: false,
-            warning: `agent-mail probe failed: ${err instanceof Error ? err.message : String(err)}`,
+            warning: `agent-mail probe failed: ${errMsg(err)}`,
         };
     }
 }
@@ -692,7 +692,7 @@ export async function runObserve(ctx, args) {
         const classified = classifyExecError(err);
         return makeFlywheelErrorResult('flywheel_observe', 'observe', {
             code: classified.code,
-            message: err instanceof Error ? err.message : String(err),
+            message: errMsg(err),
             retryable: classified.retryable,
             hint: 'observe orchestration failed unexpectedly — rerun flywheel_observe or set FW_LOG_LEVEL=debug to capture the cause.',
             cause: classified.cause,

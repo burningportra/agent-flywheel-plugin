@@ -198,6 +198,12 @@ export declare function throwFlywheelError(input: {
     details?: Record<string, unknown>;
 }): never;
 /**
+ * Coerce an `unknown` caught error to its message string. Equivalent to the
+ * inline `err instanceof Error ? err.message : String(err)` pattern but keeps
+ * call sites readable. Pure, total over `unknown`, never throws.
+ */
+export declare function errMsg(err: unknown): string;
+/**
  * Redact absolute filesystem paths and cap length before embedding raw error
  * messages in MCP-visible structured output. Prevents local-path leakage via
  * FlywheelToolError.cause without losing signal value for debugging.

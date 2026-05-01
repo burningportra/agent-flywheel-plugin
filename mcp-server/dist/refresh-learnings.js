@@ -45,6 +45,7 @@
  *     skill owns all filesystem mutations (archival, edits).
  */
 import { SolutionDocFrontmatterSchema, } from './solution-doc-schema.js';
+import { errMsg } from './errors.js';
 import { normalizeText } from './utils/text-normalize.js';
 // ─── Frontmatter parser ────────────────────────────────────────
 /**
@@ -369,7 +370,7 @@ export async function refreshLearnings(root, fs, options = {}) {
         catch (err) {
             unparseable.push({
                 path: rel,
-                reason: err instanceof Error ? err.message : String(err),
+                reason: errMsg(err),
             });
             continue;
         }

@@ -10,6 +10,7 @@ import {
 } from "./agent-mail.js";
 import type { ExecFn } from "./exec.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { normalizeText } from "./utils/text-normalize.js";
 
 // ─── Telemetry ─────────────────────────────────────────────────
@@ -70,7 +71,7 @@ export function emitTelemetry(
   } catch (err) {
     telemetryLog.error("Failed to emit telemetry event", {
       kind: event.kind,
-      error: err instanceof Error ? err.message : String(err),
+      error: errMsg(err),
     });
   }
 }
@@ -456,7 +457,7 @@ export function loadTenderConfig(cwd: string): TenderConfig {
     } catch (err) {
       log.warn("Failed to read/parse tender.config.json", {
         filePath,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg(err),
       });
     }
   }
@@ -676,7 +677,7 @@ export class SwarmTender {
               })
               .catch(err => {
                 nudgesThisCycle--; // rollback on failure
-                process.stderr.write(`[tender] Nudge delivery failed for step ${agent.stepIndex}: ${err instanceof Error ? err.message : String(err)}\n`);
+                process.stderr.write(`[tender] Nudge delivery failed for step ${agent.stepIndex}: ${errMsg(err)}\n`);
               });
           } else if (shouldKill) {
             this.log.warn("Killing stuck agent after max nudges", { stepIndex: agent.stepIndex });

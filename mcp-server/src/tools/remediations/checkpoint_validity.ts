@@ -10,6 +10,7 @@
 import { existsSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import type { HandlerCtx, RemediationHandler } from '../remediate.js';
+import { errMsg } from '../../errors.js';
 import { createLogger } from '../../logger.js';
 import { readCheckpoint } from '../../checkpoint.js';
 import { resolveRealpathWithinRoot } from '../../utils/path-safety.js';
@@ -79,7 +80,7 @@ export const checkpointValidityHandler: RemediationHandler = {
         renameSync(target, dest);
       } catch (err) {
         log.warn('renameSync also failed', {
-          error: err instanceof Error ? err.message : String(err),
+          error: errMsg(err),
         });
         return { stepsRun: 0, stderr: r.detail ?? r.reason };
       }
@@ -103,7 +104,7 @@ export const checkpointValidityHandler: RemediationHandler = {
       return true;
     } catch (err) {
       log.warn('verifyProbe: readCheckpoint threw', {
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg(err),
       });
       return false;
     }

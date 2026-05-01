@@ -9,6 +9,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, append
 import { join } from "path";
 import { parseFeedbackFile } from "./parsers.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { assertSafeSegment } from "./utils/path-safety.js";
 import { normalizeText } from "./utils/text-normalize.js";
 const log = createLogger("feedback");
@@ -62,14 +63,14 @@ export function loadAllFeedback(cwd) {
                 return parsed.ok ? parsed.data : null;
             }
             catch (err) {
-                log.warn("failed to read feedback file", { code: "parse_failure", file: f, cause: err instanceof Error ? err.message : String(err) });
+                log.warn("failed to read feedback file", { code: "parse_failure", file: f, cause: errMsg(err) });
                 return null;
             }
         })
             .filter((f) => f != null);
     }
     catch (err) {
-        log.warn("failed to read feedback directory", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
+        log.warn("failed to read feedback directory", { code: "parse_failure", cause: errMsg(err) });
         return [];
     }
 }
@@ -134,7 +135,7 @@ export function withCassContext(prompt, cwd, taskDescription) {
         return `## Context from Prior Flywheel Runs\n${memory}\n\n---\n\n${prompt}`;
     }
     catch (err) {
-        log.warn("CASS context injection failed", { code: "cli_not_available", cause: err instanceof Error ? err.message : String(err) });
+        log.warn("CASS context injection failed", { code: "cli_not_available", cause: errMsg(err) });
         return prompt;
     }
 }
@@ -216,7 +217,7 @@ export function parseToolFeedback(output, toolName) {
         };
     }
     catch (err) {
-        log.warn("failed to parse tool feedback", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
+        log.warn("failed to parse tool feedback", { code: "parse_failure", cause: errMsg(err) });
         return null;
     }
 }
@@ -241,7 +242,7 @@ export function saveToolFeedback(cwd, feedback) {
         appendFileSync(file, JSON.stringify(feedback) + "\n", "utf8");
     }
     catch (err) {
-        log.warn("failed to save tool feedback", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
+        log.warn("failed to save tool feedback", { code: "cli_failure", cause: errMsg(err) });
     }
 }
 //# sourceMappingURL=feedback.js.map

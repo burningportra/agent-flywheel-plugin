@@ -6,7 +6,7 @@ import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
-import { makeFlywheelErrorResult } from '../errors.js';
+import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import {
   assertSafeRelativePath,
   resolveRealpathWithinRoot,
@@ -220,7 +220,7 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
       return errorResult(
         'planning',
         'cli_failure',
-        `Failed to write plan file: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to write plan file: ${errMsg(err)}`,
         { planFilePath },
         'Check filesystem permissions on docs/plans/ and free disk space, then retry.',
       );

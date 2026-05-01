@@ -10,6 +10,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, append
 import { join } from "path";
 import { parseFeedbackFile } from "./parsers.js";
 import { createLogger } from "./logger.js";
+import { errMsg } from "./errors.js";
 import { assertSafeSegment } from "./utils/path-safety.js";
 import { normalizeText } from "./utils/text-normalize.js";
 
@@ -94,13 +95,13 @@ export function loadAllFeedback(cwd: string): FlywheelFeedback[] {
           const parsed = parseFeedbackFile(raw);
           return parsed.ok ? parsed.data : null;
         } catch (err: unknown) {
-          log.warn("failed to read feedback file", { code: "parse_failure", file: f, cause: err instanceof Error ? err.message : String(err) });
+          log.warn("failed to read feedback file", { code: "parse_failure", file: f, cause: errMsg(err) });
           return null;
         }
       })
       .filter((f): f is FlywheelFeedback => f != null);
   } catch (err: unknown) {
-    log.warn("failed to read feedback directory", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
+    log.warn("failed to read feedback directory", { code: "parse_failure", cause: errMsg(err) });
     return [];
   }
 }
@@ -183,7 +184,7 @@ export function withCassContext(prompt: string, cwd: string, taskDescription?: s
 
     return `## Context from Prior Flywheel Runs\n${memory}\n\n---\n\n${prompt}`;
   } catch (err: unknown) {
-    log.warn("CASS context injection failed", { code: "cli_not_available", cause: err instanceof Error ? err.message : String(err) });
+    log.warn("CASS context injection failed", { code: "cli_not_available", cause: errMsg(err) });
     return prompt;
   }
 }
@@ -302,7 +303,7 @@ export function parseToolFeedback(output: string, toolName: string): ToolFeedbac
       suggestions: Array.isArray(p.suggestions) ? p.suggestions : [],
     };
   } catch (err: unknown) {
-    log.warn("failed to parse tool feedback", { code: "parse_failure", cause: err instanceof Error ? err.message : String(err) });
+    log.warn("failed to parse tool feedback", { code: "parse_failure", cause: errMsg(err) });
     return null;
   }
 }
@@ -327,6 +328,6 @@ export function saveToolFeedback(cwd: string, feedback: ToolFeedback): void {
     const file = join(dir, `${safe.value}.jsonl`);
     appendFileSync(file, JSON.stringify(feedback) + "\n", "utf8");
   } catch (err: unknown) {
-    log.warn("failed to save tool feedback", { code: "cli_failure", cause: err instanceof Error ? err.message : String(err) });
+    log.warn("failed to save tool feedback", { code: "cli_failure", cause: errMsg(err) });
   }
 }
