@@ -17,6 +17,7 @@ import { runReview } from './tools/review.js';
 import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
 import { runAdvanceWave } from './tools/advance-wave.js';
+import { runObserve } from './tools/observe.js';
 import { runRemediate, RemediateInputSchema } from './tools/remediate.js';
 import { runCalibrate, CalibrateInputSchema } from './tools/calibrate.js';
 import { makeToolError } from './tools/shared.js';
@@ -288,6 +289,17 @@ const PRIMARY_TOOLS = [
         },
     },
     {
+        name: 'flywheel_observe',
+        description: 'Single-call read-only session-state snapshot. Aggregates checkpoint, beads, agent-mail, ntm, git, WIZARD artifacts, and a cached doctor verdict (60s TTL) into one structured envelope. Idempotent + non-mutating; designed for fast session recovery without staging multiple round-trips. Wall-clock budget < 1.5s; degraded probes mark their sub-section as `unavailable: true`.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+            },
+            required: ['cwd'],
+        },
+    },
+    {
         name: 'flywheel_remediate',
         description: 'Apply the canonical fix for a failing doctor check. Default mode is dry_run; pass mode:\'execute\' + autoConfirm:true to actually mutate. Per-check mutex prevents concurrent calls.',
         inputSchema: {
@@ -345,6 +357,7 @@ const DEFAULT_RUNNERS = {
     flywheel_memory: runMemory,
     flywheel_doctor: runDoctor,
     flywheel_get_skill: runGetSkill,
+    flywheel_observe: runObserve,
     // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
     orch_profile: runProfile,
     orch_discover: runDiscover,
@@ -356,6 +369,7 @@ const DEFAULT_RUNNERS = {
     orch_advance_wave: runAdvanceWave,
     orch_memory: runMemory,
     orch_get_skill: runGetSkill,
+    orch_observe: runObserve,
 };
 /**
  * Extension runners — tools added by beads that don't (or can't) widen

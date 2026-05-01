@@ -193,6 +193,12 @@ const PHASE_META: Record<FlywheelPhase, PhaseMeta> = {
     nextAction: "Call `flywheel_doctor` for a health sweep.",
     buildResumePrompt: () => "Doctor sweep in progress — rerun `flywheel_doctor` if you need fresh results.",
   },
+  observe: {
+    label: "Observing session state",
+    emoji: "👁️",
+    nextAction: "Call `flywheel_observe` for a session-state snapshot.",
+    buildResumePrompt: () => "Observe is a read-only snapshot — call `flywheel_observe` for the current session state.",
+  },
 };
 
 // ─── Core detection logic ─────────────────────────────────────

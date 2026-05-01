@@ -387,7 +387,8 @@ export type FlywheelPhase =
   | "reviewing"
   | "iterating"
   | "complete"
-  | "doctor";
+  | "doctor"
+  | "observe";
 
 export type CoordinationMode = "worktree" | "single-branch";
 
@@ -580,6 +581,7 @@ export type FlywheelToolName =
   | 'flywheel_memory'
   | 'flywheel_doctor'
   | 'flywheel_get_skill'
+  | 'flywheel_observe'
   // Deprecated orch_* aliases — kept for back-compat, removed in v4.0.
   | 'orch_profile'
   | 'orch_discover'
@@ -590,7 +592,8 @@ export type FlywheelToolName =
   | 'orch_verify_beads'
   | 'orch_advance_wave'
   | 'orch_memory'
-  | 'orch_get_skill';
+  | 'orch_get_skill'
+  | 'orch_observe';
 
 export interface ToolChoiceOption {
   id: string;
