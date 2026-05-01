@@ -24,6 +24,7 @@ import { parseBrList } from '../br-parser.js';
 import { createLogger } from '../logger.js';
 import { makeToolResult } from './shared.js';
 import { classifyExecError, makeFlywheelErrorResult } from '../errors.js';
+import { readCompletionReport } from '../completion-report.js';
 const log = createLogger('observe');
 // ─── Constants ────────────────────────────────────────────────────────────
 /** Per-probe timeout budget. Keeps the tool inside the 1.5s wall-clock target. */
@@ -32,6 +33,10 @@ const PROBE_TIMEOUT_MS = 1000;
 const DOCTOR_CACHE_TTL_MS = 60_000;
 /** Cap on filesystem-glob results so a runaway working tree can't blow up the envelope. */
 const ARTIFACT_HARD_CAP = 50;
+/** Attestation staleness threshold — older than this and we surface an info hint. */
+const ATTESTATION_STALE_MS = 24 * 60 * 60 * 1000;
+/** Hard cap on attestation probes so a runaway activeBeadIds list can't blow the budget. */
+const ATTESTATION_PROBE_CAP = 50;
 // ─── Schema ───────────────────────────────────────────────────────────────
 const SeveritySchema = z.enum(['info', 'warn', 'red']);
 const HintSchema = z.object({
@@ -94,6 +99,20 @@ const ArtifactsSectionSchema = z.object({
     flywheelScratch: z.array(z.string()),
     truncated: z.boolean().optional(),
 });
+const AttestationsSectionSchema = z.object({
+    /** activeBeadIds we attempted to probe (capped at ATTESTATION_PROBE_CAP). */
+    inFlightBeadIds: z.array(z.string()),
+    /** Bead ids whose `.pi-flywheel/completion/<beadId>.json` does not exist. */
+    missing: z.array(z.string()),
+    /** Bead ids whose attestation parsed cleanly but is older than 24h. */
+    stale: z.array(z.string()),
+    /** Bead ids whose file exists but failed JSON-parse or schema validation. */
+    invalid: z.array(z.string()),
+    /** Set when probing was skipped (no checkpoint, or no activeBeadIds). */
+    unavailable: z.literal(true).optional(),
+    /** Set when we capped the probe count to protect the budget. */
+    truncated: z.boolean().optional(),
+});
 export const FlywheelObserveReportSchema = z.object({
     version: z.literal(1),
     cwd: z.string(),
@@ -105,6 +124,7 @@ export const FlywheelObserveReportSchema = z.object({
     agentMail: AgentMailSectionSchema,
     ntm: NtmSectionSchema,
     artifacts: ArtifactsSectionSchema,
+    attestations: AttestationsSectionSchema,
     hints: z.array(HintSchema),
     doctor: z
         .object({
@@ -390,6 +410,67 @@ function probeArtifacts(cwd) {
         ...(truncated ? { truncated: true } : {}),
     };
 }
+/**
+ * Probe `.pi-flywheel/completion/<beadId>.json` for each in-flight bead.
+ *
+ * Uses T1's `readCompletionReport` (claude-orchestrator-2j1) so missing /
+ * malformed / schema-invalid files are classified consistently with the
+ * coordinator-side validators in `flywheel_verify_beads` and
+ * `flywheel_advance_wave`.
+ *
+ * Read-only (T6 hard rule): never writes anything. Caps probe count to
+ * `ATTESTATION_PROBE_CAP` so a runaway activeBeadIds list can't blow the
+ * 1.5s wall-clock budget.
+ */
+async function probeAttestations(cwd, beadIds, now) {
+    if (beadIds.length === 0) {
+        return {
+            inFlightBeadIds: [],
+            missing: [],
+            stale: [],
+            invalid: [],
+            unavailable: true,
+        };
+    }
+    const capped = beadIds.slice(0, ATTESTATION_PROBE_CAP);
+    const truncated = beadIds.length > capped.length;
+    const missing = [];
+    const stale = [];
+    const invalid = [];
+    const results = await Promise.allSettled(capped.map((id) => readCompletionReport(cwd, id)));
+    for (let i = 0; i < capped.length; i += 1) {
+        const id = capped[i];
+        const r = results[i];
+        if (r.status === 'rejected') {
+            // Reading itself threw (extremely rare with T1's helper, which catches
+            // ENOENT and JSON errors). Treat as missing — agent must rewrite.
+            missing.push(id);
+            continue;
+        }
+        const v = r.value;
+        if (!v.ok) {
+            if (v.error.code === 'not_found') {
+                missing.push(id);
+            }
+            else {
+                // invalid_json or schema_invalid — file exists but unusable.
+                invalid.push(id);
+            }
+            continue;
+        }
+        const created = Date.parse(v.report.createdAt);
+        if (!Number.isNaN(created) && now - created > ATTESTATION_STALE_MS) {
+            stale.push(id);
+        }
+    }
+    return {
+        inFlightBeadIds: capped,
+        missing,
+        stale,
+        invalid,
+        ...(truncated ? { truncated: true } : {}),
+    };
+}
 async function getCachedOrFreshDoctor(ctx, now) {
     const entry = doctorCache.get(ctx.cwd);
     if (entry && now - entry.ts < DOCTOR_CACHE_TTL_MS) {
@@ -470,11 +551,31 @@ function deriveHints(report) {
             nextAction: 'run flywheel_doctor for details, then flywheel_remediate',
         });
     }
-    // TODO(T7, claude-orchestrator-2r8): once the Completion Evidence schema
-    // lands (T1, claude-orchestrator-2j1), surface missing/stale
-    // `.pi-flywheel/completion/<beadId>.json` here as warn/info hints. The
-    // hook point is intentionally inside this function so attestation hints
-    // appear alongside other observability hints, not as a separate channel.
+    // T7 (claude-orchestrator-2r8) — Completion Evidence integration.
+    // For each in-flight bead, surface missing or stale attestation files
+    // alongside the other observability hints. Co-located deliberately so
+    // recovery agents see one ranked list, not a separate channel.
+    for (const id of report.attestations.missing) {
+        hints.push({
+            severity: 'warn',
+            message: `bead ${id} in-flight without attestation`,
+            nextAction: 'agent should write completion JSON before advancing',
+        });
+    }
+    for (const id of report.attestations.stale) {
+        hints.push({
+            severity: 'info',
+            message: `stale attestation for closed-bead ${id}`,
+            nextAction: 'review .pi-flywheel/completion/' + id + '.json for currency',
+        });
+    }
+    for (const id of report.attestations.invalid) {
+        hints.push({
+            severity: 'warn',
+            message: `attestation for ${id} failed schema validation`,
+            nextAction: 'rewrite .pi-flywheel/completion/' + id + '.json against CompletionReportSchemaV1',
+        });
+    }
     return hints;
 }
 // ─── Rendering ────────────────────────────────────────────────────────────
@@ -532,15 +633,19 @@ export async function runObserve(ctx, args) {
     const startMs = Date.now();
     void args;
     try {
-        const [git, beads, agentMail, ntm, doctor] = await Promise.all([
+        // Checkpoint is sync + cheap; read it first so attestation probes can use
+        // its activeBeadIds as their input. Artifacts is sync too.
+        const checkpoint = readCheckpointSection(ctx.cwd);
+        const artifacts = probeArtifacts(ctx.cwd);
+        const activeBeadIds = checkpoint.activeBeadIds ?? [];
+        const [git, beads, agentMail, ntm, doctor, attestations] = await Promise.all([
             probeGit(ctx),
             probeBeads(ctx),
             probeAgentMail(ctx),
             probeNtm(ctx),
             getCachedOrFreshDoctor(ctx, startMs),
+            probeAttestations(ctx.cwd, activeBeadIds, startMs),
         ]);
-        const checkpoint = readCheckpointSection(ctx.cwd);
-        const artifacts = probeArtifacts(ctx.cwd);
         const elapsedMs = Date.now() - startMs;
         const partial = {
             version: 1,
@@ -553,6 +658,7 @@ export async function runObserve(ctx, args) {
             agentMail,
             ntm,
             artifacts,
+            attestations,
             doctor,
         };
         const hints = deriveHints(partial);

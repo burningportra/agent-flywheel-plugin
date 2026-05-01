@@ -83,6 +83,14 @@ export declare const FlywheelObserveReportSchema: z.ZodObject<{
         flywheelScratch: z.ZodArray<z.ZodString>;
         truncated: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>;
+    attestations: z.ZodObject<{
+        inFlightBeadIds: z.ZodArray<z.ZodString>;
+        missing: z.ZodArray<z.ZodString>;
+        stale: z.ZodArray<z.ZodString>;
+        invalid: z.ZodArray<z.ZodString>;
+        unavailable: z.ZodOptional<z.ZodLiteral<true>>;
+        truncated: z.ZodOptional<z.ZodBoolean>;
+    }, z.core.$strip>;
     hints: z.ZodArray<z.ZodObject<{
         severity: z.ZodEnum<{
             info: "info";
