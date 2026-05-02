@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.2] - 2026-05-02
+
+### Fixed
+
+- **Hook paths leaked stderr on every Bash call.** `hooks/hooks.json` referenced `node hooks/agent-mail-guard.js` and `node hooks/startup.js` as relative paths, which Claude Code resolves against the project's cwd, not the plugin install dir. When the project lacked a `hooks/` directory the PreToolUse:Bash entry produced a `MODULE_NOT_FOUND` on every Bash tool call (the sister Stop / SubagentStop / SessionStart entries swallowed it via `2>/dev/null || true`, but PreToolUse:Bash did not). All four hook commands now use `"${CLAUDE_PLUGIN_ROOT}/hooks/..."` with consistent error suppression.
+
 ## [3.11.1] - 2026-05-02
 
 ### Fixed
