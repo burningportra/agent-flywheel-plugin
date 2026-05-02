@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.3] - 2026-05-02
+
+### Changed
+
+- **Reality check promoted to top-level on every `/agent-flywheel:start` menu.** The 3-prompt sequence in `skills/start/_reality_check.md` (read AGENTS.md + README.md → code investigation → exhaustive `/reality-check-for-project` → granular `br` bead graph → optional NTM swarm) was already wired but lived only in the `open-beads-exist` menu and the `Other` sub-menu of the other two states. v3.11.3 surfaces it on the `previous-session-exists` and `fresh-start` menus too. On fresh-start it is the **Recommended** option whenever the repo has either `AGENTS.md` or `README.md` at root (the gap-vs-vision baseline that makes the pass meaningful); on greenfield repos with neither, "Scan & discover" remains Recommended. Deslop pass moves to the `Other` sub-menu on the previous-session and fresh-start states; it remains top-level on `open-beads-exist`. Reality check is no longer duplicated in any `Other` sub-menu now that it is top-level everywhere.
+
 ## [3.11.2] - 2026-05-02
 
 ### Fixed
