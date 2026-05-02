@@ -232,14 +232,34 @@ Build the menu options dynamically based on detected state:
 
 **If a previous session exists** (checkpoint found with non-idle phase):
 
+Print this block first (per the menu-visibility rule below):
+
+```
+Primary entry points (active session: '<goal>' @ <phase>):
+  • Auto-swarm          — in-flight resume with 4 pi + 2 cc swarm (Recommended)
+  • Resume session      — continue manually (no swarm)
+  • Reality check       — gap-check vs vision via /reality-check-for-project
+  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
+
+More entry points (type the label into "Other" or run the slash command directly):
+  • Work on beads       — refine / implement / inspect the open bead set
+  • New goal            — discard checkpoint and start over
+  • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
+  • Research repo       — paste a GitHub URL → /flywheel-research
+  • Audit               — /agent-flywheel:flywheel-audit
+  • Setup               — /agent-flywheel:flywheel-setup
+```
+
+Then call:
+
 ```
 AskUserQuestion(questions: [{
-  question: "What would you like to do?",
+  question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
-    { label: "Reality check", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. The 'come-to-Jesus' steering pass after compounded work. See skills/start/_reality_check.md" },
+    { label: "Reality check", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" },
     { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel ideas, plan, or review the current bead set. Auto-routes to the right mode based on phase. ~20-30 min; needs ntm + 2 healthy CLIs" }
   ],
   multiSelect: false
@@ -248,13 +268,32 @@ AskUserQuestion(questions: [{
 
 **If open/in-progress beads exist** but no active session:
 
+Print this block first (per the menu-visibility rule below):
+
+```
+Primary entry points (<N> open beads):
+  • Auto-swarm          — in-flight resume with 4 pi + 2 cc swarm (Recommended)
+  • Reality check       — gap-check vs vision via /reality-check-for-project
+  • Work on beads       — refine / implement / inspect manually
+  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
+
+More entry points (type the label into "Other" or run the slash command directly):
+  • New goal            — discard the open beads and start over
+  • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
+  • Research repo       — paste a GitHub URL → /flywheel-research
+  • Audit               — /agent-flywheel:flywheel-audit
+  • Setup               — /agent-flywheel:flywheel-setup
+```
+
+Then call:
+
 ```
 AskUserQuestion(questions: [{
-  question: "What would you like to do?",
+  question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
-    { label: "Reality check", description: "Step back: gap-check actual implementation against AGENTS.md/README.md/plan vision using the reality-check skill, convert gaps to beads, optionally run swarm. The 'come-to-Jesus' steering pass. See skills/start/_reality_check.md" },
+    { label: "Reality check", description: "Step back: gap-check actual implementation against AGENTS.md/README.md/plan vision using the reality-check skill, convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel new ideas, the current plan, or steelman the open-bead set. Auto-routes by phase. ~20-30 min; needs ntm + 2 healthy CLIs" }
   ],
@@ -264,15 +303,37 @@ AskUserQuestion(questions: [{
 
 **If no beads and no session** (fresh start):
 
+> **Menu visibility rule (MANDATORY).** `AskUserQuestion` caps at 4 labeled options. Before calling it, print the **full menu** (all top-level + sub-options the routing table can reach in this state) as a visible markdown block so the user can see every entry point at load. Do NOT hide options behind an "Other" sub-menu — surface them. The 4 options inside `AskUserQuestion` are the most-common entry points; the extras (Simplify pass, Duel, Audit, Setup, Auto-swarm, Quick fix) are reachable via the printed block by typing the label into "Other" or by invoking the matching `/flywheel-*` slash command directly. Apply this same rule to the previous-session-exists and open-beads-exist menus above.
+
+Print this block first:
+
+```
+Primary entry points:
+  • Reality check       — /reality-check-for-project gap analysis (Recommended when AGENTS.md/README.md exist)
+  • Scan & discover     — profile the repo and surface improvement ideas
+  • Set a goal          — /brainstorming → flywheel_select → planning
+  • Research repo       — paste a GitHub URL → /flywheel-research
+
+More entry points (type the label into "Other" or run the slash command directly):
+  • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
+  • Duel                — /agent-flywheel:flywheel-duel (adversarial 2-agent ideation)
+  • Audit               — /agent-flywheel:flywheel-audit
+  • Setup               — /agent-flywheel:flywheel-setup
+  • Quick fix           — /agent-flywheel:flywheel-fix
+  • Auto-swarm          — in-flight resume; only meaningful with active beads
+```
+
+Then call:
+
 ```
 AskUserQuestion(questions: [{
-  question: "What would you like to do?",
+  question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Reality check (Recommended)", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. The canonical 'where are we?' entry point on a project with existing docs. See skills/start/_reality_check.md" },
+    { label: "Reality check (Recommended)", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" },
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities (greenfield default)" },
     { label: "Set a goal", description: "I already know what I want to build" },
-    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards --mode=ideas — bypass single-model brainstorm, generate decorrelated goal options. ~20-30 min; needs ntm + 2 healthy CLIs" }
+    { label: "Research repo", description: "Paste a GitHub URL — deep-research it via /flywheel-research and optionally generate an integration plan with beads. Use Other to provide the URL" }
   ],
   multiSelect: false
 }])
@@ -287,7 +348,7 @@ AskUserQuestion(questions: [{
 | Choice | Action |
 |--------|--------|
 | **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 pi + 2 cc; fall back to 4 cod only if Pi is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
-| **Other** | Surface a follow-up `AskUserQuestion` with the state-appropriate sub-options (per UNIVERSAL RULE 1, never end the turn here). For previous-session-exists state: `Work on beads / New goal / Simplify pass / Research repo`. For open-beads-exist state: `Simplify pass / New goal / Research repo / Audit`. For fresh-start state: `Simplify pass / Research repo / Setup`. "Simplify pass" routes to `_deslop.md` (the canonical engine of `/simplify-and-refactor-code-isomorphically`); the label uses the skill's actual name so users searching for "simplify" or "refactor" find the path. Reality check is top-level on every menu state, so it is intentionally NOT duplicated in this sub-menu. Quick fix is reachable via `/agent-flywheel:flywheel-fix` directly and intentionally not listed. Then route the chosen sub-option through the matching row below. |
+| **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed "More entry points" block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Simplify pass / Duel / Setup`. Open-beads-exist: `New goal / Simplify pass / Research repo / Audit / Setup`. Previous-session-exists: `Work on beads / New goal / Simplify pass / Research repo / Audit / Setup`. Route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches, treat the free-text as a custom goal and route to **Set a goal**. |
 | **Simplify pass** (a.k.a. Deslop pass) | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the canonical skill `/simplify-and-refactor-code-isomorphically` is the engine of every mode, with `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm` orchestrating around it. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove isomorphism preservation. |
 | **Duel** | Invoke `/agent-flywheel:flywheel-duel` (state-aware routing — picks `mode=ideas` for fresh starts, `mode=architecture` when a goal is selected but no plan exists, `mode=reliability\|security` when reviewing risky open beads). Pre-flight (MANDATORY): run `which ntm` + `which claude codex gemini 2>/dev/null` (real binaries behind the `cc/cod/gmi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) — need ntm + ≥2 of {claude, codex, gemini}; on failure, emit a one-line warning and surface a sub-menu offering `Deep (idea-wizard) / Triangulated / Cancel`. After the duel completes, parse `DUELING_WIZARDS_REPORT.md`, stamp `state.planSource = "duel"` (or the discovery equivalent so `_beads.md` Provenance block fires), and continue into the standard goal-selection or plan-approval flow per current phase. Do NOT skip the alignment check at Step 5.55 — duels surface contested decisions the alignment check exists to surface. |
 | **Reality check** | Read `skills/start/_reality_check.md` end-to-end and surface its depth-selection `AskUserQuestion` (Reality check only / Reality check + beads / Full pipeline). Do NOT pick a depth unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching section verbatim; the slash-named skill (`/reality-check-for-project`) is load-bearing. Phase 1 (the docs+code+gap-report prompt) typically takes 15–20 minutes — do NOT short-circuit it with a docs-only summary. Bead creation is `br`-only per `/beads-workflow`. |

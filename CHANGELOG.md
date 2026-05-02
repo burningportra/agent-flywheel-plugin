@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.5] - 2026-05-02
+
+### Changed
+
+- **Start menu now surfaces every entry point at load — no hidden `Other` sub-menu.** `skills/start/SKILL.md` Step 0d adds a mandatory "menu visibility rule" requiring a printed `Primary entry points` + `More entry points` block before the `AskUserQuestion` call on all three menu states (`fresh-start`, `open-beads-exist`, `previous-session-exists`). The `AskUserQuestion` 4-option cap still applies to the labeled radio choices, but the printed block makes Simplify pass / Duel / Audit / Setup / Quick fix / Research repo / etc. visible upfront — the user can pick any of them by typing the label into "Other" or invoking the matching `/flywheel-*` slash command directly. Step 0e `Other` routing-table row updated: it now matches the typed label against the printed block (case-insensitive, leading-substring OK) and routes directly without surfacing a second `AskUserQuestion`. Fresh-start menu also swaps `Duel` → `Research repo` in the labeled options (Duel demoted to the printed block on fresh-start; remains top-level on previous-session-exists and open-beads-exist).
+
 ## [3.11.4] - 2026-05-02
 
 ### Added
