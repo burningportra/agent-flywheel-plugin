@@ -1,14 +1,14 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.11.0 ▓▒░
+░▒▓ CLAUDE // AGENT-FLYWHEEL v3.11.1 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code.**
 Scan → discover → plan → implement → review — with checkpoints, gates, and adversarial review at every seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.11.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.11.1-blue.svg)](#)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.18-brightgreen)](#)
 [![CI](https://github.com/burningportra/agent-flywheel-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/burningportra/agent-flywheel-plugin/actions)
@@ -347,6 +347,7 @@ claude --plugin-dir .
 | Swarm agents idle / stuck | Tender daemon not running | Check `.pi-flywheel/tender-events.log`; restart with `node mcp-server/dist/scripts/tender-daemon.js --session=<...>` |
 | `flywheel_advance_wave` returns `attestation_missing` | A closed bead has no `.pi-flywheel/completion/<id>.json` | Implementor must write the report (template in `skills/start/_implement.md`); or set `FW_ATTESTATION_REQUIRED=` (unset) for warn-only |
 | Repeated agent-mail file-reservation conflicts | Upstream advisory-enforcement bug | Use `reserveOrFail()` from `mcp-server/src/agent-mail-helpers.ts` — never call `agentMailRPC("file_reservation_paths")` directly (`RESERVE001` lint rule enforces this) |
+| `Resource is temporarily busy ... mailbox activity lock is busy` from `am doctor` | The live Agent Mail daemon holds `.mailbox.activity.lock` | Run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`; do not delete lock files. Claude/Pi hooks block mutating `am doctor` commands from swarm panes. |
 
 For deeper traces:
 

@@ -102,6 +102,14 @@ describe('chaos/remediate-concurrent', () => {
             cmd === 'curl' && args.includes('http://127.0.0.1:8765/health/liveness'),
           respond: { result: { code: 0, stdout: '{"status":"alive"}', stderr: '' } },
         },
+        {
+          match: (cmd, args) => cmd === 'bash' && args[0] === '-lc',
+          respond: { result: { code: 0, stdout: '', stderr: '' } },
+        },
+        {
+          match: (cmd, args) => cmd === 'am' && args[0] === 'doctor',
+          respond: { result: { code: 0, stdout: 'ok', stderr: '' } },
+        },
       ]);
       const ac = new AbortController();
 

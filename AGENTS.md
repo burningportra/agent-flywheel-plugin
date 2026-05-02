@@ -205,6 +205,22 @@ Do **not** use `"type": "sse"` or `"type": "url"` — use `"http"`.
 2. Verify port 8765 is listening: `lsof -i :8765`
 3. Test the endpoint: `curl -s http://127.0.0.1:8765/mcp` (also: `curl -s http://127.0.0.1:8765/health/liveness` should return `{"status":"alive"}`).
 
+### Mutating `am doctor` maintenance and mailbox activity locks
+
+The Rust `am serve-http` runtime intentionally holds `.mailbox.activity.lock` and `storage.sqlite3.activity.lock` for the lifetime of the server. If you run mutating `am doctor` operations while the service is active, you may see:
+
+```
+Resource is temporarily busy ... mailbox activity lock is busy ... another Agent Mail runtime or mutating `am doctor` operation is already active
+```
+
+Do **not** delete the lock files. Stop the owning service/runtime first, run maintenance, then restart it. The canonical flywheel path is:
+
+```
+flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })
+```
+
+That remediation stops launchd/systemd/best-effort runtimes, runs `am doctor repair --yes` and `am doctor archive-normalize --yes`, restarts Agent Mail, and verifies `/health/liveness`. NTM swarm agents must not run mutating `am doctor` commands directly; they should report Agent Mail health issues to the coordinator.
+
 ### Programmatic Health Check
 
 `checkAgentMailHealth()` (exported from `mcp-server/src/agent-mail.ts`) sends a lightweight HEAD request to `http://127.0.0.1:8765/mcp` with a 3-second timeout. It returns:

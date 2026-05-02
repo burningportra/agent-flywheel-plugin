@@ -370,7 +370,16 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
            non-idiomatic code and break project conventions. If the repo has
            no AGENTS.md, note that in your started message.
 
-       Only after 0a, 0b, 0c, 0d are ALL complete may you proceed to Step 1.
+       0e. **Agent Mail runtime safety.** Use Agent Mail MCP/HTTP tools for inboxes,
+           messages, and reservations. Do NOT run mutating `am doctor` commands
+           (`repair`, `archive-normalize`, `reconstruct`, `fix`) and do NOT delete
+           `.mailbox.activity.lock` or `storage.sqlite3.activity.lock`. The live
+           `am serve-http` daemon intentionally holds those locks. If Agent Mail
+           reports "Resource is temporarily busy" or looks unhealthy, message the
+           coordinator and STOP; the coordinator should run
+           `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.
+
+       Only after 0a, 0b, 0c, 0d, 0e are ALL complete may you proceed to Step 1.
 
        ## STEP 0.5 — LOAD MEMORY (if CASS available)
        Call flywheel_memory with operation='search' and query='implementation gotchas <bead-title>'.

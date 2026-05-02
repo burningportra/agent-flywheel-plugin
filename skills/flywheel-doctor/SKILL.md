@@ -104,9 +104,11 @@ This entry feeds the "time-to-healthy" rollup in a future calibration enhancemen
 
 The four flywheel-owned CLI checks (`br_binary`, `bv_binary`, `ntm_binary`, `cm_binary`) are now auto-remediated via the canonical curl|bash installers. `flywheel_remediate` runs the install command and re-probes `<binary> --version` afterwards. If the install fails (network/permission), the result envelope reports `verifiedGreen:false` with stderr captured for inspection.
 
+`agent_mail_liveness` remediation is service-aware: it stops the supervised Agent Mail runtime to release `.mailbox.activity.lock`, runs `am doctor repair --yes` and `am doctor archive-normalize --yes`, restarts the service, then verifies `/health/liveness`. This is the canonical fix for the common `Resource is temporarily busy ... mailbox activity lock is busy` failure. Do not tell agents to delete the lock files.
+
 ### `--auto` / unattended mode
 
-For CI or scripted runs, pass `--auto` to `/flywheel-doctor` (or to the underlying tool: `flywheel_remediate({ mode: 'execute', autoConfirm: true })`). This skips the AskUserQuestion gate and applies all automated remediations whose handlers are non-blocking. Use sparingly — it WILL run shell installers without confirmation.
+For CI or scripted runs, pass `--auto` to `/flywheel-doctor` (or to the underlying tool: `flywheel_remediate({ mode: 'execute', autoConfirm: true })`). This skips the AskUserQuestion gate and applies automated remediations. Use sparingly — it can run shell installers and restart the local Agent Mail service without an additional prompt.
 
 If `overall` is `red`, do NOT run `/start` until the red checks are fixed — downstream gates will fail with more confusing errors.
 

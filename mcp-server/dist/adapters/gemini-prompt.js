@@ -47,6 +47,7 @@ export function adaptPromptForGemini(bead) {
         '- file_reservation_paths for every file you will edit; retry 3x on conflict.',
         `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} started'.`,
         '- Re-read AGENTS.md end-to-end.',
+        '- Agent Mail runtime safety: use the Agent Mail MCP/HTTP tools only. Do NOT run `am doctor repair`, `am doctor archive-normalize`, or delete `.mailbox.activity.lock`; if Agent Mail looks busy/unhealthy, report it to the coordinator and ask them to run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.',
         '',
         '## STEP 1 — IMPLEMENT',
         thinkingDirective,

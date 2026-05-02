@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.1] - 2026-05-02
+
+### Fixed
+
+- **Agent Mail activity-lock repair path.** `agent_mail_liveness` remediation now performs the safe service-aware sequence for `Resource is temporarily busy ... mailbox activity lock is busy`: stop the supervised Agent Mail runtime, run `am doctor repair --yes`, run `am doctor archive-normalize --yes`, restart Agent Mail, and verify `/health/liveness`. The handler restarts the service in a `finally` path so a failed repair does not leave Agent Mail down.
+- **NTM swarm guardrails for Agent Mail maintenance.** Claude hooks and a Pi project extension now block mutating `am doctor` commands and activity-lock deletion from swarm panes, while Stop/SubagentStop/session-shutdown hooks best-effort release file reservations when an agent identity is available. Swarm prompts and provider adapters tell implementors to report Agent Mail health issues to the coordinator instead of racing the daemon.
+
+### Changed
+
+- **Doctor and troubleshooting docs.** `/flywheel-doctor`, `AGENTS.md`, `README.md`, and swarm marching orders now point to `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })` as the canonical fix and explicitly warn not to delete Agent Mail lock files.
+
 ## [3.11.0] - 2026-04-30
 
 Runtime-safety + recovery substrate from the 2026-04-30 3-way duel cohort (`docs/duels/2026-04-30.md`, plan `docs/plans/2026-04-30-duel-winners.md`). Three composable features land together: a durable JSON ledger for completion evidence, a single-call session-state snapshot, and a coordinator-side helper that closes the v3.10.x file-reservation conflict-handling gap.

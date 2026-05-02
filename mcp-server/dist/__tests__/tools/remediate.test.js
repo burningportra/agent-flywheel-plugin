@@ -144,6 +144,21 @@ describe('T15 — runRemediate dispatcher', () => {
         });
     });
     describe('mutating handler refuses execute without autoConfirm', () => {
+        it('agent_mail_liveness execute mode + autoConfirm:false → remediation_requires_confirm', async () => {
+            const cwd = makeTmpRoot();
+            try {
+                const { exec } = alwaysOkExec();
+                const ac = new AbortController();
+                const result = await runRemediate({ cwd, checkName: 'agent_mail_liveness', autoConfirm: false, mode: 'execute' }, exec, ac.signal);
+                expect('isError' in result && result.isError).toBe(true);
+                const errResult = result;
+                expect(errResult.structuredContent.data.error.code).toBe('remediation_requires_confirm');
+                expect(errResult.structuredContent.data.error.details?.mutating).toBe(true);
+            }
+            finally {
+                cleanup(cwd);
+            }
+        });
         it('dist_drift execute mode + autoConfirm:false → remediation_requires_confirm', async () => {
             const cwd = makeTmpRoot();
             try {
@@ -190,6 +205,26 @@ describe('T15 — runRemediate dispatcher', () => {
                 expect(ok.stepsRun).toBe(1);
                 const npmCalls = calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'run' && c.args[1] === 'build');
                 expect(npmCalls.length).toBeGreaterThan(0);
+            }
+            finally {
+                cleanup(cwd);
+            }
+        });
+        it('agent_mail_liveness execute + autoConfirm:true runs stop/repair/normalize/restart and verifies', async () => {
+            const cwd = makeTmpRoot();
+            try {
+                const { exec, calls } = alwaysOkExec();
+                const ac = new AbortController();
+                const result = await runRemediate({ cwd, checkName: 'agent_mail_liveness', autoConfirm: true, mode: 'execute' }, exec, ac.signal);
+                expect('check' in result).toBe(true);
+                const ok = result;
+                expect(ok.executed).toBe(true);
+                expect(ok.stepsRun).toBe(5);
+                expect(ok.verifiedGreen).toBe(true);
+                expect(ok.plan.mutating).toBe(true);
+                expect(calls.some((c) => c.cmd === 'am' && c.args.join(' ') === 'doctor repair --yes')).toBe(true);
+                expect(calls.some((c) => c.cmd === 'am' && c.args.join(' ') === 'doctor archive-normalize --yes')).toBe(true);
+                expect(calls.filter((c) => c.cmd === 'bash' && c.args[0] === '-lc').length).toBeGreaterThanOrEqual(3);
             }
             finally {
                 cleanup(cwd);

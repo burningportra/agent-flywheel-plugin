@@ -41,6 +41,14 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
        Before editing any files, call file_reservation_paths with the files you plan to modify.
        Release reservations when done: release_file_reservations.
 
+       ## Agent Mail Runtime Safety
+       Use the Agent Mail MCP/HTTP tools for inboxes, messages, and reservations. Do NOT run mutating
+       `am doctor` commands (`repair`, `archive-normalize`, `reconstruct`, `fix`) and do NOT delete
+       `.mailbox.activity.lock` or `storage.sqlite3.activity.lock`. The live `am serve-http` daemon
+       intentionally holds those locks. If Agent Mail reports "Resource is temporarily busy" or looks
+       unhealthy, stop and message the coordinator; the coordinator should run
+       `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.
+
        ## Bead: <id> — <title>
        <description>
 

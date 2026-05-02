@@ -54,6 +54,7 @@ export function adaptPromptForClaude(
     '0b. file_reservation_paths for every file you plan to edit. Retry 3x with 30s backoff.',
     `0c. send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} started'.`,
     '0d. Re-read AGENTS.md end-to-end.',
+    '0e. Agent Mail runtime safety: use the Agent Mail MCP/HTTP tools only. Do NOT run `am doctor repair`, `am doctor archive-normalize`, or delete `.mailbox.activity.lock`; if Agent Mail looks busy/unhealthy, report it to the coordinator and ask them to run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.',
     '',
     '## STEP 1 — IMPLEMENT',
     thinkingDirective,
