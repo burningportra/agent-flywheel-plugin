@@ -29,6 +29,8 @@ storage.sqlite3-wal
 /.claude/
 /.ntm/
 /.pi-orchestrator/
+/.simplify-ledger/
+/refactor/
 
 # Vendored dev copy of mcp-agent-mail (not part of the plugin distribution)
 /mcp_agent_mail/

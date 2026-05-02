@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "/Users/kevtrinh/.local/bin/dcg",
+        "powershell": "/Users/kevtrinh/.local/bin/dcg",
+        "cwd": ".",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}

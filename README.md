@@ -1,14 +1,14 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.11.1 ▓▒░
+░▒▓ CLAUDE // AGENT-FLYWHEEL v3.11.4 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code.**
 Scan → discover → plan → implement → review — with checkpoints, gates, and adversarial review at every seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.11.1-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.11.4-blue.svg)](#)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.18-brightgreen)](#)
 [![CI](https://github.com/burningportra/agent-flywheel-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/burningportra/agent-flywheel-plugin/actions)
@@ -55,7 +55,7 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 | Completion attestation ledger | ✅ Zod-validated JSON | ✗ | ✗ | ✗ |
 | Bead-graph dependency view | ✅ `bv` + Cytoscape viewer | ✗ | ✗ | ✗ |
 | Auto-recovery (stalled beads, drift) | ✅ tender daemon + 4-min looper | ✗ | ✗ | partial |
-| Doctor / setup / healthcheck triage | ✅ 11-check sweep | ✗ | ✗ | ✗ |
+| Doctor / setup / healthcheck triage | ✅ 17-check sweep | ✗ | ✗ | ✗ |
 
 ---
 
@@ -185,7 +185,7 @@ Stuck? Run the diagnostic triage chain:
 
 | Order | Command | Role | Run when |
 |---|---|---|---|
-| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 11 checks, ~2s | First — always safe |
+| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 17 checks, ~2s | First — always safe |
 | 2 | `/agent-flywheel:flywheel-setup` | Apply fixes (install / register / configure) | Only if doctor is yellow / red |
 | 3 | `/agent-flywheel:flywheel-healthcheck` | Deep periodic audit (codebase + dep graph) | Periodically; not for setup problems |
 
@@ -296,7 +296,7 @@ claude --plugin-dir .
      │    ├── server.ts                ← MCP tool registration
      │    ├── tools/                   ← 14 flywheel_* tools
      │    │    ├── observe.ts          ← session-state snapshot (v3.11)
-     │    │    ├── doctor.ts           ← 11-check toolchain probe
+     │    │    ├── doctor.ts           ← 17-check toolchain probe
      │    │    ├── remediate.ts        ← one-tap doctor fixes
      │    │    ├── advance-wave.ts     ← wave gating + attestation read
      │    │    ├── verify-beads.ts     ← bead-close reconciliation

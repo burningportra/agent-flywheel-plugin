@@ -1,5 +1,12 @@
 # Gap Analysis: Agent Flywheel Guide vs agent-flywheel
 
+> **⚠️ HISTORICAL SNAPSHOT — last updated 2026-04-09 (codebase ~v3.4.x).** Retained for the v3.4-era audit trail. Two architectural claims below are no longer current and contradict AGENTS.md as of v3.5+:
+>
+> - The "ARCHITECTURAL DIFFERENCES" table calls `Agent(run_in_background)` "Better than ntm." Reversed by AGENTS.md "NTM is mandatory for all spawned work" — `ntm spawn` + `ntm --robot-send` is now the only sanctioned multi-agent fan-out path. Raw `Task`/`Agent` calls for code-producing work are a review-bounce condition.
+> - The same table cites "Worktree isolation" as the file-conflict mitigation. Current model is single-branch on `main` with Agent Mail file reservations + `reserveOrFail()` helper (v3.11.0+) + the `RESERVE001` lint rule + the pre-commit guard. Worktrees are no longer the canonical path; `flywheel-cleanup` exists specifically to remove orphaned ones.
+>
+> For the current vision-vs-code state, run `/agent-flywheel:flywheel-reality-check` (date-tagged gap reports land in CASS memory). The v3.11.0+ substrate (Completion Evidence Attestation, `flywheel_observe`, `reserveOrFail` + `RESERVE001`) post-dates this document.
+
 Source: https://agent-flywheel.com/complete-guide  
 Updated: 2026-04-09  
 Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.md, README.md)
