@@ -91,7 +91,7 @@ Concretely:
    - `br list --tag reality-check-<YYYY-MM-DD>` → see all beads from one round.
    - `bv --robot-triage --filter-tag reality-check-*` → triage all reality-check beads across rounds.
    - `flywheel-status` and the post-flywheel summary surface "X beads from reality-check round on <date>".
-6. After creation, run `bv --robot-triage` (or `bv triage`) to validate the graph is well-formed and surface any obvious cycles or orphans.
+6. After creation, run `ntm work triage --by-track` to validate the graph is well-formed and surface any obvious cycles or orphans (the operator-readable wrapper around `bv`; falls back to `bv --robot-triage --json` if you need structured output).
 
 When Phase 2 returns, the user has a fully self-contained bead graph representing every gap-closure task. Surface a summary (count of beads created, tag applied, dependency graph stats) to the user. Then transition to Step 4 (full-pipeline mode) or Step 6 launch menu (reality-check + beads mode).
 
@@ -123,11 +123,17 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 
 **Pane-type priority** (per AGENTS.md "NTM pane priority"): prefer `--pi=` over `--cod=`; only fall back to `--cc=3 --cod=3` (with pane indices `cod=4,5,6`) when Pi is unavailable on the host.
 
-### 4c. Looper schedule
+### 4c. Supervision (3-min looper default; ntm controller alternative)
 
-`Skill: loop` with **3-minute** interval (note: shorter than the inflight-resume's 4-min cadence — reality-check closure tends to surface bead-graph issues that benefit from faster nudging). Looper prompt:
+**Default — `Skill: loop` with 3-minute interval** (shorter than the inflight-resume's 4-min cadence — reality-check closure tends to surface bead-graph issues that benefit from faster nudging). Looper prompt:
 
-> tail .pi-flywheel/tender-events.log; check inbox via macro_start_session; nudge idle panes guided by `bv --robot-triage`; reopen stalled in_progress beads; if all open beads are in_progress AND no commits in 10min, escalate to user via AskUserQuestion.
+> tail .pi-flywheel/tender-events.log; check inbox via macro_start_session; run `ntm work triage --by-track` for prioritized work; dispatch idle panes via `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` (or `bv --robot-triage --json` + `ntm --robot-send` for the manual path); reopen stalled in_progress beads; if all open beads are in_progress AND no commits in 10min, escalate to user via AskUserQuestion.
+
+**Alternative — `ntm controller`.** If the user wants to walk away while the gap-closure swarm grinds, spawn a dedicated coordinator agent in pane 0:
+```bash
+ntm controller "$SESSION" --agent-type=cc --prompt=.pi-flywheel/controller-prompt.md
+```
+Use the custom-prompt template (`{{.Session}}`, `{{.AgentList}}`, `{{.ProjectDir}}`) to inject the gap-closure mandate (CASS `entryId` from §2, the reality-check tag for `br list --tag`). The controller follows ntm's built-in `--robot-snapshot` → `--robot-attention` → `--robot-tail` → mail-check → `--robot-interrupt` operator loop. Tender-daemon stays running in either supervision mode. If the controller pane dies, climb the stuck-pane ladder and fall back to looper-based supervision.
 
 ### 4d. Monitor loop
 

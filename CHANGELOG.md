@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.4] - 2026-05-02
+
+### Added
+
+- **`ntm controller` as opt-in supervision mode.** `_implement.md` Pre-flight now surfaces a `Supervision` `AskUserQuestion` between dispatching the wave and the first `ScheduleWakeup`. Default option "Looper-based" keeps the existing in-session 270s-cadence pattern (cache-warm wakes, knows the goal/plan). New "ntm controller" option spawns a dedicated coordinator agent in pane 0 via `ntm controller "$NTM_PROJECT" --agent-type=cc`, freeing the main Claude session to exit cleanly while a separate agent drives the canonical `--robot-snapshot` → `--robot-attention` → `--robot-tail` → mail-check → `--robot-interrupt` loop. Custom-prompt template variables (`{{.Session}}`, `{{.AgentList}}`, `{{.ProjectDir}}`) inject swarm-specific context. The same opt-in callout lands in `_inflight_prompt.md` operator decoder, `_deslop.md` §4e, `_reality_check.md` §4c, `skills/flywheel-swarm/SKILL.md`, and `commands/flywheel-swarm.md`. Recovery path documented: if the controller pane dies (`--robot-is-working` returns `gone` AND no Agent Mail traffic >10 min), climb the stuck-pane ladder (`--robot-smart-restart` → `--hard-kill` → fall back to looper-based supervision). Tender-daemon stays running in either mode; the controller is supervision, not state.
+- **`ntm work triage --by-track` and `ntm assign --auto --strategy=dependency` adopted as the operator-readable triage and dispatch surface.** Skill bodies now lead with `ntm work triage` (groups remaining work by track, wraps `bv` under the hood) and `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` (picks the next ready bead off the `bv` graph and registers the assignment in one call) instead of describing the raw `bv --robot-triage` + ad-hoc `ntm --robot-send` two-step. `bv --robot-triage --json` remains documented as the structured-output path when you specifically need to parse, and `mcp-server/src/beads.ts:215` `triageBeads()` keeps calling `bv --robot-triage --json` directly — the change is documentation-side only. Updates land in `_inflight_prompt.md` operator decoder, `_implement.md` wave loop, `_reality_check.md` Phase 2 graph validation, `skills/flywheel-swarm/SKILL.md` step 6, and `commands/flywheel-swarm.md` step 6.
+
+### Changed
+
+- **"Deslop pass" menu label renamed to "Simplify pass" wherever it appears.** The canonical engine of every deslop mode (Single-pass / Single + fresh-eyes / 5-Pi swarm / Iterative 10x) is `/simplify-and-refactor-code-isomorphically` — the old "Deslop pass" label hid that name from users searching for "simplify" or "refactor". Now: `skills/start/SKILL.md` Step 0e Other-sub-menu listings show "Simplify pass" on previous-session-exists, open-beads-exist, and fresh-start; the routing-table row is renamed (with "(a.k.a. Deslop pass)" annotation for users who know the old name). `skills/start/_deslop.md` opens with a new `## What this is` paragraph naming the canonical skill explicitly. Internal file paths and skill identifiers are unchanged (`_deslop.md` stays where it is) so no bundle-path churn. Behavior unchanged — same 4-mode `AskUserQuestion`, same baseline + fresh-eyes + ledger discipline.
+
 ## [3.11.3] - 2026-05-02
 
 ### Changed

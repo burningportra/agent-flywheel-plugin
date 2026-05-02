@@ -1,6 +1,8 @@
-# Deslop Pass — `/agent-flywheel:start` → "Deslop pass"
+# Simplify Pass — `/agent-flywheel:start` → "Simplify pass" (a.k.a. Deslop pass)
 
-**When to use:** the user invoked `/agent-flywheel:start` and picked **"Deslop pass"** from the Step 0d menu — they want to apply `/simplify-and-refactor-code-isomorphically` to the project as a proof-obligated, isomorphism-preserving refactor pass. This is meaningful on any repo (with or without open beads) and is the canonical "reduce AI-junk without changing behavior" workflow.
+**What this is:** the canonical engine here is `/simplify-and-refactor-code-isomorphically`. Every one of the four modes below (Single-pass / Single + fresh-eyes / 5-Pi swarm / Iterative 10x) ultimately invokes that skill — what changes between modes is the orchestration around it (number of agents, fresh-eyes review gates, iteration count). The "deslop" framing this file ships with adds the discipline layer (baseline capture, ledger, isomorphism cards) that makes the skill safe to apply at scale; the menu label "Simplify pass" surfaces the skill's actual name so users searching for it find this path.
+
+**When to use:** the user invoked `/agent-flywheel:start` and picked **"Simplify pass"** (or the legacy label "Deslop pass") from the Step 0d/0e menu — they want to apply `/simplify-and-refactor-code-isomorphically` to the project as a proof-obligated, isomorphism-preserving refactor pass. This is meaningful on any repo (with or without open beads) and is the canonical "reduce AI-junk without changing behavior" workflow.
 
 **How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
 
@@ -130,12 +132,18 @@ scripts/build-mutex.sh rch build
 
 Bake `scripts/build-mutex.sh` into every per-pane prompt's STEP 2 (above). The wrapper uses an atomic `mkdir` lock under `.pi-flywheel/` and does not require the Linux-only `flock` binary. If a pane waits >5 min on the lock, escalate via `/slb` two-person approval before killing.
 
-### 4e. Looper (5-min cadence per user spec)
+### 4e. Supervision (looper default; ntm controller alternative)
 
-Invoke the `Skill` tool with `loop`:
+**Default — `Skill: loop` (5-min cadence per user spec).** Invoke the `Skill` tool with `loop`:
 ```
-Skill(skill: "loop", args: "5m tend the deslop swarm; tail .pi-flywheel/tender-events.log; ensure each Codex picks a different code area (no overlap); verify isomorphism claims by spot-checking ledger entries; nudge idle panes via ntm --robot-send; reopen any stalled in_progress beads (in_progress + no commit in 30min + agent absent from list_window_identities)")
+Skill(skill: "loop", args: "5m tend the deslop swarm; tail .pi-flywheel/tender-events.log; ensure each Pi pane picks a different code area (no overlap); verify isomorphism claims by spot-checking ledger entries; nudge idle panes via ntm --robot-send (or ntm assign --auto --strategy=dependency for next-bead picks); reopen any stalled in_progress beads (in_progress + no commit in 30min + agent absent from list_window_identities)")
 ```
+
+**Alternative — `ntm controller` (opt-in; offload supervision to a dedicated pane).** If the user wants to walk away from the main Claude session, spawn a dedicated coordinator agent in pane 0:
+```bash
+ntm controller "$SESSION" --agent-type=cc
+```
+The controller follows ntm's built-in default prompt (`--robot-snapshot` → block on `--robot-attention` → `--robot-tail` → mail check → `--robot-interrupt`). Trade-off: separate context budget, no main-session burn — but the controller is a different agent with its own context, so any Simplify-pass-specific knowledge (which subsystems each pane is reserved for, ledger conventions) must be injected via the custom-prompt template (`{{.Session}}`, `{{.AgentList}}`, `{{.ProjectDir}}`) on launch. If the controller pane dies mid-run, climb the stuck-pane ladder (`--robot-is-working` → `--robot-smart-restart` → escalate to looper fallback). The tender-daemon stays running in either mode.
 
 ### 4f. Controller fresh-eyes review (you, the Claude coordinator)
 

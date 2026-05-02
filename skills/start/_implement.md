@@ -121,11 +121,28 @@ Stays inside cache TTL (270s), survives idle turns. Combine with the tender-daem
 **Putting it together** — recommended wave loop:
 1. Spawn NTM panes via `ntm spawn`.
 2. Spawn tender-daemon as a single background process.
-3. Dispatch prompts via `ntm --robot-send`.
+3. Dispatch prompts via `ntm --robot-send` for first-wave dispatch; for subsequent idle-pane "next bead" picks, prefer `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` (it picks the next ready bead off the `bv` graph and registers the assignment in one call).
 4. Call `ScheduleWakeup(270s, …)` and end the turn.
-5. (Wakeup fires) — `tail .pi-flywheel/tender-events.log` → call `flywheel_advance_wave(closedBeadIds)`.
+5. (Wakeup fires) — `tail .pi-flywheel/tender-events.log` → optionally `ntm work triage --by-track` for an operator-readable view of remaining work → call `flywheel_advance_wave(closedBeadIds)`.
 6. Dispatch returned `nextWave.prompts` (or proceed to Step 8 if `waveComplete && nextWave === null`).
 7. `kill -TERM $tender_daemon_pid` when the queue drains.
+
+**Supervision mode (optional — choose before dispatching).** Before the first ScheduleWakeup, surface this gate:
+
+```
+AskUserQuestion(questions: [{
+  question: "How should the swarm be supervised between waves?",
+  header: "Supervision",
+  options: [
+    { label: "Looper-based (Recommended)", description: "ScheduleWakeup(270s) keeps coordination in this Claude session. Cache-warm wakes, no second account burn, knows the goal/plan." },
+    { label: "ntm controller", description: "Spawn ntm controller \"$NTM_PROJECT\" --agent-type=cc in pane 0 — a dedicated coordinator agent with built-in --robot-snapshot/--robot-attention loop. Main session can exit cleanly. Trade-off: separate context budget, no goal/plan context unless injected via --prompt template." }
+  ],
+  multiSelect: false
+}])
+```
+
+- **Looper-based** → continue with the wave loop above.
+- **ntm controller** → run `ntm controller "$NTM_PROJECT" --agent-type=cc` (optionally with `--prompt=.pi-flywheel/controller-prompt.md` referencing `{{.Session}}`, `{{.AgentList}}`, `{{.ProjectDir}}` template variables to inject the wave's goal). Tender-daemon still runs. The main session may then either tend alongside or exit; if it exits, the controller drives. If the controller pane dies (`ntm --robot-is-working` returns `gone` AND no Agent Mail traffic for >10 min), climb the stuck-pane ladder (`--robot-smart-restart` → `--robot-smart-restart --hard-kill` → fall back to looper-based supervision).
 
 ### Pre-loop — swarm scaling + stagger
 

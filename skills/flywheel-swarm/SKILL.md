@@ -111,9 +111,10 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    **Save each agent's task ID and pane name** — needed for `ntm --robot-restart-pane` and `TaskStop` if they become unresponsive.
 
 6. **Monitor swarm (per `/vibing-with-ntm` tending loop):**
-   - Schedule the looper at the cadence set by `/vibing-with-ntm` (typically `ScheduleWakeup(270s, …)`); poll `fetch_inbox` and `ntm --robot-is-working` between wakes.
+   - Schedule the looper at the cadence set by `/vibing-with-ntm` (typically `ScheduleWakeup(270s, …)`); poll `fetch_inbox` and `ntm --robot-is-working` between wakes. For an operator-readable view of remaining work, `ntm work triage --by-track` wraps `bv` and groups by track; for next-bead dispatch to idle panes, prefer `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` over an ad-hoc `--robot-send`.
+   - **Alternative — `ntm controller`:** for long-running swarms, spawn `ntm controller "$NTM_PROJECT" --agent-type=cc` in pane 0 to offload supervision to a dedicated coordinator agent (built-in `--robot-snapshot`/`--robot-attention` loop). Main session can exit cleanly; tender-daemon stays running; recovery via stuck-pane ladder if the controller pane dies.
    - If an agent goes idle without reporting completion, nudge it: `SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")`. Escalate per the stuck-pane ladder in `_implement.md` — nudge → context-handoff restart → force-stop.
-   - Use `TaskList` to see overall swarm task status; use `ntm --robot-restart-pane` to recycle a wedged pane (preserves bead state via Agent Mail handoff).
+   - Use `TaskList` to see overall swarm task status; use `ntm --robot-restart-pane` to recycle a wedged pane (preserves bead state via Agent Mail handoff). Prefer `ntm --robot-smart-restart` first — it refuses if the pane is actually working.
    - `TaskStop(task_id: "<id>")` is last resort — only after the stuck-pane ladder is exhausted.
 
 7. As each agent completes:
