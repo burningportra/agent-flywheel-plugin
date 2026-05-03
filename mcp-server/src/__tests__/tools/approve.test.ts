@@ -374,7 +374,52 @@ describe('runApprove', () => {
 
     const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
 
-    expect(result.content[0].text).toContain('Bead quality');
+    // P1.1 (3rt): Quality is now a sub-headline beside Convergence (or the
+    // sole headline when convergence is undefined). The structuredContent
+    // still carries `quality.summary` for tooling.
+    expect(result.content[0].text).toContain('Quality');
+    const sc = result.structuredContent as Record<string, unknown>;
+    const data = sc?.data as Record<string, unknown>;
+    expect(data?.quality).toMatchObject({ score: expect.any(Number) });
+  });
+
+  // P1.1 (3rt): Convergence is the headline polish metric, not the
+  // weak-3 quality heuristic that plateaus while the bead set converges.
+  it('renders Convergence as the headline metric when score is defined (3rt)', async () => {
+    const bead = makeBead();
+    const calls = makeExecCalls([bead]);
+    // Seed enough polish history to trigger convergence computation
+    // (>=3 polishChanges entries is the threshold in handleStart).
+    const { ctx } = makeCtx(
+      {
+        polishRound: 3,
+        polishChanges: [3, 1, 0],
+        polishOutputSizes: [1000, 1100, 1100],
+      },
+      calls,
+    );
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+
+    const text = result.content[0].text;
+    // Headline contains both metrics, with Convergence first.
+    expect(text).toMatch(/Convergence \d+ \/ Quality \d+/);
+    // Weak-3 list (when present) is rendered as a footnote, not headline.
+    if (text.includes('weakest')) {
+      expect(text).toMatch(/_3 weakest:/);
+    }
+  });
+
+  it('renders Quality-only headline when convergence is undefined (3rt)', async () => {
+    const bead = makeBead();
+    const { ctx } = makeCtx({}, makeExecCalls([bead]));
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+
+    const text = result.content[0].text;
+    // No convergence score on first start — Quality is the sole headline.
+    expect(text).toMatch(/Quality \d+/);
+    expect(text).not.toMatch(/Convergence \d+/);
   });
 
   // ── action=advanced ──────────────────────────────────────────

@@ -455,13 +455,16 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   const changesInfo = state.polishChanges.length > 0
     ? `\nPolish history: ${state.polishChanges.map((n, i) => `R${i + 1}: ${n} change${n !== 1 ? 's' : ''}`).join(', ')}`
     : '';
+  // Polish-round header: convergence is primary, quality shown alongside so
+  // operators see both numbers move (or don't) round-to-round.
+  const headlineQuality = computeBeadQualityScore(beads);
   const convergenceInfo = convergenceScore !== undefined
-    ? `\n📈 Convergence: ${(convergenceScore * 100).toFixed(0)}%${
+    ? `\n📈 **Convergence ${(convergenceScore * 100).toFixed(0)} / Quality ${(headlineQuality.score * 100).toFixed(0)}** — ${
         convergenceScore >= 0.75
-          ? ' ✅ — diminishing returns, ready to implement'
+          ? '✅ diminishing returns, ready to implement'
           : convergenceScore >= 0.50
-          ? ' — still converging, another round recommended'
-          : ' — low convergence, more polishing needed'
+          ? 'still converging, another round recommended'
+          : 'low convergence, more polishing needed'
       }`
     : '';
   const roundHeader = round > 0
@@ -741,15 +744,23 @@ async function handleStart(
     releaseBeadMutex(mutexKey);
   }
 
-  const convergenceNote = convergenceScore !== undefined
-    ? `\n📈 Convergence: ${(convergenceScore * 100).toFixed(0)}%${
-        convergenceScore >= 0.75 ? ' ✅' : convergenceScore >= 0.50 ? ' (converging)' : ' (low)'
-      }`
-    : '';
-
-  // Always compute and display bead quality score
+  // Headline polish metric: convergence is the truth signal (does another
+  // round actually move the bead set?). Quality is a heuristic floor that
+  // can plateau even when convergence is high — surface both, lead with
+  // convergence when defined. The 3-weakest list moves to a footnote so
+  // operators don't mistake it for a gating signal (P1.1).
   const beadQuality = computeBeadQualityScore(beads);
-  const qualityNote = `\n${formatBeadQualityScore(beadQuality)}`;
+  const qualityPct = (beadQuality.score * 100).toFixed(0);
+  const headlineNote = convergenceScore !== undefined
+    ? `\n📈 **Convergence ${(convergenceScore * 100).toFixed(0)} / Quality ${qualityPct}** ${
+        convergenceScore >= 0.75 ? '✅' : convergenceScore >= 0.50 ? '(converging)' : '(low)'
+      } ${beadQuality.label}`
+    : `\n📊 **Quality ${qualityPct}** ${beadQuality.label}`;
+  const weakBeadFootnote = beadQuality.weakBeads.length > 0
+    ? `\n   _3 weakest: ${beadQuality.weakBeads.slice(0, 3).join(' | ')}_`
+    : '';
+  const convergenceNote = headlineNote;
+  const qualityNote = weakBeadFootnote;
 
   // Hotspot matrix summary (I5). Shown when contention is med/high; otherwise
   // the line is omitted so the legacy-friendly output stays compact.
