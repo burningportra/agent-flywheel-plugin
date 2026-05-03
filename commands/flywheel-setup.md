@@ -190,3 +190,16 @@ Use a checkmark for passing items and an X for failed/skipped items. For any X i
 
 If ALL Required items pass: *"All prerequisites met. You can now run `/start`."*
 If ANY Required item failed: *"Do not run `/start` until all Required items pass. Fix the items marked above and re-run `/flywheel-setup`."*
+
+## 12. Auto-verify with `/flywheel-doctor`
+
+Setup ends by running the doctor sweep automatically — the user shouldn't have to ask "did that actually work?" Adopts context-mode pattern E (research doc §4-E, bead `claude-orchestrator-3jv`).
+
+If step 11 reported all Required items passing, **immediately invoke** the `mcp__plugin_agent-flywheel_agent-flywheel__flywheel_doctor` MCP tool with `cwd` set to the current working directory. Render the returned `DoctorReport` inline.
+
+Behavior rules:
+- If `criticalFails > 0` (red rows): print the failing rows prominently and recommend re-running `/flywheel-setup` for items still flagged, or following each row's `hint` for ones setup can't fix.
+- If `overall: "yellow"` and `criticalFails === 0`: print the warnings but tell the user setup succeeded.
+- If `overall: "green"`: confirm "setup verified — flywheel is healthy" and stop.
+
+If step 11 reported any Required failure, **skip** the doctor run (mirrors `runSetupAndVerify`'s `setup_unhealthy` verdict — no point running the deeper sweep when the install itself is incomplete).
