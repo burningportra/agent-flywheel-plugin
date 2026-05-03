@@ -129,4 +129,70 @@ describe("tender-daemon script", () => {
         expect(lines.some((line) => line.includes('"kind":"daemon_stopped"'))).toBe(true);
     });
 });
+// ─── 3ag — parsePaneStates schema strictness ──────────────────────────────
+//
+// Before 3ag: parsePaneStates walked every nested object and coerced any
+// string-valued top-level key (e.g. health_grade, recommendation, fleet_health)
+// into a fake pane entry. The events log filled with bogus
+// pane_state_changed entries where `pane` was a JSON key, not a real pane
+// ID. Fix: only iterate `parsed.panes[]` (or `parsed.agents[]`); never
+// iterate top-level keys.
+describe("parsePaneStates schema strictness (3ag)", () => {
+    it("ignores top-level scalar keys when no panes[] array is present", async () => {
+        const { parsePaneStates } = await loadDaemonModule();
+        const realNtmHealthPayload = JSON.stringify({
+            health_grade: "B",
+            fleet_health: "ok",
+            recommendation: "idle",
+            summary: "2 working / 4 idle",
+        });
+        expect(parsePaneStates(realNtmHealthPayload)).toEqual({});
+    });
+    it("iterates panes[] when the array carrier is present", async () => {
+        const { parsePaneStates } = await loadDaemonModule();
+        const payload = JSON.stringify({
+            health_grade: "B",
+            recommendation: "fan-out",
+            panes: [
+                { pane: "pane-0", state: "working" },
+                { name: "pane-1", status: "idle" },
+                { id: "pane-2", health: "ok" },
+            ],
+        });
+        expect(parsePaneStates(payload)).toEqual({
+            "pane-0": "working",
+            "pane-1": "idle",
+            "pane-2": "ok",
+        });
+    });
+    it("iterates agents[] as alternate carrier", async () => {
+        const { parsePaneStates } = await loadDaemonModule();
+        const payload = JSON.stringify({
+            agents: [{ pane: "pane-0", state: "working" }],
+        });
+        expect(parsePaneStates(payload)).toEqual({ "pane-0": "working" });
+    });
+    it("handles a top-level array of pane rows", async () => {
+        const { parsePaneStates } = await loadDaemonModule();
+        const payload = JSON.stringify([
+            { pane: "pane-0", state: "working" },
+            { pane: "pane-1", state: "idle" },
+        ]);
+        expect(parsePaneStates(payload)).toEqual({
+            "pane-0": "working",
+            "pane-1": "idle",
+        });
+    });
+    it("does not mistake numeric or non-pane top-level keys for panes", async () => {
+        const { parsePaneStates } = await loadDaemonModule();
+        // The exact malformed shape observed in the 2026-05-03 feedback:
+        // top-level keys "2", "3", and JSON literal-ish state strings.
+        const malformed = JSON.stringify({
+            "2": "{",
+            "3": "[",
+            health_grade: "unknown",
+        });
+        expect(parsePaneStates(malformed)).toEqual({});
+    });
+});
 //# sourceMappingURL=tender-daemon.test.js.map

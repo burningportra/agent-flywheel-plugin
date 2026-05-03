@@ -189,40 +189,73 @@ function parseRobotState(raw: string): string | null {
   return compact[0] ?? null;
 }
 
-function collectPaneStates(value: unknown, out: Record<string, string>): void {
-  if (Array.isArray(value)) {
-    for (const item of value) collectPaneStates(item, out);
-    return;
-  }
-  if (!value || typeof value !== "object") return;
-
-  const obj = value as Record<string, unknown>;
+/**
+ * Extract a `{pane, state}` pair from one pane-shaped object. Returns
+ * `null` when the shape doesn't match — we never coerce arbitrary
+ * top-level keys (`health_grade`, `recommendation`, ...) into pane IDs.
+ * That's the root cause of the bogus `pane_state_changed` events tracked
+ * in bead 3ag.
+ */
+function extractPaneEntry(obj: Record<string, unknown>): { pane: string; state: string } | null {
   const pane =
     (typeof obj.pane === "string" && obj.pane) ||
     (typeof obj.name === "string" && obj.name) ||
     (typeof obj.id === "string" && obj.id) ||
     null;
+  if (!pane) return null;
   const stateRaw =
     (typeof obj.state === "string" && obj.state) ||
     (typeof obj.status === "string" && obj.status) ||
     (typeof obj.health === "string" && obj.health) ||
     null;
+  if (!stateRaw) return null;
+  const state = normalizeState(stateRaw);
+  if (state.length === 0) return null;
+  return { pane, state };
+}
 
-  if (pane && stateRaw) {
-    const state = normalizeState(stateRaw);
-    if (state.length > 0) out[pane] = state;
+/**
+ * Collect pane states from an `ntm --robot-agent-health` JSON payload.
+ *
+ * Schema-strict (bead 3ag): only iterate the recognised pane carriers —
+ * `parsed.panes`, `parsed.agents`, or a top-level array of pane objects.
+ * Never iterate top-level scalar keys like `health_grade`, `fleet_health`,
+ * or `recommendation` as if they were pane IDs.
+ */
+function collectPaneStates(value: unknown, out: Record<string, string>): void {
+  if (value === null || value === undefined) return;
+
+  // Top-level array → each element is a pane object.
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const entry = extractPaneEntry(item as Record<string, unknown>);
+      if (entry) out[entry.pane] = entry.state;
+    }
+    return;
   }
 
-  const entries = Object.entries(obj);
-  for (const [key, nested] of entries) {
-    if (typeof nested === "string") {
-      const state = normalizeState(nested);
-      if (state.length > 0 && (ROBOT_STATES.has(state) || state.includes("idle") || state.includes("working"))) {
-        out[key] = state;
-      }
-      continue;
+  if (typeof value !== "object") return;
+
+  const obj = value as Record<string, unknown>;
+
+  // Object that is itself a pane row.
+  const direct = extractPaneEntry(obj);
+  if (direct) {
+    out[direct.pane] = direct.state;
+    return;
+  }
+
+  // Recognised pane carriers. Order matters: panes first (canonical), then
+  // agents (alternate name some ntm builds emit). Both must be arrays.
+  const carrierKeys = ["panes", "agents"] as const;
+  for (const key of carrierKeys) {
+    const carrier = obj[key];
+    if (Array.isArray(carrier)) {
+      collectPaneStates(carrier, out);
+      // Don't double-count; first matching carrier wins.
+      return;
     }
-    collectPaneStates(nested, out);
   }
 }
 
@@ -232,11 +265,16 @@ export function parsePaneStates(raw: string): Record<string, string> {
 
   try {
     const parsed = JSON.parse(trimmed);
+    // If the input parsed as JSON, trust the schema-strict pane collector —
+    // do NOT fall through to the line parser. The line parser is only for
+    // non-JSON `key: value` payloads, and applying it to a JSON string with
+    // no `panes[]` would let stray top-level keys leak in (the original
+    // 3ag bug).
     const out: Record<string, string> = {};
     collectPaneStates(parsed, out);
-    if (Object.keys(out).length > 0) return out;
+    return out;
   } catch {
-    // fall through to line parser
+    // not valid JSON — fall through to line parser
   }
 
   const states: Record<string, string> = {};

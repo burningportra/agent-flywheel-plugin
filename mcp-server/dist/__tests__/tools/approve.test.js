@@ -199,6 +199,7 @@ describe('runApprove', () => {
                 kind: 'beads_approved',
                 launchMode: 'sequential',
                 readyCount: 1,
+                stop_reason: 'manual_start',
                 activeBeadIds: ['bead-1'],
                 currentBeadId: 'bead-1',
                 convergence: {
@@ -261,6 +262,7 @@ describe('runApprove', () => {
                 kind: 'beads_approved',
                 launchMode: 'parallel',
                 readyCount: 2,
+                stop_reason: 'manual_start',
                 activeBeadIds: ['bead-1', 'bead-2'],
                 currentBeadId: 'bead-1',
                 convergence: {
