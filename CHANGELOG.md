@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.8] - 2026-05-03
+
+### Added
+
+- **"Set a goal" + "Pick up existing plan" elevated to top-level menu options on all three menu states (claude-orchestrator-1o4).** Both entry points were previously buried — operators had to type into the Other field or pre-load slash-command args. Now they're labeled `AskUserQuestion` rows on the fresh-start, open-beads-exist, and previous-session-exists menus. The "Pick up existing plan" row auto-detects `docs/plans/*.md` (sorted by mtime) and surfaces the top 3 paths in the printed block as copy-paste suggestions. New conditional-Recommended chain on fresh-start picks the headline option dynamically: existing plan → "Pick up existing plan (Recommended)", else vision docs → "Reality check (Recommended)", else greenfield → "Scan & discover (Recommended)". State-aware behavior: on previous-session-exists / open-beads-exist, "Set a goal" appends new beads to the existing set (no checkpoint discard); "Pick up existing plan" merges plan-derived beads into the current set with Step 5.5's coverage + dedup sweep handling overlap. Step 0e routing adds a path-shape detector to the Other row — typed input matching `docs/plans/` or ending in `.md` routes to "Pick up existing plan" instead of "Set a goal". Lint test (`mcp-server/src/__tests__/skills/start/menu-options.test.ts`, 15 assertions) guarantees both labels stay surfaced across all 3 variants.
+
 ## [3.11.7] - 2026-05-03
 
 ### Added
