@@ -228,6 +228,8 @@ Route the choice immediately: **Inspect first** → show `git worktree list --po
 
 ### 0d. Present the main menu
 
+**Plan detection (run before building the menu).** Glob `docs/plans/*.md` sorted by mtime descending; capture the top 3 as `RECENT_PLAN_PATHS` (relative paths). If none exist, set `RECENT_PLAN_PATHS = []`. This list is surfaced inline in the printed block whenever "Pick up existing plan" is shown so operators can copy-paste a path directly.
+
 Build the menu options dynamically based on detected state:
 
 **If a previous session exists** (checkpoint found with non-idle phase):
@@ -238,12 +240,19 @@ Print this block first (per the menu-visibility rule below):
 Primary entry points (active session: '<goal>' @ <phase>):
   • Auto-swarm          — in-flight resume with 4 pi + 2 cc swarm (Recommended)
   • Resume session      — continue manually (no swarm)
-  • Reality check       — gap-check vs vision via /reality-check-for-project
-  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
+  • Set a goal          — type a fresh goal in Other; appends to existing beads after drift confirm
+  • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps to bead creation
+
+Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
+  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
+  • <RECENT_PLAN_PATHS[1]>
+  • <RECENT_PLAN_PATHS[2]>
 
 More entry points (type the label into "Other" or run the slash command directly):
   • Work on beads       — refine / implement / inspect the open bead set
-  • New goal            — discard checkpoint and start over
+  • New goal            — discard checkpoint AND existing beads, start over
+  • Reality check       — gap-check vs vision via /reality-check-for-project
+  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
   • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
   • Research repo       — paste a GitHub URL → /flywheel-research
   • Audit               — /agent-flywheel:flywheel-audit
@@ -259,8 +268,8 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
-    { label: "Reality check", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" },
-    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel ideas, plan, or review the current bead set. Auto-routes to the right mode based on phase. ~20-30 min; needs ntm + 2 healthy CLIs" }
+    { label: "Set a goal", description: "Type a fresh goal in Other — appends to the current bead set after a drift confirmation. Does NOT discard the checkpoint" },
+    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers the plan via flywheel_plan and jumps straight to bead creation" }
   ],
   multiSelect: false
 }])
@@ -273,11 +282,18 @@ Print this block first (per the menu-visibility rule below):
 ```
 Primary entry points (<N> open beads):
   • Auto-swarm          — in-flight resume with 4 pi + 2 cc swarm (Recommended)
-  • Reality check       — gap-check vs vision via /reality-check-for-project
   • Work on beads       — refine / implement / inspect manually
-  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
+  • Set a goal          — type a fresh goal in Other; appends new beads to the current set
+  • Pick up existing plan — type a path to docs/plans/<file>.md in Other; merges into the current bead set
+
+Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
+  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
+  • <RECENT_PLAN_PATHS[1]>
+  • <RECENT_PLAN_PATHS[2]>
 
 More entry points (type the label into "Other" or run the slash command directly):
+  • Reality check       — gap-check vs vision via /reality-check-for-project
+  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
   • New goal            — discard the open beads and start over
   • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
   • Research repo       — paste a GitHub URL → /flywheel-research
@@ -293,9 +309,9 @@ AskUserQuestion(questions: [{
   header: "Start",
   options: [
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
-    { label: "Reality check", description: "Step back: gap-check actual implementation against AGENTS.md/README.md/plan vision using the reality-check skill, convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
-    { label: "Duel", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards — duel new ideas, the current plan, or steelman the open-bead set. Auto-routes by phase. ~20-30 min; needs ntm + 2 healthy CLIs" }
+    { label: "Set a goal", description: "Type a fresh goal in Other — appends new beads to the existing set without discarding them" },
+    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers the plan via flywheel_plan and merges generated beads into the current set" }
   ],
   multiSelect: false
 }])
@@ -309,12 +325,18 @@ Print this block first:
 
 ```
 Primary entry points:
-  • Reality check       — /reality-check-for-project gap analysis (Recommended when AGENTS.md/README.md exist)
+  • Set a goal          — type your goal in Other; runs /brainstorming if ambiguous, then flywheel_select
+  • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps straight to bead creation
   • Scan & discover     — profile the repo and surface improvement ideas
-  • Set a goal          — /brainstorming → flywheel_select → planning
-  • Research repo       — paste a GitHub URL → /flywheel-research
+  • Reality check       — /reality-check-for-project gap analysis
+
+Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
+  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
+  • <RECENT_PLAN_PATHS[1]>
+  • <RECENT_PLAN_PATHS[2]>
 
 More entry points (type the label into "Other" or run the slash command directly):
+  • Research repo       — paste a GitHub URL → /flywheel-research
   • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
   • Duel                — /agent-flywheel:flywheel-duel (adversarial 2-agent ideation)
   • Audit               — /agent-flywheel:flywheel-audit
@@ -330,16 +352,22 @@ AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Reality check (Recommended)", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" },
+    { label: "Set a goal", description: "Type the goal directly in Other — runs /brainstorming when ambiguous, then flywheel_select. The most direct path when you know what you want to build" },
+    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan and jumps to bead creation — skips brainstorming + scan" },
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities (greenfield default)" },
-    { label: "Set a goal", description: "I already know what I want to build" },
-    { label: "Research repo", description: "Paste a GitHub URL — deep-research it via /flywheel-research and optionally generate an integration plan with beads. Use Other to provide the URL" }
+    { label: "Reality check", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" }
   ],
   multiSelect: false
 }])
 ```
 
-**Conditional Recommendation:** if the repo lacks both `AGENTS.md` and `README.md` at root, demote "Reality check" out of the Recommended slot (no docs = no gap-vs-vision baseline) and promote "Scan & discover" to Recommended. Detect by `Glob` in 0b — record `HAS_VISION_DOCS = true|false` and use it to swap the `(Recommended)` suffix between rows. This keeps the menu honest on greenfield repos while making reality-check the obvious first move on any project that already has aspirational docs.
+**Conditional Recommendation (fresh-start menu only).** Pick the `(Recommended)` row dynamically from this priority chain:
+
+1. **`RECENT_PLAN_PATHS.length > 0`** → "Pick up existing plan (Recommended)" — a ready-to-go plan is the strongest available signal; the operator almost always wants to pick it up.
+2. **`HAS_VISION_DOCS === true`** (AGENTS.md or README.md at root, detected by Glob in 0b) → "Reality check (Recommended)" — vision docs exist; gap-check before adding more.
+3. **Otherwise (greenfield)** → "Scan & discover (Recommended)" — no docs, no plans; profile first.
+
+"Set a goal" is never auto-Recommended on the fresh-start menu; if the operator already knows their goal, they can pick it directly. This avoids the bias toward "type something" when the project already has structure to lean on.
 
 ### 0e. Route the user's choice
 
@@ -348,7 +376,7 @@ AskUserQuestion(questions: [{
 | Choice | Action |
 |--------|--------|
 | **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 pi + 2 cc; fall back to 4 cod only if Pi is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
-| **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed "More entry points" block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Simplify pass / Duel / Setup`. Open-beads-exist: `New goal / Simplify pass / Research repo / Audit / Setup`. Previous-session-exists: `Work on beads / New goal / Simplify pass / Research repo / Audit / Setup`. Route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches, treat the free-text as a custom goal and route to **Set a goal**. |
+| **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Research repo / Simplify pass / Duel / Audit / Setup / Quick fix / Auto-swarm`. Open-beads-exist: `Reality check / Duel / New goal / Simplify pass / Research repo / Audit / Setup`. Previous-session-exists: `Work on beads / New goal / Reality check / Duel / Simplify pass / Research repo / Audit / Setup`. **Special handling:** if the typed text starts with a path-like token (e.g. `docs/plans/`, ends in `.md`, or matches one of the surfaced `RECENT_PLAN_PATHS`), route as **Pick up existing plan** with the typed text as `<plan-path>`. Otherwise route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches AND it isn't path-shaped, treat the free-text as a custom goal and route to **Set a goal** with the typed text as `<goal>`. |
 | **Simplify pass** (a.k.a. Deslop pass) | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the canonical skill `/simplify-and-refactor-code-isomorphically` is the engine of every mode, with `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm` orchestrating around it. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove isomorphism preservation. |
 | **Duel** | Invoke `/agent-flywheel:flywheel-duel` (state-aware routing — picks `mode=ideas` for fresh starts, `mode=architecture` when a goal is selected but no plan exists, `mode=reliability\|security` when reviewing risky open beads). Pre-flight (MANDATORY): run `which ntm` + `which claude codex gemini 2>/dev/null` (real binaries behind the `cc/cod/gmi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) — need ntm + ≥2 of {claude, codex, gemini}; on failure, emit a one-line warning and surface a sub-menu offering `Deep (idea-wizard) / Triangulated / Cancel`. After the duel completes, parse `DUELING_WIZARDS_REPORT.md`, stamp `state.planSource = "duel"` (or the discovery equivalent so `_beads.md` Provenance block fires), and continue into the standard goal-selection or plan-approval flow per current phase. Do NOT skip the alignment check at Step 5.55 — duels surface contested decisions the alignment check exists to surface. |
 | **Reality check** | Read `skills/start/_reality_check.md` end-to-end and surface its depth-selection `AskUserQuestion` (Reality check only / Reality check + beads / Full pipeline). Do NOT pick a depth unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching section verbatim; the slash-named skill (`/reality-check-for-project`) is load-bearing. Phase 1 (the docs+code+gap-report prompt) typically takes 15–20 minutes — do NOT short-circuit it with a docs-only summary. Bead creation is `br`-only per `/beads-workflow`. |
@@ -356,7 +384,8 @@ AskUserQuestion(questions: [{
 | **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
-| **Set a goal** | Run `/brainstorming` to refine the goal, then **in the same turn** call `flywheel_select` (Step 4), read `_planning.md`, and run through Step 4.5 (Phase 0.5) and Step 5's `AskUserQuestion` without pausing for user input — see "Stay-in-turn rule" below |
+| **Set a goal** | Read the typed `<goal>` from the Other field. If empty, prompt for it via a follow-up `AskUserQuestion`. Then: run `/brainstorming` to refine the goal (skip when the goal is already concrete and ≤300 chars per the 0.preflight heuristics), and **in the same turn** call `flywheel_select` (Step 4), read `_planning.md`, and run through Step 4.5 (Phase 0.5) and Step 5's `AskUserQuestion` without pausing for user input — see "Stay-in-turn rule" below. **State-aware behavior:** on previous-session-exists, do NOT delete the checkpoint — append-mode (the new goal sits alongside the existing session). On open-beads-exist, the new beads merge into the existing set. On fresh-start, just proceed normally. |
+| **Pick up existing plan** | Read the typed `<plan-path>` from the Other field. Validate: it must exist on disk AND end in `.md`. If invalid, surface a follow-up `AskUserQuestion` listing `RECENT_PLAN_PATHS` as labeled options plus an Other field for a custom path. Once a valid path is in hand: call `flywheel_select` with a synthesized goal derived from the plan's first H1/H2 header (or the filename if no header), then call `flywheel_plan({ planFile: <plan-path> })`, then jump directly to Step 5.5 (bead creation — read `_beads.md` first). Skip Step 2 (profile) and Step 3 (discover) entirely — the plan already represents committed scope. **State-aware behavior:** on previous-session-exists, run the drift check (same one used by Resume session) before registering the new plan; if drift is severe, ask whether to discard the checkpoint first. On open-beads-exist, surface a confirmation that the plan's beads will merge into the existing set (no automatic dedup at this stage — Step 5.5's coverage + dedup sweep will handle it). On fresh-start, just proceed. |
 | **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
 | **Quick fix** | Invoke `/flywheel-fix` |
 | **Audit** | Invoke `/flywheel-audit` |
