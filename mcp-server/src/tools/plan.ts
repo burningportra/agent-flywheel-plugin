@@ -153,12 +153,24 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
     state.planDocument = planDocument;
     state.planRefinementRound = 0;
     state.phase = 'awaiting_plan_approval';
+    // Record planSource provenance. Explicit "picked-up-existing-plan" gates Step 5.45.
+    // mode==='duel' wins (handled later in the duel branch); otherwise honor args.source
+    // when supplied. Fresh brainstormed plans pass no source — leave it undefined so
+    // downstream code can default to the standard 5.5 path without a 5.45 prompt.
+    if (args.source === 'picked-up-existing-plan') {
+      state.planSource = 'picked-up-existing-plan';
+    }
     saveState(state);
+
+    const isPickedUp = state.planSource === 'picked-up-existing-plan';
+    const nextStepLine = isPickedUp
+      ? '**NEXT (Step 5.45): Surface the picked-up-plan menu (Validate / Approve / Refine / Scrap) before any bead creation. See `skills/start/SKILL.md` Step 5.45.**'
+      : '**NEXT: Call `flywheel_approve_beads` to review the plan and proceed to bead creation.**';
 
     return okResult(
       `**Plan loaded from \`${planDocument}\`.**
 
-**NEXT: Call \`flywheel_approve_beads\` to review the plan and proceed to bead creation.**
+${nextStepLine}
 
 Goal: "${goal}"${constraintsSummary}
 
@@ -167,6 +179,8 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`,
       {
         kind: 'plan_registered',
         source: 'plan_file',
+        planSource: state.planSource ?? null,
+        pickedUp: isPickedUp,
         goal,
         mode,
         planDocument,

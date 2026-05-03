@@ -139,6 +139,67 @@ describe('skills/start/SKILL.md — Step 0d menu options (claude-orchestrator-1o
       'expected Other row to mention docs/plans/ or .md as the path-shape signal',
     ).toBe(true);
   });
+
+  // ── Step 5.45 plan-stage menu (claude-orchestrator-ttk) ────────────────────
+
+  describe('Step 5.45 — picked-up-plan menu', () => {
+    it('Step 5.45 section exists and gates on picked-up-existing-plan source', () => {
+      expect(skillBody.includes('## Step 5.45'), 'expected `## Step 5.45` heading').toBe(true);
+      const sectionStart = skillBody.indexOf('## Step 5.45');
+      // End at the next ## heading.
+      const sectionEnd = skillBody.indexOf('\n## ', sectionStart + 1);
+      expect(sectionEnd, 'expected another ## section after Step 5.45').toBeGreaterThan(sectionStart);
+      const section = skillBody.slice(sectionStart, sectionEnd);
+      // Gating signal MUST mention the planSource enum value verbatim.
+      expect(
+        section.includes('picked-up-existing-plan'),
+        'Step 5.45 must gate on `state.planSource === "picked-up-existing-plan"`',
+      ).toBe(true);
+      // All four labeled options must be surfaced.
+      for (const label of ['Validate against code', 'Approve and bead-ify', 'Refine plan first', 'Scrap and restart']) {
+        expect(
+          section.includes(label),
+          `Step 5.45 menu missing labeled option "${label}"`,
+        ).toBe(true);
+      }
+    });
+
+    it('Step 0e Pick up existing plan handler passes source: "picked-up-existing-plan" to flywheel_plan', () => {
+      const pickRowMatch = skillBody.match(/\|\s*\*\*Pick up existing plan\*\*[\s\S]*?\n\|/);
+      expect(pickRowMatch).not.toBeNull();
+      const rowBody = pickRowMatch![0];
+      expect(
+        rowBody.includes('source: "picked-up-existing-plan"') ||
+          rowBody.includes("source: 'picked-up-existing-plan'"),
+        'Step 0e Pick-up handler must call flywheel_plan with source: "picked-up-existing-plan"',
+      ).toBe(true);
+      expect(
+        rowBody.includes('5.45'),
+        'Step 0e Pick-up handler must reference Step 5.45 (do NOT jump straight to 5.5)',
+      ).toBe(true);
+    });
+
+    it('Pick up existing plan descriptions in all 3 menu variants mention Step 5.45 / Validate', () => {
+      // Each variant's labeled-option description should advertise the validate menu so
+      // operators understand the picked-up flow does more than blind bead-ification.
+      const labelDescPattern = /\{\s*label:\s*"Pick up existing plan",\s*description:\s*"([^"]+)"/g;
+      const descriptions: string[] = [];
+      let match;
+      while ((match = labelDescPattern.exec(skillBody)) !== null) {
+        descriptions.push(match[1]);
+      }
+      expect(
+        descriptions.length,
+        'expected 3 "Pick up existing plan" labeled rows (one per menu variant)',
+      ).toBe(3);
+      for (const desc of descriptions) {
+        expect(
+          desc.includes('5.45') || desc.toLowerCase().includes('validate'),
+          `Pick-up description should mention Step 5.45 or Validate: "${desc}"`,
+        ).toBe(true);
+      }
+    });
+  });
 });
 
 function escapeRegex(s: string): string {

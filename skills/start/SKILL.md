@@ -269,7 +269,7 @@ AskUserQuestion(questions: [{
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends to the current bead set after a drift confirmation. Does NOT discard the checkpoint" },
-    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers the plan via flywheel_plan and jumps straight to bead creation" }
+    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps" }
   ],
   multiSelect: false
 }])
@@ -311,7 +311,7 @@ AskUserQuestion(questions: [{
     { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 pi + 2 cc swarm (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends new beads to the existing set without discarding them" },
-    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers the plan via flywheel_plan and merges generated beads into the current set" }
+    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then Step 5.45 surfaces (Validate / Approve / Refine / Scrap); validated gaps merge into the current bead set" }
   ],
   multiSelect: false
 }])
@@ -353,7 +353,7 @@ AskUserQuestion(questions: [{
   header: "Start",
   options: [
     { label: "Set a goal", description: "Type the goal directly in Other — runs /brainstorming when ambiguous, then flywheel_select. The most direct path when you know what you want to build" },
-    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan and jumps to bead creation — skips brainstorming + scan" },
+    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps. Skips brainstorming + scan" },
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities (greenfield default)" },
     { label: "Reality check", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" }
   ],
@@ -385,7 +385,7 @@ AskUserQuestion(questions: [{
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
 | **Set a goal** | Read the typed `<goal>` from the Other field. If empty, prompt for it via a follow-up `AskUserQuestion`. Then: run `/brainstorming` to refine the goal (skip when the goal is already concrete and ≤300 chars per the 0.preflight heuristics), and **in the same turn** call `flywheel_select` (Step 4), read `_planning.md`, and run through Step 4.5 (Phase 0.5) and Step 5's `AskUserQuestion` without pausing for user input — see "Stay-in-turn rule" below. **State-aware behavior:** on previous-session-exists, do NOT delete the checkpoint — append-mode (the new goal sits alongside the existing session). On open-beads-exist, the new beads merge into the existing set. On fresh-start, just proceed normally. |
-| **Pick up existing plan** | Read the typed `<plan-path>` from the Other field. Validate: it must exist on disk AND end in `.md`. If invalid, surface a follow-up `AskUserQuestion` listing `RECENT_PLAN_PATHS` as labeled options plus an Other field for a custom path. Once a valid path is in hand: call `flywheel_select` with a synthesized goal derived from the plan's first H1/H2 header (or the filename if no header), then call `flywheel_plan({ planFile: <plan-path> })`, then jump directly to Step 5.5 (bead creation — read `_beads.md` first). Skip Step 2 (profile) and Step 3 (discover) entirely — the plan already represents committed scope. **State-aware behavior:** on previous-session-exists, run the drift check (same one used by Resume session) before registering the new plan; if drift is severe, ask whether to discard the checkpoint first. On open-beads-exist, surface a confirmation that the plan's beads will merge into the existing set (no automatic dedup at this stage — Step 5.5's coverage + dedup sweep will handle it). On fresh-start, just proceed. |
+| **Pick up existing plan** | Read the typed `<plan-path>` from the Other field. Validate: it must exist on disk AND end in `.md`. If invalid, surface a follow-up `AskUserQuestion` listing `RECENT_PLAN_PATHS` as labeled options plus an Other field for a custom path. Once a valid path is in hand: call `flywheel_select` with a synthesized goal derived from the plan's first H1/H2 header (or the filename if no header), then call `flywheel_plan({ planFile: <plan-path>, source: "picked-up-existing-plan" })`. **Do NOT jump straight to Step 5.5** — the picked-up source signal triggers **Step 5.45** (the plan-stage menu) first. Skip Step 2 (profile) and Step 3 (discover) entirely — the plan already represents committed scope. **State-aware behavior:** on previous-session-exists, run the drift check (same one used by Resume session) before registering the new plan; if drift is severe, ask whether to discard the checkpoint first. On open-beads-exist, surface a confirmation that the plan's beads will merge into the existing set (no automatic dedup at this stage — Step 5.5's coverage + dedup sweep will handle it). On fresh-start, just proceed. |
 | **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
 | **Quick fix** | Invoke `/flywheel-fix` |
 | **Audit** | Invoke `/flywheel-audit` |
@@ -514,6 +514,84 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
   - **Step 7 (impl agents):** Skip STEP 0 (Agent Mail bootstrap) in agent prompts. Agents work without file reservations or messaging — the coordinator monitors via TaskOutput instead of inbox.
   - **Step 5 (deep plan):** Skip Agent Mail bootstrap for plan agents. Agents write plan files to disk; coordinator reads them directly.
 - If Agent Mail comes up mid-session, detect it on next parallel spawn and resume normal bootstrapping.
+
+## Step 5.45: Picked-up-plan stage menu (gated on `state.planSource === "picked-up-existing-plan"`)
+
+> **When to surface this.** ONLY after `flywheel_plan` returns with `state.planSource === "picked-up-existing-plan"` (set when the Step 0d "Pick up existing plan" route called `flywheel_plan({ planFile, source: "picked-up-existing-plan" })`). Plans coming from /brainstorming, mode=deep, mode=duel, or mode=standard skip this step entirely and flow straight to Step 5.5.
+>
+> **Why this exists.** A picked-up plan was written hours/days/weeks ago. Bits of it may already be implemented in HEAD. Bits may be stale relative to the current codebase. The default Step 5.5 bead-creation flow assumes the plan is fresh — beading every section blindly wastes work and produces stragglers that get auto-closed by `flywheel_verify_beads` later. Step 5.45 gives the operator four levers BEFORE the bead-set materializes.
+
+After `flywheel_plan` returns successfully (response contains `pickedUp: true`), surface:
+
+```
+AskUserQuestion(questions: [{
+  question: "Plan registered: '<plan-path>' (<chars> chars, last modified <relative-time>). What does this plan need?",
+  header: "Plan",
+  options: [
+    { label: "Validate against code (Recommended)", description: "Section-vs-file-vs-git-log diff: which plan sections are already implemented in HEAD? Bead-ify only the gaps. ~2-5 min" },
+    { label: "Approve and bead-ify", description: "Trust the plan as-is — go straight to Step 5.5 (coverage check + br create)" },
+    { label: "Refine plan first", description: "Open the plan for inline edits via /superpowers:writing-plans before bead-ifying. Re-enters this menu after refinement" },
+    { label: "Scrap and restart", description: "Discard this plan and return to Step 0d. Optionally appends a `## Retired` block to the plan file with today's date so future Pick-up runs skip it" }
+  ],
+  multiSelect: false
+}])
+```
+
+### Per-option routing
+
+#### "Validate against code" (Recommended)
+
+Run a section-vs-file analysis to identify which parts of the plan have already shipped:
+
+1. **Parse plan into sections.** Read `state.planDocument`. Split on `^##\s` and `^###\s` headers; each section becomes a `{ title, body, lineRange }` record.
+2. **Extract file claims per section.** For each section, scan the body for backtick-quoted paths (`` `mcp-server/src/foo.ts` ``), explicit "Create:" / "New file:" / "Modify:" directives, and bullet items mentioning paths. Build `<section> → [paths-claimed]`.
+3. **Match against git history.** For each claimed path:
+   - `git log --oneline --diff-filter=A -- <path>` — if non-empty, the file was ADDED at some point. New-file claims are satisfied.
+   - `git log --oneline -- <path>` — if non-empty, the file has commits. Modify claims are partially satisfied.
+   - `git log --oneline --grep="<bead-id-shape>"` for any bead IDs the plan section mentions (`claude-orchestrator-XXX`) — if matching commits exist, count it as fully done.
+   - Compare commit timestamps to the plan file's mtime: commits AFTER the plan was written are likely the implementation; commits BEFORE are pre-existing context the plan was written against.
+4. **Build a coverage table** of `<section> → done | partial | missing`:
+   - `done` — all claimed paths have post-mtime commits OR matching bead-id commits.
+   - `partial` — some paths have post-mtime commits, others don't.
+   - `missing` — no claimed paths show evidence of post-mtime work.
+5. **Surface the report and route the next action via `AskUserQuestion`:**
+
+   ```
+   AskUserQuestion(questions: [{
+     question: "Plan coverage: <D> done / <P> partial / <M> missing. <one-line summary of the gap>. What next?",
+     header: "Coverage",
+     options: [
+       { label: "Bead-ify gaps only (Recommended)", description: "Pre-filter the plan so Step 5.5 only sees the partial + missing sections. <P+M> beads expected" },
+       { label: "Bead-ify everything", description: "Ignore the coverage analysis and bead the full plan as-is" },
+       { label: "Retire the plan", description: "Coverage shows the plan is fully shipped — append `## Retired` block with today's date and return to Step 0d" },
+       { label: "Inspect first", description: "Show the per-section coverage breakdown, then re-prompt" }
+     ],
+     multiSelect: false
+   }])
+   ```
+
+   - **"Bead-ify gaps only"** → write a filtered plan to `docs/plans/<original-name>-gaps-<YYYY-MM-DD>.md` containing only the partial/missing sections. Re-call `flywheel_plan({ planFile: <gaps-plan>, source: "picked-up-existing-plan" })`? No — set `state.planDocument` to the gaps file directly, mark the picked-up signal as already-validated (so 5.45 doesn't re-fire), then proceed to Step 5.5.
+   - **"Bead-ify everything"** → proceed to Step 5.5 with the original plan unchanged.
+   - **"Retire the plan"** → append `## Retired\n\nValidated against HEAD on <YYYY-MM-DD>; all sections shipped.\n` to the plan file, clear `state.planDocument` and `state.planSource`, return to Step 0d.
+   - **"Inspect first"** → print the per-section table (one row per section: `<title> | <status> | <commits-found>`), then re-show this 4-option menu.
+
+#### "Approve and bead-ify"
+
+Skip validation. Jump directly to Step 5.5 (load `_beads.md`). The plan's beads materialize as if it had come from /brainstorming.
+
+#### "Refine plan first"
+
+1. Invoke `/superpowers:writing-plans` with the existing plan file as input. The skill returns a refined plan path (typically `docs/plans/<original-name>-refined-<YYYY-MM-DD>.md`).
+2. Re-call `flywheel_plan({ planFile: <refined-path>, source: "picked-up-existing-plan" })`.
+3. The 5.45 menu re-fires with the refined plan. The operator can pick Validate, Approve, Refine again, or Scrap.
+
+#### "Scrap and restart"
+
+1. Append `## Retired\n\nDiscarded by operator on <YYYY-MM-DD>; reason: scrapped during pick-up.\n` to the plan file (so future Pick-up runs skip it from the `RECENT_PLAN_PATHS` suggestions).
+2. Clear `state.planDocument`, `state.planSource`, `state.selectedGoal`.
+3. Jump back to Step 0d main menu.
+
+> **One-time gate.** Step 5.45 fires ONCE per `flywheel_plan` registration. After the operator picks any of the 4 options, set `state.planSource = undefined` (or `"picked-up-validated"` if you want to keep telemetry) so re-entering Step 5.5 from the same plan doesn't re-prompt. The Refine path is the only exception — it re-registers the plan with the picked-up source, so 5.45 fires again on the refined plan.
 
 ## Step 2: Scan and profile the repository
 

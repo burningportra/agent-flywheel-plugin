@@ -38,6 +38,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -156,6 +157,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -196,6 +198,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -239,6 +242,11 @@ export declare const TOOLS: ({
             };
             planContent: {
                 type: string;
+                description: string;
+            };
+            source: {
+                type: string;
+                enum: string[];
                 description: string;
             };
             goal?: undefined;
@@ -302,6 +310,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -354,6 +363,7 @@ export declare const TOOLS: ({
             ideas?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
@@ -396,6 +406,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -444,6 +455,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -501,6 +513,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -533,6 +546,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -575,6 +589,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -618,6 +633,7 @@ export declare const TOOLS: ({
             mode?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;
@@ -669,6 +685,7 @@ export declare const TOOLS: ({
             ideas?: undefined;
             planFile?: undefined;
             planContent?: undefined;
+            source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
             until_convergence_score?: undefined;

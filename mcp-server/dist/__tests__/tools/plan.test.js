@@ -125,6 +125,43 @@ describe('runPlan', () => {
             expect(state.planRefinementRound).toBe(0);
             expect(result.content[0].text).toContain('Plan loaded from');
         });
+        // ── claude-orchestrator-ttk: source="picked-up-existing-plan" gates Step 5.45 ──
+        it('records planSource="picked-up-existing-plan" when source arg is supplied', async () => {
+            const planPath = join(tmpDir, 'plan.md');
+            writeFileSync(planPath, '# Picked-up Plan\n');
+            const { ctx, state } = makeCtx({}, tmpDir);
+            const result = await runPlan(ctx, {
+                cwd: tmpDir,
+                planFile: 'plan.md',
+                source: 'picked-up-existing-plan',
+            });
+            expect(result.isError).toBeUndefined();
+            expect(state.planSource).toBe('picked-up-existing-plan');
+            expect(result.structuredContent).toMatchObject({
+                data: {
+                    kind: 'plan_registered',
+                    planSource: 'picked-up-existing-plan',
+                    pickedUp: true,
+                },
+            });
+            // Step 5.45 hint must appear in the user-facing text so the orchestrator
+            // doesn't blindly jump to flywheel_approve_beads.
+            expect(result.content[0].text).toContain('5.45');
+        });
+        it('does NOT set planSource when source arg is omitted (fresh plan path)', async () => {
+            const planPath = join(tmpDir, 'plan.md');
+            writeFileSync(planPath, '# Fresh Plan\n');
+            const { ctx, state } = makeCtx({}, tmpDir);
+            const result = await runPlan(ctx, { cwd: tmpDir, planFile: 'plan.md' });
+            expect(result.isError).toBeUndefined();
+            expect(state.planSource).toBeUndefined();
+            expect(result.structuredContent).toMatchObject({
+                data: { pickedUp: false },
+            });
+            // Default text path → flywheel_approve_beads, not 5.45.
+            expect(result.content[0].text).toContain('flywheel_approve_beads');
+            expect(result.content[0].text).not.toContain('5.45');
+        });
         it('returns error when planFile does not exist', async () => {
             const { ctx } = makeCtx({}, tmpDir);
             const result = await runPlan(ctx, { cwd: tmpDir, planFile: 'missing.md' });

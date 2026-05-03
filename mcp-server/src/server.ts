@@ -146,6 +146,11 @@ const PRIMARY_TOOLS = [
           type: 'string',
           description: 'Pre-synthesized plan content (inline). For large plans, write to disk first and use planFile instead to prevent stdio stalling.',
         },
+        source: {
+          type: 'string',
+          enum: ['picked-up-existing-plan'],
+          description: 'Provenance signal. Set to "picked-up-existing-plan" when registering a plan via the Step 0d "Pick up existing plan" route; this gates Step 5.45 (the Validate / Approve / Refine / Scrap menu) before bead creation. Omit for fresh plans coming out of /brainstorming, mode=deep, or mode=duel — those flow straight to Step 5.5.',
+        },
       },
       required: ['cwd'],
     },

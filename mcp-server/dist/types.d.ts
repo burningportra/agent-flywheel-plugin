@@ -386,8 +386,12 @@ export interface FlywheelState {
     planConvergenceScore?: number;
     /** Plan quality readiness score from the Plan Quality Oracle. */
     planReadinessScore?: unknown;
-    /** How the plan was generated. Drives downstream Provenance-block injection at bead-creation time. */
-    planSource?: "standard" | "deep" | "duel" | "planning-workflow" | "external";
+    /**
+     * How the plan arrived in this session. Drives:
+     *   - Provenance-block injection at bead-creation time (duel only).
+     *   - Step 5.45 plan-stage menu gating (only fires when "picked-up-existing-plan").
+     */
+    planSource?: "standard" | "deep" | "duel" | "planning-workflow" | "external" | "picked-up-existing-plan";
     /**
      * Persisted across phases so a session restart can resume from the last
      * completed phase rather than rerunning the full 7-phase pipeline.
@@ -497,6 +501,13 @@ export interface PlanArgs {
     mode?: "standard" | "deep" | "duel";
     planContent?: string;
     planFile?: string;
+    /**
+     * Provenance signal for the plan being registered. When set to
+     * "picked-up-existing-plan" (the Step 0d "Pick up existing plan" route),
+     * Step 5.45 surfaces a plan-stage menu (Validate / Approve / Refine / Scrap)
+     * before bead creation. Otherwise the plan flows straight to Step 5.5.
+     */
+    source?: "picked-up-existing-plan";
 }
 export interface ApproveArgs {
     cwd: string;
