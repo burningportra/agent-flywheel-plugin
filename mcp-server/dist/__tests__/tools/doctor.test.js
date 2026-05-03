@@ -740,9 +740,11 @@ describe('runDoctorChecks criticalFails wiring', () => {
         const cwd = makeTmpCwd();
         try {
             const stubs = allGreenStubs().filter((s) => !s.match('br', ['--version']));
+            // Make every br invocation fail (both --version and --help fallback)
+            // so the check goes red rather than green-via-fallback.
             stubs.push({
-                match: (cmd, args) => cmd === 'br' && args[0] === '--version',
-                respond: { result: { code: 127, stdout: '', stderr: 'br: not found' } },
+                match: (cmd) => cmd === 'br',
+                respond: { throws: new Error('br: command not found') },
             });
             const report = await runDoctorChecks(cwd, undefined, {
                 exec: makeStubbedExec(stubs),

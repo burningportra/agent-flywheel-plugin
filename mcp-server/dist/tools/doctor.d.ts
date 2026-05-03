@@ -106,10 +106,14 @@ export declare function countRescueEntriesWithin30Days(raw: string, nowMs: numbe
  */
 export declare function readManifestVersion(path: string): string | null;
 /**
- * Resolve the installed plugin manifest path. Probes
- * `$CLAUDE_PLUGIN_ROOT/plugin.json` first; falls back to the standard
- * `~/.claude/plugins/agent-flywheel/plugin.json` location. Returns `null`
- * if neither exists.
+ * Resolve the installed plugin manifest path via the active platform
+ * adapter. For Claude Code, that probes `$CLAUDE_PLUGIN_ROOT/plugin.json`
+ * first then `~/.claude/plugins/agent-flywheel/plugin.json`. Returns `null`
+ * when nothing is installed, so the version-triple check skips that side.
+ *
+ * Re-exported for tests that want the concrete default; callers should
+ * usually go through {@link HookAdapter.installedPluginManifestPath} via
+ * {@link getAdapter}.
  */
 export declare function resolveInstalledPluginManifest(): string | null;
 /**

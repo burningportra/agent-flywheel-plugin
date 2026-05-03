@@ -22,6 +22,7 @@ import { createLogger } from '../logger.js';
 import { errMsg } from '../errors.js';
 import { readTelemetry } from '../telemetry.js';
 import { detectCliCapabilities, describeCapabilities, } from '../adapters/model-diversity.js';
+import { getAdapter } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 const log = createLogger('doctor');
 // ─── Constants ────────────────────────────────────────────────────────────
@@ -33,11 +34,13 @@ const TOTAL_SWEEP_BUDGET_MS = 10_000;
 const MAX_CONCURRENCY = 6;
 /** Worktree dirs older than this and already merged to main are stale. */
 const STALE_WORKTREE_AGE_MS = 3 * 24 * 60 * 60 * 1000;
-const WORKTREE_SCAN_ROOTS = [
-    { relativePath: join('.claude', 'worktrees'), label: '.claude/worktrees', mode: 'direct' },
-    { relativePath: join('.ntm', 'worktrees'), label: '.ntm/worktrees', mode: 'gitfile' },
-    { relativePath: join('.pi-flywheel', 'worktrees'), label: '.pi-flywheel/worktrees', mode: 'direct' },
-];
+/**
+ * Worktree scan roots are now sourced from the active {@link HookAdapter}
+ * rather than hardcoded here. The default Claude Code adapter still emits the
+ * historical three roots (`.claude/worktrees`, `.ntm/worktrees`,
+ * `.pi-flywheel/worktrees`); future Codex/Gemini adapters override.
+ */
+const WORKTREE_SCAN_ROOTS = getAdapter().worktreeScanRoots();
 /** Canonical check names. Exported for test assertions. */
 export const DOCTOR_CHECK_NAMES = [
     'mcp_connectivity',
@@ -1347,20 +1350,17 @@ export function readManifestVersion(path) {
     }
 }
 /**
- * Resolve the installed plugin manifest path. Probes
- * `$CLAUDE_PLUGIN_ROOT/plugin.json` first; falls back to the standard
- * `~/.claude/plugins/agent-flywheel/plugin.json` location. Returns `null`
- * if neither exists.
+ * Resolve the installed plugin manifest path via the active platform
+ * adapter. For Claude Code, that probes `$CLAUDE_PLUGIN_ROOT/plugin.json`
+ * first then `~/.claude/plugins/agent-flywheel/plugin.json`. Returns `null`
+ * when nothing is installed, so the version-triple check skips that side.
+ *
+ * Re-exported for tests that want the concrete default; callers should
+ * usually go through {@link HookAdapter.installedPluginManifestPath} via
+ * {@link getAdapter}.
  */
 export function resolveInstalledPluginManifest() {
-    const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
-    if (envRoot) {
-        const p = join(envRoot, 'plugin.json');
-        if (existsSync(p))
-            return p;
-    }
-    const fallback = join(homedir(), '.claude', 'plugins', 'agent-flywheel', 'plugin.json');
-    return existsSync(fallback) ? fallback : null;
+    return getAdapter().installedPluginManifestPath();
 }
 /**
  * Diff a manifest version triple. Returns the set of label pairs that
