@@ -95,7 +95,16 @@ function sha256Hex(data: string | Buffer): string {
 
 // --- bundle path resolution ----------------------------------------------
 
-function findRepoRootFromHere(): string {
+/**
+ * Locate the plugin install directory (the folder containing `mcp-server/`
+ * and `skills/`). Honors `CLAUDE_PLUGIN_ROOT` env var (set by Claude Code at
+ * launch time) so the bundle/disk lookups resolve against the plugin's own
+ * install — NOT the calling project's cwd. Falls back to walking up from
+ * `import.meta.url`, then to `process.cwd()`.
+ */
+function findPluginInstallRoot(): string {
+  const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  if (envRoot && envRoot.length > 0) return path.resolve(envRoot);
   const here = path.dirname(fileURLToPath(import.meta.url));
   let dir = here;
   for (let i = 0; i < 8; i++) {
@@ -109,12 +118,12 @@ function findRepoRootFromHere(): string {
 
 function resolveBundlePath(opts?: { repoRoot?: string; bundlePath?: string }): string {
   if (opts?.bundlePath) return path.resolve(opts.bundlePath);
-  const root = opts?.repoRoot ?? findRepoRootFromHere();
+  const root = opts?.repoRoot ?? findPluginInstallRoot();
   return path.join(root, DEFAULT_BUNDLE_REL);
 }
 
 function resolveRepoRoot(opts?: { repoRoot?: string }): string {
-  return opts?.repoRoot ?? findRepoRootFromHere();
+  return opts?.repoRoot ?? findPluginInstallRoot();
 }
 
 // --- frontmatter parser (matches T12 — defensive YAML subset) ------------

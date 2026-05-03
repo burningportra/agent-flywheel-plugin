@@ -36,7 +36,10 @@ export async function runGetSkill(ctx, args) {
     }
     const { name } = parsed.data;
     try {
-        const result = await getSkill(name, { repoRoot: ctx.cwd });
+        // NOTE: do NOT pass ctx.cwd as repoRoot. The caller's project directory
+        // has no skills bundle. Skills always resolve from the plugin install
+        // root (CLAUDE_PLUGIN_ROOT or auto-detected from this module's location).
+        const result = await getSkill(name);
         const structured = {
             tool: "flywheel_get_skill",
             version: 1,
