@@ -518,6 +518,38 @@ function makeCwdResolutionErrorResult(
   });
 }
 
+/**
+ * One-shot orch_* deprecation warning emitter (bead 3ef).
+ *
+ * Fires the first time any given orch_* alias is invoked in a server's
+ * lifetime. Subsequent calls are no-ops so a long-running server doesn't
+ * spam its log with the same warning every minute.
+ *
+ * Exported for tests; internal callers should NOT depend on this directly.
+ */
+const _orchDeprecationWarned = new Set<string>();
+
+export function emitOrchDeprecationWarning(toolName: string): boolean {
+  if (!toolName.startsWith('orch_')) return false;
+  if (_orchDeprecationWarned.has(toolName)) return false;
+  _orchDeprecationWarned.add(toolName);
+  const canonical = toolName.replace(/^orch_/, 'flywheel_');
+  log.warn('orch_* MCP namespace deprecated', {
+    code: 'orch_deprecation_warned',
+    deprecated: toolName,
+    use: canonical,
+    removedIn: 'v4.0',
+    migration:
+      `Replace ${toolName}({...}) with ${canonical}({...}) — same input/output shape.`,
+  });
+  return true;
+}
+
+/** Test-only — reset the once-per-tool warning ledger. */
+export function _resetOrchDeprecationLedger(): void {
+  _orchDeprecationWarned.clear();
+}
+
 export function createCallToolHandler(dependencies: CallToolHandlerDependencies) {
   const runners: Record<FlywheelToolName, ToolRunner> = {
     ...DEFAULT_RUNNERS,
@@ -580,6 +612,14 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
           content: [{ type: 'text', text: `No runner registered for tool: ${name}` }],
           isError: true,
         };
+      }
+      // Deprecation warning for orch_* aliases (bead 3ef). The aliases keep
+      // working — this is the deprecation window, not removal — but each
+      // call logs once per tool so operators see they should migrate to
+      // flywheel_*. Removed in v4.0; tracked via `orch_deprecation_warned`
+      // so the log stays one-shot per tool per server lifetime.
+      if (name.startsWith('orch_')) {
+        emitOrchDeprecationWarning(name);
       }
       return await runner(ctx, runnerArgs);
     } catch (err: unknown) {

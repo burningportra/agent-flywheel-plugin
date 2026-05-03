@@ -1,8 +1,8 @@
 import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
-import { createCallToolHandler, TOOLS } from '../server.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { _resetOrchDeprecationLedger, createCallToolHandler, emitOrchDeprecationWarning, TOOLS, } from '../server.js';
 import { createInitialState } from '../types.js';
 import { FlywheelError } from '../errors.js';
 function makeTmpCwd() {
@@ -341,6 +341,64 @@ describe('createCallToolHandler', () => {
                 },
             },
         });
+    });
+});
+// ─── 3ef — orch_* deprecation warning ─────────────────────────────────────
+//
+// Every orch_<name> MCP call should emit a one-shot deprecation warning
+// pointing at the canonical flywheel_<name>. Subsequent calls to the same
+// orch_ alias must NOT re-fire — long-running servers shouldn't spam the
+// log. Removed in v4.0.
+describe('orch_* deprecation warning (3ef)', () => {
+    beforeEach(() => {
+        _resetOrchDeprecationLedger();
+    });
+    afterEach(() => {
+        _resetOrchDeprecationLedger();
+    });
+    it('emitOrchDeprecationWarning returns true the first time and false thereafter', () => {
+        expect(emitOrchDeprecationWarning('orch_approve_beads')).toBe(true);
+        expect(emitOrchDeprecationWarning('orch_approve_beads')).toBe(false);
+        expect(emitOrchDeprecationWarning('orch_approve_beads')).toBe(false);
+    });
+    it('tracks each orch_ alias independently', () => {
+        expect(emitOrchDeprecationWarning('orch_plan')).toBe(true);
+        expect(emitOrchDeprecationWarning('orch_review')).toBe(true);
+        expect(emitOrchDeprecationWarning('orch_plan')).toBe(false);
+    });
+    it('returns false for non-orch tool names (no false positive)', () => {
+        expect(emitOrchDeprecationWarning('flywheel_plan')).toBe(false);
+        expect(emitOrchDeprecationWarning('something_else')).toBe(false);
+    });
+    it('createCallToolHandler emits the warning when an orch_ alias dispatches', async () => {
+        const cwd = process.cwd();
+        const runner = vi.fn().mockResolvedValue({
+            content: [{ type: 'text', text: 'ok' }],
+            structuredContent: { tool: 'orch_plan', status: 'ok' },
+        });
+        // Spy on stderr — the logger writes JSON lines to stderr at warn level.
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        const handler = createCallToolHandler({
+            makeExec: vi.fn(() => vi.fn()),
+            loadState: vi.fn(() => createInitialState()),
+            saveState: vi.fn(),
+            clearState: vi.fn(),
+            runners: {
+                // Cast — orch_ keys widen the runner map at runtime even though they
+                // aren't in the FlywheelToolName union.
+                orch_plan: runner,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            },
+        });
+        await handler({
+            params: { name: 'orch_plan', arguments: { cwd } },
+        });
+        expect(runner).toHaveBeenCalledTimes(1);
+        const stderrText = stderrSpy.mock.calls.map((c) => String(c[0])).join('');
+        stderrSpy.mockRestore();
+        expect(stderrText).toContain('orch_deprecation_warned');
+        expect(stderrText).toContain('orch_plan');
+        expect(stderrText).toContain('flywheel_plan');
     });
 });
 //# sourceMappingURL=server.test.js.map

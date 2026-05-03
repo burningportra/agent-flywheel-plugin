@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.7] - 2026-05-03
+
+### Added
+
+- **Convergence-bound polish loop on `flywheel_approve_beads` (claude-orchestrator-2p5).** New optional params `until_convergence_score` (default 0.85) and `max_rounds` (default 5) auto-stop the polish loop when it has actually converged, instead of letting operators ad-hoc judge "good enough." Every terminal transition surfaces a discrete `stop_reason` field: `convergence_reached | max_rounds_hit | manual_start | manual_reject`. Builds on **claude-orchestrator-3rt**, which made convergence the headline polish metric (Quality 76 / Convergence 94 instead of Quality alone — the operator-misleading P1.1 fix).
+- **`orphan_tender_daemons` doctor check (claude-orchestrator-n3a).** New `mcp-server/src/checks/orphan-tender-daemons.ts` module — runs `ps -eo pid,command`, filters for `node tender-daemon.js`, parses `--session`, cross-refs against `tmux list-sessions`, and emits a yellow row when the session no longer exists. Hint pre-bakes a `kill -TERM <pid> [<pid>...]` one-shot. Auto-remediation intentionally not wired (destructive); operator must confirm. Fixes the long-running zombie tender-daemon problem from the 2026-05-03 feedback session.
+- **Looper auto-teardown after 5 consecutive empty ticks (claude-orchestrator-2ox).** Pure prose change to the canonical in-flight prompt (`skills/start/_inflight_prompt.md`). Tracks consecutive ticks where the bead graph is fully drained (open=ready=in_progress=0); resets the moment any new bead lands; fires a one-shot `PushNotification` recommending `CronDelete <id>` + `kill -TERM $TENDER_PID` + `ntm kill-session $SESSION` at 5 ticks (~20 min) and stops scheduling. Operator can override with "keep going" within 30 min.
+
+### Fixed
+
+- **`flywheel_get_skill` resolves bundle/disk from the plugin install root, not caller cwd (claude-orchestrator-c9l).** P0 — fresh installs of v3.11.6 returned "not found in bundle or on disk" for every skill, breaking the documented MCP-first recovery path. Root cause: the tool was passing `ctx.cwd` (the calling project) as `repoRoot`, so bundle/disk lookups searched `<project>/mcp-server/dist/skills.bundle.json` and `<project>/skills/` — neither exists in arbitrary projects. Fix: route both lookups through new `findPluginInstallRoot()`, which honors the standard `CLAUDE_PLUGIN_ROOT` env (set by Claude Code at launch) and falls back to walking up from this module's location.
+- **Tender-daemon pane parser is schema-strict (claude-orchestrator-3ag).** P1.2 — the JSON walker was iterating every nested object and coercing top-level scalar strings (`health_grade`, `recommendation`, `fleet_health`) into fake pane entries, filling the events log with bogus `pane_state_changed` rows where `pane` was a JSON key, not a real pane ID. Now only iterates the recognised carriers (`parsed.panes[]`, `parsed.agents[]`, or a top-level array). Stops falling through to the line parser when JSON parsed successfully but had no panes (the line parser was re-mis-matching JSON syntax).
+- **`flywheel_approve_beads` headline metric (claude-orchestrator-3rt).** P0 / P1.1 — the displayed bead-quality score is a "find 3 weakest" heuristic that plateaus at 76/76/76 across rounds while the actual `convergence.score` climbs to ≥0.9. Now renders `Convergence X / Quality Y` as the unified headline (or `Quality Y` alone when convergence isn't yet computed); 3-weakest list demoted to a footnote.
+
+### Changed
+
+- **`orch_*` MCP namespace deprecated; use `flywheel_*` (claude-orchestrator-3ef).** Every `orch_<name>` call now logs a one-shot deprecation warning (`code: orch_deprecation_warned`) including the canonical `flywheel_<name>` replacement and a copy-paste migration string. The aliases keep working through the deprecation window — they will be **removed in v4.0**. Migration is mechanical: replace `orch_<name>({...})` with `flywheel_<name>({...})` — same input/output shape.
+
+### Documented (upstream coordination)
+
+These three beads were closed without code changes because they live in repos outside agent-flywheel. Each landed a design note under `docs/upstream-asks/`:
+
+- **claude-orchestrator-e4m** — Eager-load core `flywheel_*` MCP tools. Verified the published Claude Code plugin manifest schema has no field for marking MCP tools as eager-loaded; tool deferral is a Claude Code platform decision. Doc proposes 3 acceptable shapes.
+- **claude-orchestrator-1wg** — `ntm assign --strategy=dependency` filters out Pi/Cod panes. Spawning `4pi + 2cc` produces 6 panes but only the 2 CC are picked up by the strategy; Pi/Cod panes self-claim ~60s later.
+- **claude-orchestrator-2fn** — Agent Mail `recovery: degraded_read_only` is a false alarm; the flag tracks the forensics replica, not the live mailbox.
+
 ## [3.11.6] - 2026-05-03
 
 ### Added

@@ -690,6 +690,9 @@ export declare const TOOLS: ({
     };
 })[];
 export declare function validateToolArgs(toolName: string, args: Record<string, unknown>): ToolValidationError | null;
+export declare function emitOrchDeprecationWarning(toolName: string): boolean;
+/** Test-only — reset the once-per-tool warning ledger. */
+export declare function _resetOrchDeprecationLedger(): void;
 export declare function createCallToolHandler(dependencies: CallToolHandlerDependencies): (request: {
     params: {
         name: string;
