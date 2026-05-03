@@ -42,6 +42,12 @@ export const DoctorReportSchema = z.object({
     version: z.literal(1),
     cwd: z.string(),
     overall: DoctorCheckSeveritySchema,
+    /**
+     * Count of red-severity checks. Exit code = 1 iff `criticalFails > 0`.
+     * Yellow checks never gate. Mirrors context-mode's doctor counter
+     * (context-mode/src/cli.ts ~L350-L495).
+     */
+    criticalFails: z.number().int().nonnegative().default(0),
     partial: z.boolean().default(false),
     checks: z.array(DoctorCheckSchema),
     elapsedMs: z.number().int().nonnegative(),

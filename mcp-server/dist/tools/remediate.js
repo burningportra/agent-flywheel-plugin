@@ -41,6 +41,7 @@ export const REMEDIATION_REGISTRY = {
     swarm_model_ratio: null,
     codex_config_compat: null,
     rescues_last_30d: null,
+    npm_marketplace_version_drift: null,
 };
 export function assertExhaustive(_) {
     throw new Error('Non-exhaustive registry');

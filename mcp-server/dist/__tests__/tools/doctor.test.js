@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runDoctorChecks, computeOverallSeverity, DOCTOR_CHECK_NAMES, parseCodexConfigTopLevelModel, isCodexIncompatibleModel, countLocalTelemetryRescuesWithin30Days, } from '../../tools/doctor.js';
+import { runDoctorChecks, computeOverallSeverity, countCriticalFails, diffVersionTriple, readManifestVersion, DOCTOR_CHECK_NAMES, parseCodexConfigTopLevelModel, isCodexIncompatibleModel, countLocalTelemetryRescuesWithin30Days, } from '../../tools/doctor.js';
 // ─── Shared helpers ───────────────────────────────────────────────────────
 const DAY_MS = 24 * 60 * 60 * 1000;
 function makeTmpCwd() {
@@ -705,6 +705,227 @@ describe('codex_config_compat (integrated)', () => {
         }
         finally {
             cleanup(cwd);
+        }
+    });
+});
+// ─── countCriticalFails + criticalFails wiring ─────────────────────────────
+describe('countCriticalFails', () => {
+    const mk = (sev) => ({
+        name: 'x',
+        severity: sev,
+        message: '',
+    });
+    it('counts only red-severity rows', () => {
+        expect(countCriticalFails([mk('green'), mk('yellow'), mk('green')])).toBe(0);
+        expect(countCriticalFails([mk('red'), mk('yellow'), mk('red')])).toBe(2);
+        expect(countCriticalFails([])).toBe(0);
+    });
+});
+describe('runDoctorChecks criticalFails wiring', () => {
+    it('all-green sweep produces criticalFails=0 and overall=green', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+            });
+            expect(report.criticalFails).toBe(0);
+            expect(report.overall).toBe('green');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('absent required binary bumps criticalFails, gates overall=red', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const stubs = allGreenStubs().filter((s) => !s.match('br', ['--version']));
+            stubs.push({
+                match: (cmd, args) => cmd === 'br' && args[0] === '--version',
+                respond: { result: { code: 127, stdout: '', stderr: 'br: not found' } },
+            });
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(stubs),
+                codexConfigPath: null,
+            });
+            expect(report.criticalFails).toBeGreaterThan(0);
+            expect(report.overall).toBe('red');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
+// ─── version-triple drift check ────────────────────────────────────────────
+describe('diffVersionTriple', () => {
+    it('returns empty when all three match', () => {
+        expect(diffVersionTriple({ local: '1.0.0', marketplace: '1.0.0', installed: '1.0.0' })).toEqual([]);
+    });
+    it('flags every disagreeing pair', () => {
+        const drift = diffVersionTriple({
+            local: '1.0.0',
+            marketplace: '1.0.1',
+            installed: '0.9.0',
+        });
+        expect(drift).toHaveLength(3);
+        expect(drift[0]).toContain('local(1.0.0)');
+        expect(drift[0]).toContain('marketplace(1.0.1)');
+    });
+    it('skips pairs where one side is null', () => {
+        const drift = diffVersionTriple({
+            local: '1.0.0',
+            marketplace: null,
+            installed: '0.9.0',
+        });
+        expect(drift).toEqual(['local(1.0.0)↔installed(0.9.0)']);
+    });
+});
+describe('readManifestVersion', () => {
+    it('returns the version string when present', () => {
+        const cwd = makeTmpCwd();
+        try {
+            const path = join(cwd, 'pkg.json');
+            writeFileSync(path, JSON.stringify({ name: 'x', version: '2.3.4' }));
+            expect(readManifestVersion(path)).toBe('2.3.4');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('returns null on missing file', () => {
+        expect(readManifestVersion('/nonexistent/path/pkg.json')).toBeNull();
+    });
+    it('returns null on missing version field', () => {
+        const cwd = makeTmpCwd();
+        try {
+            const path = join(cwd, 'pkg.json');
+            writeFileSync(path, JSON.stringify({ name: 'x' }));
+            expect(readManifestVersion(path)).toBeNull();
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('returns null on malformed JSON without throwing', () => {
+        const cwd = makeTmpCwd();
+        try {
+            const path = join(cwd, 'pkg.json');
+            writeFileSync(path, '{ not json');
+            expect(readManifestVersion(path)).toBeNull();
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
+describe('npm_marketplace_version_drift check', () => {
+    function setupRepo(cwd, versions) {
+        if (versions.local) {
+            writeFileSync(join(cwd, 'mcp-server', 'package.json'), JSON.stringify({ name: 'agent-flywheel-mcp', version: versions.local }));
+        }
+        if (versions.marketplace) {
+            mkdirSync(join(cwd, '.claude-plugin'), { recursive: true });
+            writeFileSync(join(cwd, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'agent-flywheel', version: versions.marketplace }));
+        }
+    }
+    it('green when local + marketplace versions match (installed skipped)', async () => {
+        const cwd = makeTmpCwd();
+        setupRepo(cwd, { local: '3.11.5', marketplace: '3.11.5' });
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                installedPluginManifestPath: null,
+            });
+            const check = report.checks.find((c) => c.name === 'npm_marketplace_version_drift');
+            expect(check.severity).toBe('green');
+            expect(check.message).toContain('aligned');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('yellow when local and marketplace diverge (warn-only, criticalFails unaffected)', async () => {
+        const cwd = makeTmpCwd();
+        setupRepo(cwd, { local: '3.11.5', marketplace: '3.10.0' });
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                installedPluginManifestPath: null,
+            });
+            const check = report.checks.find((c) => c.name === 'npm_marketplace_version_drift');
+            expect(check.severity).toBe('yellow');
+            expect(check.message).toContain('drift');
+            expect(check.message).toContain('3.11.5');
+            expect(check.message).toContain('3.10.0');
+            expect(check.hint).toContain('/flywheel-setup');
+            expect(report.criticalFails).toBe(0);
+            expect(report.overall).toBe('yellow');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('green-skipped when no local manifest present (synthetic cwd)', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                installedPluginManifestPath: null,
+                marketplaceManifestPath: null,
+            });
+            const check = report.checks.find((c) => c.name === 'npm_marketplace_version_drift');
+            expect(check.severity).toBe('green');
+            expect(check.message).toContain('not applicable');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('treats unreadable installed manifest as null (skips that side, no warning)', async () => {
+        const cwd = makeTmpCwd();
+        setupRepo(cwd, { local: '3.11.5', marketplace: '3.11.5' });
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                installedPluginManifestPath: join(cwd, 'no-such-file.json'),
+            });
+            const check = report.checks.find((c) => c.name === 'npm_marketplace_version_drift');
+            expect(check.severity).toBe('green');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
+// ─── renderDoctorReport (clack-prompts) ────────────────────────────────────
+describe('renderDoctorReport (clack/picocolors)', () => {
+    it('returns criticalFails as the exit-code value', async () => {
+        const { renderDoctorReport } = await import('../../tools/doctor-render.js');
+        const greenReport = {
+            version: 1,
+            cwd: '/tmp',
+            overall: 'green',
+            criticalFails: 0,
+            partial: false,
+            checks: [{ name: 'a', severity: 'green', message: 'ok' }],
+            elapsedMs: 5,
+            timestamp: '2026-05-03T00:00:00.000Z',
+        };
+        const redReport = { ...greenReport, overall: 'red', criticalFails: 2 };
+        // Suppress clack output during tests so the test runner stays quiet.
+        const stdoutWrite = process.stdout.write.bind(process.stdout);
+        const noop = (() => true);
+        process.stdout.write = noop;
+        try {
+            expect(renderDoctorReport(greenReport)).toBe(0);
+            expect(renderDoctorReport(redReport)).toBe(2);
+        }
+        finally {
+            process.stdout.write = stdoutWrite;
         }
     });
 });

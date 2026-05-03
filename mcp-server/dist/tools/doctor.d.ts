@@ -14,7 +14,7 @@
 import { type ExecFn } from '../exec.js';
 import type { DoctorCheck, DoctorCheckSeverity, DoctorReport, ErrorCodeTelemetry } from '../types.js';
 /** Canonical check names. Exported for test assertions. */
-export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "rescues_last_30d"];
+export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "rescues_last_30d", "npm_marketplace_version_drift"];
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
 export interface DoctorOptions {
     /** Override per-check timeout (ms). */
@@ -30,6 +30,13 @@ export interface DoctorOptions {
     /** Override path to ~/.codex/config.toml (tests). Pass a fixture path or
      * `null` to skip reading. Defaults to `~/.codex/config.toml`. */
     codexConfigPath?: string | null;
+    /** Override path to the marketplace plugin manifest (tests). Defaults to
+     * `<cwd>/.claude-plugin/plugin.json`. Pass `null` to treat as missing. */
+    marketplaceManifestPath?: string | null;
+    /** Override path to the installed plugin cache manifest (tests). When
+     * undefined, the check probes `$CLAUDE_PLUGIN_ROOT/plugin.json` if set,
+     * else `~/.claude/plugins/<name>/plugin.json`. Pass `null` to skip. */
+    installedPluginManifestPath?: string | null;
 }
 /**
  * Run all 11 health checks in parallel. Never throws.
@@ -38,6 +45,15 @@ export interface DoctorOptions {
  * `partial: true`, empty `checks`, `overall: 'red'`, `elapsedMs: 0`.
  */
 export declare function runDoctorChecks(cwd: string, signal?: AbortSignal, options?: DoctorOptions): Promise<DoctorReport>;
+/**
+ * Count of red-severity checks. The exit code of the slash-command CLI is
+ * `1` iff this is > 0; yellow checks never gate.
+ *
+ * Mirrors context-mode/src/cli.ts's `criticalFails` accumulator. Centralizes
+ * the previously ad-hoc severity counting so callers (and tests) can rely on
+ * a single number.
+ */
+export declare function countCriticalFails(checks: DoctorCheck[]): number;
 /**
  * Reduce a list of checks to a single overall severity.
  * - red if any check is red
@@ -84,4 +100,26 @@ export declare function countLocalTelemetryRescuesWithin30Days(telemetry: ErrorC
  * Exported for test access.
  */
 export declare function countRescueEntriesWithin30Days(raw: string, nowMs: number): number;
+/**
+ * Read a JSON manifest's `version` field. Returns `null` if the file is
+ * missing, unreadable, or the field is absent/non-string. Never throws.
+ */
+export declare function readManifestVersion(path: string): string | null;
+/**
+ * Resolve the installed plugin manifest path. Probes
+ * `$CLAUDE_PLUGIN_ROOT/plugin.json` first; falls back to the standard
+ * `~/.claude/plugins/agent-flywheel/plugin.json` location. Returns `null`
+ * if neither exists.
+ */
+export declare function resolveInstalledPluginManifest(): string | null;
+/**
+ * Diff a manifest version triple. Returns the set of label pairs that
+ * disagree (e.g. `['local↔marketplace', 'local↔installed']`). Pure — used
+ * by the check probe and by tests.
+ */
+export declare function diffVersionTriple(triple: {
+    local: string | null;
+    marketplace: string | null;
+    installed: string | null;
+}): string[];
 //# sourceMappingURL=doctor.d.ts.map

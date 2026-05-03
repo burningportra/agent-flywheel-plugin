@@ -60,6 +60,10 @@ export const DOCTOR_CHECK_NAMES = [
     'codex_config_compat',
     // Codex-rescue handoff observability (bead `agent-flywheel-plugin-1qn`).
     'rescues_last_30d',
+    // Version-triple drift across mcp-server/package.json,
+    // .claude-plugin/plugin.json, and the installed plugin cache.
+    // Warn-only; recommends `/flywheel-setup` as the fix.
+    'npm_marketplace_version_drift',
 ];
 // ─── Actionable hints ─────────────────────────────────────────────────────
 // DoctorCheck.hint must be a human-readable remediation sentence, not an
@@ -73,6 +77,7 @@ const CLI_NOT_AVAILABLE_HINT = 'Install the missing CLI and ensure it is on $PAT
 const EXEC_TIMEOUT_HINT = 'The probe exceeded its per-check timeout (default 2s). Re-run with a larger `perCheckTimeoutMs`, or investigate why the CLI is slow.';
 const POSTMORTEM_CHECKPOINT_STALE_HINT = 'Clear the stale checkpoint with `/flywheel-stop`, or resume it with `/start` once you have confirmed the recorded goal still applies.';
 const CODEX_CONFIG_GPT5_HINT = 'Comment out the `model = "..."` line in ~/.codex/config.toml. The codex-companion app-server path uses OpenAI API auth and rejects gpt-5*/gpt-5-codex on ChatGPT-account auth even though `codex exec` accepts them. Removing the override lets the app-server pick its built-in default.';
+const VERSION_DRIFT_HINT = 'Run `/flywheel-setup` (or `cd mcp-server && npm run version-sync`) to align the manifests. Warn-only — drift does not block the run.';
 /**
  * Run all 11 health checks in parallel. Never throws.
  *
@@ -93,6 +98,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             version: 1,
             cwd,
             overall: 'red',
+            criticalFails: 0,
             partial: true,
             checks: [],
             elapsedMs: 0,
@@ -143,6 +149,10 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             ? join(homedir(), '.codex', 'config.toml')
             : options.codexConfigPath),
         () => checkRescuesLast30d(exec, cwd, combined, perCheckTimeoutMs, now),
+        () => checkVersionTriple(cwd, combined, now, {
+            installedManifestPath: options.installedPluginManifestPath,
+            marketplaceManifestPath: options.marketplaceManifestPath,
+        }),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -194,15 +204,40 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
     const externallyAborted = signal?.aborted === true;
     const budgetExceeded = combined.aborted && !externallyAborted && elapsedMs >= totalBudgetMs;
     const partial = externallyAborted || budgetExceeded;
+    const criticalFails = countCriticalFails(checks);
     return {
         version: 1,
         cwd,
-        overall: computeOverallSeverity(checks),
+        overall: severityFromCounts(checks, criticalFails),
+        criticalFails,
         partial,
         checks,
         elapsedMs,
         timestamp,
     };
+}
+/**
+ * Count of red-severity checks. The exit code of the slash-command CLI is
+ * `1` iff this is > 0; yellow checks never gate.
+ *
+ * Mirrors context-mode/src/cli.ts's `criticalFails` accumulator. Centralizes
+ * the previously ad-hoc severity counting so callers (and tests) can rely on
+ * a single number.
+ */
+export function countCriticalFails(checks) {
+    return checks.reduce((n, c) => (c.severity === 'red' ? n + 1 : n), 0);
+}
+/**
+ * Derive overall severity from the criticalFails counter and the presence of
+ * any yellow row. Equivalent to `computeOverallSeverity` but parameterized
+ * on the precomputed counter so callers don't double-walk the array.
+ */
+function severityFromCounts(checks, criticalFails) {
+    if (criticalFails > 0)
+        return 'red';
+    if (checks.some((c) => c.severity === 'yellow'))
+        return 'yellow';
+    return 'green';
 }
 /**
  * Reduce a list of checks to a single overall severity.
@@ -1296,5 +1331,101 @@ async function isCommitOnMain(exec, cwd, signal, timeout, head) {
     catch {
         return false;
     }
+}
+/**
+ * Read a JSON manifest's `version` field. Returns `null` if the file is
+ * missing, unreadable, or the field is absent/non-string. Never throws.
+ */
+export function readManifestVersion(path) {
+    try {
+        const raw = readFileSync(path, 'utf8');
+        const parsed = JSON.parse(raw);
+        return typeof parsed.version === 'string' ? parsed.version : null;
+    }
+    catch {
+        return null;
+    }
+}
+/**
+ * Resolve the installed plugin manifest path. Probes
+ * `$CLAUDE_PLUGIN_ROOT/plugin.json` first; falls back to the standard
+ * `~/.claude/plugins/agent-flywheel/plugin.json` location. Returns `null`
+ * if neither exists.
+ */
+export function resolveInstalledPluginManifest() {
+    const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
+    if (envRoot) {
+        const p = join(envRoot, 'plugin.json');
+        if (existsSync(p))
+            return p;
+    }
+    const fallback = join(homedir(), '.claude', 'plugins', 'agent-flywheel', 'plugin.json');
+    return existsSync(fallback) ? fallback : null;
+}
+/**
+ * Diff a manifest version triple. Returns the set of label pairs that
+ * disagree (e.g. `['local↔marketplace', 'local↔installed']`). Pure — used
+ * by the check probe and by tests.
+ */
+export function diffVersionTriple(triple) {
+    const drift = [];
+    const { local, marketplace, installed } = triple;
+    if (local && marketplace && local !== marketplace) {
+        drift.push(`local(${local})↔marketplace(${marketplace})`);
+    }
+    if (local && installed && local !== installed) {
+        drift.push(`local(${local})↔installed(${installed})`);
+    }
+    if (marketplace && installed && marketplace !== installed) {
+        drift.push(`marketplace(${marketplace})↔installed(${installed})`);
+    }
+    return drift;
+}
+async function checkVersionTriple(cwd, signal, now, opts) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('npm_marketplace_version_drift');
+    const localPath = join(cwd, 'mcp-server', 'package.json');
+    const marketplacePath = opts.marketplaceManifestPath === null
+        ? null
+        : opts.marketplaceManifestPath ?? join(cwd, '.claude-plugin', 'plugin.json');
+    const installedPath = opts.installedManifestPath === null
+        ? null
+        : opts.installedManifestPath ?? resolveInstalledPluginManifest();
+    const local = readManifestVersion(localPath);
+    const marketplace = marketplacePath ? readManifestVersion(marketplacePath) : null;
+    const installed = installedPath ? readManifestVersion(installedPath) : null;
+    // If we can't read the local manifest at all, the cwd isn't a flywheel
+    // checkout — skip the comparison rather than synthesize a warning. Other
+    // checks (dist_drift, mcp_connectivity) flag a broken repo.
+    if (!local) {
+        return {
+            name: 'npm_marketplace_version_drift',
+            severity: 'green',
+            message: `version triple not applicable (no mcp-server/package.json under ${cwd})`,
+            durationMs: now() - start,
+        };
+    }
+    const drift = diffVersionTriple({ local, marketplace, installed });
+    if (drift.length === 0) {
+        const seen = [
+            `local=${local}`,
+            marketplace ? `marketplace=${marketplace}` : 'marketplace=missing',
+            installed ? `installed=${installed}` : 'installed=missing',
+        ].join(' ');
+        return {
+            name: 'npm_marketplace_version_drift',
+            severity: 'green',
+            message: `versions aligned (${seen})`,
+            durationMs: now() - start,
+        };
+    }
+    return {
+        name: 'npm_marketplace_version_drift',
+        severity: 'yellow',
+        message: `manifest version drift: ${drift.join(', ')}`,
+        hint: VERSION_DRIFT_HINT,
+        durationMs: now() - start,
+    };
 }
 //# sourceMappingURL=doctor.js.map

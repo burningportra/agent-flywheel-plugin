@@ -22,6 +22,7 @@ export declare const RemediateInputSchema: z.ZodObject<{
         swarm_model_ratio: "swarm_model_ratio";
         codex_config_compat: "codex_config_compat";
         rescues_last_30d: "rescues_last_30d";
+        npm_marketplace_version_drift: "npm_marketplace_version_drift";
     }>;
     autoConfirm: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
     mode: z.ZodDefault<z.ZodOptional<z.ZodEnum<{

@@ -593,6 +593,7 @@ export declare const DoctorReportSchema: z.ZodObject<{
         yellow: "yellow";
         red: "red";
     }>;
+    criticalFails: z.ZodDefault<z.ZodNumber>;
     partial: z.ZodDefault<z.ZodBoolean>;
     checks: z.ZodArray<z.ZodObject<{
         name: z.ZodString;

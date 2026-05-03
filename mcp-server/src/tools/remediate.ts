@@ -86,6 +86,7 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   swarm_model_ratio: null,
   codex_config_compat: null,
   rescues_last_30d: null,
+  npm_marketplace_version_drift: null,
 };
 
 export function assertExhaustive(_: never): never {

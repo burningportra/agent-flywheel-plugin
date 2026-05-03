@@ -17,9 +17,11 @@
     "lint:skill:update-manifest": "tsx scripts/lint-skill.ts --update-manifest"
   },
   "dependencies": {
+    "@clack/prompts": "^0.7.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@sinclair/typebox": "^0.34.0",
     "execa": "^9.0.0",
+    "picocolors": "^1.1.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
