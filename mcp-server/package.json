@@ -14,7 +14,9 @@
     "lint:skill": "tsx scripts/lint-skill.ts --file ../skills/start/SKILL.md --baseline .lintskill-baseline.json",
     "lint:skill:json": "tsx scripts/lint-skill.ts --file ../skills/start/SKILL.md --ci --format json",
     "lint:skill:update-baseline": "tsx scripts/lint-skill.ts --file ../skills/start/SKILL.md --update-baseline --baseline .lintskill-baseline.json",
-    "lint:skill:update-manifest": "tsx scripts/lint-skill.ts --update-manifest"
+    "lint:skill:update-manifest": "tsx scripts/lint-skill.ts --update-manifest",
+    "version-sync": "node scripts/version-sync.mjs",
+    "version-sync:check": "node scripts/version-sync.mjs --check"
   },
   "dependencies": {
     "@clack/prompts": "^0.7.0",

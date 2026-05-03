@@ -1,0 +1,31 @@
+{
+  "//": "Manifests synchronized by `npm run version-sync`. Source of truth is mcp-server/package.json unless --version is passed. Paths are relative to the repo root.",
+  "manifests": [
+    {
+      "path": "mcp-server/package.json",
+      "kind": "json",
+      "isSource": true
+    },
+    {
+      "path": ".claude-plugin/plugin.json",
+      "kind": "json"
+    },
+    {
+      "path": ".claude-plugin/marketplace.json",
+      "kind": "json",
+      "//": "Top-level manifest has no `version` field today; included so future schema changes are picked up automatically.",
+      "optional": true
+    }
+  ],
+  "readme": [
+    {
+      "path": "README.md",
+      "//": "Opt-in via --readme flag. Pattern matches v3.11.5 / Version 3.11.5 / agent-flywheel@3.11.5 / vX.Y.Z badges. Best-effort regex sweep.",
+      "patterns": [
+        "(v)\\d+\\.\\d+\\.\\d+",
+        "(Version )\\d+\\.\\d+\\.\\d+",
+        "(agent-flywheel@)\\d+\\.\\d+\\.\\d+"
+      ]
+    }
+  ]
+}
