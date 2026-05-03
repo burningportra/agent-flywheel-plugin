@@ -97,6 +97,15 @@ export function allGreenStubs() {
             match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
             respond: ok('/usr/local/bin/gemini'),
         },
+        // Orphan tender-daemons (n3a) — no daemons running → green.
+        {
+            match: (cmd, args) => cmd === 'ps' && args[0] === '-eo',
+            respond: ok(''),
+        },
+        {
+            match: (cmd, args) => cmd === 'tmux' && args[0] === 'list-sessions',
+            respond: ok(''),
+        },
     ];
 }
 /**
