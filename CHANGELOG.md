@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.9] - 2026-05-03
+
+### Added
+
+- **Step 5.45 picked-up-plan menu (claude-orchestrator-ttk).** Completes the "Pick up existing plan" flow shipped in v3.11.8 (claude-orchestrator-1o4 / P1.5). Picked-up plans were previously dumped into the standard bead-creation flow that assumes the plan is fresh — wasting work on sections that already shipped. New `state.planSource = "picked-up-existing-plan"` (set by the Step 0d "Pick up existing plan" route via `flywheel_plan({ planFile, source: "picked-up-existing-plan" })`) gates a four-option menu before any `br create` fires:
+
+  - **Validate against code (Recommended)** — section-vs-file-vs-git-log diff: parse the plan into sections, extract claimed file paths, cross-reference `git log --diff-filter=A` for new-file claims and post-mtime commits for modify claims, build a `done | partial | missing` coverage table, and surface a follow-up menu so the operator can bead-ify only the gaps (not the full plan). Algorithm specified in `skills/start/SKILL.md` Step 5.45 prose; the orchestrator drives it (no TS automation needed).
+  - **Approve and bead-ify** — current behavior; trust the plan and jump to Step 5.5.
+  - **Refine plan first** — loop through `/superpowers:writing-plans` and re-fire 5.45 on the refined plan.
+  - **Scrap and restart** — append `## Retired\n\nDiscarded by operator on <YYYY-MM-DD>...\n` to the plan file (so future Pick-up runs skip it from `RECENT_PLAN_PATHS` suggestions), clear state, return to Step 0d.
+
+  Plans coming from /brainstorming, mode=deep, mode=duel, or mode=standard skip Step 5.45 entirely (no regression on fresh-plan paths). The new `flywheel_plan` `source` arg is opt-in; omitting it leaves `state.planSource` undefined and routes straight to Step 5.5 as before. `runPlan` returns a `pickedUp: boolean` field on `structuredContent.data` plus a Step-5.45 hint in the user-facing text so the orchestrator doesn't blindly call `flywheel_approve_beads`. Pick-up row descriptions in all 3 menu variants updated to mention the validate menu so operators know what's coming.
+
+  Tests: +5 (3 lint assertions in `menu-options.test.ts` covering Step 5.45 section + label coverage + Step 0e source-arg passing; 2 unit tests in `plan.test.ts` covering picked-up-records-state + omitting-source-leaves-state-undefined). 126 files, 1673 passing.
+
 ## [3.11.8] - 2026-05-03
 
 ### Added
