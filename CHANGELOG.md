@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.6] - 2026-05-03
+
+### Added
+
+- **`/flywheel-doctor` clack render path + version-detection triple + criticalFails counter (claude-orchestrator-cj2).** Borrows context-mode patterns B+C+D. The doctor MCP tool keeps its JSON contract unchanged, but the slash-command output path now renders a colored `[x]/[ ]/[-]/[*]` checklist via `@clack/prompts` + `picocolors` instead of a JSON dump. New check `npm_marketplace_version_drift` compares local `mcp-server/package.json`, marketplace manifest, and installed plugin cache version — warns on divergence and recommends `/flywheel-setup` as the fix. Severity tracking formalized into a `criticalFails: number` field on the report; `overall` derived from it (`criticalFails > 0 → red`, warnings only → yellow, otherwise green).
+- **`HookAdapter` contract + `ClaudeCodeAdapter` scaffolding (claude-orchestrator-2ur).** Borrows context-mode pattern A. New interface in `mcp-server/src/adapters/HookAdapter.ts` with `validateHooks()`, `configureAllHooks()`, `setHookPermissions()`, `checkPluginRegistration()`, `updatePluginRegistry()`, `getInstalledVersion()`. `ClaudeCodeAdapter` implements it against the existing `.claude/settings.json` flow; `detect.ts` returns the platform name from env introspection; `getAdapter(detectPlatform())` is the dispatch seam. `flywheel_doctor` and `flywheel_setup` refactored to dispatch through the adapter — zero behavior change for Claude Code users today, but adding Gemini CLI / Codex / OpenCode / Cursor support is now a single new file plus one entry in `getAdapter`.
+- **Manifest `version-sync` script (claude-orchestrator-32e).** Borrows context-mode pattern F. New `mcp-server/scripts/version-sync.mjs` walks a configurable list of manifests and brings every `version` field into alignment with `mcp-server/package.json` (or an explicit `--version <semver>`). `npm run version-sync` does the bump; `npm run version-sync:check` exits non-zero with a diff report when any manifest is out of sync (intended for CI / pre-commit gating). Eliminates the multi-manifest drift that bit us in v3.5.4 → v3.6.2 (the slash-command-vs-SKILL.md drift bug). This release was bumped using the new script — eating our own dogfood.
+- **`/flywheel-setup` auto-pairs with `/flywheel-doctor` (claude-orchestrator-3jv).** Borrows context-mode pattern E. After setup's success path completes, `runSetupAndVerify` invokes the in-process doctor handler and renders the result inline using the new `renderDoctorReport` helper (from cj2). The user no longer has to manually run `/flywheel-doctor` to verify setup actually fixed anything — the verification is automatic and recommended fixes (if any) are surfaced in the same response. If setup itself fails, doctor is skipped (mirroring the existing `setup_unhealthy` verdict).
+
+### Tests
+
+- **+33 tests** (1589 → 1622 passing across 124 test files). Each bead landed with companion test changes: doctor.test.ts (clack render, version-triple, criticalFails branches), ClaudeCodeAdapter.test.ts (validateHooks, checkPluginRegistration, updatePluginRegistry round-trip), version-sync.test.ts (sync + check modes against fixture manifests), setup.test.ts (`runSetupAndVerify` integration, doctor-report inclusion in success response).
+
+### Background
+
+- Patterns sourced from a focused research pass on [`mksglu/context-mode`](https://github.com/mksglu/context-mode) — see `docs/research/context-mode-explore.md` for the full breakdown of `ctx upgrade` and `ctx doctor` mechanics, plus the patterns explicitly NOT borrowed (git-clone-per-upgrade, forced native rebuilds, mandatory `npm install -g`).
+- 9 follow-up beads filed under tag `flywheel-feedback` (priorities P0 → P2) covering operator-feedback gaps from a prior 50-bead swarm session — see `br list` for the surgical fixes (P1.1 → P3.2). Three architectural concerns documented separately at `docs/design/2026-05-03-flywheel-architectural-design-pass.md` for design-pass discussion before any further skill-edit churn.
+
 ## [3.11.5] - 2026-05-02
 
 ### Changed
