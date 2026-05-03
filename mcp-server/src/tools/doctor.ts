@@ -31,6 +31,7 @@ import {
 import { getAdapter } from '../adapters/platform/index.js';
 import type { HookAdapter, WorktreeScanRoot } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
+import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
 import type {
   DoctorCheck,
   DoctorCheckSeverity,
@@ -85,6 +86,9 @@ export const DOCTOR_CHECK_NAMES = [
   // .claude-plugin/plugin.json, and the installed plugin cache.
   // Warn-only; recommends `/flywheel-setup` as the fix.
   'npm_marketplace_version_drift',
+  // Orphan tender-daemons (bead n3a) — node tender-daemon.js processes whose
+  // --session no longer exists in tmux. Yellow + suggests `kill -TERM`.
+  'orphan_tender_daemons',
 ] as const;
 
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
@@ -232,6 +236,7 @@ export async function runDoctorChecks(
         installedManifestPath: options.installedPluginManifestPath,
         marketplaceManifestPath: options.marketplaceManifestPath,
       }),
+    () => checkOrphanTenderDaemons(exec, cwd, combined, perCheckTimeoutMs, now),
   ];
 
   const wrapped = checkFns.map((fn, idx) =>

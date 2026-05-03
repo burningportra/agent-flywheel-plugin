@@ -14,7 +14,7 @@
 import { type ExecFn } from '../exec.js';
 import type { DoctorCheck, DoctorCheckSeverity, DoctorReport, ErrorCodeTelemetry } from '../types.js';
 /** Canonical check names. Exported for test assertions. */
-export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "rescues_last_30d", "npm_marketplace_version_drift"];
+export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "rescues_last_30d", "npm_marketplace_version_drift", "orphan_tender_daemons"];
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
 export interface DoctorOptions {
     /** Override per-check timeout (ms). */

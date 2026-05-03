@@ -24,6 +24,7 @@ import { readTelemetry } from '../telemetry.js';
 import { detectCliCapabilities, describeCapabilities, } from '../adapters/model-diversity.js';
 import { getAdapter } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
+import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
 const log = createLogger('doctor');
 // ─── Constants ────────────────────────────────────────────────────────────
 /** Per-check exec timeout (ms). */
@@ -67,6 +68,9 @@ export const DOCTOR_CHECK_NAMES = [
     // .claude-plugin/plugin.json, and the installed plugin cache.
     // Warn-only; recommends `/flywheel-setup` as the fix.
     'npm_marketplace_version_drift',
+    // Orphan tender-daemons (bead n3a) — node tender-daemon.js processes whose
+    // --session no longer exists in tmux. Yellow + suggests `kill -TERM`.
+    'orphan_tender_daemons',
 ];
 // ─── Actionable hints ─────────────────────────────────────────────────────
 // DoctorCheck.hint must be a human-readable remediation sentence, not an
@@ -156,6 +160,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             installedManifestPath: options.installedPluginManifestPath,
             marketplaceManifestPath: options.marketplaceManifestPath,
         }),
+        () => checkOrphanTenderDaemons(exec, cwd, combined, perCheckTimeoutMs, now),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {

@@ -87,6 +87,9 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   codex_config_compat: null,
   rescues_last_30d: null,
   npm_marketplace_version_drift: null,
+  // n3a — auto-remediation not offered: killing tender-daemons is destructive
+  // and operator-driven (see hint with explicit `kill -TERM <pid>`).
+  orphan_tender_daemons: null,
 };
 
 export function assertExhaustive(_: never): never {
