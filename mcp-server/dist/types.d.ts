@@ -502,7 +502,19 @@ export interface ApproveArgs {
     cwd: string;
     action: "start" | "polish" | "reject" | "advanced" | "git-diff-review";
     advancedAction?: string;
+    /** P2.4 / 2p5 — convergence threshold above which a polish call returns
+     * stop_reason="convergence_reached" instead of scheduling another round.
+     * Default 0.85. */
+    until_convergence_score?: number;
+    /** P2.4 / 2p5 — round cap; when state.polishRound >= max_rounds the call
+     * returns stop_reason="max_rounds_hit" instead of scheduling more rounds.
+     * Default 5. */
+    max_rounds?: number;
 }
+/** P2.4 / 2p5 — explicit reason a polish loop terminated. Surfaced in the
+ * approve_beads response so operators don't have to infer "did we converge
+ * or did we hit the cap?" from text. */
+export type ApproveStopReason = "convergence_reached" | "max_rounds_hit" | "manual_start" | "manual_reject";
 /**
  * Review modes (bead agent-flywheel-plugin-f0j): dispatch the same reviewer
  * personas into four human-shaped workflows. The flag propagates into the

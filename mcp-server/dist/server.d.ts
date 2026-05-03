@@ -40,6 +40,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -156,6 +158,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -194,6 +198,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -240,6 +246,8 @@ export declare const TOOLS: ({
             ideas?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -275,6 +283,17 @@ export declare const TOOLS: ({
             advancedAction: {
                 type: string;
                 enum: string[];
+                description: string;
+            };
+            until_convergence_score: {
+                type: string;
+                minimum: number;
+                maximum: number;
+                description: string;
+            };
+            max_rounds: {
+                type: string;
+                minimum: number;
                 description: string;
             };
             goal?: undefined;
@@ -336,6 +355,8 @@ export declare const TOOLS: ({
             planFile?: undefined;
             planContent?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadIds?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
@@ -377,6 +398,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             closedBeadIds?: undefined;
@@ -423,6 +446,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -478,6 +503,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -508,6 +535,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -548,6 +577,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -589,6 +620,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
@@ -638,6 +671,8 @@ export declare const TOOLS: ({
             planContent?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;

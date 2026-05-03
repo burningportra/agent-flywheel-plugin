@@ -238,6 +238,7 @@ describe('runApprove', () => {
         kind: 'beads_approved',
         launchMode: 'sequential',
         readyCount: 1,
+        stop_reason: 'manual_start',
         activeBeadIds: ['bead-1'],
         currentBeadId: 'bead-1',
         convergence: {
@@ -309,6 +310,7 @@ describe('runApprove', () => {
         kind: 'beads_approved',
         launchMode: 'parallel',
         readyCount: 2,
+        stop_reason: 'manual_start',
         activeBeadIds: ['bead-1', 'bead-2'],
         currentBeadId: 'bead-1',
         convergence: {
@@ -820,5 +822,88 @@ describe('runApprove', () => {
 
     releaseBeadMutex(key);
     _resetForTest();
+  });
+});
+
+// ─── P2.4 / 2p5 — polish bounds + stop_reason ─────────────────────────────
+//
+// flywheel_approve_beads now auto-stops the polish loop when convergence
+// crosses the threshold OR when state.polishRound hits max_rounds. Every
+// terminal transition surfaces a `stop_reason` field so callers can decide
+// programmatically whether to start, reject, or override with a higher cap.
+
+describe('flywheel_approve_beads polish bounds (2p5)', () => {
+  let runApprove2p5: Awaited<ReturnType<typeof importApprove>>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    runApprove2p5 = await importApprove();
+  });
+
+  it('returns stop_reason="manual_reject" when action=reject', async () => {
+    const { ctx } = makeCtx({}, makeExecCalls([makeBead()]));
+    const result = await runApprove2p5(ctx, { cwd: '/fake/cwd', action: 'reject' });
+    const sc = result.structuredContent as any;
+    expect(sc.data.stop_reason).toBe('manual_reject');
+  });
+
+  it('returns stop_reason="manual_start" when action=start', async () => {
+    const { ctx } = makeCtx({}, makeExecCalls([makeBead()]));
+    const result = await runApprove2p5(ctx, { cwd: '/fake/cwd', action: 'start' });
+    const sc = result.structuredContent as any;
+    expect(sc.data.stop_reason).toBe('manual_start');
+  });
+
+  it('returns stop_reason="convergence_reached" when convergence ≥ until_convergence_score', async () => {
+    // Seed enough polish history for computeConvergenceScore to fire AND
+    // produce a high score: 3 rounds, last two with 0 changes, output sizes
+    // stable → convergence trends to 1.0.
+    const { ctx } = makeCtx(
+      {
+        polishRound: 4,
+        polishChanges: [3, 0, 0, 0],
+        polishOutputSizes: [1000, 1100, 1100, 1100],
+      },
+      makeExecCalls([makeBead()]),
+    );
+    const result = await runApprove2p5(ctx, {
+      cwd: '/fake/cwd',
+      action: 'polish',
+      until_convergence_score: 0.5,
+    });
+    const sc = result.structuredContent as any;
+    expect(sc.data.kind).toBe('polish_bound_reached');
+    expect(sc.data.stop_reason).toBe('convergence_reached');
+    expect(sc.data.convergenceScore).toBeGreaterThanOrEqual(0.5);
+    expect(result.content[0].text).toMatch(/Polish bound reached/);
+  });
+
+  it('returns stop_reason="max_rounds_hit" when polishRound ≥ max_rounds', async () => {
+    const { ctx } = makeCtx(
+      {
+        polishRound: 5,
+        polishChanges: [3, 2, 1],
+      },
+      makeExecCalls([makeBead()]),
+    );
+    const result = await runApprove2p5(ctx, {
+      cwd: '/fake/cwd',
+      action: 'polish',
+      max_rounds: 5,
+    });
+    const sc = result.structuredContent as any;
+    expect(sc.data.kind).toBe('polish_bound_reached');
+    expect(sc.data.stop_reason).toBe('max_rounds_hit');
+    expect(result.content[0].text).toMatch(/round 5 ≥ max_rounds 5/);
+  });
+
+  it('does NOT bound when polish round < max_rounds AND convergence is undefined', async () => {
+    // Default state — no polish history → convergence undefined, round=0
+    // → polish round runs normally.
+    const { ctx } = makeCtx({}, makeExecCalls([makeBead()]));
+    const result = await runApprove2p5(ctx, { cwd: '/fake/cwd', action: 'polish' });
+    const sc = result.structuredContent as any;
+    expect(sc.data.kind).not.toBe('polish_bound_reached');
+    expect(sc.data.kind).toBe('bead_refinement_requested');
   });
 });

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ToolContext, McpToolResult, Bead, ApproveArgs, FlywheelPhase, ToolNextStep, HotspotMatrix, TemplateExpansionInput } from '../types.js';
+import type { ToolContext, McpToolResult, Bead, ApproveArgs, ApproveStopReason, FlywheelPhase, ToolNextStep, HotspotMatrix, TemplateExpansionInput } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
@@ -471,6 +471,11 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     ? `\nPolish round ${round}${changesInfo}${convergenceInfo}${state.polishConverged ? '\nSteady-state reached.' : ''}`
     : '';
 
+  // ── Polish bounds (P2.4 / 2p5) ────────────────────────────────
+  // Compute defaults at the call site so tests can override per-call.
+  const untilConvergence = args.until_convergence_score ?? 0.85;
+  const maxRounds = args.max_rounds ?? 5;
+
   // ── Handle action ─────────────────────────────────────────────
   if (args.action === 'reject') {
     _lastBeadSnapshot = undefined;
@@ -483,6 +488,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
       {
         kind: 'approval_rejected',
         action: 'reject',
+        stop_reason: 'manual_reject' satisfies ApproveStopReason,
         activeBeadIds: [],
       },
       makeNextToolStep('call_tool', 'Restart flywheel from profiling if you want to try again.', {
@@ -492,6 +498,55 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
   }
 
   if (args.action === 'polish') {
+    // Auto-bound the polish loop. Two stop conditions:
+    //   1. convergence ≥ until_convergence_score → convergence_reached
+    //   2. polishRound ≥ max_rounds              → max_rounds_hit
+    // When either trips, route the operator to `action: start` instead of
+    // scheduling another (wasteful) polish round. The stop_reason is
+    // surfaced verbatim so callers can decide programmatically whether to
+    // start, reject, or override with a higher max_rounds.
+    if (convergenceScore !== undefined && convergenceScore >= untilConvergence) {
+      return makeApproveResult(
+        `**Polish bound reached: convergence ${(convergenceScore * 100).toFixed(0)} ≥ ${(untilConvergence * 100).toFixed(0)}.** Skipping further polish rounds.${roundHeader}\n\nNEXT: call \`flywheel_approve_beads\` with action="start" to launch implementation, or pass a higher \`until_convergence_score\` to keep polishing.`,
+        state.phase,
+        'beads',
+        {
+          kind: 'polish_bound_reached',
+          action: 'polish',
+          stop_reason: 'convergence_reached' satisfies ApproveStopReason,
+          convergenceScore,
+          untilConvergence,
+          maxRounds,
+          round,
+          activeBeadIds: state.activeBeadIds,
+        },
+        makeNextToolStep('call_tool', 'Polish loop converged — start implementation.', {
+          tool: 'flywheel_approve_beads',
+          argsSchemaHint: { action: 'start' },
+        }),
+      );
+    }
+    if (round >= maxRounds) {
+      return makeApproveResult(
+        `**Polish bound reached: round ${round} ≥ max_rounds ${maxRounds}.** Skipping further polish rounds.${roundHeader}\n\nNEXT: call \`flywheel_approve_beads\` with action="start" to launch implementation, or pass a higher \`max_rounds\` to keep polishing.`,
+        state.phase,
+        'beads',
+        {
+          kind: 'polish_bound_reached',
+          action: 'polish',
+          stop_reason: 'max_rounds_hit' satisfies ApproveStopReason,
+          convergenceScore,
+          untilConvergence,
+          maxRounds,
+          round,
+          activeBeadIds: state.activeBeadIds,
+        },
+        makeNextToolStep('call_tool', 'Polish loop hit max_rounds — start implementation.', {
+          tool: 'flywheel_approve_beads',
+          argsSchemaHint: { action: 'start' },
+        }),
+      );
+    }
     return handlePolish(ctx, beads, round, false, matrix);
   }
 
@@ -499,7 +554,8 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     return handleAdvanced(ctx, beads, round, args.advancedAction, matrix);
   }
 
-  // action === 'start' — launch implementation
+  // action === 'start' — launch implementation. stop_reason is "manual_start"
+  // because the polish loop was terminated by an explicit operator decision.
   return handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix);
 }
 
@@ -796,6 +852,7 @@ ${beadList}`,
         launchMode: 'sequential',
         readyCount: 1,
         currentBeadId: state.currentBeadId,
+        stop_reason: 'manual_start' satisfies ApproveStopReason,
         readyBeads: [{
           id: bead.id,
           title: bead.title,
@@ -893,6 +950,7 @@ ${beadList}`,
       launchMode: 'parallel',
       readyCount: ready.length,
       currentBeadId: state.currentBeadId,
+      stop_reason: 'manual_start' satisfies ApproveStopReason,
       readyBeads: ready.map((bead) => ({
         id: bead.id,
         title: bead.title,

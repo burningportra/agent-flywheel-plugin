@@ -140,6 +140,17 @@ const PRIMARY_TOOLS = [
                     enum: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
                     description: 'Required when action=advanced. Selects the advanced refinement strategy.',
                 },
+                until_convergence_score: {
+                    type: 'number',
+                    minimum: 0,
+                    maximum: 1,
+                    description: 'Optional polish-bound (default 0.85). When action=polish and the in-state convergence score has already crossed this threshold, the call returns stop_reason="convergence_reached" instead of scheduling another polish round (bead 2p5).',
+                },
+                max_rounds: {
+                    type: 'integer',
+                    minimum: 1,
+                    description: 'Optional polish-bound (default 5). When action=polish and state.polishRound >= max_rounds, the call returns stop_reason="max_rounds_hit" instead of scheduling another polish round (bead 2p5).',
+                },
             },
             required: ['cwd', 'action'],
         },
