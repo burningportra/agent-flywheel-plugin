@@ -24,7 +24,7 @@ This skill is a thin pointer to the canonical reality-check sub-flow at `skills/
 
 4. CASS capture (§2) and bead tagging (§3) are mandatory — they make the reality-check round queryable across future sessions.
 
-5. If you're in the middle of an active flywheel session (checkpoint exists), the reality-check findings should produce beads tagged `reality-check-<YYYY-MM-DD>` that the existing swarm can pick up via `flywheel_advance_wave`. If standalone, the "Full pipeline" depth launches a fresh 3 pi + 3 cc swarm specifically for gap-closure (cod fallback if Pi unavailable; see AGENTS.md NTM pane priority).
+5. If you're in the middle of an active flywheel session (checkpoint exists), the reality-check findings should produce beads tagged `reality-check-<YYYY-MM-DD>` that the existing swarm can pick up via `flywheel_advance_wave`. If standalone, the "Full pipeline" depth launches a fresh 3 cod + 3 cc swarm specifically for gap-closure (pi fallback if Codex unavailable; see AGENTS.md NTM pane priority).
 
 ## Why this is a thin pointer
 

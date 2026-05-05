@@ -4,7 +4,7 @@
 
 **When to use:** the user invoked `/agent-flywheel:start` and picked **"Simplify pass"** (or the legacy label "Deslop pass") from the Step 0d/0e menu — they want to apply `/simplify-and-refactor-code-isomorphically` to the project as a proof-obligated, isomorphism-preserving refactor pass. This is meaningful on any repo (with or without open beads) and is the canonical "reduce AI-junk without changing behavior" workflow.
 
-**How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
+**How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Cod swarm — pi fallback if Codex unavailable, per AGENTS.md NTM pane priority / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
 
 ---
 
@@ -17,7 +17,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Single-pass (Recommended)", description: "One in-process invocation of /simplify-and-refactor-code-isomorphically. Fast; good for small/medium repos or initial exploration." },
     { label: "Single + fresh-eyes", description: "Single-pass, then a verbatim fresh-eyes review prompt to catch any isomorphism violations the first pass introduced." },
-    { label: "5-Pi swarm via NTM", description: "Spawn 5+ Pi panes (cod fallback if Pi unavailable on the host; see AGENTS.md NTM pane priority), each tackling a different code area, with Claude (you) as controller doing fresh-eyes review. 5-min looper. Best for large repos." },
+    { label: "5-Cod swarm via NTM", description: "Spawn 5+ Codex panes (pi fallback if Codex unavailable on the host; see AGENTS.md NTM pane priority), each tackling a different code area, with Claude (you) as controller doing fresh-eyes review. 5-min looper. Best for large repos." },
     { label: "Iterative (10x via /repeatedly-apply-skill)", description: "Solo agent re-applies the skill 10 times with fresh-eyes review between passes. No NTM required. Good for slow-burn cleanup." }
   ],
   multiSelect: false
@@ -30,7 +30,7 @@ Route on the answer:
 |------|--------|
 | Single-pass | Run §2 only |
 | Single + fresh-eyes | Run §2, then §3 |
-| 5-Pi swarm (cod fallback) | Run §4 |
+| 5-Cod swarm (pi fallback) | Run §4 |
 | Iterative | Run §5 |
 
 ---
@@ -83,19 +83,19 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
 ```bash
 SESSION="${NTM_PROJECT}--deslop"
 # Pane-type priority (user preference, see AGENTS.md "NTM pane priority"):
-#   prefer `pi` over `cod`. Only fall back to `--cod=5` if Pi is unavailable on this host.
-ntm spawn "$NTM_PROJECT" --label deslop --no-user --pi=5 --stagger-mode=smart
+#   prefer `cod` over `pi`. Only fall back to `--pi=5` if Codex is unavailable on this host.
+ntm spawn "$NTM_PROJECT" --label deslop --no-user --cod=5 --stagger-mode=smart
 ```
 
-Pane indices 1–5 are all Pi. Allocate 5 names from `mcp-server/src/adapters/agent-names.ts` via `allocateAgentNames(5, 'deslop-<sha>')`. Each pane gets a distinct **code area assignment** (e.g. "tools/", "adapters/", "tests/", "scripts/", "docs/" — adapt to the repo's structure).
+Pane indices 1–5 are all Codex. Allocate 5 names from `mcp-server/src/adapters/agent-names.ts` via `allocateAgentNames(5, 'deslop-<sha>')`. Each pane gets a distinct **code area assignment** (e.g. "tools/", "adapters/", "tests/", "scripts/", "docs/" — adapt to the repo's structure).
 
-### 4c. Per-pane prompt (Pi-tuned)
+### 4c. Per-pane prompt (Codex-tuned)
 
 For each pane `<N>` ∈ 1..5:
 
 ```bash
-ntm --robot-send="$SESSION" --panes=<N> --type=pi --msg='## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY)
-0a. macro_start_session(human_key=<cwd>, program=pi-cli, model=your-model, task_description="Deslop pane <N>: <area-assignment>"). Your name is <pane-N-name>.
+ntm --robot-send="$SESSION" --panes=<N> --type=cod --msg='## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY)
+0a. macro_start_session(human_key=<cwd>, program=codex, model=<your model name>, task_description="Deslop pane <N>: <area-assignment>"). Your name is <pane-N-name>.
 0b. file_reservation_paths on the files inside <area-assignment>/. Refresh every 30 min via renew_file_reservations.
 0c. send_message to "<coordinator-name>" subject "[deslop] pane <N> started" with your area assignment.
 0d. Re-read AGENTS.md and README.md.

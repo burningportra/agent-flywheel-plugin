@@ -111,11 +111,11 @@ If you find yourself wanting to spawn N>1 coding workers without NTM, stop and l
 
 ## NTM pane priority
 
-When spawning NTM panes for the swarm (planning, implement, deslop, etc.), **prefer `--pi=` (and `--type=pi` for `--robot-send`) over `--cod=` / `--type=cod`**. Pi is the default secondary lane after Claude (`cc`); Codex (`cod`) is only a fallback when Pi is unavailable on the host (no Pi CLI, quota exhausted, or the workflow explicitly demands Codex).
+When spawning NTM panes for the swarm (planning, implement, deslop, etc.), **prefer `--cod=` (and `--type=cod` for `--robot-send`) over `--pi=` / `--type=pi`**. Codex (`cod`) is the default secondary lane after Claude (`cc`); Pi (`pi`) is only a fallback when Codex is unavailable on the host (no Codex CLI, quota exhausted, or the workflow explicitly demands Pi).
 
-**Gemini → Pi fallback.** Pi was added to NTM (see [ntm@3f1c23b](https://github.com/burningportra/ntm/commit/3f1c23b61230f98197950335643be7525cf248e5)) as the designated substitute when Gemini is unavailable. When the model-diversified split (`cc:pi:gem` 1:1:1) detects that Gemini is missing/quota-exhausted, **reassign Gemini's share to Pi (`--pi=`) before redistributing to Claude or Codex**. Order of substitution for a missing Gemini lane: Pi → Codex → Claude.
+**Gemini → Codex fallback.** When the model-diversified split (`cc:cod:gem` 1:1:1) detects that Gemini is missing/quota-exhausted, **reassign Gemini's share to Codex (`--cod=`) before redistributing to Claude or Pi**. Order of substitution for a missing Gemini lane: Codex → Pi → Claude.
 
-Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, and any future swarm/orchestrator skill). Reviewers: reject PRs that reintroduce `--cod=` / `--type=cod` as the default without a documented Pi-unavailable justification, or that redistribute a missing Gemini lane to anything other than Pi first.
+Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, and any future swarm/orchestrator skill). Reviewers: reject PRs that reintroduce `--pi=` / `--type=pi` as the default without a documented Codex-unavailable justification, or that redistribute a missing Gemini lane to anything other than Codex first.
 
 ## Bead Lifecycle
 

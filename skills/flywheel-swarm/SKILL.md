@@ -18,23 +18,25 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 3. Ask the user: "How many agents should run in parallel? (Recommended: 2-4)"
 
 4. **Setup coordination:**
-   - Bootstrap Agent Mail: `macro_start_session(human_key: cwd, program: "claude-code", model: your-model, task_description: "Swarm: <goal>")`
+   - Bootstrap Agent Mail: `macro_start_session(human_key: cwd, program: "claude-code", model: "<your model name>", task_description: "Swarm: <goal>")`
    - Create a team: `TeamCreate(team_name: "swarm-<goal-slug>")`
    - Resolve NTM project: read `projects_base` from `ntm config show` and confirm `$projects_base/$(basename $PWD)` resolves (per the readiness gate in `_inflight_prompt.md`). On miss, follow the symlink/config path from `flywheel-setup` §6 before continuing.
-   - Apply the **AGENTS.md NTM pane priority** for swarm composition: prefer **4 pi + 2 cc** when both are healthy; fall back to **4 cod** if Pi is unavailable. Run `which claude codex gemini pi 2>/dev/null` (real binaries behind the `cc/cod/gmi/pi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) and `ntm deps -v` to pick the live mix; never spawn agents whose CLI is missing.
+   - Apply the **AGENTS.md NTM pane priority** for swarm composition: prefer **4 cod + 2 cc** when both are healthy; fall back to **4 pi** if Codex is unavailable. Run `which claude codex gemini pi 2>/dev/null` (real binaries behind the `cc/cod/gmi/pi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) and `ntm deps -v` to pick the live mix; never spawn agents whose CLI is missing.
 
 5. For each ready bead (up to the user's limit), create a task and spawn an NTM-backed impl agent:
    - `TaskCreate(subject: "Impl: <bead-id> <title>", status: "in_progress")`
    - Save the task ID
    - Spawn the pane via NTM (per `/vibing-with-ntm` and `/ntm`):
-     ```
-     ntm spawn "$NTM_PROJECT" --pane-name="impl-<bead-id>" --agent="<cc|cod|pi>"
+     ```bash
+     ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
+       --cc=<N_claude> --cod=<N_cod> --stagger-mode=smart
+     # Fall back to --pi=<N> only if Codex is unavailable (see AGENTS.md NTM pane priority)
      ```
    - Send the marching-orders prompt via `ntm --robot-send` (NOT inline `Agent()`):
      ```
      ntm --robot-send="$NTM_PROJECT" --pane-name="impl-<bead-id>" --msg="
        ## Agent Mail Bootstrap
-       Call macro_start_session(human_key: '<cwd>', program: 'claude-code', model: '<resolved-model>',
+       Call macro_start_session(human_key: '<cwd>', program: 'claude-code', model: '<your model name>',
          task_description: 'Implementing bead <id>: <title>')
        Note your assigned agent name for messaging.
 

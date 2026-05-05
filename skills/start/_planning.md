@@ -311,22 +311,22 @@ Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes,
    # --no-user omits pane 0 entirely; planners get pane indices 1, 2, 3.
    # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
    # Pane-type priority (user preference, see AGENTS.md "NTM pane priority"):
-   #   prefer `pi` over `cod`. Only fall back to `--cod=1` if Pi is unavailable.
-   ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --no-user --cc=1 --pi=1 --gmi=1 --stagger-mode=smart
+   #   prefer `cod` over `pi`. Only fall back to `--pi=1` if Codex is unavailable.
+   ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
    ```
 
-   **Pane → planner mapping** (panes are addressed by numeric index — `cc-1` / `pi-1` / `gmi-1` style does NOT work):
+   **Pane → planner mapping** (panes are addressed by numeric index — `cc-1` / `cod-1` / `gmi-1` style does NOT work):
 
    | Pane # | Type  | Perspective | Model hint  |
    |--------|-------|-------------|-------------|
    | 1      | `cc`  | correctness | opus        |
-   | 2      | `pi`  | ergonomics  | pi          |
+   | 2      | `cod` | ergonomics  | codex       |
    | 3      | `gmi` | robustness  | gemini      |
 
    Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
    ```bash
    ntm --robot-send="$SESSION" --panes=1 --type=cc  --msg="<correctness planner prompt>"
-   ntm --robot-send="$SESSION" --panes=2 --type=pi  --msg="<ergonomics  planner prompt>"
+   ntm --robot-send="$SESSION" --panes=2 --type=cod --msg="<ergonomics  planner prompt>"
    ntm --robot-send="$SESSION" --panes=3 --type=gmi --msg="<robustness  planner prompt>"
    ```
 
