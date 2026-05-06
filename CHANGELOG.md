@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
+
+## [3.12.0] - 2026-05-06
+
+### Added
+
+- **APR-Pro multi-signal plan convergence + B6 oscillation guard (`05071af`).** Adopted from [Dicklesworthstone/automated_plan_reviser_pro](https://github.com/Dicklesworthstone/automated_plan_reviser_pro) per Phase 12 verdict (A1-only scope-down). New `ConvergenceState` schema (`mcp-server/src/convergence.ts`, `SCORE_VERSION` constant) tracks plan score across delta-text + file-coverage + dependency-graph signals. Persisted at `.pi-flywheel/plans/<slug>/convergence.json` (per Phase 12 §12.3 — no `.flywheel/` rename). State writes use the existing `writeFile`/`mkdir` pattern from `completion-report.ts` (no new atomic-write infrastructure per opus §4.2). Ring-buffer of recent revisions feeds the B6 oscillation detector: when `signFlips > revisions / 3`, the state flips to `status: "oscillating"`, surfaced via the new doctor check and `flywheel_advance_wave` kill-switch.
+- **`flywheel_convergence({ cwd, planSlug })` MCP tool (`mcp-server/src/tools/convergence-tool.ts`, registered in `server.ts`).** Read-only; returns the persisted `ConvergenceState` for a plan slug derived via `planSlugFromIdentifier(planPathOrId)`. Result envelope includes `oscillation.detected: boolean` plus `signFlips`, `revisions`. Step 5.45 (picked-up-plan menu) renders the score in the question text only and never arms a default option (per Phase 12 §12.5 + README §Design Philosophy #3, every decision routes through `AskUserQuestion`).
+- **`convergence_state_validity` doctor check.** Probes that the persisted `convergence.json` parses against `ConvergenceStateSchema` and the `signFlips/revisions` invariants are intact. `flywheel_doctor` surfaces it under the standard 11-check sweep (now 12 entries with this addition); severity defaults to yellow on parse failure, red only on schema-required-field violations.
+- **Step 5.45 hint + `flywheel_advance_wave` gating with kill-switch.** Auto-approve at score ≥ 0.90 still routes through `AskUserQuestion`; the kill-switch on `flywheel_advance_wave` consults convergence + oscillation flags but cannot bypass the user.
+
+### Changed
+
+- **NTM pane priority (`c0cf590`) — `--cod=` is now the default secondary lane after `--cc=`; `--pi=` demoted to fallback.** AGENTS.md "NTM pane priority" updated. The deep-plan and swarm flows pick `--cod=N` over `--pi=N` when spawning planners and implementors; `--pi=` only fires when Codex is unavailable.
+
 ## [3.11.9] - 2026-05-03
 
 ### Added
