@@ -1,3 +1,5 @@
+> Consolidated into [docs/research/research-apr-pro-landed-2026-05-06.md] on 2026-05-06.
+
 # Integration Proposal — APR-Pro Convergence + Bundling + Atomic State Cluster
 
 **Date.** 2026-05-05

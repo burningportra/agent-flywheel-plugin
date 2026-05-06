@@ -1,3 +1,5 @@
+> Consolidated into [docs/research/research-apr-pro-landed-2026-05-06.md] on 2026-05-06.
+
 # APR-Pro Integration Feedback — Sonnet Reviewer
 
 **Date.** 2026-05-05

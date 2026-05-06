@@ -1,3 +1,5 @@
+> Landed in v3.12.0 (commit 05071af). Consolidated into [docs/research/research-apr-pro-landed-2026-05-06.md] on 2026-05-06.
+
 # Research Proposal — APR-Pro → Agent-Flywheel
 
 **Source repo.** [`Dicklesworthstone/automated_plan_reviser_pro`](https://github.com/Dicklesworthstone/automated_plan_reviser_pro) (v1.2.2)

@@ -1,3 +1,5 @@
+> Archived into [docs/research/research-apr-pro-phase-archive-2026-05-06.md] on 2026-05-06.
+
 # Phase 6b: APR-Pro → Agent-Flywheel Ergonomics
 
 > **Scope**: Developer experience improvements — how flywheel users interact with the

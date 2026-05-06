@@ -1,3 +1,5 @@
+> Archived into [docs/research/research-apr-pro-phase-archive-2026-05-06.md] on 2026-05-06.
+
 # Phase 2: APR-Pro Deep Dive — Top 3 Tangents
 
 **Date**: 2026-05-05

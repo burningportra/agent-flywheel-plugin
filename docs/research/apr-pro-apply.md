@@ -1,3 +1,5 @@
+> Archived into [docs/research/research-apr-pro-phase-archive-2026-05-06.md] on 2026-05-06.
+
 # Phase 6a: APR-Pro → Agent-Flywheel Adoption Proposals
 
 **Date**: 2026-05-05

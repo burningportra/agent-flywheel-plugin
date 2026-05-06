@@ -1,3 +1,5 @@
+> Archived into [docs/research/research-apr-pro-phase-archive-2026-05-06.md] on 2026-05-06.
+
 # Phase 1: APR-Pro Architecture Exploration
 
 **Date**: 2026-05-05  

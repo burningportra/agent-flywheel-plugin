@@ -1,3 +1,5 @@
+> Consolidated into [docs/research/research-apr-pro-landed-2026-05-06.md] on 2026-05-06.
+
 # Phase 11b Feedback (opus) — APR-Pro Integration Cluster (A1+A2+A3)
 
 **Date.** 2026-05-05
