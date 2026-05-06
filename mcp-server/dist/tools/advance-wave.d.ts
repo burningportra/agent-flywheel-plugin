@@ -25,6 +25,21 @@ export interface AdvanceWaveOutcome {
      * hard error (`attestation_missing` / `attestation_invalid`) instead.
      */
     needsEvidence: boolean;
+    /**
+     * Convergence-driven auto-approve recommendation (B-AC2 §12.4).
+     *
+     * `armed: true` when the active plan's convergence score ≥ 0.90 AND the
+     * `flywheel.config.yaml > convergence.gate_advance_wave` kill-switch is on.
+     * Per README §Design Philosophy #3 the *decision* is still the operator's
+     * — this only surfaces a "Recommended" label for the next-wave question.
+     * Never silent advancement.
+     */
+    convergence?: {
+        armed: boolean;
+        score: number | null;
+        status: string | null;
+        reason: 'auto_approve_recommended' | 'below_threshold' | 'no_state' | 'kill_switch_off' | 'no_active_plan';
+    };
 }
 export declare function runAdvanceWave(ctx: ToolContext, args: AdvanceWaveArgs): Promise<McpToolResult>;
 export {};

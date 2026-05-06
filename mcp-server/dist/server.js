@@ -20,6 +20,7 @@ import { runAdvanceWave } from './tools/advance-wave.js';
 import { runObserve } from './tools/observe.js';
 import { runRemediate, RemediateInputSchema } from './tools/remediate.js';
 import { runCalibrate, CalibrateInputSchema } from './tools/calibrate.js';
+import { runConvergence } from './tools/convergence-tool.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -347,6 +348,21 @@ const PRIMARY_TOOLS = [
             required: ['cwd', 'checkName'],
         },
     },
+    {
+        name: 'flywheel_convergence',
+        description: 'Read the persisted convergence state for a plan slug from .pi-flywheel/plans/<slug>/convergence.json. Returns { tool, version: 1, status: "ok" | "not_found" | "error", data: ConvergenceState | null }. Pure read; never mutates. Status "error" with code "score_version_mismatch" signals the on-disk state was written by a different scoreVersion and must be recomputed before use.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                planSlug: {
+                    type: 'string',
+                    description: 'Plan slug or original plan path. Slugified to a filesystem-safe directory name; same slug used by writers.',
+                },
+            },
+            required: ['cwd', 'planSlug'],
+        },
+    },
 ];
 /**
  * Deprecated `orch_*` aliases for each primary `flywheel_*` tool.
@@ -412,6 +428,12 @@ const EXTENSION_RUNNERS = {
     orch_calibrate: async (ctx, args) => {
         const parsed = CalibrateInputSchema.parse({ ...args, cwd: ctx.cwd });
         return runCalibrate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
+    },
+    flywheel_convergence: async (ctx, args) => {
+        return runConvergence(ctx, {
+            cwd: ctx.cwd,
+            planSlug: args.planSlug ?? '',
+        });
     },
 };
 function isKnownToolName(name) {

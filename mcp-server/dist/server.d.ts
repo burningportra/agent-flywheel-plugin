@@ -57,6 +57,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -176,6 +177,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -217,6 +219,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -270,6 +273,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -325,6 +329,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -379,6 +384,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -424,6 +430,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -472,6 +479,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -527,6 +535,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -565,6 +574,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -607,6 +617,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -651,6 +662,7 @@ export declare const TOOLS: ({
             name?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planSlug?: undefined;
         };
         required: string[];
     };
@@ -702,6 +714,49 @@ export declare const TOOLS: ({
             refreshRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
+            planSlug?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            planSlug: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
         };
         required: string[];
     };

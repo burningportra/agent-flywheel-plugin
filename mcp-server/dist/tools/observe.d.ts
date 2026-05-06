@@ -110,6 +110,52 @@ export declare const FlywheelObserveReportSchema: z.ZodObject<{
         }>>;
         unavailable: z.ZodOptional<z.ZodLiteral<true>>;
     }, z.core.$strip>>;
+    convergence: z.ZodOptional<z.ZodObject<{
+        version: z.ZodLiteral<1>;
+        planSlug: z.ZodString;
+        scoreVersion: z.ZodLiteral<1>;
+        revisions: z.ZodArray<z.ZodObject<{
+            version: z.ZodLiteral<1>;
+            revisionId: z.ZodString;
+            timestamp: z.ZodString;
+            size: z.ZodObject<{
+                lines: z.ZodNumber;
+                words: z.ZodNumber;
+                chars: z.ZodNumber;
+            }, z.core.$strip>;
+            structural: z.ZodObject<{
+                headings: z.ZodNumber;
+                codeBlocks: z.ZodNumber;
+                links: z.ZodNumber;
+                listItems: z.ZodNumber;
+            }, z.core.$strip>;
+            diffVsPrior: z.ZodNullable<z.ZodObject<{
+                addedLines: z.ZodNumber;
+                removedLines: z.ZodNumber;
+                similarityScore: z.ZodNumber;
+            }, z.core.$strip>>;
+        }, z.core.$strip>>;
+        signals: z.ZodObject<{
+            outputSizeTrend: z.ZodNumber;
+            changeVelocity: z.ZodNumber;
+            similarityTrend: z.ZodNumber;
+        }, z.core.$strip>;
+        oscillation: z.ZodObject<{
+            signFlips: z.ZodNumber;
+            detected: z.ZodBoolean;
+        }, z.core.$strip>;
+        score: z.ZodNumber;
+        status: z.ZodEnum<{
+            converged: "converged";
+            diverging: "diverging";
+            approaching: "approaching";
+            nearly_converged: "nearly_converged";
+            oscillating: "oscillating";
+        }>;
+        estimatedRoundsRemaining: z.ZodNullable<z.ZodNumber>;
+        computedAt: z.ZodString;
+    }, z.core.$strip>>;
+    convergenceGated: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>;
 export type FlywheelObserveReport = z.infer<typeof FlywheelObserveReportSchema>;
 export type ObserveHint = z.infer<typeof HintSchema>;

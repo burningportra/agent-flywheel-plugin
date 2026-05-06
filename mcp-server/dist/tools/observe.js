@@ -25,6 +25,9 @@ import { createLogger } from '../logger.js';
 import { makeToolResult } from './shared.js';
 import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { readCompletionReport } from '../completion-report.js';
+import { ConvergenceStateSchema } from '../convergence.js';
+import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
+import { loadFlywheelConfig } from '../flywheel-config.js';
 const log = createLogger('observe');
 // ─── Constants ────────────────────────────────────────────────────────────
 /** Per-probe timeout budget. Keeps the tool inside the 1.5s wall-clock target. */
@@ -134,6 +137,24 @@ export const FlywheelObserveReportSchema = z.object({
         unavailable: z.literal(true).optional(),
     })
         .optional(),
+    /**
+     * Convergence state for the active plan (B-AC2).
+     *
+     * Optional + additive: existing observe consumers see no change in the field
+     * set they already use. Only populated when `checkpoint.planDocument` is set
+     * and a `.pi-flywheel/plans/<slug>/convergence.json` exists. A read error
+     * (invalid JSON, schema mismatch, score-version mismatch) drops to undefined
+     * + a `red` hint rather than failing the whole observe call.
+     */
+    convergence: ConvergenceStateSchema.optional(),
+    /**
+     * `convergenceGated` (B-AC2 §12.4) — `true` when `flywheel_advance_wave`
+     * will use convergence score for auto-approve recommendations on this run
+     * (driven by `flywheel.config.yaml > convergence.gate_advance_wave`).
+     * Top-level (NOT nested under `convergence`) so consumers can detect the
+     * orchestrator-gating mode without having any plan loaded.
+     */
+    convergenceGated: z.boolean().optional(),
 });
 const doctorCache = new Map();
 /** Test/internal hook — flush the cache. Not exported via the tool envelope. */
@@ -646,6 +667,41 @@ export async function runObserve(ctx, args) {
             getCachedOrFreshDoctor(ctx, startMs),
             probeAttestations(ctx.cwd, activeBeadIds, startMs),
         ]);
+        // Convergence + kill-switch (B-AC2): both are best-effort sync reads of
+        // small files at the repo root and well under the probe budget. Any parse
+        // failure surfaces as a hint without failing observe.
+        const config = (() => {
+            try {
+                return loadFlywheelConfig(ctx.cwd);
+            }
+            catch {
+                return null;
+            }
+        })();
+        const convergenceGated = config?.convergence.gate_advance_wave ?? true;
+        let convergence;
+        const convergenceHints = [];
+        if (checkpoint.planDocument) {
+            try {
+                const slug = planSlugFromIdentifier(checkpoint.planDocument);
+                const result = await readConvergenceFromDisk(ctx.cwd, slug);
+                if (result.status === 'ok') {
+                    convergence = result.data.state;
+                }
+                else if (result.status === 'error') {
+                    convergenceHints.push({
+                        severity: result.code === 'score_version_mismatch' ? 'red' : 'warn',
+                        message: `Convergence read error (${result.code}): ${result.message}`,
+                        nextAction: result.code === 'score_version_mismatch'
+                            ? 'Recompute convergence state — the on-disk scoreVersion does not match the running algorithm.'
+                            : 'Inspect the convergence.json file or rerun the convergence math.',
+                    });
+                }
+            }
+            catch (err) {
+                log.warn('convergence probe threw', { err: String(err) });
+            }
+        }
         const elapsedMs = Date.now() - startMs;
         const partial = {
             version: 1,
@@ -660,8 +716,10 @@ export async function runObserve(ctx, args) {
             artifacts,
             attestations,
             doctor,
+            convergence,
+            convergenceGated,
         };
-        const hints = deriveHints(partial);
+        const hints = [...deriveHints(partial), ...convergenceHints];
         const report = { ...partial, hints };
         const validated = FlywheelObserveReportSchema.safeParse(report);
         if (!validated.success) {

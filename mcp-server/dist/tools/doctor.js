@@ -25,6 +25,7 @@ import { detectCliCapabilities, describeCapabilities, } from '../adapters/model-
 import { getAdapter } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
+import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
 const log = createLogger('doctor');
 // ─── Constants ────────────────────────────────────────────────────────────
 /** Per-check exec timeout (ms). */
@@ -71,6 +72,10 @@ export const DOCTOR_CHECK_NAMES = [
     // Orphan tender-daemons (bead n3a) — node tender-daemon.js processes whose
     // --session no longer exists in tmux. Yellow + suggests `kill -TERM`.
     'orphan_tender_daemons',
+    // Convergence-state validity (B-AC2). Green when no active plan or when
+    // .pi-flywheel/plans/<slug>/convergence.json parses + matches scoreVersion.
+    // Red on schema_invalid / score_version_mismatch / invalid_json.
+    'convergence_state_validity',
 ];
 // ─── Actionable hints ─────────────────────────────────────────────────────
 // DoctorCheck.hint must be a human-readable remediation sentence, not an
@@ -161,6 +166,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             marketplaceManifestPath: options.marketplaceManifestPath,
         }),
         () => checkOrphanTenderDaemons(exec, cwd, combined, perCheckTimeoutMs, now),
+        () => checkConvergenceStateValidity(cwd, combined, now),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -790,6 +796,65 @@ async function checkCheckpointValidity(cwd, signal, now) {
             severity: 'yellow',
             message: `checkpoint probe failed: ${errMsg(err)}`,
             hint: POSTMORTEM_CHECKPOINT_STALE_HINT,
+            durationMs: now() - start,
+        };
+    }
+}
+/**
+ * Convergence state validity (B-AC2). Probes the active plan's
+ * `.pi-flywheel/plans/<slug>/convergence.json` if a checkpoint with
+ * `planDocument` exists. Green when no plan or state is absent (additive
+ * feature — absence is fine). Red when the file is corrupt JSON / fails
+ * schema / has scoreVersion mismatch.
+ */
+async function checkConvergenceStateValidity(cwd, signal, now) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('convergence_state_validity');
+    try {
+        const ckpt = readCheckpoint(cwd);
+        const planDocument = ckpt?.envelope.state.planDocument;
+        if (!planDocument) {
+            return {
+                name: 'convergence_state_validity',
+                severity: 'green',
+                message: 'no active plan — convergence not applicable',
+                durationMs: now() - start,
+            };
+        }
+        const slug = planSlugFromIdentifier(planDocument);
+        const result = await readConvergenceFromDisk(cwd, slug);
+        if (result.status === 'ok') {
+            return {
+                name: 'convergence_state_validity',
+                severity: 'green',
+                message: `convergence state valid (score=${result.data.state.score.toFixed(3)}, status=${result.data.state.status})`,
+                durationMs: now() - start,
+            };
+        }
+        if (result.status === 'not_found') {
+            return {
+                name: 'convergence_state_validity',
+                severity: 'green',
+                message: 'no convergence state on disk yet (plan registered but not yet scored)',
+                durationMs: now() - start,
+            };
+        }
+        return {
+            name: 'convergence_state_validity',
+            severity: 'red',
+            message: `convergence state invalid (${result.code}): ${result.message}`,
+            hint: result.code === 'score_version_mismatch'
+                ? 'Recompute convergence — the on-disk scoreVersion does not match the running algorithm.'
+                : 'Inspect or regenerate .pi-flywheel/plans/<slug>/convergence.json.',
+            durationMs: now() - start,
+        };
+    }
+    catch (err) {
+        return {
+            name: 'convergence_state_validity',
+            severity: 'yellow',
+            message: `convergence probe failed: ${errMsg(err)}`,
             durationMs: now() - start,
         };
     }

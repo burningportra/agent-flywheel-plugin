@@ -1,0 +1,10 @@
+# Flywheel project config. Read by the MCP server at runtime.
+# Schema is hand-edited — keys are flat and additive; unknown keys are ignored.
+#
+# Per docs/research-apr-pro-integration.md Phase 12 §12.4:
+#   convergence.gate_advance_wave (default true) is the kill-switch for
+#   orchestrator-side score gating. Set to `false` to disable auto-approve
+#   recommendations from `flywheel_advance_wave` regardless of score.
+
+convergence:
+  gate_advance_wave: true

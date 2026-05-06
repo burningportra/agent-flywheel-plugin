@@ -521,11 +521,13 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
 >
 > **Why this exists.** A picked-up plan was written hours/days/weeks ago. Bits of it may already be implemented in HEAD. Bits may be stale relative to the current codebase. The default Step 5.5 bead-creation flow assumes the plan is fresh — beading every section blindly wastes work and produces stragglers that get auto-closed by `flywheel_verify_beads` later. Step 5.45 gives the operator four levers BEFORE the bead-set materializes.
 
-After `flywheel_plan` returns successfully (response contains `pickedUp: true`), surface:
+After `flywheel_plan` returns successfully (response contains `pickedUp: true`), call `flywheel_convergence({ planSlug: <slug-derived-from-plan-path> })` and read the result. If `status: "ok"`, mention the score in the question text below. The 4 labeled options NEVER change — score never arms a default (per Phase 12 §12.5 + README §Design Philosophy #3, every decision is `AskUserQuestion`).
+
+> **Score in question text only.** When `convergence.score` is present, append `(score <X.YY>, <status>)` to the question text — e.g. `Plan registered: 'foo.md' (score 0.82, nearly_converged). What does this plan need?`. When no convergence state exists yet (first registration), omit the score parenthetical and surface the bare question.
 
 ```
 AskUserQuestion(questions: [{
-  question: "Plan registered: '<plan-path>' (<chars> chars, last modified <relative-time>). What does this plan need?",
+  question: "Plan registered: '<plan-path>' (<chars> chars, last modified <relative-time>)<, score <X.YY> (<status>) when present>. What does this plan need?",
   header: "Plan",
   options: [
     { label: "Validate against code (Recommended)", description: "Section-vs-file-vs-git-log diff: which plan sections are already implemented in HEAD? Bead-ify only the gaps. ~2-5 min" },

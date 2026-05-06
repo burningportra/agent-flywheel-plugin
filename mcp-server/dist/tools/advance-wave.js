@@ -10,6 +10,9 @@ import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
 import * as path from 'node:path';
+import { readCheckpoint } from '../checkpoint.js';
+import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
+import { loadFlywheelConfig } from '../flywheel-config.js';
 const log = createLogger('advance-wave');
 const LANES = ['cc', 'cod', 'gem'];
 const LANE_ADAPTERS = {
@@ -23,6 +26,62 @@ function isAttestationRequired() {
     // concession that hard-blocking on day-one breaks in-flight workflows).
     const v = process.env.FW_ATTESTATION_REQUIRED?.trim().toLowerCase();
     return v != null && v !== '' && v !== '0' && v !== 'false';
+}
+/** Score threshold for the auto-approve recommendation. */
+const AUTO_APPROVE_SCORE = 0.9;
+/**
+ * Compute the convergence-recommendation block for an advance-wave outcome.
+ * Best-effort + side-effect-free: any I/O failure degrades to a "no_state"
+ * outcome rather than failing the whole call (matches the observe pattern).
+ */
+async function computeConvergenceRecommendation(cwd) {
+    let killSwitchOn = true;
+    try {
+        killSwitchOn = loadFlywheelConfig(cwd).convergence.gate_advance_wave;
+    }
+    catch {
+        killSwitchOn = true;
+    }
+    if (!killSwitchOn) {
+        return { armed: false, score: null, status: null, reason: 'kill_switch_off' };
+    }
+    let planDocument;
+    try {
+        const cp = readCheckpoint(cwd);
+        planDocument = cp?.envelope.state.planDocument;
+    }
+    catch {
+        /* no-op */
+    }
+    if (!planDocument) {
+        return { armed: false, score: null, status: null, reason: 'no_active_plan' };
+    }
+    const slug = planSlugFromIdentifier(planDocument);
+    let result;
+    try {
+        result = await readConvergenceFromDisk(cwd, slug);
+    }
+    catch {
+        return { armed: false, score: null, status: null, reason: 'no_state' };
+    }
+    if (result.status !== 'ok') {
+        return { armed: false, score: null, status: null, reason: 'no_state' };
+    }
+    const { state } = result.data;
+    if (state.score >= AUTO_APPROVE_SCORE && state.status === 'converged') {
+        return {
+            armed: true,
+            score: state.score,
+            status: state.status,
+            reason: 'auto_approve_recommended',
+        };
+    }
+    return {
+        armed: false,
+        score: state.score,
+        status: state.status,
+        reason: 'below_threshold',
+    };
 }
 function okResult(phase, text, data) {
     return makeOkToolResult('flywheel_advance_wave', phase, text, data);
@@ -57,6 +116,7 @@ export async function runAdvanceWave(ctx, args) {
     if (!verification || verifyResult.isError) {
         return verifyResult;
     }
+    const convergenceRec = await computeConvergenceRecommendation(cwd);
     if (verification.unclosedNoCommit.length > 0) {
         const stragglerIds = verification.unclosedNoCommit.map((s) => s.id);
         const outcome = {
@@ -64,6 +124,7 @@ export async function runAdvanceWave(ctx, args) {
             nextWave: null,
             waveComplete: false,
             needsEvidence: false,
+            convergence: convergenceRec,
         };
         const lines = [
             `Wave incomplete: ${verification.unclosedNoCommit.length} bead(s) still open without commits.`,
@@ -112,6 +173,7 @@ export async function runAdvanceWave(ctx, args) {
             nextWave: null,
             waveComplete: true,
             needsEvidence,
+            convergence: convergenceRec,
         };
         return okResult(state.phase, 'Wave verified. Queue drained — no more beads to dispatch.', outcome);
     }
@@ -145,6 +207,7 @@ export async function runAdvanceWave(ctx, args) {
         },
         waveComplete: true,
         needsEvidence,
+        convergence: convergenceRec,
     };
     const lines = [
         `Wave verified (${verification.verified.length}/${args.closedBeadIds.length} closed).`,
@@ -156,6 +219,15 @@ export async function runAdvanceWave(ctx, args) {
         if (verification.invalidEvidence.length > 0) {
             lines.push(`⚠️  ${verification.invalidEvidence.length} bead(s) advanced with invalid completion attestation (Stage 1 warn-only — set FW_ATTESTATION_REQUIRED=1 to block).`);
         }
+    }
+    if (convergenceRec.armed && convergenceRec.score !== null) {
+        lines.push(`Convergence: score=${convergenceRec.score.toFixed(2)} (${convergenceRec.status}) — auto-approve recommended for the next-wave AskUserQuestion (operator still picks; never silent).`);
+    }
+    else if (convergenceRec.reason === 'kill_switch_off') {
+        lines.push('Convergence gating disabled (flywheel.config.yaml > convergence.gate_advance_wave=false).');
+    }
+    else if (convergenceRec.score !== null) {
+        lines.push(`Convergence: score=${convergenceRec.score.toFixed(2)} (${convergenceRec.status}) — below auto-approve threshold; operator picks normally.`);
     }
     lines.push(`Next wave: ${waveCandidates.length} bead(s) dispatched across ${LANES.length} lanes.`);
     lines.push(...waveCandidates.map((b, i) => `  - ${b.id} → ${LANES[i % LANES.length]} (${complexityMap[b.id]})`));

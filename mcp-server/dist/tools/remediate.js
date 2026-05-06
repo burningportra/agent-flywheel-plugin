@@ -45,6 +45,11 @@ export const REMEDIATION_REGISTRY = {
     // n3a — auto-remediation not offered: killing tender-daemons is destructive
     // and operator-driven (see hint with explicit `kill -TERM <pid>`).
     orphan_tender_daemons: null,
+    // B-AC2 — convergence state corruption is operator-driven recovery: regen the
+    // ring buffer or delete the file. Auto-remediation could mask scoreVersion
+    // drift across releases (the very thing the score_version_mismatch error
+    // exists to surface).
+    convergence_state_validity: null,
 };
 export function assertExhaustive(_) {
     throw new Error('Non-exhaustive registry');
