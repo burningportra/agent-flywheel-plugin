@@ -6,6 +6,15 @@ Guidance for sub-agents working in this repository.
 
 agent-flywheel is an MCP server that drives a multi-phase development workflow: scan, discover, plan, implement, review. The MCP server runs over stdio (JSON-RPC) from `mcp-server/src/server.ts`.
 
+## 30-second map
+
+Cold-reader affordance. Each bullet links to an existing section below.
+
+- **Project-local skills** — see [`Available CLI Tools`](#available-cli-tools), [`SKILL.md linting`](#skillmd-linting), and `skills/` (project-local skill bodies loaded via `flywheel_get_skill`).
+- **MCP tools** — see [`MCP tools quick reference`](#mcp-tools-quick-reference) for the at-a-glance index, then version-sliced sections (`v3.7.0`, `v3.11.0`, `v3.12.0`) for change history.
+- **Swarm path** — see [`NTM is mandatory for all spawned work`](#ntm-is-mandatory-for-all-spawned-work) + [`Agent Coordination`](#agent-coordination) + [`Bead Lifecycle`](#bead-lifecycle). Quick recipe: `ntm spawn <project> --label <purpose> --no-user --cc=N --cod=M --stagger-mode=smart` → `ntm --robot-send=<session> --panes=<idx> --type=cc --msg="…"` → each agent runs `macro_start_session` + `reserveOrFail` + close bead with `br update --status closed` and write `.pi-flywheel/completion/<bead>.json` per the [Pre-Completion Quality Gate](#pre-completion-quality-gate-mandatory-for-every-spawned-implementor).
+- **Conventions** — see [`Hard Constraints`](#hard-constraints), [`Code Conventions`](#code-conventions), and [`Tool name deprecation`](#tool-name-deprecation).
+
 ## High-stakes track (dueling-idea-wizards integration)
 
 The flywheel has a **standard track** (single-agent at every phase) and a **high-stakes track** that surfaces adversarial cross-scoring at four seams. Both tracks share the same checkpoint state, beads, and downstream tools — only the generator changes.
@@ -64,9 +73,31 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 - **`ccc`** — optional codebase indexing/search tool. Not required; the system falls back gracefully if unavailable.
 - **`npm run bead-viewer`** — (v3.7.0+) read-only browser-based bead-graph visualizer with cycle highlighting + click-to-detail. Hard-bound to `127.0.0.1`. Serves `br list --json` + `br dep list --json` as a Cytoscape graph. Use when `bv` terminal output is hard to scan (>50 nodes).
 
+## MCP tools quick reference
+
+Current-tool index (HEAD = v3.12.0). One line per tool, alphabetical. Detailed semantics live in the version-sliced sections below; this is the cold-reader affordance.
+
+- **`flywheel_advance_wave`** — close a completed wave, mark beads `closed`, surface `nextWave[]` ready beads. Stage-1 attestation gate: `FW_ATTESTATION_REQUIRED=1` flips warn-only to hard-block on missing/invalid completion evidence.
+- **`flywheel_approve_beads({ action })`** — review/approve bead set; actions: `start | polish | reject | advanced | git-diff-review`. Returns quality score + hotspot matrix + 3 or 4-option launch menu.
+- **`flywheel_calibrate({ sinceDays? })`** — bead-template effort calibration from closed `br list` rows.
+- **`flywheel_convergence({ planSlug })`** — read-only `ConvergenceState` from `.pi-flywheel/plans/<slug>/convergence.json` (multi-signal score + B6 oscillation flag). v3.12.0+. See "MCP tools added in v3.12.0" for B6 semantics.
+- **`flywheel_discover`** — surface ranked improvement ideas after a profile pass.
+- **`flywheel_doctor`** — 11-check health sweep (incl. v3.12.0 `convergence_state_validity`). Read-only.
+- **`flywheel_get_skill({ name })`** — bundled skill body in one round-trip. Preferred over `Read` for skill lookups.
+- **`flywheel_memory({ operation, query?, content? })`** — CASS memory; operations: `search | store | draft_postmortem | draft_solution_doc | refresh_learnings`. The `refresh_learnings` op classifies `docs/solutions/` entries Keep/Update/Consolidate/Replace/Delete.
+- **`flywheel_observe`** — single-call session-state snapshot; surfaces hints from missing completion attestations.
+- **`flywheel_plan({ mode })`** — planner; modes: `standard | deep | duel`. Deep auto-detects `docs/brainstorms/<slug>-*.md`.
+- **`flywheel_profile`** — repo profile with git-HEAD-keyed cache. Always call first.
+- **`flywheel_remediate({ checkName })`** — apply canonical fix for a failing doctor check (per-check mutex, `dry_run` default).
+- **`flywheel_review`** — 5 fresh-eyes reviewers per risky bead, or duel for p0 / security beads.
+- **`flywheel_select({ goal })`** — set selected goal and transition to planning phase.
+- **`flywheel_verify_beads`** — verify closed beads have valid completion evidence; reads `.pi-flywheel/completion/<id>.json`.
+
+> **Convention.** When a future MCP tool ships, update both this quick-reference AND the version-sliced section below ("MCP tools added in v<X.Y.Z>"). The quick-ref is an at-a-glance index; the version-sliced sections preserve change history.
+
 ## MCP tools added in v3.7.0
 
-- **`flywheel_remediate({ checkName, autoConfirm?, mode? })`** — applies the canonical fix for a failing doctor check. Default mode is `dry_run`; pass `mode: 'execute'` + `autoConfirm: true` to actually mutate. Per-check mutex prevents concurrent calls. Five handlers ship: `dist_drift`, `mcp_connectivity`, `agent_mail_liveness`, `orphaned_worktrees`, `checkpoint_validity`. Other doctor checks return `remediation_unavailable` (manual hint surfaced by SKILL.md). Result envelope includes `verifiedGreen: boolean` (re-runs the original probe after apply).
+- **`flywheel_remediate({ checkName, autoConfirm?, mode? })`** — applies the canonical fix for a failing doctor check. Default mode is `dry_run`; pass `mode: 'execute'` + `autoConfirm: true` to actually mutate. Per-check mutex prevents concurrent calls. Six handlers ship: `agent_mail_liveness`, `checkpoint_validity`, `cli_binary`, `dist_drift`, `mcp_connectivity`, `orphaned_worktrees`. Other doctor checks return `remediation_unavailable` (manual hint surfaced by SKILL.md). Result envelope includes `verifiedGreen: boolean` (re-runs the original probe after apply).
 - **`flywheel_calibrate({ cwd, sinceDays? })`** — aggregates `br list --json --status closed` rows by template, computes mean/median/p95 actual vs `EFFORT_TO_MINUTES[template.estimatedEffort]`. Prefers `git log --grep=<bead-id>` first-commit ts as `started_ts` proxy (capped 200/run). Drops clock-skew samples. Writes report to `.pi-flywheel/calibration.json`. **Note (v3.7.0):** `br create` doesn't yet tag beads with their template id, so the report is currently `__untemplated__`-only. See `claude-orchestrator-1v5` for the fix.
 - **`flywheel_get_skill({ name: "<plugin>:<skill>" })`** — serves a bundled skill markdown body in one MCP call. Bundle at `mcp-server/dist/skills.bundle.json` (built by `npm run build`). 4-layer drift defense: build-time `check:skills-bundle` CI gate, runtime `manifestSha256` integrity check (falls back to disk on mismatch), per-entry `srcSha256` stale-warn, `FW_SKILL_BUNDLE=off` env-bypass for contributors editing skills live. Returns `{ name, frontmatter, body, source: 'bundle' | 'disk', staleWarn? }`.
 
@@ -88,7 +119,16 @@ The 2026-04-30 3-way duel cohort (`docs/duels/2026-04-30.md`, plan `docs/plans/2
 
 - **`flywheel_observe({ cwd })`** — single-call session-state snapshot. Versioned `FlywheelObserveReport` covering `cwd`, `git.{branch, head, dirty, untracked[]}`, `checkpoint.{exists, phase?, selectedGoal?, planDocument?, activeBeadIds[]?, warnings[]}`, `beads.{initialized, counts, ready[]}`, `agentMail.{reachable, unreadCount?, warning?}`, `ntm.{available, panes[]?, warning?}`, `artifacts.{wizard[], flywheelScratch[]}`, and `hints[]` with `severity: info|warn|red`. Idempotent and non-mutating; doctor probes are cached or short-budgeted (<1.5s total tool runtime); every external probe degrades gracefully (sub-section flagged `unavailable: true` rather than failing the whole call). Hint surface includes missing or invalid completion attestations from the Stage 1 ledger so a forgotten dogfood file is visible at the next `/start` rather than silently rotting.
 - **Completion Evidence Attestation (Stage 1).** New module `mcp-server/src/completion-report.ts` exports `CompletionReportSchemaV1` (Zod, `version: 1` additive forever), `readCompletionReport(cwd, beadId)`, `validateCompletionReport(report, bead, { cwd? })`, `formatCompletionEvidenceSummary(report)`, and `writeCompletionReport(cwd, report)`. `flywheel_verify_beads` reads `.pi-flywheel/completion/<beadId>.json` for every closed bead and surfaces `missingEvidence[]` / `invalidEvidence[]`. `flywheel_advance_wave` is the gate — Stage 1 default is warn-only (`needsEvidence: true` on the outcome); set `FW_ATTESTATION_REQUIRED=1` to flip to hard-block returning `attestation_missing` / `attestation_invalid` (2 new structured error codes). Implementor prompts in `skills/flywheel-swarm/SKILL.md`, `skills/start/_implement.md`, and `commands/flywheel-swarm.md` carry a worked JSON example.
-- **Lock-aware reservation helper + `RESERVE001` lint rule.** New module `mcp-server/src/agent-mail-helpers.ts` exports `reserveOrFail(paths, opts)` and `releaseReservations(reservationIds)`. `reserveOrFail` wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry. New lint rule `mcp-server/src/lint/rules/reserve001.ts` flags raw `agentMailRPC("file_reservation_paths")` call sites outside the helper module; the existing single use in `agent-mail.ts:228` is baselined; new offenders fail CI.
+- **Lock-aware reservation helper + `RESERVE001` lint rule.** New module `mcp-server/src/agent-mail-helpers.ts` exports `reserveOrFail(paths, opts)` and `releaseReservations(reservationIds)`. `reserveOrFail` wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry. New lint rule `mcp-server/src/lint/rules/reserve001.ts` flags raw `agentMailRPC("file_reservation_paths")` call sites outside the helper module; the existing single use inside `reserveFileReservations()` (`mcp-server/src/agent-mail.ts`) is baselined; new offenders fail CI.
+
+## MCP tools added in v3.12.0
+
+The 2026-05-06 APR-Pro adoption (`05071af`, `docs/research/research-apr-pro-landed-2026-05-06.md`) shipped multi-signal plan convergence and the B6 oscillation guard inspired by APR-Pro's automated plan reviser pipeline.
+
+- **`flywheel_convergence({ cwd, planSlug })`** — read-only handler that returns the persisted `ConvergenceState` for a plan slug. State path: `.pi-flywheel/plans/<slug>/convergence.json` (per Phase 12 §12.3 — no `.flywheel/` rename). Source: `mcp-server/src/tools/convergence-tool.ts`, registered in `server.ts`. Score is multi-signal (delta-text, file-coverage, dependency-graph stability) per `convergence.ts` `SCORE_VERSION`. Result envelope includes `oscillation.detected: boolean` plus `signFlips`, `revisions`. Plan slug derived via `planSlugFromIdentifier(planPathOrId)`.
+- **B6 oscillation guard semantics.** When `signFlips > revisions / 3`, the convergence state flips to `status: "oscillating"`, surfaced via `flywheel_convergence` and the `convergence_state_validity` doctor check. Step 5.45 (picked-up-plan menu) renders the score in the question text only — never arms a default option (per Phase 12 §12.5 + README §Design Philosophy #3, every decision routes through `AskUserQuestion`). Auto-approve at score ≥ 0.90 still routes through the user gate; the kill-switch on `flywheel_advance_wave` consults convergence + oscillation flags but cannot bypass the user.
+- **`convergence_state_validity` doctor check.** Probes that the persisted `convergence.json` parses against `ConvergenceStateSchema` and the `signFlips/revisions` invariants are intact. `flywheel_doctor` surfaces it under the standard 11-check sweep (now 12 entries with this addition); severity defaults to yellow on parse failure, red only on schema-required-field violations.
+- **NTM pane priority — changed.** v3.12.0 makes `--cod=` the default secondary lane after `--cc=`; `--pi=` is demoted to fallback (was `--pi=` over `--cod=` pre-v3.12.0). See `c0cf590` and the "NTM pane priority" section below for the canonical priority list.
 
 ## NTM is mandatory for all spawned work
 
@@ -168,7 +208,7 @@ Docs-only diffs: set `ubs.ran=false` with a non-empty `ubs.skippedReason` ("docs
 
 **Coordinator-side mitigation, mandatory for now:**
 
-1. **Use `reserveOrFail()` from `mcp-server/src/agent-mail-helpers.ts`** (v3.11.0+). This helper wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry before failing. **Do not call `agentMailRPC("file_reservation_paths", ...)` directly** — the `RESERVE001` lint rule (`mcp-server/src/lint/rules/reserve001.ts`) flags raw call sites and the existing single use in `mcp-server/src/agent-mail.ts:228` is baselined; new offenders fail CI. Use `releaseReservations(reservationIds)` for the symmetric release.
+1. **Use `reserveOrFail()` from `mcp-server/src/agent-mail-helpers.ts`** (v3.11.0+). This helper wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry before failing. **Do not call `agentMailRPC("file_reservation_paths", ...)` directly** — the `RESERVE001` lint rule (`mcp-server/src/lint/rules/reserve001.ts`) flags raw call sites and the existing single use inside `reserveFileReservations()` (`mcp-server/src/agent-mail.ts`) is baselined; new offenders fail CI. Use `releaseReservations(reservationIds)` for the symmetric release.
 2. The pre-commit guard (`/Users/kevtrinh/.mcp_agent_mail_git_mailbox_repo/projects/<slug>/.git/hooks/pre-commit`, installed via `install_precommit_guard`) is the second line of defense — it blocks commits that touch a path reserved by another agent. Do not bypass it.
 3. Round-1 of the 2026-04-26 reality-check session showed two agents (RoseFalcon + StormyAnchor) holding exclusive reservations on `mcp-server/scripts/lint-skill.ts` simultaneously. No actual write-conflict materialised that session, but the latent risk is real — the `reserveOrFail()` mitigation above is what closes it from the coordinator side.
 
@@ -267,7 +307,7 @@ Test files live in `mcp-server/src/__tests__/`. Follow existing patterns — use
 
 ## Tool name deprecation
 
-The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names are preserved as deprecated aliases that dispatch to the same runners, and will be removed in v4.0. Always use the `flywheel_*` names in new code and docs.
+The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names are preserved as deprecated aliases that dispatch to the same runners, and will be removed in v4.0. Always use the `flywheel_*` names in new code and docs. v3.11.7+ logs a one-shot `orch_deprecation_warned` per alias call with the canonical replacement, so callers can migrate without searching the diff for the rename.
 
 ## SKILL.md linting
 
