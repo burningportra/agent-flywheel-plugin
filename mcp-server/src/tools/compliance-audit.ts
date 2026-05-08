@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 
+import { storeComplianceScore } from '../cass-helpers.js';
+import { recordErrorCode } from '../telemetry.js';
 import type { McpToolResult, ToolContext } from '../types.js';
 import { makeOkToolResult, makeToolError } from './shared.js';
 
@@ -30,6 +32,7 @@ const ComplianceResultBeadSchema = z.object({
   score: z.number(),
   passed: z.boolean(),
   scorecard_path: z.string(),
+  rubric_breakdown: z.record(z.string(), z.string()).optional(),
   top_failures: z.array(z.string()).optional(),
 }).passthrough();
 
@@ -242,7 +245,80 @@ export async function runComplianceAudit(
     }
   }
 
-  // TODO(Task 7): side effects (br update, telemetry, CASS)
+  const errors: Record<string, string> = {};
+
+  for (const bead of failed) {
+    try {
+      const updateResult = await ctx.exec(
+        'br',
+        ['update', bead.beadId, '--status', 'open'],
+        { cwd: args.cwd, timeout: 10000, signal: ctx.signal },
+      );
+      if (updateResult.code !== 0) {
+        errors[bead.beadId] = `br update failed (exit ${updateResult.code}): ${(
+          updateResult.stderr || updateResult.stdout
+        ).slice(0, 500)}`;
+        continue;
+      }
+
+      const commentBody = `Compliance audit reopened - score ${bead.score}/1000. See ${bead.reportPath}`;
+      const commentResult = await ctx.exec(
+        'br',
+        ['comments', 'add', bead.beadId, '--message', commentBody],
+        { cwd: args.cwd, timeout: 10000, signal: ctx.signal },
+      );
+      if (commentResult.code !== 0) {
+        errors[`${bead.beadId}:comment`] = `br comment failed (exit ${commentResult.code}): ${(
+          commentResult.stderr || commentResult.stdout
+        ).slice(0, 500)}`;
+      }
+    } catch (err: unknown) {
+      errors[bead.beadId] = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  if (failed.length > 0) {
+    recordErrorCode('compliance_false_closed', {
+      hashable: failed.map((bead) => bead.beadId).join(','),
+    });
+  }
+
+  let gitHead = 'unknown';
+  try {
+    const gitResult = await ctx.exec(
+      'git',
+      ['rev-parse', 'HEAD'],
+      { cwd: args.cwd, timeout: 5000, signal: ctx.signal },
+    );
+    const trimmed = gitResult.stdout.trim();
+    if (gitResult.code === 0 && trimmed.length > 0) {
+      gitHead = trimmed;
+    } else {
+      errors.gitHead = `git rev-parse HEAD failed (exit ${gitResult.code}): ${(
+        gitResult.stderr || gitResult.stdout || 'empty stdout'
+      ).slice(0, 500)}`;
+    }
+  } catch (err: unknown) {
+    errors.gitHead = err instanceof Error ? err.message : String(err);
+  }
+
+  for (const bead of parsedResult.beads ?? []) {
+    try {
+      storeComplianceScore(args.cwd, {
+        beadId: bead.id,
+        score: bead.score,
+        threshold,
+        passed: bead.passed,
+        rubric: bead.rubric_breakdown ?? {},
+        passUtc: parsedResult.pass_utc ?? '',
+        sessionId: process.env.FW_SESSION_ID ?? null,
+        gitHead,
+      });
+    } catch (err: unknown) {
+      errors[`cass:${bead.id}`] = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   return okComplianceResult(
     `Compliance audit complete: ${passed.length} passed, ${failed.length} failed.`,
     startedAt,
@@ -250,7 +326,7 @@ export async function runComplianceAudit(
       passed,
       failed,
       passUtc: parsedResult.pass_utc ?? null,
-      errors: {},
+      errors,
     },
   );
 }

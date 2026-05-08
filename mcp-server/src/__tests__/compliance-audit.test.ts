@@ -4,8 +4,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { storeComplianceScore } from '../cass-helpers.js';
+import { _resetTelemetryForTest, flushTelemetry, readTelemetry } from '../telemetry.js';
 import { runComplianceAudit } from '../tools/compliance-audit.js';
 import type { ToolContext } from '../types.js';
+
+vi.mock('../cass-helpers.js', () => ({
+  storeComplianceScore: vi.fn(),
+}));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +27,9 @@ const stubCtx = (overrides: Partial<ToolContext> = {}): ToolContext => ({
 describe('runComplianceAudit', () => {
   beforeEach(() => {
     delete process.env.FW_COMPLIANCE_OVERRIDE;
+    delete process.env.FW_SESSION_ID;
+    _resetTelemetryForTest();
+    vi.mocked(storeComplianceScore).mockReset();
   });
 
   it('returns ok with empty arrays when beadIds is empty', async () => {
@@ -77,6 +86,9 @@ describe('runComplianceAudit - skill spawn + parse', () => {
 
   beforeEach(() => {
     delete process.env.FW_COMPLIANCE_OVERRIDE;
+    delete process.env.FW_SESSION_ID;
+    _resetTelemetryForTest();
+    vi.mocked(storeComplianceScore).mockReset();
     tmp = mkdtempSync(join(tmpdir(), 'fw-comp-'));
   });
 
@@ -193,5 +205,148 @@ describe('runComplianceAudit - skill spawn + parse', () => {
     const data = (result.structuredContent as any).data;
     expect(data.status).toBe('error');
     expect(data.errors.parse).toBeTruthy();
+  });
+});
+
+describe('runComplianceAudit - side effects', () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    delete process.env.FW_COMPLIANCE_OVERRIDE;
+    delete process.env.FW_SESSION_ID;
+    _resetTelemetryForTest();
+    vi.mocked(storeComplianceScore).mockReset();
+    tmp = mkdtempSync(join(tmpdir(), 'fw-comp-effects-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+    delete process.env.FW_SESSION_ID;
+  });
+
+  it('runs br update --status open + br comments add for each failed bead', async () => {
+    setupFakePassDir(tmp, 'compliance-result-mixed.json');
+    const exec = vi.fn(async (cmd: string, _args: string[], _opts?: Parameters<ToolContext['exec']>[2]) => ({
+      code: 0,
+      stdout: cmd === 'git' ? 'abc123\n' : '',
+      stderr: '',
+    }));
+
+    const result = await runComplianceAudit(stubCtx({ exec }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.status).toBe('ok');
+    const brCalls = exec.mock.calls.filter((call) => call[0] === 'br');
+    expect(brCalls).toContainEqual([
+      'br',
+      ['update', 'agent-flywheel-002', '--status', 'open'],
+      { cwd: tmp, timeout: 10000, signal: undefined },
+    ]);
+    const commentCall = brCalls.find((call) => call[1][0] === 'comments' && call[1][1] === 'add');
+    expect(commentCall).toBeDefined();
+    expect(commentCall![1]).toEqual([
+      'comments',
+      'add',
+      'agent-flywheel-002',
+      '--message',
+      expect.stringContaining('score 420/1000'),
+    ]);
+  });
+
+  it('does not run br update or comment for passed beads', async () => {
+    setupFakePassDir(tmp, 'compliance-result-pass.json');
+    const exec = vi.fn(async (cmd: string, _args: string[], _opts?: Parameters<ToolContext['exec']>[2]) => ({
+      code: 0,
+      stdout: cmd === 'git' ? 'abc123\n' : '',
+      stderr: '',
+    }));
+
+    await runComplianceAudit(stubCtx({ exec }), { cwd: tmp, beadIds: ['agent-flywheel-001'] });
+
+    const brCalls = exec.mock.calls.filter((call) => call[0] === 'br');
+    expect(brCalls).toEqual([]);
+  });
+
+  it('continues when br update fails and records an errors entry', async () => {
+    setupFakePassDir(tmp, 'compliance-result-mixed.json');
+    const exec = vi.fn(async (cmd: string, args: string[]) => {
+      if (cmd === 'br' && args[0] === 'update') {
+        return { code: 2, stdout: '', stderr: 'bead locked' };
+      }
+      return { code: 0, stdout: cmd === 'git' ? 'abc123\n' : '', stderr: '' };
+    });
+
+    const result = await runComplianceAudit(stubCtx({ exec }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.status).toBe('ok');
+    expect(data.errors['agent-flywheel-002']).toContain('br update failed');
+    expect(data.errors['agent-flywheel-002']).toContain('bead locked');
+    const commentCall = exec.mock.calls.find(
+      (call) => call[0] === 'br' && call[1][0] === 'comments' && call[1][1] === 'add',
+    );
+    expect(commentCall).toBeUndefined();
+  });
+
+  it('records compliance_false_closed telemetry once when any bead fails', async () => {
+    setupFakePassDir(tmp, 'compliance-result-mixed.json');
+    const exec = vi.fn(async (cmd: string, _args: string[], _opts?: Parameters<ToolContext['exec']>[2]) => ({
+      code: 0,
+      stdout: cmd === 'git' ? 'abc123\n' : '',
+      stderr: '',
+    }));
+
+    await runComplianceAudit(stubCtx({ exec }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
+    });
+    await flushTelemetry({ cwd: tmp });
+
+    const telemetry = await readTelemetry({ cwd: tmp });
+    expect(telemetry?.counts.compliance_false_closed).toBe(1);
+  });
+
+  it('persists compliance scores to CASS for all parsed beads', async () => {
+    setupFakePassDir(tmp, 'compliance-result-mixed.json');
+    process.env.FW_SESSION_ID = 'sess-test';
+    const exec = vi.fn(async (cmd: string, _args: string[], _opts?: Parameters<ToolContext['exec']>[2]) => ({
+      code: 0,
+      stdout: cmd === 'git' ? 'abc123\n' : '',
+      stderr: '',
+    }));
+
+    await runComplianceAudit(stubCtx({ exec }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
+      threshold: 750,
+    });
+
+    expect(storeComplianceScore).toHaveBeenCalledTimes(2);
+    expect(storeComplianceScore).toHaveBeenNthCalledWith(1, tmp, {
+      beadId: 'agent-flywheel-001',
+      score: 850,
+      threshold: 750,
+      passed: true,
+      rubric: { impl_completeness: '260/300' },
+      passUtc: '2026-05-08T19:14:22Z',
+      sessionId: 'sess-test',
+      gitHead: 'abc123',
+    });
+    expect(storeComplianceScore).toHaveBeenNthCalledWith(2, tmp, {
+      beadId: 'agent-flywheel-002',
+      score: 420,
+      threshold: 750,
+      passed: false,
+      rubric: { impl_completeness: '120/300' },
+      passUtc: '2026-05-08T19:14:22Z',
+      sessionId: 'sess-test',
+      gitHead: 'abc123',
+    });
   });
 });
