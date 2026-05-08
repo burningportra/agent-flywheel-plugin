@@ -708,7 +708,7 @@ export interface PlanArgs {
 }
 export interface ApproveArgs {
   cwd: string;
-  action: "start" | "polish" | "reject" | "advanced" | "git-diff-review";
+  action: "start" | "polish" | "reject" | "advanced" | "git-diff-review" | "remediate";
   advancedAction?: string;
   /** P2.4 / 2p5 — convergence threshold above which a polish call returns
    * stop_reason="convergence_reached" instead of scheduling another round.
@@ -718,6 +718,29 @@ export interface ApproveArgs {
    * returns stop_reason="max_rounds_hit" instead of scheduling more rounds.
    * Default 5. */
   max_rounds?: number;
+  /**
+   * Required when `action: 'remediate'`. Each call creates exactly one
+   * bead via `br create`, populated from the §"Remediation Bead Template"
+   * verbatim shape. T11 (`_wrapup.md` Step 9.5) calls this once per
+   * failing criterion when the operator picks Iterate. Bead: T20
+   * (claude-orchestrator-38i).
+   */
+  remediation?: {
+    /** Plan slug — used to fill the verdict-file path in the bead body. */
+    planSlug: string;
+    /** Iteration index from the verdict — used for the verdict-file path. */
+    iteration: number;
+    /** Criterion id (e.g. `c2`). Mirrors PerCriterionVerdict.criterionId. */
+    criterionId: string;
+    /** Criterion description from rubric.md — looked up by the caller because PerCriterionVerdict carries only the id. */
+    criterionDescription: string;
+    /** Verdict status for this criterion. */
+    status: "unmet" | "partial";
+    /** Grader's evidence trace — quoted in the bead body unchanged. */
+    evidence: string;
+    /** Gaps the grader flagged — fold into bead acceptance criteria. */
+    gaps: string[];
+  };
 }
 /** P2.4 / 2p5 — explicit reason a polish loop terminated. Surfaced in the
  * approve_beads response so operators don't have to infer "did we converge

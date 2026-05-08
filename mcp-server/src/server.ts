@@ -165,13 +165,31 @@ const PRIMARY_TOOLS = [
         cwd: { type: 'string', description: 'Project working directory' },
         action: {
           type: 'string',
-          enum: ['start', 'polish', 'reject', 'advanced', 'git-diff-review'],
-          description: 'start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle',
+          enum: ['start', 'polish', 'reject', 'advanced', 'git-diff-review', 'remediate'],
+          description: 'start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle, remediate=create one bead from a failing outcome-grading criterion (T20).',
         },
         advancedAction: {
           type: 'string',
           enum: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
           description: 'Required when action=advanced. Selects the advanced refinement strategy.',
+        },
+        remediation: {
+          type: 'object',
+          description: 'Required when action=remediate. Carries the failing-criterion payload used by the §"Remediation Bead Template" body. T11 (_wrapup.md Step 9.5 Iterate) renders this from the failing PerCriterionVerdict + rubric.md.',
+          properties: {
+            planSlug: { type: 'string', description: 'Plan slug used to fill the verdict-file path in the bead body.' },
+            iteration: { type: 'number', description: 'Iteration index from the verdict.' },
+            criterionId: { type: 'string', description: 'Criterion id (e.g. c2).' },
+            criterionDescription: { type: 'string', description: 'Criterion description from rubric.md.' },
+            status: { type: 'string', enum: ['unmet', 'partial'], description: 'Verdict status for this criterion.' },
+            evidence: { type: 'string', description: "Grader's evidence trace; quoted into the bead body unchanged." },
+            gaps: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Gaps the grader flagged; rendered as bullet list in bead body.',
+            },
+          },
+          required: ['planSlug', 'iteration', 'criterionId', 'criterionDescription', 'status', 'evidence', 'gaps'],
         },
         until_convergence_score: {
           type: 'number',
