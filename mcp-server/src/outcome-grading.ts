@@ -511,13 +511,28 @@ function yamlScalar(value: string): string {
  * Mirrors the slug derivation used by `flywheel_convergence` so the
  * `.pi-flywheel/plans/<slug>/` directory carries the same name across
  * tools.
+ *
+ * Special case: when the path matches `.pi-flywheel/plans/<slug>/rubric.md`
+ * (or .../grading/iteration-N.json), the slug is the parent directory of
+ * `rubric.md` / `grading/`, not the trailing filename. This lets callers
+ * thread `state.outcomeRubricPath` straight through without losing the
+ * slug.
  */
 export function planSlugFromIdentifier(planPathOrId: string): string {
-  const base = planPathOrId
-    .split(/[\\/]/)
-    .pop()
-    ?.replace(/\.md$/i, '') ?? planPathOrId;
-  return base
+  const segments = planPathOrId.split(/[\\/]/);
+  // Detect the `.pi-flywheel/plans/<slug>/rubric.md` and
+  // `.pi-flywheel/plans/<slug>/grading/iteration-N.json` shapes — slug is
+  // the segment immediately after `plans/`.
+  const plansIdx = segments.indexOf('plans');
+  if (plansIdx !== -1 && segments[plansIdx - 1] === '.pi-flywheel' && segments[plansIdx + 1]) {
+    return slugify(segments[plansIdx + 1]);
+  }
+  const base = segments.pop()?.replace(/\.md$/i, '') ?? planPathOrId;
+  return slugify(base);
+}
+
+function slugify(value: string): string {
+  return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
@@ -844,7 +859,34 @@ export async function synthesizeRubric(
   const synthesizer = opts.synthesizer ?? defaultSynthesizerDriver;
   const now = opts.now ?? Date.now;
 
-  // Resolve plan path + slug.
+  // ─ action: 'validate' fast-path — does not need a plan file at all.
+  // Resolve slug from either args.planSlug or state.outcomeRubricPath.
+  if (action === 'validate') {
+    const slugV = args.planSlug
+      ?? (state.outcomeRubricPath ? planSlugFromIdentifier(state.outcomeRubricPath) : undefined)
+      ?? (args.planPath ? planSlugFromIdentifier(args.planPath) : undefined)
+      ?? (state.planDocument ? planSlugFromIdentifier(state.planDocument) : undefined);
+    if (!slugV) {
+      throw new FlywheelError({
+        code: 'invalid_input',
+        message: 'synthesizeRubric action=validate requires planSlug or state.outcomeRubricPath',
+      });
+    }
+    const rubricRelV = rubricPathForSlug(slugV);
+    const rubricAbsV = path.join(cwd, rubricRelV);
+    if (!existsSync(rubricAbsV)) {
+      throw new FlywheelError({
+        code: 'rubric_missing',
+        message: `rubric.md not found at ${rubricRelV}`,
+      });
+    }
+    const rubric = parseRubricFrontmatter(readFileSync(rubricAbsV, 'utf8'));
+    state.outcomeRubricPath = rubricRelV;
+    saveState(state);
+    return { rubricPath: rubricRelV, rubric, source: rubric.source };
+  }
+
+  // Resolve plan path + slug for synth/edit/regenerate paths.
   const planPath = args.planPath ?? state.planDocument;
   if (!planPath) {
     throw new FlywheelError({
@@ -858,19 +900,8 @@ export async function synthesizeRubric(
   const rubricAbs = path.join(cwd, rubricRel);
   const lockAbs = path.join(cwd, rubricLockPathForSlug(slug));
 
-  // ─ action: 'validate' — read + parse + return; no write ─
-  if (action === 'validate') {
-    if (!existsSync(rubricAbs)) {
-      throw new FlywheelError({
-        code: 'rubric_missing',
-        message: `rubric.md not found at ${rubricRel}`,
-      });
-    }
-    const rubric = parseRubricFrontmatter(readFileSync(rubricAbs, 'utf8'));
-    state.outcomeRubricPath = rubricRel;
-    saveState(state);
-    return { rubricPath: rubricRel, rubric, source: rubric.source };
-  }
+  // (action: 'validate' is handled in the fast-path above; if we reach
+  // here, action is one of 'synthesize' | 'edit' | 'regenerate'.)
 
   // Read plan content for cache key + LLM input.
   if (!existsSync(planAbs)) {
