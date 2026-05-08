@@ -292,6 +292,46 @@ The tool returns `{verified, autoClosed, unclosedNoCommit, errors}`:
   }])
   ```
 
+### Step 9.0a — Compliance audit (default-on wave gate)
+
+After `flywheel_verify_beads` succeeds with no `unclosedNoCommit` entries and no `errors`, run the compliance audit on the same wave before showing the existing progress menu:
+
+```
+flywheel_compliance_audit({
+  cwd,
+  beadIds: <bead-ids-just-closed>,
+  mode: 'single-bead',     // default
+  threshold: 700,          // default
+})
+```
+
+This spawns the standalone `/beads-compliance-and-completion-verification` skill in single-bead-parallel mode. Wall time is usually 5-10 minutes for a wave of 5. It honors `FW_COMPLIANCE_OVERRIDE` for emergency skips.
+
+Branch on `result.structuredContent?.data?.status`:
+
+- **`status === 'skipped'`** (`FW_COMPLIANCE_OVERRIDE` set) -> display `Compliance: skipped (override)` and proceed to the existing Step 9 result menu.
+- **`status === 'error'`** -> display the error reason, such as `Compliance: error parsing result.json`, and proceed to the existing Step 9 result menu. This is advisory only; do not gate on audit tool errors.
+- **`status === 'ok'` AND `failed.length === 0`** -> display `Compliance: <N> passed (all >=700/1000)` and proceed to the existing Step 9 result menu.
+- **`status === 'ok'` AND `failed.length > 0`** -> present the failure menu in Step 9.0b.
+
+### Step 9.0b — Compliance failure menu
+
+```
+AskUserQuestion(questions: [{
+  question: "Compliance audit found <N> false-closed bead(s). What now?",
+  header: "Compliance",
+  options: [
+    { label: "Re-implement failed (Recommended)", description: "Reopened beads <ids> - route back to Step 7 with these as the new wave" },
+    { label: "Show evidence", description: "Open <passUtc>/REPORT.md, then re-show this menu" },
+    { label: "Override + proceed", description: "Stamp `Compliance-Override: <ids>` trailer in wrap-up commit. Beads stay reopened, session continues" },
+    { label: "Skip and continue (advisory)", description: "Treat the audit as advisory, ignore the reopens, proceed to wrap-up. Logged but not gated" }
+  ],
+  multiSelect: false
+}])
+```
+
+Beads in `failed[]` have already been reopened by `flywheel_compliance_audit` via `br update --status open`. This menu controls only what happens next, not the bead state. Routing is handled in Task 10.
+
 Then check remaining beads with `br list`. If beads remain, use `AskUserQuestion`:
 
 ```
