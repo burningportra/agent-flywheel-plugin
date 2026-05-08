@@ -206,6 +206,21 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    1. **Detect CLI availability up-front.** Run `which claude codex gemini` (or call `flywheel_doctor` and read the `claude_cli` / `codex_cli` / `gemini_cli` rows + the `swarm_model_ratio` synthesis). Build a capabilities map. The MCP server exposes `detectCliCapabilities` from `mcp-server/src/adapters/model-diversity.ts` for programmatic callers.
 
+   1a. **Codex config compatibility pre-spawn gate (MANDATORY when lane includes a `cod` pane).** If `DOCTOR_REPORT.checks` shows `codex_config_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning. Skipping it is a known failure mode: cod pane crashes within seconds with `'gpt-5.5-xhigh' model is not supported when using Codex with a ChatGPT account` (verified 2026-05-08).
+
+      ```
+      AskUserQuestion(questions: [{
+        question: "Doctor flagged codex_config_compat (~/.codex/config.toml model='X' is rejected by ChatGPT-account auth). Apply the fix before spawning?",
+        header: "Codex config",
+        options: [
+          { label: "Apply fix and proceed (Recommended)", description: "Run: sed -i.bak -E 's/^([[:space:]]*model[[:space:]]*=)/# \\1/' ~/.codex/config.toml. Then spawn the swarm." },
+          { label: "Skip cod from swarm", description: "Re-shape lane sizes to redistribute codex share to claude+gemini. Loses Codex perspective." },
+          { label: "Continue anyway", description: "Spawn cod panes despite known incompatibility — they will crash within seconds." }
+        ],
+        multiSelect: false
+      }])
+      ```
+
    2. **Compute the lane sizes** from the capabilities map and the wave size N:
       - All three available: `floor(N/3)` each. N=3 → 1 Claude + 1 Codex + 1 Gemini. N=4 → 2C + 1Co + 1G (claude takes the +1). N=5 → 2C + 2Co + 1G. N=14 → 5C + 5Co + 4G.
       - Missing one CLI (e.g. codex absent): redistribute its share to the surviving providers by priority. Wave of 3 with codex missing → 2 Claude + 1 Gemini, plus a degraded-mode warning to the user.
@@ -234,10 +249,12 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
       Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
       ```bash
-      ntm --robot-send="$SESSION" --panes=1 --type=cc  --msg="<claude-tuned prompt>"
-      ntm --robot-send="$SESSION" --panes=$((N_claude+1)) --type=cod --msg="<codex-tuned prompt>"
-      ntm --robot-send="$SESSION" --panes=$((N_claude+N_cod+1)) --type=gem --msg="<gemini-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=1 --msg="<claude-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_claude+1)) --msg="<codex-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_claude+N_cod+1)) --msg="<gemini-tuned prompt>"
       ```
+
+      **Flag note (verified 2026-05-08).** Use `--panes=N` (plural; indices comma-separated). `--pane=N` (singular) is silently broadcast to ALL panes. Combining `--panes=N --type=cc` AND-restricts to zero matches at session-init time before pane-type metadata stabilizes — drop `--type=` when you already know the index from the spawn order.
 
       ⚠ **Forbidden in automation:** `ntm view` (retiles the user's tmux layout and returns nothing useful) and `ntm dashboard` / `ntm palette` (human-only TUIs). The user can run them; the orchestrator must not.
 

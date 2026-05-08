@@ -1,162 +1,138 @@
-# Skill Refinement Proposal — skills/start/ (evidence: v3.4.0 session, 2026-04-21)
+# skills/start refinement proposal — 2026-05-08
 
-**Refiner:** ChartreuseWaterfall (claude-opus-4-7)
-**Coordinator:** LilacRidge
-**Session:** v3.4.0 observability bundle — release `6f24cf3` (14 beads closed, 740 → 919 tests, 0 production regressions)
-**Plan:** `docs/plans/2026-04-21-v3-4-0-synthesized.md`
+> **Source evidence**: outcome-grading v3.13.0 cycle (60+ orchestrator turns, 3-pane deep-plan + 1-pane impl coordinator-serial)
+> **Supersedes**: prior 2026-04-21 v3.4.0-evidence proposal (now stale).
 
----
+## Priority 1 — fixes for live failures observed this cycle
 
-## Evidence summary
+### #1 — NTM `--robot-send` flag syntax
 
-Session shipped v3.4.0 cleanly (14 beads, 2 waves parallel + 1 serial, fresh-eyes gate after F1, pre-merge 2-reviewer release gate). Observed friction points, ranked by recurrence:
+**Files**: `skills/start/_planning.md` lines 328-330, `skills/start/_implement.md` lines 237-239.
 
-- **br CLI flag mismatches (2 incidents, silent failure both times).** Coordinator used `br create --issue-type` (silently accepted, empty JSON output) and `br update --close-reason` (does not exist — `br close -r/--reason` is the correct form, or `br update --status closed` with a separate commit message for closing reason).
-  - Verified via `br create --help`: the flag is `-t`/`--type`; `--issue-type` is NOT listed.
-  - Verified via `br close --help`: `-r/--reason <REASON>` is the close-reason flag, and `br update` has no `--reason` flag at all.
-  - Current `skills/start/_beads.md:9` uses the correct form (`--type task`) but the example is one line in a numbered list — easy to miss mid-flow.
+**Failure observed this cycle**: First dispatch with `ntm --robot-send=$SESSION --panes=1 --type=cc --msg=<correctness-prompt>` was rejected with `"No target panes matched the filter criteria"` because the AND of `--panes=1 AND --type=cc` matched zero panes at session-init time (pane-type metadata wasn't fully populated yet). Second attempt without `--type=cc` succeeded but unintentionally broadcasted to ALL 3 panes (because the leading test was `--pane=1` singular, which doesn't exist on `--robot-send` and got silently ignored). Result: cod and gmi panes got the correctness prompt; required override messages.
 
-- **Title-format lint cosmetic noise (3 incidents).** `R1:`, `T13:`, `D12:` beads flagged "title not a verb phrase" by lint. All three were intentional wave/review labels; the lint heuristic doesn't recognize wave-prefix conventions. Cosmetic but pollutes the quality score (0.74 this session, below the 0.75 "acceptable" threshold).
+**Proposed change**:
 
-- **Plan quality score 0.74 at launch (1 incident, high consequence).** Below the skill's documented 0.75 "acceptable" threshold. User accepted the risk; no downstream issues. The low-quality menu at `_beads.md:155-167` fires but the user ratified the synthesis anyway. The threshold's calibration may be too strict.
+In `_planning.md` § "Deep plan" dispatch (around line 326), replace the 3 example lines:
 
-- **Agent Mail `contact_policy` default blocks first peer-to-peer send (2 incidents).** `bootstrapCoordinator` (F1) auto-sets `auto` for the coordinator but not for planner/reviewer identities. Workaround: agents embedded their summary in task-return text instead of Agent Mail body.
+```bash
+# BEFORE:
+ntm --robot-send="$SESSION" --panes=1 --type=cc  --msg="<correctness planner prompt>"
+ntm --robot-send="$SESSION" --panes=2 --type=cod --msg="<ergonomics  planner prompt>"
+ntm --robot-send="$SESSION" --panes=3 --type=gmi --msg="<robustness  planner prompt>"
 
-- **Codex sandbox cannot access `mcp__plugin_agent-flywheel_agent-mail__*` tools (1 incident — codex:codex-rescue robustness planner).** Agent produced plan but could not bootstrap AM. Already documented as degraded mode in `SKILL.md` (step 0f) — the fallback worked.
+# AFTER:
+ntm --robot-send="$SESSION" --panes=1 --msg="<correctness planner prompt>"
+ntm --robot-send="$SESSION" --panes=2 --msg="<ergonomics  planner prompt>"
+ntm --robot-send="$SESSION" --panes=3 --msg="<robustness  planner prompt>"
+```
 
-- **Parallel-wave `dist/` build race (1 incident, non-blocking).** I3 committed `dist/` first; I2 rebuilt the same `dist/` and committed only src/. Outputs were byte-identical. No bug, but the pattern is confusing when debugging via git blame.
+Add a note immediately after the bash block:
 
-- **Fresh-eyes gate after F1 caught a real P1 (1 incident, high value).** `HotspotInputBead.body` vs `Bead.description` field mismatch silently suppressed the `coordinator-serial` recommendation. The 5-reviewer parallel dispatch found it cold. Strong validation of the existing pattern.
+> **Flag note (verified 2026-05-08).** Use `--panes=N` (plural; indices are comma-separated). `--pane=N` (singular) is silently broadcast to ALL panes. Combining `--panes=N --type=cc` AND-restricts to zero matches at session-init time before pane-type metadata stabilizes — drop `--type=` when you already know the index. Test with `--msg="ping"` before dispatching the full prompt and verify `successful: ["N"]` returned, not `["0", "1", "2"]`.
 
-- **Agent-mail search returned empty** for both `"start skill feedback"` and `"flywheel skill"` queries — no cross-session feedback messages arrived during this cycle. Evidence here comes from CASS entry `b-mo9ibqpx-sx6i5r`, git log, and plan synthesis text.
+Apply identical change to `_implement.md` line 237-239 (Step 7 implementation dispatch).
 
----
+### #2 — `codex_config_compat` pre-spawn gate (missing)
 
-## High-confidence changes (evidence ≥ 2 data points OR single-incident with silent-failure consequence)
+**Files**: `skills/start/_planning.md` § Deep plan pre-flight (around line 295), `skills/start/_implement.md` § Pre-flight gate.
 
-### Change 1: Add br CLI command reference card at top of `_beads.md`
+**Failure observed this cycle**: `codex_config_compat` was yellow at session start (doctor flagged `~/.codex/config.toml model = "gpt-5.5"` as ChatGPT-account-incompatible). The deep-plan swarm was spawned anyway. The cod pane crashed within seconds with `"'gpt-5.5-xhigh' model is not supported when using Codex with a ChatGPT account"`. Required mid-cycle user-confirmed `sed` fix + pane restart.
 
-- **File + section:** `skills/start/_beads.md` — insert new block between line 2 and line 3 (before `## Step 5.5`).
-- **BEFORE:**
-  ```
-  # Bead Creation & Approval — Steps 5.5, 6
+**Proposed change**: Add a new pre-flight sub-step BEFORE the swarm spawn, in both `_planning.md` (deep plan + duel) and `_implement.md` (impl dispatch):
 
-  ## Step 5.5: Create beads from the plan
-  ```
-- **AFTER:**
-  ```
-  # Bead Creation & Approval — Steps 5.5, 6
+> **Codex config compatibility pre-spawn gate.** If the swarm includes any `cod` pane AND `DOCTOR_REPORT.checks` shows `codex_config_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning:
+>
+> ```
+> AskUserQuestion(questions: [{
+>   question: "Doctor flagged codex_config_compat (~/.codex/config.toml model='X' is rejected by ChatGPT-account auth). Apply the fix before spawning?",
+>   header: "Codex config",
+>   options: [
+>     { label: "Apply fix and proceed (Recommended)", description: "Run: sed -i.bak -E 's/^([[:space:]]*model[[:space:]]*=)/# \\1/' ~/.codex/config.toml. Then spawn the swarm." },
+>     { label: "Skip cod from swarm", description: "Spawn with --cc=N --gmi=M only (no cod panes). Loses Codex perspective" },
+>     { label: "Continue anyway", description: "Spawn cod panes despite known incompatibility — they will likely crash within seconds. Pick this only if you have an alternative grader plan" }
+>   ],
+>   multiSelect: false
+> }])
+> ```
+>
+> **Apply fix and proceed** → `sed`, then continue to spawn step. **Skip cod** → re-shape the spawn args to omit `--cod=N`. **Continue anyway** → spawn as planned and surface the failure to the user when it occurs (don't silently fall back).
 
-  > ## br CLI command reference (use EXACTLY these flags — the CLI silently accepts unknown flags and returns empty JSON)
-  >
-  > | Operation | Correct form | Common wrong form |
-  > |-----------|--------------|-------------------|
-  > | Create bead | `br create --title "…" --description "…" --priority 2 --type task` | `--issue-type` (silently ignored — use `-t`/`--type`) |
-  > | Add dependency | `br dep add <downstream> <upstream>` (positional) | `--depends-on` (does not exist) |
-  > | Close bead with reason | `br close <id> --reason "…"` or `br close <id> -r "…"` | `br update <id> --close-reason "…"` (does not exist) |
-  > | Mark status closed | `br update <id> --status closed` | `br update <id> --status done` (status enum is `open`/`deferred`/`in_progress`/`closed`) |
-  > | List all | `br list` (default) or `br list --json` | — |
-  > | Show one | `br show <id> --json \| jq '.[0]'` (wraps in array) | `br show <id>` then parse as single object (will fail — it's an array) |
-  >
-  > **Hard rule:** If `br` returns empty JSON or exits 0 with no visible effect, you likely used a flag that doesn't exist. Re-run with `--help` to verify before retrying.
+### #3 — `br list` default-view excludes closed beads
 
-  ## Step 5.5: Create beads from the plan
-  ```
-- **Rationale + evidence:**
-  - CLI silent-accept behavior hit TWICE this session (`--issue-type`, `--close-reason`). Both times the coordinator proceeded thinking the command succeeded — only noticed when downstream state didn't match.
-  - `br create --help` output confirms `-t`/`--type` is the correct flag; `br close --help` confirms `-r`/`--reason` is close-only (not on `update`).
-  - Existing `_beads.md:9` has the correct form inline but is buried in a numbered list; a top-of-file reference card is impossible to miss when the agent reads the file at Step 5.5 entry.
-  - Matches the pattern used by the `_implement.md` idle-agent escalation table (also evidence-driven after v3.3.0 session).
+**File**: `skills/start/_beads.md` line 11 (the br CLI command reference table).
 
----
+**Failure observed this cycle**: Tend cycles using `br list --json` filtered for `status === 'closed'` returned 0 results even when 9 commits clearly closed 9 beads. Default `br list` excludes closed. The skill's reference table had only "List open beads" → `br list (default) or br list --json` — no entry for closed beads.
 
-### Change 2: Extend plan-quality-score "low quality" menu with a "ratify as-is" fast-path for decisive convergence
+**Proposed change**: Add a row to the reference table at line 11:
 
-- **File + section:** `skills/start/_beads.md` lines 155-167 (the low-quality `AskUserQuestion` menu).
-- **BEFORE:**
-  ```
-  AskUserQuestion(questions: [{
-    question: "Quality score: <X.XX>/1.00 — below the 0.75 threshold. <weak-bead-summary>. How should I proceed?",
-    header: "Low quality",
-    options: [
-      { label: "Polish beads", description: "Run another bead refinement round (Recommended)" },
-      { label: "Back to plan", description: "Return to Step 5.6 to refine the plan itself" },
-      { label: "Launch anyway", description: "Proceed despite low score — accept the risk" },
-      { label: "Reject", description: "Discard these beads and start over with a different goal" }
-    ],
-    multiSelect: false
-  }])
-  ```
-- **AFTER:**
-  ```
-  AskUserQuestion(questions: [{
-    question: "Quality score: <X.XX>/1.00 — below the 0.75 threshold. <weak-bead-summary>. How should I proceed?",
-    header: "Low quality",
-    options: [
-      { label: "Polish beads", description: "Run another bead refinement round (Recommended)" },
-      { label: "Back to plan", description: "Return to Step 5.6 to refine the plan itself" },
-      { label: "Launch anyway", description: "Proceed despite low score — accept the risk (note in end-of-turn summary)" },
-      { label: "Reject", description: "Discard these beads and start over with a different goal" }
-    ],
-    multiSelect: false
-  }])
-  ```
-  AND add this note immediately below the menu:
-  ```
-  > **Cosmetic-lint exception:** If ≥ 50% of the weak-bead reasons are lint cosmetic flags
-  > (e.g. "title not a verb phrase" on wave-prefix beads like `R1:`, `T13:`, `D12:`), surface
-  > them to the user as "cosmetic only" in `<weak-bead-summary>` and pre-recommend "Launch
-  > anyway". Title-format lint on wave-prefix beads is a known false-positive — do not force
-  > a polish round over it. Reserve polish rounds for substantive weakness (vague acceptance
-  > criteria, missing WHY, oversized scope).
-  ```
-- **Rationale + evidence:**
-  - 3 out of N beads this session were flagged title-not-verb-phrase — all 3 were intentional wave-prefix labels (`R1:`, `T13:`, `D12:`).
-  - Plan quality score landed at 0.74 (below 0.75) largely because of this. User ratified anyway; no downstream issues.
-  - Without this exception, the skill forces a polish round that accomplishes nothing for the cosmetic lint — wasted cycle and reinforces "threshold theater" behavior.
-  - The fix preserves the gate for substantive quality issues while carving out the known false-positive.
+```
+> | List closed beads | `br list --status closed --json` | `br list \| grep closed` (closed status not shown by default) |
+```
 
----
+Add a new caveat below the existing WARNING at line 66:
 
-### Change 3: Add a "decisive convergence" pattern callout to `_implement.md` after successful wave
+> **Tend-cycle note**: `br list` (no flags) shows only `open` and `in_progress`. To check this cycle's completion count, use `br list --status closed --json`. Common false-alarm pattern: orchestrator sees commits but `br list` shows 0 closed → assumes implementer is committing without closing → wastes a tend cycle on a phantom problem.
 
-- **File + section:** `skills/start/_implement.md` — add a note in the "Stuck-swarm diagnostics" table area, or as a new sub-section after line 96 (the "Post-wave bridge to Step 8" note).
-- **BEFORE:** (no existing guidance on parallel-wave `dist/` build races)
-- **AFTER:** (insert after line 96, before `### Stuck-swarm diagnostics`):
-  ```
-  ### Parallel-wave build-artifact races
+## Priority 2 — improvements for clarity (nice-to-have)
 
-  When multiple impl beads in the same wave all trigger `npm run build` (or equivalent),
-  they will each rebuild `dist/` or equivalent output directory. Byte-identical outputs
-  are fine — git will only see one change — but **different commit orderings can confuse
-  git blame** (bead B's commit may ship bead A's dist/ and vice versa).
+### #4 — `cycleStartSha` bootstrap gap callout in `_wrapup.md`
 
-  **Recommended pattern:**
-  - Designate ONE bead per wave as the "build-committer" — only that bead commits
-    `dist/`. Other beads commit src/ only.
-  - Alternative: defer the `dist/` commit to Step 9.5 wrap-up, where the coordinator
-    runs one final `npm run build` and commits the bumped output alongside the version
-    bump. This is the pattern used by v3.4.0 — clean git log, no cross-bead confusion.
+**File**: `skills/start/_wrapup.md` § Step 10.0 post-mortem error-code branches.
 
-  If you observe two beads committing the same `dist/` bytes, note it in end-of-turn
-  summary but do NOT retroactively squash — the history is accurate and future bisects
-  still land on the correct src/.
-  ```
-- **Rationale + evidence:**
-  - One incident this session (I3 + I2 both committed byte-identical `dist/`). Not a bug, but confusing during release review.
-  - Low-cost documentation fix that codifies the v3.4.0 pattern so future waves don't repeat the ambiguity.
-  - Single incident, but the pattern is reproducible any time a parallel wave touches a built artifact — worth writing down before it bites on a non-identical-bytes case.
+**Issue**: The `postmortem_empty_session` error-code branch says "still returns a terse draft; proceed with the AskUserQuestion" — but doesn't flag the common cause: features that capture state at session-boundary points (`flywheel_select`, `flywheel_plan`) don't kick in until the NEXT cycle. A cycle that SHIPS such a feature gets `empty_session` for its own postmortem.
 
----
+**Proposed change**: Append to the `postmortem_empty_session` branch:
 
-## Lower-confidence observations (≤ 2 data points — flag but don't propose)
+> **Common cause**: this cycle shipped a state-capture feature at a session-boundary point (e.g. `cycleStartSha` capture in `flywheel_select`), but the capture wasn't yet implemented when this cycle's `flywheel_select` was called. The auto-postmortem can't see this cycle's commits because there's no captured baseline. Hand-write the post-mortem from `git log --since="<session-start-time>" --oneline` instead. The next cycle will work correctly.
 
-- **Agent Mail contact_policy default blocks peer-to-peer first-send.** 2 incidents this session (planner and reviewer first sends). Workaround (embed summary in task-return) worked. F1 already auto-sets coordinator policy; extending to all bootstrap calls is a candidate for a future F-bead, but the SKILL-level fix would be a one-liner in the agent prompt template and may belong in the `agent-mail` skill rather than `skills/start/`. Revisit if it recurs.
-- **Codex sandbox ↔ Agent Mail gap.** 1 incident (codex:codex-rescue robustness planner). Already documented as degraded mode in SKILL.md §0f. The fallback worked. No skill change needed unless this becomes frequent.
-- **Plan quality threshold calibration.** The 0.75 threshold fired once as a false positive (Change 2 addresses the cosmetic-lint case), but the broader question "is 0.75 the right number?" needs more sessions' data to answer. Track across next 3 cycles before proposing a threshold change.
+### #5 — Step 5.55 "decisive convergence on synthesizer recommendations" example
 
----
+**File**: `skills/start/_planning.md` § Step 5.55 §3.
 
-**Total high-confidence changes:** 3 (br CLI reference card, cosmetic-lint exception to low-quality gate, parallel-wave build-artifact guidance).
-**Net additions:** ~60 lines across 2 files. No deletions.
-**Risk:** Low — all three are additive; none weaken an existing gate.
+**Issue**: The skill says "**All answers confirm the plan** → proceed to Step 5.6" but the user's confirming answers may agree with the SYNTHESIZER's recommendations (not change them) — that's actually decisive convergence in disguise, not a "no-op" branch. Worth a one-line note.
+
+**Proposed change**: Append to the "All answers confirm" branch in §3:
+
+> Note: this branch fires when the user agrees with the synthesizer's recommendations on every question. The synthesizer already adopted those choices in the plan body; the user's confirmation just cross-validates. No refinement round is needed — proceed directly to Step 5.6.
+
+### #6 — Solution-doc category classifier picks "test" for non-test cycles
+
+**File**: `mcp-server/src/solution-doc-schema.ts` (NOT a skill, but caught during this cycle's wrap-up).
+
+**Issue**: This cycle's solution doc was auto-categorized as `docs/solutions/test/...` because the goal text mentioned "test" (in the context of "rubric grader iteration loop, with test output"). Better category: `tooling` or `coordination`. Worth a follow-up bead, not a skill change.
+
+**Recommended action**: file a follow-up bead in next cycle, not part of this refine.
+
+### #7 — `mark_message_read()` validation rejects integer message IDs
+
+**File**: agent-mail server-side Zod parsing (NOT a skill, observed mid-cycle).
+
+**Issue**: Passing `message_id: 757` (integer) returns `expected type integer, got string` from validator. Workaround: skip clearing stale inbox messages.
+
+**Recommended action**: file as upstream agent-mail issue, not part of this refine.
+
+## What worked well this cycle (preserve, don't change)
+
+- **Step 5.55 alignment-check loop is load-bearing.** Surfacing the 4 unresolved tensions BEFORE bead creation caught all the load-bearing decisions. Decisive-convergence skip rule worked smoothly.
+- **Step 0c doctor smoke check is load-bearing.** It flagged `codex_config_compat` and `checkpoint_validity` at session start — both were real issues. The skill correctly surfaced them but the user (and orchestrator) didn't gate on them; that's the pre-spawn gate ask in #2.
+- **Coordinator-serial launch mode + hotspot matrix routing** was correct for this cycle (3 beads modify same file). The 4-option launch menu correctly routed to single-pane impl.
+- **flywheel_approve_beads(action: 'remediate')** as a Tension #3 resolution — clean addition without polluting other approve actions.
+- **Per-bead completion-report.json discipline** — every closed bead has its evidence preserved on disk, queryable via `flywheel_verify_beads`.
+
+## Files to modify (if proposal accepted)
+
+- [ ] `skills/start/_planning.md` (Priority 1 #1, #2; Priority 2 #5)
+- [ ] `skills/start/_implement.md` (Priority 1 #1, #2)
+- [ ] `skills/start/_beads.md` (Priority 1 #3)
+- [ ] `skills/start/_wrapup.md` (Priority 2 #4)
+
+## Application order
+
+1. Apply #1 (NTM flag syntax) — single-line edits, lowest risk
+2. Apply #3 (br list reference table) — single-line additions
+3. Apply #2 (codex_config_compat gate) — adds new sub-step, larger surface
+4. Apply #4 (postmortem callout) — append-only
+5. Apply #5 (decisive-convergence note) — append-only
+
+After applying: rebuild bundle (`cd mcp-server && npm run build`) so the bundled skill body matches disk.

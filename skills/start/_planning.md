@@ -291,6 +291,21 @@ Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes,
 > - `NTM_AVAILABLE=false reason=cli-missing` → use the `Agent()` fallback silently.
 > - `NTM_AVAILABLE=false reason=name-collision` or `symlink-failed` → surface `AskUserQuestion` per `_implement.md` Pre-flight gate. NEVER auto-clobber an existing symlink that points elsewhere — destructive.
 
+> **Codex config compatibility pre-spawn gate (MANDATORY when spawn includes a `cod` pane).** If `DOCTOR_REPORT.checks` shows `codex_config_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning. Skipping it is a known failure mode: cod pane crashes within seconds with `'gpt-5.5-xhigh' model is not supported when using Codex with a ChatGPT account` (verified 2026-05-08).
+>
+> ```
+> AskUserQuestion(questions: [{
+>   question: "Doctor flagged codex_config_compat (~/.codex/config.toml model='X' is rejected by ChatGPT-account auth). Apply the fix before spawning?",
+>   header: "Codex config",
+>   options: [
+>     { label: "Apply fix and proceed (Recommended)", description: "Run: sed -i.bak -E 's/^([[:space:]]*model[[:space:]]*=)/# \\1/' ~/.codex/config.toml. Then spawn the swarm." },
+>     { label: "Skip cod from swarm", description: "Spawn with --cc=N --gmi=M only (no cod panes). Loses Codex perspective but avoids crash." },
+>     { label: "Continue anyway", description: "Spawn cod panes despite known incompatibility — they will likely crash within seconds." }
+>   ],
+>   multiSelect: false
+> }])
+> ```
+
 1. **Bootstrap Agent Mail** — call `macro_start_session` with:
    - `human_key`: current working directory
    - `program`: "claude-code"
@@ -325,10 +340,12 @@ Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes,
 
    Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
    ```bash
-   ntm --robot-send="$SESSION" --panes=1 --type=cc  --msg="<correctness planner prompt>"
-   ntm --robot-send="$SESSION" --panes=2 --type=cod --msg="<ergonomics  planner prompt>"
-   ntm --robot-send="$SESSION" --panes=3 --type=gmi --msg="<robustness  planner prompt>"
+   ntm --robot-send="$SESSION" --panes=1 --msg="<correctness planner prompt>"
+   ntm --robot-send="$SESSION" --panes=2 --msg="<ergonomics  planner prompt>"
+   ntm --robot-send="$SESSION" --panes=3 --msg="<robustness  planner prompt>"
    ```
+
+   **Flag note (verified 2026-05-08).** Use `--panes=N` (plural; indices comma-separated). `--pane=N` (singular) is silently broadcast to ALL panes. Combining `--panes=N --type=cc` AND-restricts to zero matches at session-init time before pane-type metadata stabilizes — drop `--type=` when you already know the index. Test with `--msg="ping"` before the full prompt; verify `successful: ["N"]` returned, not `["0", "1", "2"]`.
 
    Each planner's prompt MUST still include the Agent Mail bootstrap (`macro_start_session` — the call auto-assigns an adjective+noun name; planner introduces itself to coordinator via `send_message` immediately after). NTM handles the process lifecycle; Agent Mail handles the coordination protocol.
 
@@ -552,6 +569,7 @@ Do NOT pad with low-value questions. 2 sharp questions beat 4 fuzzy ones.
 ### 3. Branch on the answers
 
 - **All answers confirm the plan** ("Scope is right" / "Agree with A" / "Defer is fine" etc.) → proceed to Step 5.6 (Plan-ready gate). Note in your end-of-turn summary that alignment was confirmed.
+  > **Synthesizer-recommendation acceptance (verified 2026-05-08).** This branch also fires when the user agrees with the synthesizer's recommendations on every question (i.e. the answer "changes" the plan to match what the synthesizer already proposed). The synthesizer adopted those choices in the plan body; the user's confirmation cross-validates without needing a refinement round. Proceed directly to Step 5.6.
 
 - **Decisive convergence** — all answers request changes AND every change is a consistent pick from a SINGLE alternative source (e.g. the user picked the Codex column on every row of a triangulation report, or picked "plan B" on every question where plans diverged): run ONE refinement round to incorporate the user's selections, then **skip the re-extract loop and proceed directly to Step 5.6**. Rationale: the user has already arbitrated every open question in a single batch; re-asking "is the revised plan aligned?" is ceremonial. Surface in your end-of-turn summary: "Decisive convergence on <source> — skipped re-alignment round."
 

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.13.1] - 2026-05-08
+
+### Changed
+
+- **`skills/start/_planning.md` and `skills/start/_implement.md`** — corrected NTM `--robot-send` flag syntax. Removed `--type=cc/cod/gmi` from dispatch examples (broken AND-restriction at session-init time). Added a verified-2026-05-08 flag note: use `--panes=N` (plural; comma-separated indices); `--pane=N` singular silently broadcasts to ALL panes.
+- **`skills/start/_planning.md` Deep plan pre-flight + `skills/start/_implement.md` Step 7 spawn** — added codex_config_compat pre-spawn gate. When DOCTOR_REPORT flags `codex_config_compat` yellow/red AND swarm includes a `cod` pane, surface a 3-option AskUserQuestion (Apply fix / Skip cod / Continue anyway) BEFORE spawn. Prevents the cod-pane-crashes-on-launch failure mode observed in v3.13.0 cycle.
+- **`skills/start/_beads.md`** — added "List closed beads" row to br CLI command reference (`br list --status closed --json`) and tend-cycle note explaining that `br list` default view excludes closed beads.
+- **`skills/start/_wrapup.md` Step 10.0** — `postmortem_empty_session` branch now flags the common cause: cycles that ship state-capture features at session-boundary points (e.g. `cycleStartSha` capture in `flywheel_select`) get an empty auto-postmortem because the capture wasn't yet implemented when this cycle's `flywheel_select` was called.
+- **`skills/start/_planning.md` Step 5.55** — "All answers confirm the plan" branch now documents the synthesizer-recommendation acceptance pattern: when user agrees with synthesizer recommendations on every question, no refinement round needed.
+
+### Why
+
+Observed during v3.13.0 outcome-grading cycle (60+ orchestrator turns, 3-pane deep-plan + 1-pane impl coordinator-serial). The NTM flag syntax bug caused the correctness prompt to broadcast to all 3 planner panes; the codex_config_compat doctor flag was ignored at swarm spawn and the cod pane crashed mid-cycle. Both required user intervention. Skill refinement closes the loop.
+
 ## [3.13.0] - 2026-05-08
 
 ### Added

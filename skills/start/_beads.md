@@ -9,9 +9,12 @@
 > | Close bead with reason | `br close <id> --reason "…"` or `br close <id> -r "…"` | `br update <id> --close-reason "…"` (does not exist) |
 > | Mark status closed | `br update <id> --status closed` | `br update <id> --status done` (status enum is `open`/`deferred`/`in_progress`/`closed`) |
 > | List open beads | `br list` (default) or `br list --json` | — |
+> | List closed beads | `br list --status closed --json` | `br list \| grep closed` (default view excludes closed) |
 > | Show one bead | `br show <id> --json \| jq '.[0]'` (wraps in array) | `br show <id>` parsed as single object (will fail — output is an array) |
 >
 > **Hard rule**: if `br` returns empty JSON or exits 0 with no visible effect, you likely used a flag that doesn't exist. Re-run with `--help` to verify before retrying.
+>
+> **Tend-cycle note**: `br list` (no flags) shows only `open` and `in_progress`. To check this cycle's completion count, use `br list --status closed --json`. Common false-alarm pattern: orchestrator sees commits but `br list` shows 0 closed → assumes implementer is committing without closing → wastes a tend cycle on a phantom problem.
 
 ## Step 5.5: Create beads from the plan
 

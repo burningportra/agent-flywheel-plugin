@@ -313,7 +313,7 @@ const draftMarkdown = res.structuredContent?.data?.draft?.markdown;
 ```
 
 **Structured error branching (mandatory).** Route on `res.structuredContent?.data?.error?.code` (`FlywheelErrorCode`):
-- `postmortem_empty_session` → still returns a terse draft; proceed with the AskUserQuestion below, note that the session had no shippable commits.
+- `postmortem_empty_session` → still returns a terse draft; proceed with the AskUserQuestion below, note that the session had no shippable commits. **Common cause (verified 2026-05-08)**: this cycle SHIPPED a state-capture feature at a session-boundary point (e.g. `cycleStartSha` capture in `flywheel_select`), but the capture wasn't yet implemented when this cycle's `flywheel_select` was called — so the auto-postmortem can't see this cycle's commits. Hand-write the post-mortem from `git log --since="<session-start-time>" --oneline` instead. The next cycle will work correctly.
 - `postmortem_checkpoint_stale` → `sessionStartSha` no longer resolves in `git log`. Surface the reconstruction warning from `error.hint` inline and let the user decide whether to keep the (partial) draft.
 - any other code → skip Step 10.0, proceed to Step 10.
 
