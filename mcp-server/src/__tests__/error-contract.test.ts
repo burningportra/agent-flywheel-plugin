@@ -13,8 +13,8 @@ import {
 } from '../errors.js';
 
 describe('FLYWHEEL_ERROR_CODES', () => {
-  it('has exactly 38 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode + 7 22i remediation/bundle/viewer + 2 xsz attestation)', () => {
-    expect(FLYWHEEL_ERROR_CODES).toHaveLength(38);
+  it('has exactly 46 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode + 7 22i remediation/bundle/viewer + 2 xsz attestation + 8 v3.13.0 outcome-grading)', () => {
+    expect(FLYWHEEL_ERROR_CODES).toHaveLength(46);
   });
 
   it('DEFAULT_RETRYABLE covers every code', () => {
@@ -297,7 +297,7 @@ describe('hint propagation through the Zod envelope', () => {
 //       against the doctor.ts regression where `hint: 'cli_failure'`
 //       was shipped as a placeholder.
 
-describe('FlywheelError hint contract (all 38 codes)', () => {
+describe('FlywheelError hint contract (all 46 codes)', () => {
   it('DEFAULT_HINTS covers every FlywheelErrorCode', () => {
     expect(Object.keys(DEFAULT_HINTS).sort()).toEqual([...FLYWHEEL_ERROR_CODES].sort());
   });
