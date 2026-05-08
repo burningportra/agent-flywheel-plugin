@@ -171,6 +171,43 @@ describe('runSelect', () => {
             },
         });
     });
+    // ─── v3.13.0 outcome-grading cycle-boundary tests (T13) ───
+    describe('outcome-grading cycle-boundary', () => {
+        it('captures cycleStartSha from git rev-parse HEAD', async () => {
+            const exec = createMockExec([
+                { cmd: 'git', args: ['rev-parse', 'HEAD'], result: { code: 0, stdout: 'abc123def456\n', stderr: '' } },
+            ]);
+            const state = makeState({ repoProfile: makeRepoProfile() });
+            const ctx = {
+                exec,
+                cwd: '/fake/cwd',
+                state,
+                saveState: () => { },
+                clearState: () => { },
+            };
+            await runSelect(ctx, { cwd: '/fake/cwd', goal: 'New cycle' });
+            expect(state.cycleStartSha).toBe('abc123def456');
+        });
+        it('leaves cycleStartSha undefined when git rev-parse fails', async () => {
+            const { ctx, state } = makeCtx();
+            await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Detached HEAD' });
+            expect(state.cycleStartSha).toBeUndefined();
+        });
+        it('resets per-cycle outcome-grading fields', async () => {
+            const { ctx, state } = makeCtx();
+            state.outcomeRubricPath = '.pi-flywheel/plans/old-slug/rubric.md';
+            state.outcomeGradingSkipped = true;
+            state.outcomeGradingHistory = [
+                { iteration: 1, timestamp: '2026-05-01T00:00:00Z', verdict: {} },
+            ];
+            state.cycleEndTestOutput = 'old test output';
+            await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Fresh cycle' });
+            expect(state.outcomeRubricPath).toBeUndefined();
+            expect(state.outcomeGradingSkipped).toBeUndefined();
+            expect(state.outcomeGradingHistory).toBeUndefined();
+            expect(state.cycleEndTestOutput).toBeUndefined();
+        });
+    });
     it('returns structuredContent for invalid goal errors', async () => {
         const { ctx } = makeCtx();
         const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: '   ' });

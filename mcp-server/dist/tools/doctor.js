@@ -76,6 +76,11 @@ export const DOCTOR_CHECK_NAMES = [
     // .pi-flywheel/plans/<slug>/convergence.json parses + matches scoreVersion.
     // Red on schema_invalid / score_version_mismatch / invalid_json.
     'convergence_state_validity',
+    // v3.13.0 outcome-grading (claude-orchestrator-2ty / T12). Validates the
+    // active plan's `.pi-flywheel/plans/<slug>/rubric.md` frontmatter against
+    // RubricSchemaV1 — green when no rubric or rubric parses with criteria,
+    // yellow on missing-file / parse failure, red on empty-criteria.
+    'outcome_rubric_validity',
 ];
 // ─── Actionable hints ─────────────────────────────────────────────────────
 // DoctorCheck.hint must be a human-readable remediation sentence, not an
@@ -90,6 +95,10 @@ const EXEC_TIMEOUT_HINT = 'The probe exceeded its per-check timeout (default 2s)
 const POSTMORTEM_CHECKPOINT_STALE_HINT = 'Clear the stale checkpoint with `/flywheel-stop`, or resume it with `/start` once you have confirmed the recorded goal still applies.';
 const CODEX_CONFIG_GPT5_HINT = 'Comment out the `model = "..."` line in ~/.codex/config.toml. The codex-companion app-server path uses OpenAI API auth and rejects gpt-5*/gpt-5-codex on ChatGPT-account auth even though `codex exec` accepts them. Removing the override lets the app-server pick its built-in default.';
 const VERSION_DRIFT_HINT = 'Run `/flywheel-setup` (or `cd mcp-server && npm run version-sync`) to align the manifests. Warn-only — drift does not block the run.';
+// v3.13.0 outcome-grading hints (verbatim from synthesized plan §"Doctor — Hint strings").
+const OUTCOME_RUBRIC_GREEN_HINT = 'No action needed; continue the flywheel.';
+const OUTCOME_RUBRIC_YELLOW_HINT = 'Open the rubric gate and choose Re-edit or Regenerate before creating beads.';
+const OUTCOME_RUBRIC_RED_HINT = 'Regenerate the rubric now; an empty criteria list cannot grade the cycle.';
 /**
  * Run all 11 health checks in parallel. Never throws.
  *
@@ -167,6 +176,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         }),
         () => checkOrphanTenderDaemons(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkConvergenceStateValidity(cwd, combined, now),
+        () => checkOutcomeRubricValidity(cwd, combined, now),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -1497,5 +1507,165 @@ async function checkVersionTriple(cwd, signal, now, opts) {
         hint: VERSION_DRIFT_HINT,
         durationMs: now() - start,
     };
+}
+// ─── v3.13.0 outcome-grading: outcome_rubric_validity (T12) ─────────────
+/**
+ * Outcome-grading rubric validity probe. Reads the active plan's
+ * `.pi-flywheel/plans/<slug>/rubric.md` and validates the frontmatter
+ * against `RubricSchemaV1` from `mcp-server/src/outcome-grading.ts`.
+ *
+ * Severity ladder (verbatim from synthesized plan §T12):
+ *   - green: no active rubric / valid rubric with ≥3 criteria.
+ *   - yellow: file missing OR frontmatter parse failure.
+ *   - red: frontmatter parses but criteria array is empty.
+ *
+ * Pure I/O — never touches the rubric beyond reading it. The slug used to
+ * locate the file comes from `state.outcomeRubricPath` when set, falling
+ * back to `planSlugFromIdentifier(planDocument)` when only the plan path
+ * is on the checkpoint.
+ */
+async function checkOutcomeRubricValidity(cwd, signal, now) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('outcome_rubric_validity');
+    const ckpt = readCheckpoint(cwd);
+    const state = ckpt?.envelope.state;
+    const rubricPath = state?.outcomeRubricPath;
+    const planDocument = state?.planDocument;
+    // Resolve target rubric path. `outcomeRubricPath` is the canonical signal
+    // (set by flywheel_synthesize_rubric); fall back to the conventional
+    // `.pi-flywheel/plans/<slug>/rubric.md` only if a plan is on the
+    // checkpoint and the synthesizer has not yet run.
+    let resolved = null;
+    if (rubricPath) {
+        resolved = rubricPath.startsWith('/') ? rubricPath : join(cwd, rubricPath);
+    }
+    else if (planDocument) {
+        // No rubric path set — outcome-grading not yet initialized for this
+        // plan. This is the green "not applicable" path; skip the file probe.
+        return {
+            name: 'outcome_rubric_validity',
+            severity: 'green',
+            message: 'no active rubric - outcome grading not applicable',
+            hint: OUTCOME_RUBRIC_GREEN_HINT,
+            durationMs: now() - start,
+        };
+    }
+    else {
+        return {
+            name: 'outcome_rubric_validity',
+            severity: 'green',
+            message: 'no active rubric - outcome grading not applicable',
+            hint: OUTCOME_RUBRIC_GREEN_HINT,
+            durationMs: now() - start,
+        };
+    }
+    let raw;
+    try {
+        raw = readFileSync(resolved, 'utf8');
+    }
+    catch {
+        return {
+            name: 'outcome_rubric_validity',
+            severity: 'yellow',
+            message: `outcome rubric path is set but the file is missing: ${rubricPath}`,
+            hint: OUTCOME_RUBRIC_YELLOW_HINT,
+            durationMs: now() - start,
+        };
+    }
+    // Try the strict parser first. On Zod failure, classify by inspecting
+    // whether the underlying frontmatter loaded a non-empty criteria array
+    // — empty-criteria is the red path; everything else is yellow.
+    // Lazy-require to keep doctor.ts decoupled from outcome-grading at the
+    // module-load layer.
+    const og = await import('../outcome-grading.js');
+    try {
+        og.parseRubricFrontmatter(raw);
+        // Re-parse to read N for the message — parser succeeded, so this
+        // cannot fail; ignore casing on `source` (parser already validated).
+        const rubric = og.parseRubricFrontmatter(raw);
+        return {
+            name: 'outcome_rubric_validity',
+            severity: 'green',
+            message: `outcome rubric valid (${rubric.criteria.length} criteria, source ${rubric.source})`,
+            hint: OUTCOME_RUBRIC_GREEN_HINT,
+            durationMs: now() - start,
+        };
+    }
+    catch (err) {
+        const msg = errMsg(err);
+        // Zod's "Array must contain at least 3 element(s)" is the canonical
+        // empty/short-criteria signal. We escalate to red ONLY for length=0.
+        // criteria.length in {1, 2} stays yellow per the spec because that
+        // implies the synthesizer ran but mis-shaped output, recoverable via
+        // edit-inline rather than a hard regenerate.
+        if (looksLikeEmptyCriteria(raw)) {
+            return {
+                name: 'outcome_rubric_validity',
+                severity: 'red',
+                message: 'outcome rubric has zero criteria',
+                hint: OUTCOME_RUBRIC_RED_HINT,
+                durationMs: now() - start,
+            };
+        }
+        const short = msg.length > 200 ? `${msg.slice(0, 197)}…` : msg;
+        return {
+            name: 'outcome_rubric_validity',
+            severity: 'yellow',
+            message: `outcome rubric invalid: ${short}`,
+            hint: OUTCOME_RUBRIC_YELLOW_HINT,
+            durationMs: now() - start,
+        };
+    }
+}
+/**
+ * Loose check for "the YAML had a `criteria:` key but the list was empty"
+ * — used by `checkOutcomeRubricValidity` to escalate to red severity. We
+ * deliberately do NOT call back into `parseRubricFrontmatter`'s YAML
+ * subset parser here, because that throws on the empty-list path itself
+ * (Zod min:3). A simple text scan is enough: find the `criteria:` line,
+ * confirm it's followed by no `- ` list items before the next top-level
+ * key or the closing `---`. Pure (no I/O), tolerant of CRLF, ignores
+ * comments.
+ *
+ * Exported for test access only.
+ */
+export function looksLikeEmptyCriteria(raw) {
+    const normalised = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalised.split('\n');
+    if (lines[0]?.trim() !== '---')
+        return false;
+    let inFm = true;
+    let i = 1;
+    for (; i < lines.length; i++) {
+        if (lines[i].trim() === '---') {
+            inFm = false;
+            break;
+        }
+    }
+    if (inFm)
+        return false;
+    const fm = lines.slice(1, i);
+    // Find the `criteria:` line; only treat as empty when it has no inline
+    // value and no `- ` continuation before the next top-level key.
+    for (let j = 0; j < fm.length; j++) {
+        const line = fm[j];
+        if (/^criteria\s*:\s*$/.test(line.trim())) {
+            // Look ahead for any `- ` line at deeper indent before the next
+            // top-level key (line that starts with a non-space, non-dash, non-#).
+            for (let k = j + 1; k < fm.length; k++) {
+                const t = fm[k];
+                const tt = t.trim();
+                if (tt === '' || tt.startsWith('#'))
+                    continue;
+                if (/^\s*-\s/.test(t))
+                    return false; // has at least one item
+                if (/^\S/.test(t))
+                    return true; // hit next top-level key, no items found
+            }
+            return true; // ran off the end with no items
+        }
+    }
+    return false;
 }
 //# sourceMappingURL=doctor.js.map

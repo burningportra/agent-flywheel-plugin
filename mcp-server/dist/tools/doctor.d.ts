@@ -14,7 +14,7 @@
 import { type ExecFn } from '../exec.js';
 import type { DoctorCheck, DoctorCheckSeverity, DoctorReport, ErrorCodeTelemetry } from '../types.js';
 /** Canonical check names. Exported for test assertions. */
-export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "rescues_last_30d", "npm_marketplace_version_drift", "orphan_tender_daemons", "convergence_state_validity"];
+export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "rescues_last_30d", "npm_marketplace_version_drift", "orphan_tender_daemons", "convergence_state_validity", "outcome_rubric_validity"];
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
 export interface DoctorOptions {
     /** Override per-check timeout (ms). */
@@ -126,4 +126,17 @@ export declare function diffVersionTriple(triple: {
     marketplace: string | null;
     installed: string | null;
 }): string[];
+/**
+ * Loose check for "the YAML had a `criteria:` key but the list was empty"
+ * — used by `checkOutcomeRubricValidity` to escalate to red severity. We
+ * deliberately do NOT call back into `parseRubricFrontmatter`'s YAML
+ * subset parser here, because that throws on the empty-list path itself
+ * (Zod min:3). A simple text scan is enough: find the `criteria:` line,
+ * confirm it's followed by no `- ` list items before the next top-level
+ * key or the closing `---`. Pure (no I/O), tolerant of CRLF, ignores
+ * comments.
+ *
+ * Exported for test access only.
+ */
+export declare function looksLikeEmptyCriteria(raw: string): boolean;
 //# sourceMappingURL=doctor.d.ts.map

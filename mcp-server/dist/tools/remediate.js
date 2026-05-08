@@ -50,6 +50,11 @@ export const REMEDIATION_REGISTRY = {
     // drift across releases (the very thing the score_version_mismatch error
     // exists to surface).
     convergence_state_validity: null,
+    // T12 — outcome rubric repair routes through the operator-driven Step 5.6
+    // rubric gate (Re-edit / Regenerate / Skip). Auto-rewrite would silently
+    // overwrite operator edits (`source: 'edited'`); the doctor hint already
+    // points at the right gate.
+    outcome_rubric_validity: null,
 };
 export function assertExhaustive(_) {
     throw new Error('Non-exhaustive registry');

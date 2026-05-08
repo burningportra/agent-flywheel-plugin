@@ -432,6 +432,52 @@ export interface FlywheelState {
      * backward-compatibility with v3.3.0 checkpoints.
      */
     sessionStartSha?: string;
+    /**
+     * Path (relative to cwd) of the active rubric.md. Set by
+     * `flywheel_synthesize_rubric` and reset by `flywheel_select`.
+     */
+    outcomeRubricPath?: string;
+    /**
+     * Set to `true` by the Skip-rubric branch of the Step 5.6 rubric gate.
+     * Cleared at the next `flywheel_select` (one-cycle skip — OQ-B).
+     * `flywheel_grade_outcome` short-circuits to the skip sentinel when
+     * this is true.
+     */
+    outcomeGradingSkipped?: boolean;
+    /**
+     * Capped FIFO of past grading rounds (Tension #4). Each entry stores the
+     * iteration index, the verdict envelope, and the wall-clock timestamp
+     * the grader returned. Caller (T6) is responsible for the FIFO eviction
+     * to last-5 entries to keep the checkpoint bounded.
+     *
+     * The verdict shape is the v3.13.0 GraderVerdictSchemaV1 — schema-bumped
+     * via the v2 ladder pattern documented in `outcome-grading.ts`.
+     */
+    outcomeGradingHistory?: Array<{
+        iteration: number;
+        verdict: import('./outcome-grading.js').GraderVerdict;
+        timestamp: string;
+    }>;
+    /**
+     * Iteration cap. Default 3 at read (matches MA's `max_iterations`).
+     * Bounded `[1, 5]` by `getMaxOutcomeIterations(state)` from
+     * `outcome-grading.ts` — set this field freely; the helper clamps.
+     */
+    maxOutcomeIterations?: number;
+    /**
+     * Git SHA captured at `flywheel_select` time. Used by `gradeOutcome` as
+     * `commitRangeStart`. The 4-tier recovery ladder
+     * (state → checkpoint.gitHead → git-log-by-time → HEAD~50) protects
+     * against missing values; never defaults to `HEAD` (false `satisfied`).
+     */
+    cycleStartSha?: string;
+    /**
+     * Captured by the `_wrapup.md` test-runner hook. Truncated to 10K chars
+     * at write. Surfaced inside the grader prompt when the dynamic budget
+     * permits (Robustness D9 priority: rubric > diff stat > diff body >
+     * test output).
+     */
+    cycleEndTestOutput?: string;
 }
 /** On-disk checkpoint envelope — wraps FlywheelState with crash-recovery metadata. */
 export interface CheckpointEnvelope {
@@ -511,7 +557,7 @@ export interface PlanArgs {
 }
 export interface ApproveArgs {
     cwd: string;
-    action: "start" | "polish" | "reject" | "advanced" | "git-diff-review";
+    action: "start" | "polish" | "reject" | "advanced" | "git-diff-review" | "remediate";
     advancedAction?: string;
     /** P2.4 / 2p5 — convergence threshold above which a polish call returns
      * stop_reason="convergence_reached" instead of scheduling another round.
@@ -521,6 +567,29 @@ export interface ApproveArgs {
      * returns stop_reason="max_rounds_hit" instead of scheduling more rounds.
      * Default 5. */
     max_rounds?: number;
+    /**
+     * Required when `action: 'remediate'`. Each call creates exactly one
+     * bead via `br create`, populated from the §"Remediation Bead Template"
+     * verbatim shape. T11 (`_wrapup.md` Step 9.5) calls this once per
+     * failing criterion when the operator picks Iterate. Bead: T20
+     * (claude-orchestrator-38i).
+     */
+    remediation?: {
+        /** Plan slug — used to fill the verdict-file path in the bead body. */
+        planSlug: string;
+        /** Iteration index from the verdict — used for the verdict-file path. */
+        iteration: number;
+        /** Criterion id (e.g. `c2`). Mirrors PerCriterionVerdict.criterionId. */
+        criterionId: string;
+        /** Criterion description from rubric.md — looked up by the caller because PerCriterionVerdict carries only the id. */
+        criterionDescription: string;
+        /** Verdict status for this criterion. */
+        status: "unmet" | "partial";
+        /** Grader's evidence trace — quoted in the bead body unchanged. */
+        evidence: string;
+        /** Gaps the grader flagged — fold into bead acceptance criteria. */
+        gaps: string[];
+    };
 }
 /** P2.4 / 2p5 — explicit reason a polish loop terminated. Surfaced in the
  * approve_beads response so operators don't have to infer "did we converge

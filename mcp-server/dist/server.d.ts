@@ -41,6 +41,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -58,6 +59,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -161,6 +164,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -178,6 +182,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -203,6 +209,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -220,6 +227,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -257,6 +266,7 @@ export declare const TOOLS: ({
             ideas?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -274,6 +284,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -291,11 +303,51 @@ export declare const TOOLS: ({
                 type: string;
                 enum: string[];
                 description: string;
+                default?: undefined;
             };
             advancedAction: {
                 type: string;
                 enum: string[];
                 description: string;
+            };
+            remediation: {
+                type: string;
+                description: string;
+                properties: {
+                    planSlug: {
+                        type: string;
+                        description: string;
+                    };
+                    iteration: {
+                        type: string;
+                        description: string;
+                    };
+                    criterionId: {
+                        type: string;
+                        description: string;
+                    };
+                    criterionDescription: {
+                        type: string;
+                        description: string;
+                    };
+                    status: {
+                        type: string;
+                        enum: string[];
+                        description: string;
+                    };
+                    evidence: {
+                        type: string;
+                        description: string;
+                    };
+                    gaps: {
+                        type: string;
+                        items: {
+                            type: string;
+                        };
+                        description: string;
+                    };
+                };
+                required: string[];
             };
             until_convergence_score: {
                 type: string;
@@ -330,6 +382,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -351,6 +405,7 @@ export declare const TOOLS: ({
                 type: string;
                 enum: string[];
                 description: string;
+                default?: undefined;
             };
             mode: {
                 type: string;
@@ -370,6 +425,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadIds?: undefined;
@@ -385,6 +441,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -415,6 +473,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -431,6 +490,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -465,6 +526,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -480,6 +542,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -524,6 +588,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -536,6 +601,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -558,6 +625,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -575,6 +643,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -602,6 +672,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -618,6 +689,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -647,6 +720,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -663,6 +737,8 @@ export declare const TOOLS: ({
             checkName?: undefined;
             autoConfirm?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -700,6 +776,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -715,6 +792,8 @@ export declare const TOOLS: ({
             name?: undefined;
             sinceDays?: undefined;
             planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };
@@ -741,6 +820,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             advancedAction?: undefined;
+            remediation?: undefined;
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadId?: undefined;
@@ -757,6 +837,126 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            planSlug: {
+                type: string;
+                description: string;
+            };
+            planPath: {
+                type: string;
+                description: string;
+            };
+            action: {
+                type: string;
+                enum: string[];
+                default: string;
+                description: string;
+            };
+            editIntent: {
+                type: string;
+                description: string;
+                properties: {
+                    kind: {
+                        type: string;
+                        enum: string[];
+                    };
+                    text: {
+                        type: string;
+                        description: string;
+                    };
+                };
+                required: string[];
+            };
+            force: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            planSlug: {
+                type: string;
+                description: string;
+            };
+            force: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
         };
         required: string[];
     };

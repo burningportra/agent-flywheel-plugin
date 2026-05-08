@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.13.0] - 2026-05-08
+
+### Added
+
+- **Outcome grading — whole-cycle rubric + decorrelated grader + iteration loop.** Ports the Anthropic Managed Agents API's "rubric + decorrelated grader + iteration loop" pattern locally — concepts only; no MA API substrate adopted. Authoritative spec: `docs/superpowers/specs/2026-05-08-outcome-grading-design.md`. Synthesised plan: `docs/plans/2026-05-08-outcome-grading-synthesized.md`.
+- **`flywheel_synthesize_rubric({ cwd, action?, planSlug?, planPath?, editIntent?, force? })` MCP tool.** Author / validate / edit / regenerate the cycle-level outcome rubric at `.pi-flywheel/plans/<slug>/rubric.md`. `action` ∈ `synthesize | validate | edit | regenerate`. Edits are deterministic for `tighten | add | remove`; LLM-mediated for `custom`. Operator-edited rubrics (`source: 'edited' || 'user'`) are never overwritten without `force=true`. Sidecar `.rubric.lock` records the `planContentSha` so re-synth on unchanged plan content is a cache hit. Atomic writes via `mcp-server/src/atomic-write.ts:writeAtomic`. Discriminated success kinds: `rubric_synthesized | rubric_preserved | rubric_edited | rubric_validated`.
+- **`flywheel_grade_outcome({ cwd, planSlug?, force? })` MCP tool.** Spawn a decorrelated grader — `codex exec --json --model "${FW_GRADER_MODEL ?? 'gpt-5.5'}"` primary, fresh CC fallback via `claude --print` when codex is unavailable. 4-tier `cycleStartSha` recovery ladder protects against missing baselines (`state` → `checkpoint.gitHead` → `git log --before=<ts>` → `HEAD~50`). Iteration-cap coercion is server-side: `needs_revision` at `iteration ≥ state.maxOutcomeIterations` is force-coerced to `max_iterations_reached` before the response leaves the tool. ENOSPC / EROFS / EDQUOT graceful degrade — verdict returned in-memory tagged `persistence: 'failed'`. Per-`planSlug` in-memory mutex prevents concurrent grader spawns. Verdict persisted to `.pi-flywheel/plans/<slug>/grading/iteration-<N>.json`. Discriminated success kinds: `grader_verdict | grading_skipped | grading_capped | grading_persistence_failed`.
+- **`flywheel_approve_beads({ action: 'remediate', remediation })` action.** Creates exactly one bead from a failing-criterion verdict using the verbatim §"Remediation Bead Template" body. Increments `state.iterationRound`. T11 (`_wrapup.md` Step 9.5.0 Iterate branch) calls this once per criterion where `verdict.perCriterion[i].status !== 'met'`.
+- **`outcome_rubric_validity` doctor check.** Read-only probe of the active plan's `rubric.md`. Severity ladder: green (no rubric / valid rubric ≥3 criteria), yellow (file missing / parse failure), red (criteria array empty). Hints verbatim from synthesized plan §"Doctor Hints"; remediation is operator-driven through Step 5.6.5 (auto-rewrite would silently overwrite operator edits).
+- **8 new structured error codes** in `mcp-server/src/errors.ts`: `rubric_synth_invalid`, `rubric_missing`, `grader_timeout`, `verdict_invalid`, `grader_unavailable`, `cycle_start_sha_unset`, `outcome_iteration_capped`, `concurrent_grade`. Default hints verbatim from synthesized plan §"Error hints". Only `grader_timeout` is `retryable: true` by default.
+- **Skill wiring.** `skills/start/_planning.md` Step 5.6.5 fires `flywheel_synthesize_rubric` after the operator picks Create beads, then routes through Approve / Edit inline / Regenerate / Skip rubric. `skills/start/_wrapup.md` Step 9.5.0 fires `flywheel_grade_outcome` before commit review and branches on the 5 result kinds (skipped / verdict / capped / persistence-failed / error-envelope).
+- **`mcp-server/src/atomic-write.ts:writeAtomic` helper.** POSIX-atomic file write (`mkdir → writeFile-tmp → rename`) used by rubric.md and iteration-N.json so concurrent readers see either old or new content, never a half-write.
+
+### Changed
+
+- **`flywheel_select` captures `state.cycleStartSha`** at goal-set time (OQ-A resolution). On detached HEAD / no-commits / git-missing, the field stays undefined and the grader's 4-tier ladder fires. Also resets `outcomeRubricPath`, `outcomeGradingSkipped`, `outcomeGradingHistory`, `cycleEndTestOutput` so a new goal does not inherit a stale rubric path or grading history.
+- **`FlywheelState` adds 6 optional fields** for outcome grading: `outcomeRubricPath?`, `outcomeGradingSkipped?`, `outcomeGradingHistory?` (FIFO-capped at last 5), `maxOutcomeIterations?` (bounded `[1,5]`), `cycleStartSha?`, `cycleEndTestOutput?`. v3.11.x and v3.12.x checkpoints continue to load with all six undefined — gated by `mcp-server/src/__tests__/migration.test.ts` against the frozen v3.12 fixture.
+- **`flywheel_doctor` count bumped from 12 to 21 checks** with the addition of `outcome_rubric_validity`. Quick-reference and v3.12.0 doc lines updated accordingly.
+- **`mcp-server/package.json` version bumped to `3.13.0`** (additive minor — no breaking schema changes).
+
+### Internal
+
+- **Schema versioning ladder documented in `mcp-server/src/outcome-grading.ts` header.** `RubricSchemaV1` and `GraderVerdictSchemaV1` are pinned at `version: z.literal(1)` and additive forever within v1; the v2 ladder uses `z.discriminatedUnion('version', [V1, V2])` and a `readRubric()` reader helper.
+- **Module decoupling.** `mcp-server/src/tools/doctor.ts` lazy-imports `outcome-grading.ts` to keep doctor.ts free of the schema dependency at module-load.
+- **Migration safety test.** `mcp-server/src/__tests__/fixtures/checkpoint-v3.12.json` (with pre-computed `stateHash` matching `computeStateHash`) plus `mcp-server/src/__tests__/migration.test.ts` lock the additivity invariant against future drift.
+
 ## [3.12.0] - 2026-05-06
 
 ### Added

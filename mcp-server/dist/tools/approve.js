@@ -248,6 +248,14 @@ export async function runApprove(ctx, args) {
     if (!state.selectedGoal) {
         return makeApproveError('Error: No goal selected. Call flywheel_select first.', state.phase, 'beads', 'missing_prerequisite', { requiredTool: 'flywheel_select' }, 'Call flywheel_select with the chosen goal before flywheel_approve_beads.');
     }
+    // ── v3.13.0 outcome-grading: remediation action (T20) ────────
+    // Branches before bead-list refresh because remediation CREATES a new
+    // bead from a verdict criterion; existing bead state is irrelevant to
+    // the create call. T11 (`_wrapup.md` Step 9.5 Iterate branch) calls
+    // this once per failing criterion.
+    if (args.action === 'remediate') {
+        return handleRemediate(ctx, args);
+    }
     // ── Plan approval mode (when phase is awaiting_plan_approval) ──
     if ((state.phase === 'awaiting_plan_approval' || (state.phase === 'planning' && state.planDocument)) &&
         state.planDocument) {
@@ -843,6 +851,101 @@ Current beads:\n${compactList}`, state.phase, 'beads', {
         advancedAction,
         validAdvancedActions: [...ADVANCED_ACTIONS],
     }, `Pass advancedAction as one of: ${ADVANCED_ACTIONS.join(', ')}.`);
+}
+// ─── v3.13.0 outcome-grading remediation (T20) ───────────────────────────
+/**
+ * Render the §"Remediation Bead Template" body for one failing criterion.
+ * Verbatim from `docs/plans/2026-05-08-outcome-grading-synthesized.md`.
+ */
+function renderRemediationBeadBody(args) {
+    const { planSlug, iteration, criterionId, criterionDescription, status, evidence, gaps } = args;
+    const verdictPath = `.pi-flywheel/plans/${planSlug}/grading/iteration-${iteration}.json`;
+    const gapLines = gaps.length === 0 ? '- (no gaps recorded — grader returned empty list)' : gaps.map((g) => `- ${g}`).join('\n');
+    return [
+        '## Source',
+        '',
+        `- Verdict: \`${verdictPath}\``,
+        `- Criterion: \`${criterionId}\``,
+        `- Status: \`${status}\``,
+        '',
+        '## Rubric criterion',
+        '',
+        criterionDescription,
+        '',
+        '## Evidence from grader',
+        '',
+        evidence || '(no evidence recorded — grader returned empty string)',
+        '',
+        '## Gaps to close',
+        '',
+        gapLines,
+        '',
+        '## Acceptance criteria',
+        '',
+        '- Each listed gap is addressed or explicitly documented as out of scope.',
+        '- Relevant tests/build/lint commands pass.',
+        `- The next outcome grade marks \`${criterionId}\` as met, or the remaining gap is justified in the verdict.`,
+        '',
+    ].join('\n');
+}
+/**
+ * Truncate a criterion description to fit a `br create --title` argument.
+ * Same shortening rule as bead-creation prompts elsewhere — first line,
+ * ≤80 chars total title length.
+ */
+function shortenForTitle(description, maxLen) {
+    const firstLine = description.split('\n')[0]?.trim() ?? '';
+    if (firstLine.length <= maxLen)
+        return firstLine;
+    return `${firstLine.slice(0, maxLen - 1)}…`;
+}
+async function handleRemediate(ctx, args) {
+    const { exec, cwd, state, saveState, signal } = ctx;
+    const r = args.remediation;
+    if (!r) {
+        return makeApproveError('Error: action="remediate" requires the `remediation` payload (planSlug, iteration, criterionId, criterionDescription, status, evidence, gaps).', state.phase, 'beads', 'invalid_input', { action: 'remediate' }, 'Pass the `remediation` object built from the failing-criterion verdict; T11 (_wrapup.md Step 9.5 Iterate) renders it from PerCriterionVerdict + rubric.md.');
+    }
+    if (!r.planSlug || !r.criterionId || !r.criterionDescription) {
+        return makeApproveError('Error: remediation.planSlug, remediation.criterionId, and remediation.criterionDescription are all required and non-empty.', state.phase, 'beads', 'invalid_input', {
+            action: 'remediate',
+            planSlugSet: Boolean(r.planSlug),
+            criterionIdSet: Boolean(r.criterionId),
+            criterionDescriptionSet: Boolean(r.criterionDescription),
+        }, 'Look up the criterion description from .pi-flywheel/plans/<slug>/rubric.md before calling — PerCriterionVerdict carries only the id.');
+    }
+    const titleHead = `Outcome remediation ${r.criterionId}`;
+    const titleTailRoom = Math.max(20, 80 - titleHead.length - 2);
+    const title = `${titleHead}: ${shortenForTitle(r.criterionDescription, titleTailRoom)}`;
+    const description = renderRemediationBeadBody(r);
+    const create = await exec('br', [
+        'create',
+        '--title', title,
+        '--description', description,
+        '--priority', '2',
+        '--type', 'task',
+    ], { cwd, timeout: 10000, signal });
+    if (create.code !== 0) {
+        return makeApproveError(`Error creating remediation bead: ${create.stderr || `exit ${create.code}`}`, state.phase, 'beads', 'cli_failure', {
+            command: 'br create (remediation)',
+            criterionId: r.criterionId,
+            stderr: create.stderr,
+        }, 'Run `br list --json` manually; if br is unhealthy fix the CLI before calling action="remediate" again.');
+    }
+    // Increment iteration round so the next grade call records iteration N+1.
+    state.iterationRound = (state.iterationRound ?? 0) + 1;
+    saveState(state);
+    return makeApproveResult(`Remediation bead created for criterion \`${r.criterionId}\` (status: ${r.status}). iterationRound is now ${state.iterationRound}. Repeat with action="remediate" for each remaining failing criterion, then loop back to Step 6 (implementation).`, state.phase, 'beads', {
+        kind: 'remediation_bead_created',
+        action: 'remediate',
+        criterionId: r.criterionId,
+        planSlug: r.planSlug,
+        iteration: r.iteration,
+        title,
+        iterationRound: state.iterationRound,
+    }, makeNextToolStep('call_tool', 'Repeat for each remaining failing criterion, then re-run flywheel_approve_beads(action="start") to launch the next implementation wave.', {
+        tool: 'flywheel_approve_beads',
+        argsSchemaHint: { action: 'remediate', remediation: '<failing criterion>' },
+    }));
 }
 function formatBeadList(beads) {
     const childIds = new Set(beads.filter(b => b.parent).map(b => b.id));

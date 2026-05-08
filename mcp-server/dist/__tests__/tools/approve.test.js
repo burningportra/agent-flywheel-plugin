@@ -727,4 +727,119 @@ describe('flywheel_approve_beads polish bounds (2p5)', () => {
         expect(sc.data.kind).toBe('bead_refinement_requested');
     });
 });
+// ─── action=remediate (T20 / claude-orchestrator-38i) ─────────────────────
+describe('runApprove — action=remediate', () => {
+    let runApproveR;
+    beforeEach(async () => {
+        vi.resetModules();
+        runApproveR = await importApprove();
+    });
+    function makeRemediation(overrides = {}) {
+        return {
+            planSlug: '2026-05-08-outcome-grading',
+            iteration: 1,
+            criterionId: 'c2',
+            criterionDescription: 'flywheel_synthesize_rubric MCP tool registered in server.ts and writes .pi-flywheel/plans/<slug>/rubric.md',
+            status: 'unmet',
+            evidence: 'mcp-server/src/server.ts has no entry for flywheel_synthesize_rubric',
+            gaps: [
+                'Tool is not registered in server.ts',
+                'No corresponding inputSchema defined',
+            ],
+            ...overrides,
+        };
+    }
+    it('creates a remediation bead from a failing criterion and increments iterationRound', async () => {
+        const calls = [
+            {
+                cmd: 'br',
+                args: [
+                    'create',
+                    '--title', 'Outcome remediation c2: flywheel_synthesize_rubric MCP tool registered in server.…',
+                    '--description', expect.any(String),
+                    '--priority', '2',
+                    '--type', 'task',
+                ],
+                result: { code: 0, stdout: 'br-remediate-1', stderr: '' },
+            },
+        ];
+        // Use a permissive matcher: the title is deterministic but description
+        // is long; use a lenient mock that matches on cmd + first 4 args.
+        const exec = async (cmd, args) => {
+            if (cmd === 'br' && args[0] === 'create') {
+                return { code: 0, stdout: 'br-remediate-1', stderr: '' };
+            }
+            return { code: 1, stdout: '', stderr: 'not mocked' };
+        };
+        const state = makeState({ selectedGoal: 'Outcome grading', phase: 'reviewing', iterationRound: 0 });
+        const ctx = {
+            exec: exec,
+            cwd: '/fake/cwd',
+            state,
+            saveState: () => { },
+            clearState: () => { },
+        };
+        const result = await runApproveR(ctx, {
+            cwd: '/fake/cwd',
+            action: 'remediate',
+            remediation: makeRemediation(),
+        });
+        expect(result.isError).toBeUndefined();
+        expect(state.iterationRound).toBe(1);
+        const sc = result.structuredContent;
+        expect(sc.data.kind).toBe('remediation_bead_created');
+        expect(sc.data.criterionId).toBe('c2');
+        expect(sc.data.iterationRound).toBe(1);
+        expect(sc.data.title).toContain('Outcome remediation c2');
+        void calls;
+    });
+    it('returns invalid_input when remediation payload is omitted', async () => {
+        const { ctx } = makeCtx({ phase: 'reviewing' });
+        const result = await runApproveR(ctx, {
+            cwd: '/fake/cwd',
+            action: 'remediate',
+        });
+        expect(result.isError).toBe(true);
+        const sc = result.structuredContent;
+        expect(sc.data.error.code).toBe('invalid_input');
+        expect(sc.data.error.message).toContain('remediation` payload');
+    });
+    it('returns invalid_input when criterionDescription is empty', async () => {
+        const { ctx } = makeCtx({ phase: 'reviewing' });
+        const result = await runApproveR(ctx, {
+            cwd: '/fake/cwd',
+            action: 'remediate',
+            remediation: makeRemediation({ criterionDescription: '' }),
+        });
+        expect(result.isError).toBe(true);
+        const sc = result.structuredContent;
+        expect(sc.data.error.code).toBe('invalid_input');
+        expect(sc.data.error.details.criterionDescriptionSet).toBe(false);
+    });
+    it('surfaces br-create failure as cli_failure', async () => {
+        const exec = async (cmd, args) => {
+            if (cmd === 'br' && args[0] === 'create') {
+                return { code: 2, stdout: '', stderr: 'br: database locked' };
+            }
+            return { code: 1, stdout: '', stderr: 'not mocked' };
+        };
+        const state = makeState({ selectedGoal: 'Outcome grading', phase: 'reviewing' });
+        const ctx = {
+            exec: exec,
+            cwd: '/fake/cwd',
+            state,
+            saveState: () => { },
+            clearState: () => { },
+        };
+        const result = await runApproveR(ctx, {
+            cwd: '/fake/cwd',
+            action: 'remediate',
+            remediation: makeRemediation(),
+        });
+        expect(result.isError).toBe(true);
+        const sc = result.structuredContent;
+        expect(sc.data.error.code).toBe('cli_failure');
+        expect(sc.data.error.message).toContain('database locked');
+    });
+});
 //# sourceMappingURL=approve.test.js.map

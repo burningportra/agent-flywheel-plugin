@@ -54,11 +54,20 @@ const V3_4_CODES = [
     // claude-orchestrator-xsz — Completion Evidence Attestation gate (T2)
     'attestation_missing',
     'attestation_invalid',
+    // v3.13.0 outcome-grading (claude-orchestrator-25w / T1)
+    'rubric_synth_invalid',
+    'rubric_missing',
+    'grader_timeout',
+    'verdict_invalid',
+    'grader_unavailable',
+    'cycle_start_sha_unset',
+    'outcome_iteration_capped',
+    'concurrent_grade',
 ];
 describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
-    it('contains exactly the 16 legacy + 22 new codes (38 total)', () => {
+    it('contains exactly the 16 legacy + 30 new codes (46 total)', () => {
         expect(FLYWHEEL_ERROR_CODES).toHaveLength(LEGACY_CODES.length + V3_4_CODES.length);
-        expect(FLYWHEEL_ERROR_CODES).toHaveLength(38);
+        expect(FLYWHEEL_ERROR_CODES).toHaveLength(46);
     });
     it('preserves legacy codes in order for v3.3.0 back-compat', () => {
         for (let i = 0; i < LEGACY_CODES.length; i++) {

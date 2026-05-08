@@ -52,6 +52,16 @@ export const FLYWHEEL_ERROR_CODES = [
     // claude-orchestrator-xsz — Completion Evidence Attestation gate (T2)
     'attestation_missing',
     'attestation_invalid',
+    // v3.13.0 outcome-grading (claude-orchestrator-25w / T1) — rubric synth,
+    // grader spawn, verdict parse, iteration loop, decorrelation guards.
+    'rubric_synth_invalid',
+    'rubric_missing',
+    'grader_timeout',
+    'verdict_invalid',
+    'grader_unavailable',
+    'cycle_start_sha_unset',
+    'outcome_iteration_capped',
+    'concurrent_grade',
 ];
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
 export const FlywheelToolErrorSchema = z.object({
@@ -129,6 +139,15 @@ export const DEFAULT_HINTS = {
     viewer_port_in_use: 'All retried bead-viewer ports are in use. Try `--port <N>` with a free port or kill the existing viewer.',
     attestation_missing: 'A bead reported closed but no completion attestation found at `.pi-flywheel/completion/<beadId>.json` — the implementor must write the CompletionReport JSON before the wave can advance.',
     attestation_invalid: 'A completion attestation failed schema or cross-bead validation — re-read the bead, fix the report shape (or the underlying invariant violation like status=closed without beadClosedVerified=true), and rewrite `.pi-flywheel/completion/<beadId>.json`.',
+    // v3.13.0 outcome-grading hints (verbatim from synthesized plan §"Error hints").
+    rubric_synth_invalid: 'Synthesizer returned non-conforming YAML — re-run with force=true, or hand-edit .pi-flywheel/plans/<slug>/rubric.md and set source=user.',
+    rubric_missing: 'No rubric found for the active plan — run flywheel_synthesize_rubric, or pick Skip rubric at the plan-approve gate.',
+    grader_timeout: 'Grader exceeded FW_GRADER_TIMEOUT_MS — raise the budget, retry, or fall back to a smaller diff via artifactRefs.modifiedFilePaths.',
+    verdict_invalid: 'Grader stdout did not parse against GraderVerdictSchemaV1 — one auto-retry has already fired; inspect the raw payload at debug log level.',
+    grader_unavailable: 'Neither codex_cli nor a fresh-context Agent fallback is healthy — run /flywheel-doctor and remediate codex_cli or claude_cli.',
+    cycle_start_sha_unset: 'cycleStartSha was not captured at flywheel_select — using checkpoint.gitHead or HEAD~50 fallback; commit a baseline to fix.',
+    outcome_iteration_capped: 'maxOutcomeIterations reached — accept the verdict, abort the cycle, or raise FW_MAX_OUTCOME_ITERATIONS (bounded [1,5]) before the next cycle.',
+    concurrent_grade: 'Another grader is in flight for this plan — wait for it to complete, or pass force=true to override the in-memory mutex.',
 };
 export const DEFAULT_RETRYABLE = {
     missing_prerequisite: false,
@@ -176,6 +195,18 @@ export const DEFAULT_RETRYABLE = {
     // implementor to fix, not transient
     attestation_missing: false,
     attestation_invalid: false,
+    // v3.13.0 outcome-grading retryability — grader_timeout is transient (raise
+    // the budget or retry); rubric/verdict/cycle/iteration codes are operator-
+    // or implementor-fix conditions; concurrent_grade clears once the in-flight
+    // call settles but is not auto-retried inside the same caller.
+    rubric_synth_invalid: false,
+    rubric_missing: false,
+    grader_timeout: true,
+    verdict_invalid: false,
+    grader_unavailable: false,
+    cycle_start_sha_unset: false,
+    outcome_iteration_capped: false,
+    concurrent_grade: false,
 };
 export class FlywheelError extends Error {
     code;
