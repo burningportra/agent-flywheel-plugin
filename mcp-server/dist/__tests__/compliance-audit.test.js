@@ -69,6 +69,13 @@ function setupFakePassDir(cwd, fixtureName) {
     writeFileSync(join(passDir, 'result.json'), readFileSync(fixturePath, 'utf8'));
     return passDir;
 }
+function setupFakePassDirWithResult(cwd, result) {
+    const passUtc = '2026-05-08T19-14-22Z';
+    const passDir = join(cwd, 'beads_compliance_audit', 'passes', passUtc);
+    mkdirSync(passDir, { recursive: true });
+    writeFileSync(join(passDir, 'result.json'), JSON.stringify(result));
+    return passDir;
+}
 describe('runComplianceAudit - skill spawn + parse', () => {
     let tmp;
     beforeEach(() => {
@@ -168,6 +175,54 @@ describe('runComplianceAudit - skill spawn + parse', () => {
         const data = result.structuredContent.data;
         expect(data.status).toBe('error');
         expect(data.errors.parse).toBeTruthy();
+    });
+    it('returns status=error when result.json schema_version is not 1', async () => {
+        setupFakePassDirWithResult(tmp, {
+            schema_version: 2,
+            pass_utc: '2026-05-08T19:14:22Z',
+            mode: 'flywheel-gate',
+            threshold: 700,
+            beads: [],
+        });
+        const ctx = stubCtx({
+            exec: vi.fn().mockResolvedValue({ code: 0, stdout: '', stderr: '' }),
+        });
+        const result = await runComplianceAudit(ctx, { cwd: tmp, beadIds: ['agent-flywheel-001'] });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('error');
+        expect(data.errors.parse).toContain('schema_version');
+    });
+    it('returns status=error when result.json omits beads', async () => {
+        setupFakePassDirWithResult(tmp, {
+            schema_version: 1,
+            pass_utc: '2026-05-08T19:14:22Z',
+            mode: 'flywheel-gate',
+            threshold: 700,
+        });
+        const ctx = stubCtx({
+            exec: vi.fn().mockResolvedValue({ code: 0, stdout: '', stderr: '' }),
+        });
+        const result = await runComplianceAudit(ctx, { cwd: tmp, beadIds: ['agent-flywheel-001'] });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('error');
+        expect(data.errors.parse).toContain('beads');
+    });
+    it('returns status=error when result.json includes unknown top-level keys', async () => {
+        setupFakePassDirWithResult(tmp, {
+            schema_version: 1,
+            pass_utc: '2026-05-08T19:14:22Z',
+            mode: 'flywheel-gate',
+            threshold: 700,
+            beads: [],
+            unexpected: true,
+        });
+        const ctx = stubCtx({
+            exec: vi.fn().mockResolvedValue({ code: 0, stdout: '', stderr: '' }),
+        });
+        const result = await runComplianceAudit(ctx, { cwd: tmp, beadIds: ['agent-flywheel-001'] });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('error');
+        expect(data.errors.parse).toContain('unexpected');
     });
 });
 describe('runComplianceAudit - side effects', () => {

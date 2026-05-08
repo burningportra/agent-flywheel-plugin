@@ -34,12 +34,16 @@ const ComplianceResultBeadSchema = z.object({
   scorecard_path: z.string(),
   rubric_breakdown: z.record(z.string(), z.string()).optional(),
   top_failures: z.array(z.string()).optional(),
-}).passthrough();
+}).strict();
 
 const ComplianceResultSchema = z.object({
-  pass_utc: z.string().nullable().optional(),
-  beads: z.array(ComplianceResultBeadSchema).optional(),
-}).passthrough();
+  schema_version: z.literal(1),
+  pass_utc: z.string(),
+  mode: z.literal('flywheel-gate'),
+  threshold: z.number(),
+  beads: z.array(ComplianceResultBeadSchema),
+  session_id: z.string().nullable().optional(),
+}).strict();
 
 function complianceOutcome(
   status: ComplianceAuditOutcome['status'],
