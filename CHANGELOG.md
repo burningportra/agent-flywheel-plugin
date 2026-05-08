@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.14.0] - 2026-05-08
+
+### Added
+
+- **`flywheel_compliance_audit` MCP tool** — wraps the standalone `/beads-compliance-and-completion-verification` skill. Default-on Step 9 wave-completion gate that scores every closed bead 0-1000 against acceptance criteria using real test runs and evidence packs. Beads below threshold (700) are auto-reopened. New tool at `mcp-server/src/tools/compliance-audit.ts`.
+- **Compliance failure menu in `_review.md`** — Re-implement / Show evidence / Override / Skip routing.
+- **`compliance_false_closed` telemetry counter** — surfaces in welcome-banner error-code trends.
+- **Per-bead score persistence in CASS** via new `mcp-server/src/cass-helpers.ts`. Enables future "low-score-N-sessions-in-a-row" signals.
+
+### Changed
+
+- **`/beads-compliance-and-completion-verification` skill** — added `--mode flywheel-gate` shorthand and structured `passes/<UTC>/result.json` output for programmatic callers.
+
+### Why
+
+False-closed beads — where status flipped to `closed` but the work was not actually done — were slipping past the existing `verify_beads` gate, which only checks status reconciliation. This wires literal acceptance-criteria verification into the wave-completion gate. See `docs/superpowers/specs/2026-05-08-beads-compliance-integration-design.md`.
+
+### Migration
+
+- No code changes required for existing flywheel users.
+- Wave-completion now adds ~5-10 min per wave for the audit. Skip with `FW_COMPLIANCE_OVERRIDE=<comma-separated bead-ids>` or via the in-menu Skip option.
+- Standalone skill installation required at `~/.claude/skills/beads-compliance-and-completion-verification/`. If missing, the gate degrades to advisory-only with a banner warning.
+
 ## [3.13.1] - 2026-05-08
 
 ### Changed
