@@ -41,6 +41,146 @@ AskUserQuestion(questions: [{
 
 The gate is one round-trip on the happy path (the user picks "Skip" and proceeds). It's a guardrail against the silent failure mode where every bead closes but the project still doesn't deliver.
 
+## Step 9.5.0: Outcome grading (MANDATORY — fires before the wrap-up question)
+
+> **Hard rule**: Run this gate before the existing Step 9.5 wrap-up question. The verdict drives whether the cycle proceeds to commit review (`satisfied`), iterates back to implementation (`needs_revision` + Iterate), or stops here (`failed` / `max_iterations_reached` + Abort). Skipping this gate means the cycle ships without ever validating against the rubric the operator approved at Step 5.6.5.
+
+### 1. Call the grader
+
+```
+flywheel_grade_outcome({ cwd })
+```
+
+The tool short-circuits to `kind: "grading_skipped"` when `state.outcomeGradingSkipped === true`. Otherwise it spawns the decorrelated grader (codex primary, fresh-CC fallback), parses the verdict against `GraderVerdictSchemaV1`, persists `.pi-flywheel/plans/<slug>/grading/iteration-<N>.json`, and appends to `state.outcomeGradingHistory`. Iteration-cap coercion is server-side: a grader that returns `needs_revision` at `iteration >= state.maxOutcomeIterations` is force-coerced to `max_iterations_reached` before the response leaves the tool.
+
+### 2. Branch on `result.structuredContent.data.kind`
+
+#### 2a — `kind: "grading_skipped"` → print verbatim Skipped Notice and continue
+
+```text
+Outcome grading skipped for this cycle by operator choice at plan approval.
+```
+
+(No question. Continue to the existing Step 9.5 wrap-up question below.)
+
+#### 2b — `kind: "grader_verdict"` (or `"grading_capped"`) → print verdict surface and branch
+
+Compute the verdict-table once via the server-side helper:
+
+```ts
+import { renderVerdictTable } from '../../mcp-server/dist/outcome-grading.js';
+const table = renderVerdictTable(verdict);
+```
+
+Print the verbatim §"Step 9.5 — Verdict Surface" lines (substituting `<N>`, `<max>`, `<U>`, `<P>`, `<codex|claude>`, `<durationMs>`, slug, and `<table>` from the verdict):
+
+```text
+Outcome grade: <verdict.status> @ iter <N>/<max> (<U> unmet, <P> partial)
+Grader: <codex|claude> in <durationMs>ms
+Verdict file: .pi-flywheel/plans/<slug>/grading/iteration-<N>.json
+
+<table>
+```
+
+If `verdict.modelUsed === 'claude'` AND `verdict.details?.fallbackReason === 'codex_unavailable'`, print the verbatim Codex-fallback disclosure:
+
+```text
+Grader notice: Codex unavailable (<doctor status>); used a fresh Claude grader instead.
+```
+
+If `verdict.details?.diffTruncated === true`, print the verbatim truncation disclosure:
+
+```text
+Grader notice: cycle diff exceeded 30K chars; grader saw 15K start + 15K end + file list. Verdict confidence may be reduced.
+```
+
+Branch on `verdict.status`:
+
+- **`satisfied`** → continue to the existing Step 9.5 wrap-up question. The cycle met the rubric.
+- **`needs_revision` AND `iteration < state.maxOutcomeIterations`** → surface the verbatim §"Verdict Surface (needs_revision)" question:
+  ```
+  AskUserQuestion(questions: [{
+    question: "Outcome grading found <U> unmet and <P> partial criteria at iteration <N>/<max>. What next?",
+    header: "Verdict",
+    options: [
+      { label: "Iterate", description: "Create remediation beads from the failing criteria and return to implementation (Recommended)." },
+      { label: "Accept anyway", description: "Continue wrap-up despite the unmet criteria; the verdict remains recorded." },
+      { label: "Abort", description: "Stop the cycle before commit review or wrap-up." }
+    ],
+    multiSelect: false
+  }])
+  ```
+  Route per choice (see step 3 below).
+- **`needs_revision` AND `iteration >= state.maxOutcomeIterations`** (defensive — should never fire because the tool coerces to `max_iterations_reached` server-side) → fall through to the `max_iterations_reached` branch.
+- **`max_iterations_reached`** → surface the verbatim §"Verdict Surface (max_iterations_reached)" question (Iterate is NOT an option):
+  ```
+  AskUserQuestion(questions: [{
+    question: "Outcome grading still has <U> unmet and <P> partial criteria after <N>/<max> iterations. What next?",
+    header: "Verdict",
+    options: [
+      { label: "Accept anyway", description: "Continue wrap-up with the final failing verdict recorded." },
+      { label: "Abort", description: "Stop the cycle before commit review or wrap-up." }
+    ],
+    multiSelect: false
+  }])
+  ```
+- **`failed`** → print `verdict.explanation` inline, then surface a 1-option `AskUserQuestion` with Abort + hint "Edit rubric.md by hand and re-run flywheel_grade_outcome with force=true once the rubric is correct." Do NOT proceed to commit review.
+
+#### 2c — `kind: "grading_persistence_failed"` → warn and continue with verdict-aware branches
+
+The verdict was computed but the iteration file could not be written (ENOSPC / EROFS). Print:
+
+```text
+Warning: Outcome grade computed but could not be persisted to disk.
+Reason: <verdict.details.persistenceError | "ENOSPC">
+Verdict shown in-line; not saved to .pi-flywheel/plans/<slug>/grading/iteration-<N>.json.
+```
+
+Then branch on `verdict.status` exactly as in 2b — the in-memory verdict is still load-bearing for the user's decision.
+
+#### 2d — Error envelope (`code: "grader_timeout" | "grader_unavailable" | "verdict_invalid"`) → recovery surface
+
+Surface the verbatim §"Timeout Surface" question:
+
+```
+AskUserQuestion(questions: [{
+  question: "Outcome grading timed out before a verdict was saved. What next?",
+  header: "Recover",
+  options: [
+    { label: "Retry grading", description: "Run the grader again with the same rubric and artifact range (Recommended)." },
+    { label: "Accept without grade", description: "Continue wrap-up and record grading as timed out." },
+    { label: "Abort", description: "Stop the cycle before commit review or wrap-up." }
+  ],
+  multiSelect: false
+}])
+```
+
+For `grader_unavailable` and `verdict_invalid`, adapt the question text to the `data.error.hint` from the envelope but keep the same 3-option recovery shape.
+
+### 3. On "Iterate" — create remediation beads and route back to Step 6
+
+For each `verdict.perCriterion` entry where `c.status !== 'met'`, look up the criterion's full description from `.pi-flywheel/plans/<slug>/rubric.md` (the verdict carries only `criterionId`), then call:
+
+```
+flywheel_approve_beads({
+  cwd,
+  action: "remediate",
+  remediation: {
+    planSlug: "<slug>",
+    iteration: verdict.iteration,
+    criterionId: c.criterionId,
+    criterionDescription: "<looked-up from rubric.md>",
+    status: c.status,
+    evidence: c.evidence,
+    gaps: c.gaps,
+  }
+})
+```
+
+This creates exactly **one** bead per failing criterion (gaps fold into the Acceptance Criteria section, not 1 bead per gap — bound the work, follow E8). The tool also bumps `state.iterationRound`. After all remediation beads are created, return to Step 6 (implementation) so the swarm closes them; once they're closed, re-run wrap-up which fires this gate again at iteration N+1.
+
+If the iteration cap is then reached on the next pass, the server-side coercion forces `max_iterations_reached` and the menu drops the Iterate option — so the loop is bounded.
+
 ## Step 9.5: Wrap-up — commit, version bump, rebuild
 
 Once all beads are reviewed and closed, use `AskUserQuestion`:
