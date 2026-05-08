@@ -97,17 +97,10 @@ describe('runComplianceAudit - skill spawn + parse', () => {
         expect(data.failed).toEqual([]);
         expect(data.passUtc).toBe('2026-05-08T19:14:22Z');
         expect(exec).toHaveBeenCalledWith('claude', [
-            '--skill',
-            'beads-compliance-and-completion-verification',
-            '--',
-            '--mode',
-            'flywheel-gate',
-            '--beads',
-            'agent-flywheel-001',
-            '--threshold',
-            '700',
-            '--parallelism',
-            '5',
+            '-p',
+            '--permission-mode',
+            'bypassPermissions',
+            '/beads-compliance-and-completion-verification --mode flywheel-gate --beads agent-flywheel-001 --threshold 700 --parallelism 5',
         ], { cwd: tmp, timeout: 15 * 60 * 1000, signal: undefined });
     });
     it('parses mixed result and partitions passed/failed', async () => {

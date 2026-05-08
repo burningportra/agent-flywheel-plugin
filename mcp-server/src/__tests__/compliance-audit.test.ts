@@ -115,17 +115,10 @@ describe('runComplianceAudit - skill spawn + parse', () => {
     expect(exec).toHaveBeenCalledWith(
       'claude',
       [
-        '--skill',
-        'beads-compliance-and-completion-verification',
-        '--',
-        '--mode',
-        'flywheel-gate',
-        '--beads',
-        'agent-flywheel-001',
-        '--threshold',
-        '700',
-        '--parallelism',
-        '5',
+        '-p',
+        '--permission-mode',
+        'bypassPermissions',
+        '/beads-compliance-and-completion-verification --mode flywheel-gate --beads agent-flywheel-001 --threshold 700 --parallelism 5',
       ],
       { cwd: tmp, timeout: 15 * 60 * 1000, signal: undefined },
     );

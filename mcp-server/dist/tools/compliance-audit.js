@@ -63,19 +63,23 @@ export async function runComplianceAudit(ctx, rawArgs) {
     }
     const threshold = args.threshold ?? 700;
     const parallelism = Math.max(1, Math.min(args.parallelism ?? 5, 5));
+    const skillPrompt = [
+        '/beads-compliance-and-completion-verification',
+        '--mode',
+        'flywheel-gate',
+        '--beads',
+        args.beadIds.join(','),
+        '--threshold',
+        String(threshold),
+        '--parallelism',
+        String(parallelism),
+    ].join(' ');
     try {
         const spawnResult = await ctx.exec('claude', [
-            '--skill',
-            'beads-compliance-and-completion-verification',
-            '--',
-            '--mode',
-            'flywheel-gate',
-            '--beads',
-            args.beadIds.join(','),
-            '--threshold',
-            String(threshold),
-            '--parallelism',
-            String(parallelism),
+            '-p',
+            '--permission-mode',
+            'bypassPermissions',
+            skillPrompt,
         ], { cwd: args.cwd, timeout: 15 * 60 * 1000, signal: ctx.signal });
         if (spawnResult.code !== 0) {
             const stderr = spawnResult.stderr.slice(0, 500);
