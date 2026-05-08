@@ -625,7 +625,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- **"Create beads"** → proceed to Step 5.5 (read `_beads.md`).
+- **"Create beads"** → run **Step 5.6.5 — Rubric gate** (below) BEFORE `_beads.md`. Skipping the rubric gate is a bug; the wrap-up grader has nothing to grade against without it.
 - **"Refine plan"** → run the iterative deepening recipe below, then return to this menu (loop).
 - **"Review plan"** → print the plan file path so the user can read it offline, then immediately present:
   ```
@@ -682,3 +682,109 @@ Agent(model: "opus", name: "refine-round-<N>", isolation: "worktree", run_in_bac
 ```
 
 After the refinement agent completes, return to the "Plan ready" menu above. Stop offering "Refine plan" when a round produces only minor wording changes — this signals convergence.
+
+## Step 5.6.5: Rubric gate (MANDATORY — fires after "Create beads" picks Step 5.6)
+
+> **Hard rule**: After the operator picks "Create beads" from Step 5.6, you MUST run this rubric gate before `_beads.md`. The wrap-up grader (`flywheel_grade_outcome` in `_wrapup.md` Step 9.5) reads `state.outcomeRubricPath` to decide what to grade against; skipping this gate leaves it nothing to read AND silently skips outcome grading without recording the skip flag. The only way to legitimately skip outcome grading for a cycle is the operator picking **Skip rubric** at the gate below — which sets `state.outcomeGradingSkipped = true` so the wrap-up surfaces a verbatim §"Skipped Notice" instead of a verdict.
+
+### 5.6.5a — Synthesize the draft rubric
+
+Call `flywheel_synthesize_rubric` with `cwd` and `action: "synthesize"` (default). The tool reads the active plan, spawns the synthesizer subagent, validates the output against `RubricSchemaV1`, and writes `.pi-flywheel/plans/<slug>/rubric.md`. It also seeds `state.outcomeRubricPath` so the doctor's `outcome_rubric_validity` check picks the file up next sweep.
+
+If the call returns `kind: "rubric_preserved"`, an operator-edited rubric is already on disk; print the verbatim re-entry preview and continue to the gate below:
+
+```text
+Outcome rubric already edited at <rubric-path>; preserving it unless you choose Regenerate.
+```
+
+Otherwise (kind = `rubric_synthesized`), print the verbatim Rubric Preview line:
+
+```text
+Outcome rubric drafted at <rubric-path> with <N> criteria. Source: auto.
+```
+
+**Structured error branching (mandatory).** Route on `result.structuredContent?.data?.error?.code`:
+
+- `rubric_synth_invalid` → present a recovery `AskUserQuestion` with options `Re-edit / Regenerate from scratch / Abort` (use the verbatim §"Edit Parse Failure Recovery" copy below). The synthesizer's output didn't match `RubricSchemaV1`; the file was NOT written.
+- `parse_failure` / `cli_failure` → surface the hint and offer `Retry / Skip rubric / Abort` (one auto-retry happens inside the tool already).
+- any other code → fall back to `Skip rubric` and continue to `_beads.md` so the cycle isn't blocked, but record a CASS note via `flywheel_memory(operation: "store", content: "rubric synth failed with <code>; skipped this cycle")`.
+
+### 5.6.5b — Rubric gate
+
+Surface the verbatim Rubric Gate question:
+
+```
+AskUserQuestion(questions: [{
+  question: "Outcome rubric ready (<N> criteria, source <auto|edited|user>). What should happen before bead creation?",
+  header: "Rubric",
+  options: [
+    { label: "Approve rubric", description: "Use this rubric for wrap-up grading and continue to Create beads (Recommended)." },
+    { label: "Edit inline", description: "Describe criteria to add, remove, or tighten; I will update rubric.md, validate it, and re-show this gate." },
+    { label: "Regenerate", description: "Discard the current draft and synthesize a new rubric from the plan." },
+    { label: "Skip rubric", description: "Skip outcome grading for this cycle only; wrap-up will record grading as skipped." }
+  ],
+  multiSelect: false
+}])
+```
+
+Branch on the answer:
+
+- **Approve rubric** → set `state.outcomeRubricPath` (already written by the tool) and proceed to `_beads.md` Step 5.5. No tool call needed; the rubric is already on disk.
+- **Edit inline** → run §5.6.5c (edit-inline follow-up) below.
+- **Regenerate** → call `flywheel_synthesize_rubric` with `action: "regenerate"` and `force: true` (overrides the edited-source guard). Re-show the Rubric Gate above when the new draft lands. Loop with a hard cap: after 3 regenerations without an Approve, surface `Skip rubric / Edit inline / Abort` to break out.
+- **Skip rubric** → call `flywheel_synthesize_rubric` is NOT needed here; instead manually update state by re-calling any tool that has the side effect (`flywheel_observe` is idempotent and re-saves state). Practically: print the §"Skipped Notice" sentinel inline, set `state.outcomeGradingSkipped = true` via the existing `state.ts` write path (the orchestrator's saveState fires on the next tool call), and proceed to `_beads.md`. **Do NOT loop the rubric gate after Skip.**
+
+### 5.6.5c — Edit-inline follow-up
+
+Surface the verbatim Edit Inline Follow-Up question:
+
+```
+AskUserQuestion(questions: [{
+  question: "What should change in <rubric-path>? Use Other for the exact edit text.",
+  header: "Edit",
+  options: [
+    { label: "Tighten criteria", description: "Make existing criteria more testable and file/behavior-specific (Recommended)." },
+    { label: "Add criterion", description: "Add one criterion from the Other field, then rebalance if weights exist." },
+    { label: "Remove criterion", description: "Remove or merge criteria named in Other." },
+    { label: "Custom edit", description: "Apply the precise edit instructions from Other." }
+  ],
+  multiSelect: false
+}])
+```
+
+Map the operator's selection and `Other` text into a `flywheel_synthesize_rubric` call:
+
+```
+flywheel_synthesize_rubric({
+  cwd,
+  action: "edit",
+  editIntent: { kind: "<tighten|add|remove|custom>", text: "<Other field text>" },
+})
+```
+
+Three outcomes:
+
+1. **Success (`kind: "rubric_edited"`)** → re-show the Rubric Gate (5.6.5b) so the operator can confirm.
+2. **Zod parse failure (`code: "rubric_synth_invalid"`)** → the file was NOT overwritten (D15 invariant). Run §5.6.5d below.
+3. **Other error** → surface the hint and route through the Edit Parse Failure Recovery flow (5.6.5d).
+
+### 5.6.5d — Edit parse failure recovery
+
+Surface the verbatim Edit Parse Failure Recovery question:
+
+```
+AskUserQuestion(questions: [{
+  question: "The edited rubric did not parse: <short parse error>. How should I recover?",
+  header: "Recover",
+  options: [
+    { label: "Re-edit", description: "Keep the current file, apply a correction from Other, and validate again (Recommended)." },
+    { label: "Regenerate from scratch", description: "Overwrite the broken rubric with a fresh auto-generated rubric from the plan." },
+    { label: "Abort", description: "Stop before bead creation so the rubric can be fixed manually." }
+  ],
+  multiSelect: false
+}])
+```
+
+- **Re-edit** → return to §5.6.5c with the operator's corrected `Other` text.
+- **Regenerate from scratch** → return to §5.6.5a with `action: "regenerate"` + `force: true`.
+- **Abort** → stop the cycle. Do NOT proceed to `_beads.md` — the operator needs to fix the rubric manually before `flywheel_grade_outcome` can read it.
