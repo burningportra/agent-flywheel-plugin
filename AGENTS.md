@@ -241,6 +241,15 @@ If the second call shows anything else, retry the update once before reporting c
 
 `flywheel_review` reconciles the bead state automatically: `looks-good` is idempotent on already-closed beads, `hit-me` runs a post-close audit, and `skip` returns `already_closed`. Do not skip `flywheel_review` for closed beads — the legacy "spawn reviewers from `git diff <sha>~1 <sha>`" workaround is no longer required.
 
+## Step 9 - Wave-completion gate
+
+Step 9 is a two-stage gate:
+
+1. **`flywheel_verify_beads`** - status reconciliation: closed beads exist in `br`, matching commits are found for stragglers, and completion attestation files are present.
+2. **`flywheel_compliance_audit`** (new in v3.14.0) - invokes `/beads-compliance-and-completion-verification` in single-bead-parallel mode to score every closed bead 0-1000 against literal acceptance criteria. Beads scoring below 700 are auto-reopened. See `docs/superpowers/specs/2026-05-08-beads-compliance-integration-design.md`.
+
+Skip via `FW_COMPLIANCE_OVERRIDE=<bead-id-list>` or the in-menu override path.
+
 ## Pre-Completion Quality Gate (MANDATORY for every spawned implementor)
 
 Before any swarm/NTM agent reports a bead complete (or sends its completion message), it MUST execute, in order:

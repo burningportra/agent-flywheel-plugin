@@ -482,3 +482,9 @@ If "Run polish pass" is chosen, invoke `/ui-polish` (Stripe-level iterative poli
 If "Light polish only" is chosen, spawn one reviewer agent with the scrutiny prompt from `/ui-polish` and present its top 5 findings as an `AskUserQuestion` — user picks which to fix inline vs defer to next cycle.
 
 After this step, proceed to Step 9.5 (read `_wrapup.md`).
+
+## See also
+
+- Spec: `docs/superpowers/specs/2026-05-08-beads-compliance-integration-design.md`
+- Standalone skill: `~/.claude/skills/beads-compliance-and-completion-verification/SKILL.md`
+- MCP tool: `mcp-server/src/tools/compliance-audit.ts`

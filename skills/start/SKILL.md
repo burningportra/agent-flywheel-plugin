@@ -28,7 +28,7 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 > | Planning | `agent-flywheel:start_planning` | `_planning.md` | 5, 5.55, 5.6 |
 > | Bead creation & approval | `agent-flywheel:start_beads` | `_beads.md` | 5.5, 6 |
 > | Implementation | `agent-flywheel:start_implement` | `_implement.md` | 7 |
-> | Review & loop | `agent-flywheel:start_review` | `_review.md` | 8, 9, 9.25, 9.4 |
+> | Review & loop | `agent-flywheel:start_review` | `_review.md` | 8, 9 (verify + compliance), 9.25, 9.4 |
 > | Wrap-up & post-flywheel | `agent-flywheel:start_wrapup` | `_wrapup.md` | 9.5, 10, 11, 12 |
 > | Reality check | `agent-flywheel:start_reality_check` | `_reality_check.md` | (referenced from _wrapup, _saturation) |
 > | Deslop pass | `agent-flywheel:start_deslop` | `_deslop.md` | (Step 9.5 routing) |
@@ -718,7 +718,7 @@ Each remaining phase has detailed instructions in a sub-file. **Read the file wh
 | Step 5 (planning) | `skills/start/_planning.md` | Planning mode selection, deep plan orchestration, plan alignment check (5.55), plan-ready gate (5.6) |
 | Step 5.5 (bead creation) or Step 6 (approval) | `skills/start/_beads.md` | Bead creation from plan, coverage/dedup checks, quality scoring, launch gate |
 | Step 7 (implementation) | `skills/start/_implement.md` | Swarm scaling, agent spawning, Agent Mail bootstrap, validation gates, stuck-swarm diagnostics |
-| Step 8 (review) or Step 9 (loop) | `skills/start/_review.md` | Wave-completion gate, review modes, verify beads, test-coverage sweep (9.25), UI polish pass (9.4) |
+| Step 8 (review) or Step 9 (loop) | `skills/start/_review.md` | Wave-completion gate, review modes, verify + compliance audit, test-coverage sweep (9.25), UI polish pass (9.4) |
 | Step 9.5 (wrap-up) or later | `skills/start/_wrapup.md` | Commit review, docs update, version bump, rebuild, CASS learnings (10), skill refinement (11), post-flywheel menu (12) |
 
 **Do NOT skip phases or exit the workflow early.** The flywheel's value comes from completing the full cycle: scan → discover → plan → implement → review → verify → wrap-up → learn → refine.
