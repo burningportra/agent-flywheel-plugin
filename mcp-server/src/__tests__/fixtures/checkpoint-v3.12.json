@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "writtenAt": "2026-05-06T14:30:00.000Z",
+  "flywheelVersion": "3.12.0",
+  "gitHead": "5c7ed76abc123def456789012345678901234567",
+  "state": {
+    "phase": "awaiting_plan_approval",
+    "selectedGoal": "Migrate from v3.12.x to v3.13.0",
+    "constraints": [
+      "no breaking changes"
+    ],
+    "retryCount": 0,
+    "maxRetries": 3,
+    "maxReviewPasses": 2,
+    "iterationRound": 0,
+    "currentGateIndex": 0,
+    "polishRound": 0,
+    "polishChanges": [],
+    "polishConverged": false,
+    "planDocument": "docs/plans/2026-04-30-duel-winners.md",
+    "activeBeadIds": [
+      "claude-orchestrator-xsz",
+      "agent-flywheel-plugin-zbx"
+    ],
+    "sessionStartSha": "5c7ed76abc123def456789012345678901234567"
+  },
+  "stateHash": "7af93840b0f9a9da188a033435ecb2ce810cc2089558aa5228593b64cbf3ba5c"
+}
