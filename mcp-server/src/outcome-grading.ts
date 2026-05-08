@@ -1010,22 +1010,521 @@ export interface GradeOutcomeArgs {
   force?: boolean;
 }
 
+// ─── gradeOutcome (T6) ───────────────────────────────────────────────────
+
+const GRADER_TIMEOUT_MS_DEFAULT = 120_000;
+const FW_GRADER_MODEL_DEFAULT = 'gpt-5.5';
+const DIFF_BODY_LIMIT = 30_000;
+const TEST_OUTPUT_LIMIT = 10_000;
+const HISTORY_FIFO_CAP = 5;
+
+const BLIND_AUDITOR_PREAMBLE =
+  'You are a blind auditor. You have not seen the implementation conversation. ' +
+  'You see only the rubric, the git diff range, and the test output. ' +
+  'Return ONLY a JSON object matching GraderVerdictSchemaV1. ' +
+  'Do not include prose. If the diff was truncated, note it in `explanation`.';
+
+/**
+ * Pluggable grader driver. The default invokes `codex exec` (or the
+ * fresh-CC fallback) and returns the raw stdout for Zod parsing. Tests
+ * inject a mock driver that returns a canned JSON string.
+ */
+export type GraderDriver = (input: {
+  exec: ExecFn;
+  cwd: string;
+  signal?: AbortSignal;
+  prompt: string;
+  preferModel: 'codex' | 'claude';
+  timeoutMs: number;
+}) => Promise<{ stdout: string; modelUsed: 'codex' | 'claude' }>;
+
+/**
+ * Default grader driver — codex primary (when present), fresh CC fallback.
+ *
+ * Doctor health is treated as advisory: if `codex` is not on PATH the
+ * exec call fails with ENOENT and we fall through to claude. The grader
+ * never embeds the impl conversation; only the rubric + diff + tests.
+ */
+export const defaultGraderDriver: GraderDriver = async ({ exec, cwd, signal, prompt, preferModel, timeoutMs }) => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'flywheel-grader-'));
+  const taskFile = path.join(dir, 'task.md');
+  writeFileSync(taskFile, prompt, 'utf8');
+  try {
+    if (preferModel === 'codex') {
+      try {
+        const model = process.env.FW_GRADER_MODEL ?? FW_GRADER_MODEL_DEFAULT;
+        const res = await exec(
+          'codex',
+          ['exec', '--model', model, '--json', `@${taskFile}`],
+          { cwd, timeout: timeoutMs, signal },
+        );
+        if (res.code === 0 && res.stdout.trim().length > 0) {
+          return { stdout: res.stdout.trim(), modelUsed: 'codex' };
+        }
+        log.debug('codex grader returned non-zero or empty', { exitCode: res.code, stderrLen: res.stderr.length });
+      } catch (err) {
+        log.debug('codex grader threw, falling back to claude', { err: errMsg(err) });
+      }
+    }
+    // Fresh-CC fallback — explicit "blind auditor" guarantee in the prompt
+    // already; the new claude process inherits no impl-session memory.
+    const res = await exec(
+      'claude',
+      ['--print', '--tools', 'read', `@${taskFile}`],
+      { cwd, timeout: timeoutMs, signal },
+    );
+    if (res.code !== 0) {
+      throw new FlywheelError({
+        code: 'grader_unavailable',
+        message: `claude grader exited ${res.code}`,
+        cause: sanitizeCause(res.stderr || `exit ${res.code}`),
+      });
+    }
+    return { stdout: res.stdout.trim(), modelUsed: 'claude' };
+  } finally {
+    try { unlinkSync(taskFile); } catch { /* best-effort */ }
+  }
+};
+
+// In-memory mutex per planSlug to prevent concurrent grader spawns on the
+// same cycle (D13). Cleared in the `finally` block after the call settles.
+const _graderLocks = new Map<string, true>();
+
+/**
+ * Resolve the cycle-start SHA via the 4-tier fallback ladder (D1):
+ *   1. state.cycleStartSha
+ *   2. checkpoint.gitHead (passed in via state.cycleStartSha-equivalent fallbacks)
+ *   3. git log -n 1 --before=<checkpoint.timestamp> --format=%H
+ *   4. git rev-parse HEAD~50
+ *
+ * The tier that fires is recorded on `verdict.details.cycleStartShaSource`
+ * (cycle_start_sha_unset warn-event when tiers 3 or 4 fire).
+ *
+ * Never defaults to `HEAD` — that would falsely report `satisfied` from
+ * an empty diff (Risk R5).
+ */
+async function resolveCycleStartSha(
+  ctx: ToolContext,
+  beforeIso?: string,
+): Promise<{ sha: string; source: 'state' | 'checkpoint' | 'git_log_by_time' | 'fallback_head_minus_50' }> {
+  const { exec, cwd, state, signal } = ctx;
+  if (state.cycleStartSha) {
+    return { sha: state.cycleStartSha, source: 'state' };
+  }
+  if (state.sessionStartSha) {
+    return { sha: state.sessionStartSha, source: 'checkpoint' };
+  }
+  if (beforeIso) {
+    try {
+      const res = await exec(
+        'git',
+        ['log', '-n', '1', `--before=${beforeIso}`, '--format=%H'],
+        { cwd, timeout: 5000, signal },
+      );
+      const sha = res.stdout.trim();
+      if (res.code === 0 && sha.length > 0) {
+        log.warn('cycleStartSha recovered via git-log-by-time', { code: 'cycle_start_sha_unset', beforeIso });
+        return { sha, source: 'git_log_by_time' };
+      }
+    } catch (err) {
+      log.debug('git-log-by-time fallback threw', { err: errMsg(err) });
+    }
+  }
+  try {
+    const res = await exec('git', ['rev-parse', 'HEAD~50'], { cwd, timeout: 5000, signal });
+    const sha = res.stdout.trim();
+    if (res.code === 0 && sha.length > 0) {
+      log.warn('cycleStartSha recovered via HEAD~50 fallback', { code: 'cycle_start_sha_unset' });
+      return { sha, source: 'fallback_head_minus_50' };
+    }
+  } catch (err) {
+    log.debug('HEAD~50 fallback threw', { err: errMsg(err) });
+  }
+  // All four tiers exhausted — surface as a structured error so the caller
+  // can present an actionable hint instead of false `satisfied`.
+  throw new FlywheelError({
+    code: 'cycle_start_sha_unset',
+    message: 'cycleStartSha could not be recovered through any of the 4 fallback tiers',
+  });
+}
+
+/** Truncate a diff body per the dynamic budget — 15K head + 15K tail + marker. */
+function truncateDiffBody(diff: string): { body: string; truncated: boolean } {
+  if (diff.length <= DIFF_BODY_LIMIT) {
+    return { body: diff, truncated: false };
+  }
+  const head = diff.slice(0, 15_000);
+  const tail = diff.slice(-15_000);
+  return {
+    body: `${head}\n[TRUNCATED: 30K limit; full file list below]\n${tail}`,
+    truncated: true,
+  };
+}
+
+function truncateTestOutput(raw: string | undefined): { body: string | undefined; truncated: boolean } {
+  if (!raw) return { body: undefined, truncated: false };
+  if (raw.length <= TEST_OUTPUT_LIMIT) {
+    return { body: raw, truncated: false };
+  }
+  return {
+    body: `${raw.slice(0, TEST_OUTPUT_LIMIT)}\n[TRUNCATED: 10K cap]`,
+    truncated: true,
+  };
+}
+
+/** Build the grader prompt body. Pure (no exec); exposed for tests. */
+export function buildGraderPrompt(input: {
+  rubricFrontmatter: string;
+  goal: string;
+  iteration: number;
+  cap: number;
+  gitLog: string;
+  diffStat: string;
+  diffBody: string;
+  diffTruncated: boolean;
+  testOutput: string | undefined;
+  testOutputTruncated: boolean;
+}): string {
+  const lines: string[] = [];
+  lines.push(BLIND_AUDITOR_PREAMBLE);
+  lines.push('');
+  lines.push(`Goal: ${input.goal}`);
+  lines.push(`Iteration: ${input.iteration} of cap ${input.cap}`);
+  lines.push('');
+  lines.push('## Rubric (frontmatter)');
+  lines.push(input.rubricFrontmatter);
+  lines.push('');
+  lines.push('## git log <range> --oneline');
+  lines.push('```');
+  lines.push(input.gitLog);
+  lines.push('```');
+  lines.push('');
+  lines.push('## git diff <range> --stat');
+  lines.push('```');
+  lines.push(input.diffStat);
+  lines.push('```');
+  lines.push('');
+  lines.push('## git diff <range> (body)');
+  if (input.diffTruncated) {
+    lines.push('Note: diff truncated — first 15K + last 15K shown. Flag in your `explanation`.');
+  }
+  lines.push('```diff');
+  lines.push(input.diffBody);
+  lines.push('```');
+  if (input.testOutput !== undefined) {
+    lines.push('');
+    lines.push('## Test output (cycleEndTestOutput)');
+    if (input.testOutputTruncated) {
+      lines.push('Note: test output truncated at 10K.');
+    }
+    lines.push('```');
+    lines.push(input.testOutput);
+    lines.push('```');
+  }
+  lines.push('');
+  lines.push('## Required JSON output shape');
+  lines.push('```json');
+  lines.push(
+    JSON.stringify(
+      {
+        version: 1,
+        status: 'satisfied | needs_revision | max_iterations_reached | failed',
+        iteration: input.iteration,
+        perCriterion: [
+          {
+            criterionId: 'c1',
+            status: 'met | unmet | partial',
+            evidence: 'commit shas / file paths / quoted code',
+            gaps: ['gap line 1'],
+          },
+        ],
+        explanation: 'free-text grader summary',
+        modelUsed: 'codex | claude',
+        durationMs: 0,
+        timestamp: '<ISO-8601>',
+      },
+      null,
+      2,
+    ),
+  );
+  lines.push('```');
+  return lines.join('\n');
+}
+
+/** Try parse-as-JSON, fall back to first-{...}-block extraction. */
+function extractJsonObject(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    /* fall through */
+  }
+  const match = /\{[\s\S]*\}/.exec(raw);
+  if (!match) {
+    throw new FlywheelError({
+      code: 'verdict_invalid',
+      message: 'grader stdout did not contain a JSON object',
+      cause: sanitizeCause(raw.slice(0, 200)),
+    });
+  }
+  try {
+    return JSON.parse(match[0]);
+  } catch (err) {
+    throw new FlywheelError({
+      code: 'verdict_invalid',
+      message: 'grader JSON object extracted from prose did not parse',
+      cause: sanitizeCause(errMsg(err)),
+    });
+  }
+}
+
+export interface GradeOutcomeOptions {
+  /** Test-only injection point. Defaults to `defaultGraderDriver`. */
+  grader?: GraderDriver;
+  /** Test-only clock. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
 /**
  * Grade the cycle outcome with a model strictly decorrelated from the
  * implementation swarm — codex primary, fresh-CC fallback.
  *
- * The body lands in T6 (claude-orchestrator-2ma). T2 ships only the
- * signature so downstream tool wrappers (T8) can typecheck against it.
+ * Bead: claude-orchestrator-2ma (T6).
  */
-export function gradeOutcome(
-  _ctx: ToolContext,
-  _args: GradeOutcomeArgs,
+export async function gradeOutcome(
+  ctx: ToolContext,
+  args: GradeOutcomeArgs,
+  opts: GradeOutcomeOptions = {},
 ): Promise<GraderVerdict | GradeSkippedSentinel> {
-  return Promise.reject(
-    new FlywheelError({
-      code: 'internal_error',
-      message: 'gradeOutcome not yet implemented — landing in T6 (claude-orchestrator-2ma)',
-      retryable: false,
-    }),
-  );
+  const { exec, cwd, state, saveState, signal } = ctx;
+  const grader = opts.grader ?? defaultGraderDriver;
+  const now = opts.now ?? Date.now;
+  const force = args.force === true;
+
+  // ─ Skip short-circuit (R2 from spec) ─
+  if (state.outcomeGradingSkipped === true) {
+    return {
+      status: 'skipped',
+      reason: 'operator-skipped-at-plan-approve',
+      iteration: 0,
+    };
+  }
+
+  if (!state.outcomeRubricPath) {
+    throw new FlywheelError({
+      code: 'rubric_missing',
+      message: 'state.outcomeRubricPath is unset and outcomeGradingSkipped is not true',
+    });
+  }
+
+  const slug = args.planSlug ?? planSlugFromIdentifier(state.outcomeRubricPath);
+  const lockKey = slug;
+  if (_graderLocks.has(lockKey) && !force) {
+    throw new FlywheelError({
+      code: 'concurrent_grade',
+      message: `another grader is already in flight for plan slug "${slug}"`,
+    });
+  }
+  _graderLocks.set(lockKey, true);
+
+  try {
+    const rubricAbs = path.join(cwd, state.outcomeRubricPath);
+    if (!existsSync(rubricAbs)) {
+      throw new FlywheelError({
+        code: 'rubric_missing',
+        message: `rubric.md not found at ${state.outcomeRubricPath}`,
+      });
+    }
+    const rubricRaw = readFileSync(rubricAbs, 'utf8');
+    const rubric = parseRubricFrontmatter(rubricRaw);
+    const rubricFrontmatter = renderRubricFrontmatter(rubric);
+
+    const cap = getMaxOutcomeIterations(state);
+    const iteration = (state.outcomeGradingHistory?.length ?? 0) + 1;
+
+    // Iteration-N.json existence guard (D6).
+    const verdictDirRel = path.join('.pi-flywheel', 'plans', slug, 'grading');
+    const verdictRel = path.join(verdictDirRel, `iteration-${iteration}.json`);
+    const verdictAbs = path.join(cwd, verdictRel);
+    if (existsSync(verdictAbs) && !force) {
+      throw new FlywheelError({
+        code: 'verdict_invalid',
+        message: `verdict file already exists at ${verdictRel}`,
+        hint: 'Pass force=true to re-grade, or delete the existing file.',
+      });
+    }
+
+    // Resolve cycleStartSha via the 4-tier ladder.
+    const cycleStartShaResult = await resolveCycleStartSha(ctx);
+
+    // Build prompt artifacts.
+    const range = `${cycleStartShaResult.sha}..HEAD`;
+    let gitLog = '';
+    let diffStat = '';
+    let diffBody = '';
+    try {
+      const r = await exec('git', ['log', range, '--oneline'], { cwd, timeout: 8000, signal });
+      gitLog = r.stdout.trim();
+    } catch (err) { log.debug('git log failed', { err: errMsg(err) }); }
+    try {
+      const r = await exec('git', ['diff', range, '--stat'], { cwd, timeout: 8000, signal });
+      diffStat = r.stdout.trim();
+    } catch (err) { log.debug('git diff --stat failed', { err: errMsg(err) }); }
+    try {
+      const r = await exec('git', ['diff', range], { cwd, timeout: 15000, signal });
+      diffBody = r.stdout;
+    } catch (err) { log.debug('git diff body failed', { err: errMsg(err) }); }
+    const { body: truncatedDiff, truncated: diffTruncated } = truncateDiffBody(diffBody);
+    const { body: testOutput, truncated: testOutputTruncated } = truncateTestOutput(state.cycleEndTestOutput);
+
+    const prompt = buildGraderPrompt({
+      rubricFrontmatter,
+      goal: state.selectedGoal ?? rubric.goal,
+      iteration,
+      cap,
+      gitLog,
+      diffStat,
+      diffBody: truncatedDiff,
+      diffTruncated,
+      testOutput,
+      testOutputTruncated,
+    });
+
+    // Decide preferred grader (codex when configured, else claude).
+    const preferModel: 'codex' | 'claude' = process.env.FW_GRADER_FORCE_CLAUDE === '1' ? 'claude' : 'codex';
+    const timeoutMs = Number(process.env.FW_GRADER_TIMEOUT_MS ?? GRADER_TIMEOUT_MS_DEFAULT);
+
+    const startWall = now();
+    let stdout: string;
+    let modelUsed: 'codex' | 'claude';
+    try {
+      const r = await grader({ exec, cwd, signal, prompt, preferModel, timeoutMs });
+      stdout = r.stdout;
+      modelUsed = r.modelUsed;
+    } catch (err) {
+      if (err instanceof FlywheelError) throw err;
+      const msg = errMsg(err);
+      if (/Timed out after \d+ms/.test(msg)) {
+        throw new FlywheelError({
+          code: 'grader_timeout',
+          message: `grader exceeded ${timeoutMs}ms`,
+          cause: sanitizeCause(msg),
+        });
+      }
+      throw new FlywheelError({
+        code: 'grader_unavailable',
+        message: 'grader driver threw',
+        cause: sanitizeCause(msg),
+      });
+    }
+    const durationMs = now() - startWall;
+
+    // Parse + validate. One auto-retry on Zod failure with a verbatim
+    // "JSON only" re-prompt (D11).
+    let verdictParsed: GraderVerdict;
+    let graderRetried = false;
+    try {
+      const obj = extractJsonObject(stdout);
+      verdictParsed = GraderVerdictSchemaV1.parse(obj);
+    } catch (firstErr) {
+      // One auto-retry.
+      graderRetried = true;
+      const retryPrompt =
+        'Your previous output was not valid JSON. Return ONLY the GraderVerdictSchemaV1 ' +
+        'JSON object. Do not include prose.\n\n' + prompt;
+      let retryStdout: string;
+      try {
+        const r = await grader({ exec, cwd, signal, prompt: retryPrompt, preferModel, timeoutMs });
+        retryStdout = r.stdout;
+        modelUsed = r.modelUsed;
+      } catch (err) {
+        throw new FlywheelError({
+          code: 'verdict_invalid',
+          message: 'grader retry failed after first parse error',
+          cause: sanitizeCause(errMsg(err)),
+        });
+      }
+      try {
+        const obj = extractJsonObject(retryStdout);
+        verdictParsed = GraderVerdictSchemaV1.parse(obj);
+      } catch (err) {
+        throw new FlywheelError({
+          code: 'verdict_invalid',
+          message: 'grader retry JSON did not parse against GraderVerdictSchemaV1',
+          cause: sanitizeCause(`first=${errMsg(firstErr)} | retry=${errMsg(err)}`),
+        });
+      }
+    }
+
+    // Backfill server-known fields. The grader is told the iteration
+    // index but we authoritatively re-set it; modelUsed is what we
+    // actually launched.
+    const verdict: GraderVerdict = {
+      ...verdictParsed,
+      iteration,
+      modelUsed,
+      durationMs,
+      timestamp: new Date(now()).toISOString(),
+      details: {
+        ...(verdictParsed.details ?? {}),
+        cycleStartShaSource: cycleStartShaResult.source,
+        diffTruncated,
+        testOutputTruncated,
+        graderRetried,
+        ...(modelUsed === 'claude' && preferModel === 'codex'
+          ? { fallbackReason: 'codex_unavailable' }
+          : {}),
+      },
+    };
+
+    // Iteration-cap coercion (D7) — server-side; the LLM cannot bypass.
+    if (verdict.iteration >= cap && verdict.status === 'needs_revision') {
+      verdict.status = 'max_iterations_reached';
+    }
+
+    // Atomic write FIRST, then state append (D4, D12). A crash between
+    // file-write and saveState leaves a recoverable on-disk record.
+    let persistence: 'ok' | 'failed' = 'ok';
+    try {
+      await writeAtomic(verdictAbs, `${JSON.stringify(verdict, null, 2)}\n`);
+    } catch (err) {
+      const msg = errMsg(err);
+      if (/ENOSPC|EROFS|EDQUOT/i.test(msg)) {
+        log.warn('verdict persistence failed (disk full / read-only)', { err: msg });
+        persistence = 'failed';
+        verdict.persistence = 'failed';
+      } else {
+        throw err;
+      }
+    }
+    if (persistence === 'ok') {
+      verdict.persistence = 'ok';
+    }
+
+    // Append to history with FIFO cap (Tension #4 — last 5 cycles).
+    const entry = { iteration, verdict, timestamp: verdict.timestamp };
+    const hist = (state.outcomeGradingHistory ?? []).slice();
+    hist.push(entry);
+    while (hist.length > HISTORY_FIFO_CAP) {
+      hist.shift();
+    }
+    state.outcomeGradingHistory = hist;
+    saveState(state);
+
+    log.info('outcome graded', {
+      slug,
+      iteration,
+      status: verdict.status,
+      modelUsed,
+      durationMs,
+    });
+
+    return verdict;
+  } finally {
+    _graderLocks.delete(lockKey);
+  }
+}
+
+/** Test-only — reset the in-memory grader-mutex map. */
+export function _resetGraderMutex(): void {
+  _graderLocks.clear();
 }
