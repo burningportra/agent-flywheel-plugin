@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "pass_utc": "2026-05-08T19:14:22Z",
+  "mode": "flywheel-gate",
+  "threshold": 700,
+  "beads": [
+    {
+      "id": "agent-flywheel-001",
+      "score": 850,
+      "passed": true,
+      "scorecard_path": "beads/agent-flywheel-001/scorecard.md",
+      "rubric_breakdown": {
+        "impl_completeness": "260/300"
+      }
+    },
+    {
+      "id": "agent-flywheel-002",
+      "score": 420,
+      "passed": false,
+      "scorecard_path": "beads/agent-flywheel-002/scorecard.md",
+      "rubric_breakdown": {
+        "impl_completeness": "120/300"
+      },
+      "top_failures": [
+        "impl_completeness:120/300",
+        "test_depth:60/150",
+        "anti_theater:30/150"
+      ]
+    }
+  ],
+  "session_id": "sess-abc"
+}

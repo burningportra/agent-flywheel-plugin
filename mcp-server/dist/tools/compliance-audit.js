@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { makeOkToolResult, makeToolError } from './shared.js';
 export const ComplianceAuditArgsSchema = z.object({
@@ -8,7 +10,18 @@ export const ComplianceAuditArgsSchema = z.object({
     parallelism: z.number().optional(),
     skipEnv: z.string().optional(),
 });
-function complianceOutcome(status, startedAt) {
+const ComplianceResultBeadSchema = z.object({
+    id: z.string(),
+    score: z.number(),
+    passed: z.boolean(),
+    scorecard_path: z.string(),
+    top_failures: z.array(z.string()).optional(),
+}).passthrough();
+const ComplianceResultSchema = z.object({
+    pass_utc: z.string().nullable().optional(),
+    beads: z.array(ComplianceResultBeadSchema).optional(),
+}).passthrough();
+function complianceOutcome(status, startedAt, overrides = {}) {
     return {
         kind: 'compliance_audit_outcome',
         status,
@@ -17,7 +30,14 @@ function complianceOutcome(status, startedAt) {
         passUtc: null,
         errors: {},
         durationMs: Date.now() - startedAt,
+        ...overrides,
     };
+}
+function okComplianceResult(text, startedAt, overrides = {}) {
+    return makeOkToolResult('flywheel_compliance_audit', 'reviewing', text, complianceOutcome(overrides.status ?? 'ok', startedAt, overrides));
+}
+function errorComplianceResult(text, startedAt, errors) {
+    return makeOkToolResult('flywheel_compliance_audit', 'reviewing', text, complianceOutcome('error', startedAt, { errors }));
 }
 export async function runComplianceAudit(ctx, rawArgs) {
     const startedAt = Date.now();
@@ -31,15 +51,102 @@ export async function runComplianceAudit(ctx, rawArgs) {
     const args = parsed.data;
     // Empty wave — no-op success.
     if (args.beadIds.length === 0) {
-        return makeOkToolResult('flywheel_compliance_audit', 'reviewing', 'No beads to audit.', complianceOutcome('ok', startedAt));
+        return okComplianceResult('No beads to audit.', startedAt);
     }
     // Skip-env override (emergency unblock).
     const overrideEnv = args.skipEnv ?? process.env.FW_COMPLIANCE_OVERRIDE;
     if (overrideEnv && overrideEnv.length > 0) {
-        return makeOkToolResult('flywheel_compliance_audit', 'reviewing', `Compliance audit skipped via FW_COMPLIANCE_OVERRIDE=${overrideEnv}.`, complianceOutcome('skipped', startedAt));
+        return okComplianceResult(`Compliance audit skipped via FW_COMPLIANCE_OVERRIDE=${overrideEnv}.`, startedAt, { status: 'skipped' });
     }
-    // TODO(Task 6): spawn skill, parse result.json
+    const threshold = args.threshold ?? 700;
+    const parallelism = Math.max(1, Math.min(args.parallelism ?? 5, 5));
+    try {
+        const spawnResult = await ctx.exec('claude', [
+            '--skill',
+            'beads-compliance-and-completion-verification',
+            '--',
+            '--mode',
+            'flywheel-gate',
+            '--beads',
+            args.beadIds.join(','),
+            '--threshold',
+            String(threshold),
+            '--parallelism',
+            String(parallelism),
+        ], { cwd: args.cwd, timeout: 15 * 60 * 1000, signal: ctx.signal });
+        if (spawnResult.code !== 0) {
+            const stderr = spawnResult.stderr.slice(0, 500);
+            return errorComplianceResult(`Skill spawn failed (exit ${spawnResult.code}): ${stderr.slice(0, 200)}`, startedAt, { spawn: `exit ${spawnResult.code}: ${stderr}` });
+        }
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorComplianceResult(`Skill spawn threw: ${message}`, startedAt, { spawn: message });
+    }
+    const passesRoot = join(args.cwd, 'beads_compliance_audit', 'passes');
+    if (!existsSync(passesRoot)) {
+        return errorComplianceResult('Skill ran but produced no passes directory.', startedAt, { parse: `passes directory missing: ${passesRoot}` });
+    }
+    let subdirs;
+    try {
+        subdirs = readdirSync(passesRoot, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => {
+            const fullPath = join(passesRoot, entry.name);
+            return { name: entry.name, mtime: statSync(fullPath).mtimeMs };
+        })
+            .sort((a, b) => b.mtime - a.mtime);
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorComplianceResult(`Could not inspect pass directories: ${message}`, startedAt, { parse: message });
+    }
+    if (subdirs.length === 0) {
+        return errorComplianceResult('No pass directories found.', startedAt, { parse: 'no pass dirs' });
+    }
+    const latestPassDir = join(passesRoot, subdirs[0].name);
+    const resultJsonPath = join(latestPassDir, 'result.json');
+    if (!existsSync(resultJsonPath)) {
+        return errorComplianceResult('result.json missing in latest pass.', startedAt, { parse: `result.json not found at ${resultJsonPath}` });
+    }
+    let parsedResult;
+    try {
+        const rawResult = JSON.parse(readFileSync(resultJsonPath, 'utf8'));
+        const schemaResult = ComplianceResultSchema.safeParse(rawResult);
+        if (!schemaResult.success) {
+            const issues = schemaResult.error.issues
+                .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+                .join('; ');
+            return errorComplianceResult(`result.json schema validation failed: ${issues}`, startedAt, { parse: issues });
+        }
+        parsedResult = schemaResult.data;
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return errorComplianceResult(`result.json parse failed: ${message}`, startedAt, { parse: message });
+    }
+    const passed = [];
+    const failed = [];
+    for (const bead of parsedResult.beads ?? []) {
+        const reportPath = join(latestPassDir, bead.scorecard_path);
+        if (bead.passed) {
+            passed.push({ beadId: bead.id, score: bead.score, reportPath });
+        }
+        else {
+            failed.push({
+                beadId: bead.id,
+                score: bead.score,
+                reportPath,
+                reasons: bead.top_failures ?? [],
+            });
+        }
+    }
     // TODO(Task 7): side effects (br update, telemetry, CASS)
-    throw new Error('not implemented - Task 6');
+    return okComplianceResult(`Compliance audit complete: ${passed.length} passed, ${failed.length} failed.`, startedAt, {
+        passed,
+        failed,
+        passUtc: parsedResult.pass_utc ?? null,
+        errors: {},
+    });
 }
 //# sourceMappingURL=compliance-audit.js.map
