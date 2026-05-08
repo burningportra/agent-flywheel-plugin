@@ -57,10 +57,19 @@
  *   - T6 (claude-orchestrator-2ma): `gradeOutcome()` body.
  */
 
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { z } from 'zod';
 
-import { FlywheelError, sanitizeCause } from './errors.js';
-import type { ToolContext, FlywheelState } from './types.js';
+import { writeAtomic } from './atomic-write.js';
+import { FlywheelError, sanitizeCause, errMsg } from './errors.js';
+import { createLogger } from './logger.js';
+import type { ToolContext, FlywheelState, ExecFn } from './types.js';
+
+const log = createLogger('outcome-grading');
 
 // ─── Schema versions ─────────────────────────────────────────────────────
 
@@ -577,23 +586,421 @@ export interface SynthesizeRubricResult {
   source: Rubric['source'] | 'cached';
 }
 
+// ─── Rubric-file path helpers ────────────────────────────────────────────
+
 /**
- * Synthesize (or load, edit, regenerate) the cycle-level outcome rubric.
- *
- * The body lands in T5 (claude-orchestrator-1s9). T2 ships only the
- * signature so downstream tool wrappers (T7) can typecheck against it.
+ * Repo-relative path to `.pi-flywheel/plans/<slug>/rubric.md`. Tools
+ * persist this string into `state.outcomeRubricPath`; the doctor and
+ * Step 0c banner both read it back from there.
  */
-export function synthesizeRubric(
-  _ctx: ToolContext,
-  _args: SynthesizeRubricArgs,
+export function rubricPathForSlug(slug: string): string {
+  return path.join('.pi-flywheel', 'plans', slug, 'rubric.md');
+}
+
+/** Sidecar path that records the planContentSha → rubric pairing. */
+export function rubricLockPathForSlug(slug: string): string {
+  return path.join('.pi-flywheel', 'plans', slug, '.rubric.lock');
+}
+
+function sha256Hex(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+interface RubricLockFile {
+  planContentSha: string;
+  generatedAt: string;
+  source: Rubric['source'];
+}
+
+function readRubricLock(absolutePath: string): RubricLockFile | null {
+  try {
+    const raw = readFileSync(absolutePath, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<RubricLockFile>;
+    if (
+      typeof parsed.planContentSha === 'string' &&
+      typeof parsed.generatedAt === 'string' &&
+      typeof parsed.source === 'string'
+    ) {
+      return parsed as RubricLockFile;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Synthesizer prompt ──────────────────────────────────────────────────
+
+/**
+ * Verbatim synthesizer instruction prefix. Plan content is appended
+ * AFTER this preamble — never spliced into a shell command — so any
+ * payload in the plan is treated as the LLM's *user message*, not as
+ * an exec argument. Documented in T5 spec.
+ */
+const SYNTHESIZER_PROMPT = `You are an outcome-rubric synthesizer for the agent-flywheel cycle.
+
+Read the plan that follows the \`PLAN START\` marker and produce a rubric of 5–10 testable
+criteria. Each criterion must be:
+
+  (a) testable — a future grader could mark it met / unmet / partial by inspecting the diff
+  (b) directly attributable to a specific file or behavior change
+  (c) under 140 characters in description
+
+Examples of BAD criteria (do not emit):
+  - "code is good"
+  - "tests pass"
+  - "the implementation is correct"
+
+Examples of GOOD criteria (emit shapes like these):
+  - "mcp-server/src/outcome-grading.ts exports RubricSchemaV1 and parses round-trips"
+  - "flywheel_synthesize_rubric tool is registered in server.ts and writes rubric.md"
+
+Output ONLY YAML frontmatter (no prose, no code fences) wrapped in \`---\` delimiters,
+matching this Zod schema EXACTLY:
+
+  version: 1                # literal int 1
+  source: auto              # literal string "auto"
+  generatedAt: <ISO-8601 datetime>
+  planSlug: <kebab-case slug>
+  goal: <one line goal>
+  engine: <optional model name>
+  criteria:                 # 3..15 items
+    - id: c1                # /^c\\d+$/
+      description: <≥10 chars>
+      weight: <optional 0..1 float>
+      evidenceHint: <optional file path>
+
+PLAN START`;
+
+/**
+ * Inject the engine and timestamp the synthesizer cannot know on its
+ * own. Called after the LLM returns to backfill missing-but-required
+ * fields before validation, since the LLM is told to emit
+ * `generatedAt: <ISO-8601 datetime>` literally and we want a
+ * deterministic timestamp for testing.
+ */
+function backfillRubricFields(
+  raw: string,
+  override: { goal: string; planSlug: string; engine?: string; source: Rubric['source']; generatedAt: string },
+): string {
+  // Replace placeholder lines if the synthesizer left them.
+  let out = raw;
+  const replacements: Array<[RegExp, string]> = [
+    [/^generatedAt:.*$/m, `generatedAt: ${override.generatedAt}`],
+    [/^planSlug:.*$/m, `planSlug: ${override.planSlug}`],
+    [/^goal:.*$/m, `goal: ${escapeYamlScalar(override.goal)}`],
+    [/^source:.*$/m, `source: ${override.source}`],
+  ];
+  for (const [re, repl] of replacements) {
+    if (re.test(out)) {
+      out = out.replace(re, repl);
+    }
+  }
+  if (override.engine !== undefined && !/^engine:/m.test(out)) {
+    // Append engine line just before the closing `---`.
+    out = out.replace(/^---\s*$/m, `engine: ${escapeYamlScalar(override.engine)}\n---`);
+  }
+  return out;
+}
+
+function escapeYamlScalar(value: string): string {
+  if (/^[A-Za-z0-9_./-]+$/.test(value)) return value;
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+// ─── Synthesizer invocation (exec-backed) ────────────────────────────────
+
+/**
+ * Pluggable synthesizer driver. Default invokes `claude --print` against
+ * a tmp task-file, mirroring the pattern in `deep-plan.ts`. Tests inject
+ * their own driver via the `synthesizer` arg on `synthesizeRubric` so
+ * the LLM call is fully mockable.
+ */
+export type SynthesizerDriver = (input: {
+  exec: ExecFn;
+  cwd: string;
+  signal?: AbortSignal;
+  prompt: string;
+}) => Promise<string>;
+
+const SYNTH_TIMEOUT_MS = Number(process.env.FW_RUBRIC_SYNTH_TIMEOUT_MS ?? 60_000);
+
+/** Default synthesizer — `claude --print --tools read` against a tmp task file. */
+export const defaultSynthesizerDriver: SynthesizerDriver = async ({ exec, cwd, signal, prompt }) => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'flywheel-rubric-'));
+  const taskFile = path.join(dir, 'task.md');
+  writeFileSync(taskFile, prompt, 'utf8');
+  try {
+    const res = await exec('claude', ['--print', '--tools', 'read', `@${taskFile}`], {
+      cwd,
+      timeout: SYNTH_TIMEOUT_MS,
+      signal,
+    });
+    if (res.code !== 0) {
+      throw new FlywheelError({
+        code: 'rubric_synth_invalid',
+        message: `claude synthesizer exited ${res.code}`,
+        cause: sanitizeCause(res.stderr || `exit ${res.code}`),
+      });
+    }
+    return res.stdout.trim();
+  } finally {
+    try { unlinkSync(taskFile); } catch { /* best-effort */ }
+  }
+};
+
+// ─── Edit-intent helper ──────────────────────────────────────────────────
+
+/**
+ * Apply a deterministic, parser-driven edit to a rubric. Used by
+ * `synthesizeRubric` when `action: 'edit'` arrives WITHOUT spawning a
+ * fresh LLM round-trip for the simple cases (tighten/add/remove). The
+ * `'custom'` kind requires LLM mediation and is delegated to the
+ * synthesizer driver in that case.
+ */
+function applyDeterministicEdit(
+  rubric: Rubric,
+  intent: NonNullable<SynthesizeRubricArgs['editIntent']>,
+): Rubric {
+  switch (intent.kind) {
+    case 'tighten': {
+      // Append the operator's tightening note to each criterion's
+      // description. Keeps the criterion count stable; lets the next
+      // synthesis cycle pick up the operator's intent verbatim.
+      const note = ` (operator-tighten: ${intent.text})`;
+      const newCriteria = rubric.criteria.map((c) => ({
+        ...c,
+        description: `${c.description}${note}`,
+      }));
+      return { ...rubric, criteria: newCriteria, source: 'edited' };
+    }
+    case 'add': {
+      const nextId = `c${rubric.criteria.length + 1}`;
+      const description = intent.text.length >= 10
+        ? intent.text
+        : `${intent.text} (operator-added)`;
+      return {
+        ...rubric,
+        source: 'edited',
+        criteria: [
+          ...rubric.criteria,
+          { id: nextId, description },
+        ],
+      };
+    }
+    case 'remove': {
+      // Remove criteria whose id appears in the intent text or whose
+      // description contains the intent text (case-insensitive). After
+      // removal, renumber so ids stay /^c\d+$/-contiguous.
+      const needle = intent.text.trim().toLowerCase();
+      const kept = rubric.criteria.filter((c) => {
+        if (c.id.toLowerCase() === needle) return false;
+        if (c.description.toLowerCase().includes(needle)) return false;
+        return true;
+      });
+      const renumbered = kept.map((c, idx) => ({ ...c, id: `c${idx + 1}` }));
+      return { ...rubric, source: 'edited', criteria: renumbered };
+    }
+    case 'custom':
+      // Custom edits land via the LLM driver in synthesizeRubric — the
+      // caller branches on `intent.kind === 'custom'` before reaching
+      // this helper.
+      throw new FlywheelError({
+        code: 'internal_error',
+        message: 'applyDeterministicEdit does not handle custom edits',
+      });
+  }
+}
+
+// ─── synthesizeRubric body ───────────────────────────────────────────────
+
+export interface SynthesizeRubricOptions {
+  /** Test-only injection point. Defaults to `defaultSynthesizerDriver`. */
+  synthesizer?: SynthesizerDriver;
+  /** Test-only clock. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
+/**
+ * Synthesize, validate, edit, or regenerate the cycle-level outcome rubric.
+ *
+ * See `SynthesizeRubricArgs.action` doc for the variant contract:
+ *   - `'synthesize'` (default): LLM-spawn unless cache hit OR existing
+ *     rubric has `source ∈ {'edited','user'}`. `force=true` bypasses both.
+ *   - `'validate'`: parse current rubric.md and return; no LLM, no write.
+ *   - `'edit'`: deterministic transform for tighten/add/remove; LLM for
+ *     custom. Atomic-write only on successful Zod validation.
+ *   - `'regenerate'`: explicit override; ignores the edited-source guard.
+ *
+ * Bead: claude-orchestrator-1s9 (T5).
+ */
+export async function synthesizeRubric(
+  ctx: ToolContext,
+  args: SynthesizeRubricArgs,
+  opts: SynthesizeRubricOptions = {},
 ): Promise<SynthesizeRubricResult> {
-  return Promise.reject(
-    new FlywheelError({
-      code: 'internal_error',
-      message: 'synthesizeRubric not yet implemented — landing in T5 (claude-orchestrator-1s9)',
-      retryable: false,
-    }),
-  );
+  const { exec, cwd, state, saveState, signal } = ctx;
+  const action = args.action ?? 'synthesize';
+  const synthesizer = opts.synthesizer ?? defaultSynthesizerDriver;
+  const now = opts.now ?? Date.now;
+
+  // Resolve plan path + slug.
+  const planPath = args.planPath ?? state.planDocument;
+  if (!planPath) {
+    throw new FlywheelError({
+      code: 'invalid_input',
+      message: 'synthesizeRubric requires planPath or state.planDocument',
+    });
+  }
+  const planAbs = path.isAbsolute(planPath) ? planPath : path.join(cwd, planPath);
+  const slug = args.planSlug ?? planSlugFromIdentifier(planPath);
+  const rubricRel = rubricPathForSlug(slug);
+  const rubricAbs = path.join(cwd, rubricRel);
+  const lockAbs = path.join(cwd, rubricLockPathForSlug(slug));
+
+  // ─ action: 'validate' — read + parse + return; no write ─
+  if (action === 'validate') {
+    if (!existsSync(rubricAbs)) {
+      throw new FlywheelError({
+        code: 'rubric_missing',
+        message: `rubric.md not found at ${rubricRel}`,
+      });
+    }
+    const rubric = parseRubricFrontmatter(readFileSync(rubricAbs, 'utf8'));
+    state.outcomeRubricPath = rubricRel;
+    saveState(state);
+    return { rubricPath: rubricRel, rubric, source: rubric.source };
+  }
+
+  // Read plan content for cache key + LLM input.
+  if (!existsSync(planAbs)) {
+    throw new FlywheelError({
+      code: 'not_found',
+      message: `plan file not found at ${planPath}`,
+    });
+  }
+  const planContent = readFileSync(planAbs, 'utf8');
+  const planContentSha = sha256Hex(planContent);
+
+  const goal = state.selectedGoal ?? slug;
+  const generatedAt = new Date(now()).toISOString();
+
+  // ─ action: 'edit' — operator-driven edit on existing rubric ─
+  if (action === 'edit') {
+    if (!args.editIntent) {
+      throw new FlywheelError({
+        code: 'invalid_input',
+        message: "synthesizeRubric action='edit' requires editIntent",
+      });
+    }
+    if (!existsSync(rubricAbs)) {
+      throw new FlywheelError({
+        code: 'rubric_missing',
+        message: `cannot edit: rubric.md missing at ${rubricRel}`,
+      });
+    }
+    const current = parseRubricFrontmatter(readFileSync(rubricAbs, 'utf8'));
+    let next: Rubric;
+    if (args.editIntent.kind === 'custom') {
+      const prompt =
+        `${SYNTHESIZER_PROMPT}\n\n` +
+        `Existing rubric (apply this custom edit and re-emit the full frontmatter):\n` +
+        `${renderRubricFrontmatter(current)}\n\n` +
+        `Custom edit instructions:\n${args.editIntent.text}\n\nPLAN END\n`;
+      const raw = await synthesizer({ exec, cwd, signal, prompt });
+      const filled = backfillRubricFields(raw, {
+        goal,
+        planSlug: slug,
+        source: 'edited',
+        generatedAt,
+        engine: current.engine,
+      });
+      // Validation throws rubric_synth_invalid; on failure we do NOT write
+      // the file — the operator returns to the Step 5.6 edit-recovery menu.
+      next = parseRubricFrontmatter(filled);
+    } else {
+      next = applyDeterministicEdit(current, args.editIntent);
+      next = { ...next, generatedAt };
+      // Run the synthesised body through Zod via the parser (write+parse) so
+      // any deterministic-edit invariant violation surfaces consistently.
+      const rendered = renderRubricFrontmatter(next);
+      next = parseRubricFrontmatter(rendered);
+    }
+    await writeAtomic(rubricAbs, renderRubricFrontmatter(next));
+    state.outcomeRubricPath = rubricRel;
+    saveState(state);
+    return { rubricPath: rubricRel, rubric: next, source: 'edited' };
+  }
+
+  // ─ action: 'synthesize' or 'regenerate' ─
+  const force = args.force === true || action === 'regenerate';
+
+  if (existsSync(rubricAbs) && !force) {
+    const existing = parseRubricFrontmatter(readFileSync(rubricAbs, 'utf8'));
+    if (existing.source === 'edited' || existing.source === 'user') {
+      // Operator-edits guard — never overwritten without `force=true`.
+      state.outcomeRubricPath = rubricRel;
+      saveState(state);
+      return { rubricPath: rubricRel, rubric: existing, source: 'cached' };
+    }
+    const lock = readRubricLock(lockAbs);
+    if (lock !== null && lock.planContentSha === planContentSha) {
+      // Plan content unchanged since the last auto-synth — reuse.
+      state.outcomeRubricPath = rubricRel;
+      saveState(state);
+      return { rubricPath: rubricRel, rubric: existing, source: 'cached' };
+    }
+  }
+
+  // Spawn synthesizer.
+  const prompt = `${SYNTHESIZER_PROMPT}\n${planContent}\nPLAN END\n`;
+  let raw: string;
+  try {
+    raw = await synthesizer({ exec, cwd, signal, prompt });
+  } catch (err) {
+    if (err instanceof FlywheelError) throw err;
+    throw new FlywheelError({
+      code: 'rubric_synth_invalid',
+      message: 'synthesizer driver threw',
+      cause: sanitizeCause(errMsg(err)),
+    });
+  }
+  if (!raw || raw.trim() === '') {
+    throw new FlywheelError({
+      code: 'rubric_synth_invalid',
+      message: 'synthesizer returned empty output',
+    });
+  }
+
+  // Backfill and validate.
+  const filled = backfillRubricFields(raw, {
+    goal,
+    planSlug: slug,
+    source: 'auto',
+    generatedAt,
+  });
+  const rubric = parseRubricFrontmatter(filled);
+
+  // Persist atomically + drop the cache lock alongside.
+  await writeAtomic(rubricAbs, renderRubricFrontmatter(rubric));
+  const lockBody: RubricLockFile = {
+    planContentSha,
+    generatedAt,
+    source: rubric.source,
+  };
+  await writeAtomic(lockAbs, `${JSON.stringify(lockBody, null, 2)}\n`);
+
+  state.outcomeRubricPath = rubricRel;
+  saveState(state);
+
+  log.info('rubric synthesised', {
+    slug,
+    criteria: rubric.criteria.length,
+    source: rubric.source,
+    action,
+  });
+
+  return { rubricPath: rubricRel, rubric, source: rubric.source };
 }
 
 export interface GradeOutcomeArgs {
