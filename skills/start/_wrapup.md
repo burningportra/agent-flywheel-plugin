@@ -266,6 +266,20 @@ Default proposed groups (use these to populate the first option's description):
 - Skills added/updated -> `feat(skills): ...`
 - Config or gitignore changes -> `chore: ...`
 
+**Compliance override trailer.** Before creating any wrap-up commit in this sub-step or in the version-bump sub-step, check `state.checkpoint.compliance?.overrides?.length`. If it is greater than 0, append a `Compliance-Override:` trailer to the commit message:
+
+```bash
+COMPLIANCE_OVERRIDE="$(echo '<comma-separated overrides>' | tr -d '\n')"
+git commit -m "$(cat <<EOF
+<existing message body>
+
+Compliance-Override: $COMPLIANCE_OVERRIDE
+EOF
+)"
+```
+
+This creates a permanent audit trail. Every overridden compliance failure is searchable via `git log --grep='Compliance-Override:'`.
+
 Never commit `.env`, credentials, or files matching `*-secret-*` even on "Use proposed groups" — re-prompt and exclude.
 
 ### 4. Version bump

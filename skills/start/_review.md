@@ -332,6 +332,29 @@ AskUserQuestion(questions: [{
 
 Beads in `failed[]` have already been reopened by `flywheel_compliance_audit` via `br update --status open`. This menu controls only what happens next, not the bead state. Routing is handled in Task 10.
 
+### Step 9.0c — Failure menu routing
+
+Branch on the user's Step 9.0b choice:
+
+- **"Re-implement failed"** -> set `state.checkpoint.activeBeadIds = failed.map(f => f.beadId)`, write the checkpoint, and jump back to Step 7 (implementation). Existing implementor agents pick up the reopened beads on the next wave. Do not re-run `flywheel_approve_beads`; these beads are already approved.
+
+- **"Show evidence"** -> run:
+  ```bash
+  cat <passUtc>/REPORT.md
+  ```
+  where `<passUtc>` is `result.structuredContent?.data?.passUtc`. Then re-show the Step 9.0b menu.
+
+- **"Override + proceed"** -> record overrides in the checkpoint:
+  ```
+  state.checkpoint.compliance = {
+    overrides: failed.map(f => f.beadId),
+    overrideUtc: new Date().toISOString(),
+  }
+  ```
+  Beads remain reopened. Proceed to the existing Step 9 result menu, which can lead to Step 9.5 wrap-up. `_wrapup.md` stamps the `Compliance-Override:` commit trailer.
+
+- **"Skip and continue (advisory)"** -> make no checkpoint change. Beads remain reopened because the audit findings are still real. Proceed to the existing Step 9 result menu.
+
 Then check remaining beads with `br list`. If beads remain, use `AskUserQuestion`:
 
 ```
