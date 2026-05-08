@@ -47,6 +47,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -170,6 +173,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -215,6 +221,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -272,6 +281,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -370,6 +382,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -429,6 +444,9 @@ export declare const TOOLS: ({
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -468,6 +486,75 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+            planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            beadIds: {
+                type: string;
+                description: string;
+                items: {
+                    type: string;
+                };
+                minItems?: undefined;
+            };
+            mode: {
+                type: string;
+                enum: string[];
+                description: string;
+                default?: undefined;
+            };
+            threshold: {
+                type: string;
+                description: string;
+            };
+            parallelism: {
+                type: string;
+                description: string;
+            };
+            skipEnv: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -532,6 +619,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             query?: undefined;
             operation?: undefined;
             content?: undefined;
@@ -594,6 +684,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             name?: undefined;
@@ -631,6 +724,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -678,6 +774,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -726,6 +825,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -782,6 +884,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -826,6 +931,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -898,6 +1006,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -944,6 +1055,9 @@ export declare const TOOLS: ({
             beadId?: undefined;
             parallelSafe?: undefined;
             beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;

@@ -16,6 +16,7 @@ import { runProfile } from './tools/profile.js';
 import { runReview } from './tools/review.js';
 import { runSelect } from './tools/select.js';
 import { runVerifyBeads } from './tools/verify-beads.js';
+import { runComplianceAudit } from './tools/compliance-audit.js';
 import { runAdvanceWave } from './tools/advance-wave.js';
 import { runObserve } from './tools/observe.js';
 import { runRemediate, RemediateInputSchema } from './tools/remediate.js';
@@ -224,6 +225,41 @@ const PRIMARY_TOOLS = [
                     description: 'Bead IDs completed in this wave to reconcile',
                     minItems: 1,
                     items: { type: 'string' },
+                },
+            },
+            required: ['cwd', 'beadIds'],
+        },
+    },
+    {
+        name: 'flywheel_compliance_audit',
+        description: 'Audit a wave of closed beads for compliance with their acceptance criteria via the standalone /beads-compliance-and-completion-verification skill. ' +
+            'Returns per-bead scores; reopens false-closed beads; bumps telemetry; persists scores to CASS. ' +
+            'Default mode is single-bead parallel (~5-10 min for 5 beads). Honors FW_COMPLIANCE_OVERRIDE env for emergency skip.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory' },
+                beadIds: {
+                    type: 'array',
+                    description: 'Bead IDs in this wave to audit',
+                    items: { type: 'string' },
+                },
+                mode: {
+                    type: 'string',
+                    enum: ['single-bead', 'standard'],
+                    description: 'Audit mode (default: single-bead)',
+                },
+                threshold: {
+                    type: 'number',
+                    description: 'Score threshold below which a bead is false-closed (default: 700)',
+                },
+                parallelism: {
+                    type: 'number',
+                    description: 'Max parallel skill spawns (default: 5, max: 5)',
+                },
+                skipEnv: {
+                    type: 'string',
+                    description: 'Comma-separated bead IDs to skip; if any provided, audit is short-circuited',
                 },
             },
             required: ['cwd', 'beadIds'],
@@ -463,6 +499,7 @@ const DEFAULT_RUNNERS = {
     flywheel_approve_beads: runApprove,
     flywheel_review: runReview,
     flywheel_verify_beads: runVerifyBeads,
+    flywheel_compliance_audit: runComplianceAudit,
     flywheel_advance_wave: runAdvanceWave,
     flywheel_memory: runMemory,
     flywheel_doctor: runDoctor,
@@ -476,6 +513,7 @@ const DEFAULT_RUNNERS = {
     orch_approve_beads: runApprove,
     orch_review: runReview,
     orch_verify_beads: runVerifyBeads,
+    orch_compliance_audit: runComplianceAudit,
     orch_advance_wave: runAdvanceWave,
     orch_memory: runMemory,
     orch_get_skill: runGetSkill,
@@ -705,7 +743,9 @@ export function createServer() {
     return server;
 }
 export const server = createServer();
-if (process.argv[1] != null && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (process.argv[1] !== undefined &&
+    process.argv[1] !== null &&
+    fileURLToPath(import.meta.url) === process.argv[1]) {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     log.info('MCP server started');
