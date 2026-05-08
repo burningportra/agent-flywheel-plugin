@@ -23,7 +23,7 @@ This integration makes compliance verification the new wave-completion default.
 | Default-on or opt-in? | **Default-on, single-bead parallel mode** (~5–10 min for a wave of 5). Skip option always available in the failure menu |
 | How is it wired? | **New MCP tool `flywheel_compliance_audit`.** Wraps the standalone skill behind a structured contract. Existing `flywheel_verify_beads` is unchanged |
 | Telemetry? | **Yes** (B1) — bump `compliance_false_closed` counter on every failure. Surfaces in welcome-banner trends |
-| Score persistence? | **Yes** (B2) — persist per-bead scores via `flywheel_memory.store` so future "low-score-N-sessions-in-a-row" signals are queryable |
+| Score persistence? | **Yes** (B2) — persist per-bead scores as CASS `compliance_score` records so future "low-score-N-sessions-in-a-row" signals are queryable |
 | Skill changes? | **Yes** — add `--mode flywheel-gate` shorthand (C1) and tighten JSON output contract via new `passes/<UTC>/result.json` (C2) |
 
 ## 3. Architecture
@@ -95,7 +95,7 @@ The MCP tool is the only contract between repos. Everything flywheel-side import
 2. After the spawn exits, parse `<project>/beads_compliance_audit/passes/<UTC>/result.json`. Locate the latest `passes/*/` dir by mtime if multiple exist (skill is idempotent across passes).
 3. For each `failed[]`: `br update <id> --status open` + `br comment <id> "Compliance audit reopened — score <N>/1000. See <reportPath>"`.
 4. Bump telemetry: call the internal `bumpErrorCount(cwd, "compliance_false_closed", failed.length)` helper from `mcp-server/src/telemetry.ts` directly (not via MCP). Schema is the existing `error-counts.json`; no new file format.
-5. For every result (passed AND failed): persist score via the internal `storeMemoryRecord` helper in `mcp-server/src/cass-helpers.ts` (NEW file — see 4.5). This is a direct in-process call into the same backing store that the `flywheel_memory` MCP tool uses; we are NOT reentering MCP. Record kind `compliance_score`, tags as listed in 4.5.
+5. For every result (passed AND failed): persist score via the internal `storeComplianceScore` helper in `mcp-server/src/cass-helpers.ts` (NEW file — see 4.5). This writes a CASS `compliance_score` record directly and avoids reentering MCP from inside the compliance-audit MCP tool.
 
 ### 4.2 Standalone skill changes (C1 + C2)
 
@@ -179,17 +179,26 @@ AskUserQuestion({
 
 ### 4.5 CASS persistence (B2)
 
-The `flywheel_memory` MCP tool already supports `operation: "store"` with arbitrary `kind` + `tags`. The compliance-audit tool does NOT call `flywheel_memory` over MCP (you don't reenter MCP from inside an MCP tool). Instead, both `flywheel_memory` and the new compliance-audit tool share an internal helper module.
+The compliance-audit tool persists one `compliance_score` record per audited bead. The v1 contract is intentionally narrow: the tool only needs a write helper for the score records it emits during Step 9, and it must not call `flywheel_memory` over MCP from inside another MCP tool.
 
-**`mcp-server/src/cass-helpers.ts` (NEW file):** factor the existing in-process store/search logic out of `mcp-server/src/tools/memory.ts` into helpers that both tools call:
+**`mcp-server/src/cass-helpers.ts` (NEW file):** exports the v1 score persistence helper used by `mcp-server/src/tools/compliance-audit.ts`:
 
 ```ts
-export async function storeMemoryRecord(cwd: string, record: MemoryRecord): Promise<void>;
-export async function searchMemoryRecords(cwd: string, query: string, tags?: string[]): Promise<MemoryRecord[]>;
-export async function searchPriorComplianceScores(cwd: string, beadId: string): Promise<ComplianceScoreRecord[]>;
+export interface ComplianceScoreRecord {
+  beadId: string;
+  score: number;
+  threshold: number;
+  passed: boolean;
+  rubric: Record<string, string>;
+  passUtc: string;
+  sessionId: string | null;
+  gitHead: string;
+}
+
+export function storeComplianceScore(cwd: string, record: ComplianceScoreRecord): void;
 ```
 
-The first two are extractions (no behavior change); the third is new, used by future v2 work for "low-score-N-sessions-in-a-row" signals.
+The broader memory refactor originally considered here is deferred: do not require `storeMemoryRecord`, `searchMemoryRecords`, or `searchPriorComplianceScores` in v1. The existing `flywheel_memory` implementation remains unrefactored for v1, and prior-score search is part of the future "low-score-N-sessions-in-a-row" surface.
 
 **New record kind `compliance_score`:**
 
@@ -221,7 +230,7 @@ The first two are extractions (no behavior change); the third is new, used by fu
               ▼
               parse result.json
                   ├─ for each failed: br update --status open + br comment + bump telemetry
-                  ├─ for each result: flywheel_memory.store(compliance_score)
+                  ├─ for each result: storeComplianceScore(compliance_score)
                   └─ return { passed, failed, passUtc, errors }
         │
         ▼
@@ -260,6 +269,8 @@ The first two are extractions (no behavior change); the third is new, used by fu
 - Step 10 wrap-up audit (post-session learning capture)
 - Cron / tripwire entry point (weekly all-closed audit)
 - "Low-score-N-sessions-in-a-row" signal in welcome banner (data is captured in v1, surfacing comes later)
+- Generic CASS helper extraction (`storeMemoryRecord` / `searchMemoryRecords`) shared with `flywheel_memory`
+- `searchPriorComplianceScores` helper and consumers for historical score trend queries
 - Per-bead override granularity (today: env-list bypasses ALL beads; v2: per-id approve)
 - UI surface for inspecting score history outside the flywheel
 
