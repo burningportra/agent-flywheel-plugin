@@ -8,7 +8,7 @@ import { runComplianceAudit } from '../tools/compliance-audit.js';
 const RUN = process.env.RUN_INTEGRATION === '1';
 const describeMaybe = RUN ? describe : describe.skip;
 function brList(cwd) {
-    const out = execSync('br list --json', { cwd, encoding: 'utf8' });
+    const out = execSync('br list --json', { cwd, encoding: 'utf8', timeout: 10000 });
     try {
         const parsed = JSON.parse(out);
         if (!Array.isArray(parsed)) {
@@ -29,7 +29,7 @@ function findBead(cwd, title) {
     return bead;
 }
 function execSyncIn(cwd, command) {
-    execSync(command, { cwd, stdio: 'pipe' });
+    execSync(command, { cwd, stdio: 'pipe', timeout: 10000 });
 }
 describeMaybe('compliance audit - integration', () => {
     it('runs the real skill against a 2-bead fixture project', async () => {

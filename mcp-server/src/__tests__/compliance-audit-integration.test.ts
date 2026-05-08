@@ -24,7 +24,7 @@ interface ComplianceAuditData {
 }
 
 function brList(cwd: string): BrBead[] {
-  const out = execSync('br list --json', { cwd, encoding: 'utf8' });
+  const out = execSync('br list --json', { cwd, encoding: 'utf8', timeout: 10000 });
   try {
     const parsed = JSON.parse(out) as unknown;
     if (!Array.isArray(parsed)) {
@@ -46,7 +46,7 @@ function findBead(cwd: string, title: string): BrBead {
 }
 
 function execSyncIn(cwd: string, command: string): void {
-  execSync(command, { cwd, stdio: 'pipe' });
+  execSync(command, { cwd, stdio: 'pipe', timeout: 10000 });
 }
 
 describeMaybe('compliance audit - integration', () => {
