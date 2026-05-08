@@ -297,8 +297,33 @@ describe('runComplianceAudit - side effects', () => {
         const commentCall = exec.mock.calls.find((call) => call[0] === 'br' && call[1][0] === 'comments' && call[1][1] === 'add');
         expect(commentCall).toBeUndefined();
     });
-    it('records compliance_false_closed telemetry once when any bead fails', async () => {
-        setupFakePassDir(tmp, 'compliance-result-mixed.json');
+    it('records compliance_false_closed telemetry once per failed bead', async () => {
+        setupFakePassDirWithResult(tmp, {
+            schema_version: 1,
+            pass_utc: '2026-05-08T19:14:22Z',
+            mode: 'flywheel-gate',
+            threshold: 700,
+            beads: [
+                {
+                    id: 'agent-flywheel-001',
+                    score: 410,
+                    passed: false,
+                    scorecard_path: 'beads/agent-flywheel-001/scorecard.md',
+                },
+                {
+                    id: 'agent-flywheel-002',
+                    score: 420,
+                    passed: false,
+                    scorecard_path: 'beads/agent-flywheel-002/scorecard.md',
+                },
+                {
+                    id: 'agent-flywheel-003',
+                    score: 430,
+                    passed: false,
+                    scorecard_path: 'beads/agent-flywheel-003/scorecard.md',
+                },
+            ],
+        });
         const exec = vi.fn(async (cmd, _args, _opts) => ({
             code: 0,
             stdout: cmd === 'git' ? 'abc123\n' : '',
@@ -306,11 +331,11 @@ describe('runComplianceAudit - side effects', () => {
         }));
         await runComplianceAudit(stubCtx({ exec }), {
             cwd: tmp,
-            beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
+            beadIds: ['agent-flywheel-001', 'agent-flywheel-002', 'agent-flywheel-003'],
         });
         await flushTelemetry({ cwd: tmp });
         const telemetry = await readTelemetry({ cwd: tmp });
-        expect(telemetry?.counts.compliance_false_closed).toBe(1);
+        expect(telemetry?.counts.compliance_false_closed).toBe(3);
     });
     it('persists compliance scores to CASS for all parsed beads', async () => {
         setupFakePassDir(tmp, 'compliance-result-mixed.json');

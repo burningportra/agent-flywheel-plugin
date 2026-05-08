@@ -285,9 +285,9 @@ export async function runComplianceAudit(
     }
   }
 
-  if (failed.length > 0) {
+  for (const bead of failed) {
     recordErrorCode('compliance_false_closed', {
-      hashable: failed.map((bead) => bead.beadId).join(','),
+      hashable: bead.beadId,
     });
   }
 

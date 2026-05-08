@@ -170,9 +170,9 @@ export async function runComplianceAudit(ctx, rawArgs) {
             errors[bead.beadId] = err instanceof Error ? err.message : String(err);
         }
     }
-    if (failed.length > 0) {
+    for (const bead of failed) {
         recordErrorCode('compliance_false_closed', {
-            hashable: failed.map((bead) => bead.beadId).join(','),
+            hashable: bead.beadId,
         });
     }
     let gitHead = 'unknown';
