@@ -3,7 +3,7 @@ import type { FlywheelToolName, FlywheelPhase } from './types.js';
 export declare function registerTelemetryHook(hook: (code: string, ctx?: {
     hashable?: string;
 }) => void): void;
-export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error", "doctor_check_failed", "doctor_partial_report", "hotspot_parse_failure", "hotspot_bead_body_unparseable", "postmortem_empty_session", "postmortem_checkpoint_stale", "template_not_found", "template_placeholder_missing", "template_expansion_failed", "telemetry_store_failed", "wave_collision_detected", "review_mode_gate_failed", "review_headless_findings", "remediation_unavailable", "remediation_requires_confirm", "remediation_failed", "remediate_already_running", "bundle_integrity_failed", "bundle_stale", "viewer_port_in_use", "attestation_missing", "attestation_invalid", "rubric_synth_invalid", "rubric_missing", "grader_timeout", "verdict_invalid", "grader_unavailable", "cycle_start_sha_unset", "outcome_iteration_capped", "concurrent_grade"];
+export declare const FLYWHEEL_ERROR_CODES: readonly ["missing_prerequisite", "invalid_input", "not_found", "cli_failure", "cli_not_available", "parse_failure", "exec_timeout", "exec_aborted", "blocked_state", "concurrent_write", "agent_mail_unreachable", "deep_plan_all_failed", "empty_plan", "already_closed", "unsupported_action", "internal_error", "doctor_check_failed", "doctor_partial_report", "hotspot_parse_failure", "hotspot_bead_body_unparseable", "postmortem_empty_session", "postmortem_checkpoint_stale", "template_not_found", "template_placeholder_missing", "template_expansion_failed", "telemetry_store_failed", "wave_collision_detected", "review_mode_gate_failed", "review_headless_findings", "remediation_unavailable", "remediation_requires_confirm", "remediation_failed", "remediate_already_running", "bundle_integrity_failed", "bundle_stale", "viewer_port_in_use", "attestation_missing", "attestation_invalid", "rubric_synth_invalid", "rubric_missing", "grader_timeout", "verdict_invalid", "grader_unavailable", "cycle_start_sha_unset", "outcome_iteration_capped", "concurrent_grade", "compliance_false_closed"];
 export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     missing_prerequisite: "missing_prerequisite";
     invalid_input: "invalid_input";
@@ -51,6 +51,7 @@ export declare const FlywheelErrorCodeSchema: z.ZodEnum<{
     cycle_start_sha_unset: "cycle_start_sha_unset";
     outcome_iteration_capped: "outcome_iteration_capped";
     concurrent_grade: "concurrent_grade";
+    compliance_false_closed: "compliance_false_closed";
 }>;
 export type FlywheelErrorCode = z.infer<typeof FlywheelErrorCodeSchema>;
 export declare const FlywheelToolErrorSchema: z.ZodObject<{
@@ -101,6 +102,7 @@ export declare const FlywheelToolErrorSchema: z.ZodObject<{
         cycle_start_sha_unset: "cycle_start_sha_unset";
         outcome_iteration_capped: "outcome_iteration_capped";
         concurrent_grade: "concurrent_grade";
+        compliance_false_closed: "compliance_false_closed";
     }>;
     message: z.ZodString;
     retryable: z.ZodOptional<z.ZodBoolean>;
@@ -167,6 +169,7 @@ export declare const FlywheelStructuredErrorSchema: z.ZodObject<{
                 cycle_start_sha_unset: "cycle_start_sha_unset";
                 outcome_iteration_capped: "outcome_iteration_capped";
                 concurrent_grade: "concurrent_grade";
+                compliance_false_closed: "compliance_false_closed";
             }>;
             message: z.ZodString;
             retryable: z.ZodOptional<z.ZodBoolean>;

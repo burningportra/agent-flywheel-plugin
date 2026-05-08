@@ -1,9 +1,8 @@
 /**
  * Schema round-trip tests for the FlywheelErrorCode contract.
  *
- * Covers both the 16 legacy codes and the 10 v3.4.0 additions
- * (doctor / hotspot / postmortem / template / telemetry) and enforces
- * that `DEFAULT_RETRYABLE` keys match `FLYWHEEL_ERROR_CODES` exactly.
+ * Covers the legacy codes plus additive error-code cohorts and enforces that
+ * `DEFAULT_RETRYABLE` keys match `FLYWHEEL_ERROR_CODES` exactly.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -76,10 +75,16 @@ const V3_4_CODES = [
   'concurrent_grade',
 ] as const;
 
+const V3_14_CODES = [
+  'compliance_false_closed',
+] as const;
+
 describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
-  it('contains exactly the 16 legacy + 30 new codes (46 total)', () => {
-    expect(FLYWHEEL_ERROR_CODES).toHaveLength(LEGACY_CODES.length + V3_4_CODES.length);
-    expect(FLYWHEEL_ERROR_CODES).toHaveLength(46);
+  it('contains exactly the 16 legacy + 31 additive codes (47 total)', () => {
+    expect(FLYWHEEL_ERROR_CODES).toHaveLength(
+      LEGACY_CODES.length + V3_4_CODES.length + V3_14_CODES.length,
+    );
+    expect(FLYWHEEL_ERROR_CODES).toHaveLength(47);
   });
 
   it('preserves legacy codes in order for v3.3.0 back-compat', () => {
@@ -89,8 +94,12 @@ describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
   });
 
   it('appends the v3.4.0 codes after the legacy set', () => {
-    const tail = FLYWHEEL_ERROR_CODES.slice(LEGACY_CODES.length);
+    const tail = FLYWHEEL_ERROR_CODES.slice(LEGACY_CODES.length, -V3_14_CODES.length);
     expect(tail).toEqual(V3_4_CODES);
+  });
+
+  it('appends the v3.14.0 compliance codes after prior cohorts', () => {
+    expect(FLYWHEEL_ERROR_CODES.slice(-V3_14_CODES.length)).toEqual(V3_14_CODES);
   });
 
   it('every legacy code round-trips through FlywheelErrorCodeSchema.parse()', () => {
@@ -101,6 +110,12 @@ describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
 
   it('every v3.4.0 code round-trips through FlywheelErrorCodeSchema.parse()', () => {
     for (const code of V3_4_CODES) {
+      expect(FlywheelErrorCodeSchema.parse(code)).toBe(code);
+    }
+  });
+
+  it('every v3.14.0 code round-trips through FlywheelErrorCodeSchema.parse()', () => {
+    for (const code of V3_14_CODES) {
       expect(FlywheelErrorCodeSchema.parse(code)).toBe(code);
     }
   });
@@ -171,10 +186,11 @@ describe('makeFlywheelErrorResult — v3.4.0 codes produce valid structured enve
       });
       // Never throws on a known code
       const parsed = FlywheelStructuredErrorSchema.parse(result.structuredContent);
-      expect(parsed.data.error.code).toBe(code);
-      expect(parsed.data.error.message).toBe(`surface ${code}`);
+      const { error } = parsed.data;
+      expect(error.code).toBe(code);
+      expect(error.message).toBe(`surface ${code}`);
       // retryable is populated from DEFAULT_RETRYABLE
-      expect(parsed.data.error.retryable).toBe(DEFAULT_RETRYABLE[code]);
+      expect(error.retryable).toBe(DEFAULT_RETRYABLE[code]);
     }
   });
 });

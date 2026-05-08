@@ -62,6 +62,8 @@ export const FLYWHEEL_ERROR_CODES = [
     'cycle_start_sha_unset',
     'outcome_iteration_capped',
     'concurrent_grade',
+    // v3.14.0 beads-compliance audit
+    'compliance_false_closed',
 ];
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
 export const FlywheelToolErrorSchema = z.object({
@@ -106,6 +108,7 @@ export const DEFAULT_HINTS = {
     not_found: 'The requested resource (bead, plan, or memory entry) does not exist — confirm the id with `br list` or `flywheel_memory operation=search` before retrying.',
     cli_failure: 'A shell command exited non-zero — re-run it manually to inspect stderr, then retry the tool once the underlying issue is fixed.',
     cli_not_available: 'A required CLI is not installed or not on PATH — install it (e.g. `npm install -g <tool>`) and verify with `<tool> --version`, then retry.',
+    compliance_false_closed: 'Compliance audit found a closed bead that does not meet completion requirements — reopen the bead, fix the evidence or implementation, and rerun the audit.',
     parse_failure: 'Output from a downstream tool could not be parsed — inspect the raw payload (set FW_LOG_LEVEL=debug) and file an upstream bug if the shape is unexpected.',
     exec_timeout: 'The command exceeded its timeout budget — split the work, raise the timeout, or check whether the downstream tool is hung; this is usually retryable.',
     exec_aborted: 'The operation was aborted via AbortSignal — this is usually a caller-initiated cancellation and is NOT retried automatically.',
@@ -155,6 +158,7 @@ export const DEFAULT_RETRYABLE = {
     not_found: false,
     cli_failure: true,
     cli_not_available: false,
+    compliance_false_closed: false,
     parse_failure: false,
     exec_timeout: true,
     exec_aborted: false,
@@ -230,9 +234,9 @@ export class FlywheelError extends Error {
             code: this.code,
             message: this.message,
             retryable: this.retryable,
-            ...(this.hint != null && { hint: this.hint }),
-            ...(this.cause != null && { cause: this.cause }),
-            ...(this.details != null && { details: this.details }),
+            ...(this.hint !== undefined && this.hint !== null && { hint: this.hint }),
+            ...(this.cause !== undefined && this.cause !== null && { cause: this.cause }),
+            ...(this.details !== undefined && this.details !== null && { details: this.details }),
         };
     }
 }
@@ -273,14 +277,14 @@ export function makeFlywheelErrorResult(tool, phase, input) {
     const error = {
         ...input,
         retryable: input.retryable ?? DEFAULT_RETRYABLE[input.code],
-        ...(input.cause != null && { cause: sanitizeCause(input.cause) }),
+        ...(input.cause !== undefined && input.cause !== null && { cause: sanitizeCause(input.cause) }),
         phase,
         tool,
         timestamp: new Date().toISOString(),
     };
     // Fire-and-forget telemetry hook (no-op if telemetry module not yet registered)
     try {
-        _telemetryHook?.(input.code, input.cause != null ? { hashable: input.cause } : undefined);
+        _telemetryHook?.(input.code, input.cause !== undefined && input.cause !== null ? { hashable: input.cause } : undefined);
     }
     catch { /* never throw from error result builder */ }
     return {

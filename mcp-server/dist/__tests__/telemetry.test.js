@@ -2,7 +2,7 @@
  * Tests for the error-code telemetry aggregator (I7 — agent-flywheel-plugin-p55).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // We import the telemetry module functions fresh by using the reset helper.
@@ -61,6 +61,21 @@ describe('happy path: record, flush, read', () => {
         await flushTelemetry({ cwd: testDir });
         const tel = await readTelemetry({ cwd: testDir });
         expect(tel.recentEvents[0].ctxHash).toBeUndefined();
+    });
+    it('records compliance_false_closed without throwing', async () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'fw-tel-comp-'));
+        try {
+            process.env.PI_FLYWHEEL_DIR = join(tmp, '.pi-flywheel');
+            _resetTelemetryForTest();
+            recordErrorCode('compliance_false_closed', { hashable: 'bead-XXX' });
+            await flushTelemetry({ cwd: tmp });
+            const counts = JSON.parse(readFileSync(join(tmp, '.pi-flywheel/error-counts.json'), 'utf8'));
+            expect(counts.counts['compliance_false_closed']).toBe(1);
+        }
+        finally {
+            rmSync(tmp, { recursive: true, force: true });
+            delete process.env.PI_FLYWHEEL_DIR;
+        }
     });
 });
 // ─── Bounds ───────────────────────────────────────────────────

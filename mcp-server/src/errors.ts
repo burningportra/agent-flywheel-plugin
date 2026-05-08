@@ -68,6 +68,8 @@ export const FLYWHEEL_ERROR_CODES = [
   'cycle_start_sha_unset',
   'outcome_iteration_capped',
   'concurrent_grade',
+  // v3.14.0 beads-compliance audit
+  'compliance_false_closed',
 ] as const;
 
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
@@ -124,6 +126,8 @@ export const DEFAULT_HINTS: Record<FlywheelErrorCode, string> = {
     'A shell command exited non-zero — re-run it manually to inspect stderr, then retry the tool once the underlying issue is fixed.',
   cli_not_available:
     'A required CLI is not installed or not on PATH — install it (e.g. `npm install -g <tool>`) and verify with `<tool> --version`, then retry.',
+  compliance_false_closed:
+    'Compliance audit found a closed bead that does not meet completion requirements — reopen the bead, fix the evidence or implementation, and rerun the audit.',
   parse_failure:
     'Output from a downstream tool could not be parsed — inspect the raw payload (set FW_LOG_LEVEL=debug) and file an upstream bug if the shape is unexpected.',
   exec_timeout:
@@ -215,6 +219,7 @@ export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
   not_found: false,
   cli_failure: true,
   cli_not_available: false,
+  compliance_false_closed: false,
   parse_failure: false,
   exec_timeout: true,
   exec_aborted: false,
@@ -293,9 +298,9 @@ export class FlywheelError extends Error {
       code: this.code,
       message: this.message,
       retryable: this.retryable,
-      ...(this.hint != null && { hint: this.hint }),
-      ...(this.cause != null && { cause: this.cause }),
-      ...(this.details != null && { details: this.details }),
+      ...(this.hint !== undefined && this.hint !== null && { hint: this.hint }),
+      ...(this.cause !== undefined && this.cause !== null && { cause: this.cause }),
+      ...(this.details !== undefined && this.details !== null && { details: this.details }),
     };
   }
 }
@@ -347,7 +352,7 @@ export function makeFlywheelErrorResult(
   const error: FlywheelToolError = {
     ...input,
     retryable: input.retryable ?? DEFAULT_RETRYABLE[input.code],
-    ...(input.cause != null && { cause: sanitizeCause(input.cause) }),
+    ...(input.cause !== undefined && input.cause !== null && { cause: sanitizeCause(input.cause) }),
     phase,
     tool,
     timestamp: new Date().toISOString(),
@@ -355,7 +360,10 @@ export function makeFlywheelErrorResult(
 
   // Fire-and-forget telemetry hook (no-op if telemetry module not yet registered)
   try {
-    _telemetryHook?.(input.code, input.cause != null ? { hashable: input.cause } : undefined);
+    _telemetryHook?.(
+      input.code,
+      input.cause !== undefined && input.cause !== null ? { hashable: input.cause } : undefined,
+    );
   } catch { /* never throw from error result builder */ }
 
   return {
