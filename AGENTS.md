@@ -82,7 +82,7 @@ Current-tool index (HEAD = v3.12.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_calibrate({ sinceDays? })`** — bead-template effort calibration from closed `br list` rows.
 - **`flywheel_convergence({ planSlug })`** — read-only `ConvergenceState` from `.pi-flywheel/plans/<slug>/convergence.json` (multi-signal score + B6 oscillation flag). v3.12.0+. See "MCP tools added in v3.12.0" for B6 semantics.
 - **`flywheel_discover`** — surface ranked improvement ideas after a profile pass.
-- **`flywheel_doctor`** — 11-check health sweep (incl. v3.12.0 `convergence_state_validity`). Read-only.
+- **`flywheel_doctor`** — health sweep, currently 21 checks (incl. v3.12.0 `convergence_state_validity` and v3.13.0 `outcome_rubric_validity`). Read-only.
 - **`flywheel_get_skill({ name })`** — bundled skill body in one round-trip. Preferred over `Read` for skill lookups.
 - **`flywheel_memory({ operation, query?, content? })`** — CASS memory; operations: `search | store | draft_postmortem | draft_solution_doc | refresh_learnings`. The `refresh_learnings` op classifies `docs/solutions/` entries Keep/Update/Consolidate/Replace/Delete.
 - **`flywheel_observe`** — single-call session-state snapshot; surfaces hints from missing completion attestations.
@@ -92,6 +92,9 @@ Current-tool index (HEAD = v3.12.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_review`** — 5 fresh-eyes reviewers per risky bead, or duel for p0 / security beads.
 - **`flywheel_select({ goal })`** — set selected goal and transition to planning phase.
 - **`flywheel_verify_beads`** — verify closed beads have valid completion evidence; reads `.pi-flywheel/completion/<id>.json`.
+- **`flywheel_synthesize_rubric({ action })`** — v3.13.0; synthesize / validate / edit / regenerate the cycle-level outcome rubric at `.pi-flywheel/plans/<slug>/rubric.md`. Called from `_planning.md` Step 5.6.5 after the operator picks Create beads.
+- **`flywheel_grade_outcome`** — v3.13.0; spawn a decorrelated grader (codex primary, fresh-CC fallback), parse the verdict against `GraderVerdictSchemaV1`, persist to `.pi-flywheel/plans/<slug>/grading/iteration-<N>.json`. Called from `_wrapup.md` Step 9.5.0 before commit review.
+- **`flywheel_approve_beads({ action: 'remediate' })`** — v3.13.0 action; create exactly one bead from a failing-criterion verdict using the §"Remediation Bead Template" body. Called once per failing criterion when the operator picks Iterate at the wrap-up verdict gate.
 
 > **Convention.** When a future MCP tool ships, update both this quick-reference AND the version-sliced section below ("MCP tools added in v<X.Y.Z>"). The quick-ref is an at-a-glance index; the version-sliced sections preserve change history.
 
@@ -129,6 +132,74 @@ The 2026-05-06 APR-Pro adoption (`05071af`, `docs/research/research-apr-pro-land
 - **B6 oscillation guard semantics.** When `signFlips > revisions / 3`, the convergence state flips to `status: "oscillating"`, surfaced via `flywheel_convergence` and the `convergence_state_validity` doctor check. Step 5.45 (picked-up-plan menu) renders the score in the question text only — never arms a default option (per Phase 12 §12.5 + README §Design Philosophy #3, every decision routes through `AskUserQuestion`). Auto-approve at score ≥ 0.90 still routes through the user gate; the kill-switch on `flywheel_advance_wave` consults convergence + oscillation flags but cannot bypass the user.
 - **`convergence_state_validity` doctor check.** Probes that the persisted `convergence.json` parses against `ConvergenceStateSchema` and the `signFlips/revisions` invariants are intact. `flywheel_doctor` surfaces it under the standard 11-check sweep (now 12 entries with this addition); severity defaults to yellow on parse failure, red only on schema-required-field violations.
 - **NTM pane priority — changed.** v3.12.0 makes `--cod=` the default secondary lane after `--cc=`; `--pi=` is demoted to fallback (was `--pi=` over `--cod=` pre-v3.12.0). See `c0cf590` and the "NTM pane priority" section below for the canonical priority list.
+
+## MCP tools added in v3.13.0
+
+The 2026-05-08 outcome-grading cycle (`docs/superpowers/specs/2026-05-08-outcome-grading-design.md`, plan `docs/plans/2026-05-08-outcome-grading-synthesized.md`) ports the Anthropic Managed Agents API's "rubric + decorrelated grader + iteration loop" pattern locally — concepts only; no MA API substrate adopted.
+
+- **`flywheel_synthesize_rubric({ cwd, action?, planSlug?, planPath?, editIntent?, force? })`** — author / validate / edit / regenerate the cycle-level outcome rubric. Writes `.pi-flywheel/plans/<slug>/rubric.md` and a sidecar `.rubric.lock` (planContentSha cache). `action` ∈ `synthesize | validate | edit | regenerate`. Edits are deterministic for `tighten | add | remove`; LLM-mediated for `custom`. Operator-edited rubrics (`source: 'edited' || 'user'`) are never overwritten without `force=true` (R6 mitigation). Discriminated success kinds: `rubric_synthesized | rubric_preserved | rubric_edited | rubric_validated`.
+- **`flywheel_grade_outcome({ cwd, planSlug?, force? })`** — spawn a decorrelated grader (codex primary via `codex exec --json --model "${FW_GRADER_MODEL ?? 'gpt-5.5'}"`; fresh-CC fallback via `claude --print` when codex is unavailable). 4-tier `cycleStartSha` recovery ladder protects against missing baselines (state → checkpoint.gitHead → `git log --before=<ts>` → `HEAD~50`); never falls back to `HEAD`. Iteration-cap coercion is server-side: `needs_revision` at `iteration ≥ state.maxOutcomeIterations` is force-coerced to `max_iterations_reached` before the response leaves the tool. ENOSPC / EROFS graceful degrade — verdict returned in-memory with `persistence: 'failed'`. Discriminated success kinds: `grader_verdict | grading_skipped | grading_capped | grading_persistence_failed`.
+- **`flywheel_approve_beads({ action: 'remediate', remediation })`** — new action that creates exactly one bead from a failing-criterion verdict using the verbatim §"Remediation Bead Template" body. Increments `state.iterationRound`. T11 (`_wrapup.md` Step 9.5.0 Iterate branch) calls this once per criterion where `verdict.perCriterion[i].status !== 'met'`.
+- **`outcome_rubric_validity` doctor check.** Read-only probe of the active plan's `rubric.md`. Severity: green when no rubric / valid rubric (≥3 criteria), yellow when file missing / parse failure, red when criteria array is empty. Hints are verbatim §"Doctor Hints"; remediation routes through the operator-driven Step 5.6.5 rubric gate (auto-rewrite would silently overwrite operator edits).
+- **8 new structured error codes** in `mcp-server/src/errors.ts`: `rubric_synth_invalid`, `rubric_missing`, `grader_timeout`, `verdict_invalid`, `grader_unavailable`, `cycle_start_sha_unset`, `outcome_iteration_capped`, `concurrent_grade`. Only `grader_timeout` is `retryable: true` by default.
+- **Additive `FlywheelState` fields**: `outcomeRubricPath?`, `outcomeGradingSkipped?`, `outcomeGradingHistory?` (FIFO-capped at last 5), `maxOutcomeIterations?` (bounded `[1,5]` via `getMaxOutcomeIterations`), `cycleStartSha?`, `cycleEndTestOutput?`. v3.11.x and v3.12.x checkpoints continue to load with all six undefined — see `mcp-server/src/__tests__/migration.test.ts` and the frozen v3.12 fixture.
+
+### Outcome grading lifecycle
+
+```
+flywheel_select  ─►  state.cycleStartSha = git HEAD          (T13)
+flywheel_plan    ─►  plan written to docs/plans/<slug>.md
+_planning.md 5.6 ─►  operator picks Create beads
+_planning.md 5.6.5 ─► flywheel_synthesize_rubric              (T10)
+                       │
+                       ├─ Approve  → continue to bead creation
+                       ├─ Edit     → action='edit' loop
+                       ├─ Regenerate → action='regenerate' force=true
+                       └─ Skip rubric → state.outcomeGradingSkipped=true
+                                          (one-cycle; cleared by next select)
+
+(... bead waves close ...)
+
+_wrapup.md 9.5.0 ─►  flywheel_grade_outcome                  (T11)
+                       │
+                       ├─ skipped → continue wrap-up
+                       ├─ satisfied → continue wrap-up
+                       ├─ needs_revision (iter < cap)
+                       │    └─ Iterate → flywheel_approve_beads(remediate)
+                       │                  one bead per failing criterion
+                       │                  state.iterationRound++ → back to Step 6
+                       ├─ max_iterations_reached → Accept anyway / Abort
+                       │                            (no Iterate)
+                       ├─ failed → print explanation + Abort
+                       └─ persistence_failed → warn + verdict-aware sub-branch
+```
+
+### Distinguishing `flywheel_review` from outcome grading
+
+| Concern | `flywheel_review` | Outcome grading (v3.13.0) |
+|---|---|---|
+| Scope | Per-bead implementation | Whole-cycle plan-vs-result |
+| When | After every bead's commit | Once at wrap-up (Step 9.5.0) |
+| Decorrelation | Same model family (CC reviewers) | Codex-primary / fresh-CC fallback (cross-vendor) |
+| Output | Reviewer findings + revisions | `GraderVerdictSchemaV1` JSON envelope |
+| Iteration loop | Hit-me retries | Iterate ↔ remediate beads, capped at `state.maxOutcomeIterations` |
+
+Both run in the same cycle and complement each other. `flywheel_review` ensures each bead lands cleanly; outcome grading ensures the cycle as a whole achieves what the operator approved at plan-time.
+
+### Env knobs (v3.13.0)
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `FW_GRADER_MODEL` | `gpt-5.5` | Codex model passed to `codex exec --model`. Set to override per-environment (e.g. `claude-3-5-sonnet` for the fallback). |
+| `FW_GRADER_TIMEOUT_MS` | `120000` | Per-call grader budget. Surfaced as `grader_timeout` (retryable) on overflow. |
+| `FW_GRADER_FORCE_CLAUDE` | unset | When `=1`, skips the codex primary and goes straight to the fresh-CC fallback. Use for environments where codex is intentionally unavailable. |
+| `FW_RUBRIC_SYNTH_TIMEOUT_MS` | `60000` | Per-call rubric synthesizer budget. Hard-fails as `rubric_synth_invalid` on overflow. |
+| `FW_MAX_OUTCOME_ITERATIONS` | `3` (clamped to `[1,5]`) | Default for `state.maxOutcomeIterations`. Per-cycle override happens via state edits, not a flag. |
+
+### Decided policy (v3.13.0)
+
+- **`cycleStartSha` capture point.** `flywheel_select` writes `state.cycleStartSha` at goal-set time (OQ-A resolution). On detached HEAD / no-commits / git-missing, the field stays undefined and the grader's 4-tier ladder fires.
+- **Skip-rubric stickiness.** One cycle per skip (OQ-B resolution). The next `flywheel_select` clears `state.outcomeGradingSkipped` so the operator gets a fresh prompt at every Step 5.6.5. CASS records consecutive skips as a learning so a recurring skip pattern surfaces in `flywheel_doctor` over time.
 
 ## NTM is mandatory for all spawned work
 
