@@ -23,6 +23,8 @@ import { runObserve } from './tools/observe.js';
 import { runRemediate, RemediateInputSchema } from './tools/remediate.js';
 import { runCalibrate, CalibrateInputSchema } from './tools/calibrate.js';
 import { runConvergence } from './tools/convergence-tool.js';
+import { runSynthesizeRubric } from './tools/synthesize-rubric.js';
+import { runGradeOutcome } from './tools/grade-outcome.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -410,6 +412,68 @@ const PRIMARY_TOOLS = [
       required: ['cwd', 'planSlug'],
     },
   },
+  // ─── v3.13.0 outcome-grading tools (T9 / claude-orchestrator-zbe) ───
+  {
+    name: 'flywheel_synthesize_rubric',
+    description:
+      'Synthesize / validate / edit / regenerate the cycle-level outcome rubric at .pi-flywheel/plans/<slug>/rubric.md. Called from skills/start/_planning.md Step 5.6 after the plan-ready gate fires. Discriminator on success: kind ∈ { rubric_synthesized, rubric_preserved (cache hit on edited/user source), rubric_edited (action=edit), rubric_validated (action=validate) }. Errors surface FlywheelErrorCode envelopes (rubric_synth_invalid, rubric_missing, invalid_input).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+        planSlug: {
+          type: 'string',
+          description:
+            'Plan slug. Optional; falls back to slugifying state.outcomeRubricPath / planPath / state.planDocument.',
+        },
+        planPath: {
+          type: 'string',
+          description: 'Path to the plan markdown (relative to cwd or absolute). Required for synthesize/regenerate when state.planDocument is unset.',
+        },
+        action: {
+          type: 'string',
+          enum: ['synthesize', 'validate', 'edit', 'regenerate'],
+          default: 'synthesize',
+          description:
+            'synthesize=spawn synthesizer (cache + edited-source guard); validate=parse current rubric.md; edit=apply editIntent; regenerate=force=true synth (overrides edited-source guard).',
+        },
+        editIntent: {
+          type: 'object',
+          description: 'Required when action=edit. Tighten/add/remove are deterministic transforms; custom routes through the LLM.',
+          properties: {
+            kind: { type: 'string', enum: ['tighten', 'add', 'remove', 'custom'] },
+            text: { type: 'string', description: 'Free-form instruction or single criterion text.' },
+          },
+          required: ['kind', 'text'],
+        },
+        force: {
+          type: 'boolean',
+          description: 'Bypass the planContentSha cache and the edited-source guard. Equivalent to action=regenerate.',
+        },
+      },
+      required: ['cwd'],
+    },
+  },
+  {
+    name: 'flywheel_grade_outcome',
+    description:
+      'Grade the cycle outcome with a model strictly decorrelated from the impl swarm — codex primary, fresh-CC fallback. Called from skills/start/_wrapup.md Step 9.5 before commit review. Reads state.outcomeRubricPath; short-circuits to kind=grading_skipped when state.outcomeGradingSkipped is true. Persists verdict to .pi-flywheel/plans/<slug>/grading/iteration-<N>.json. Discriminator on success: kind ∈ { grader_verdict, grading_skipped, grading_capped (max_iterations_reached server-side coerced), grading_persistence_failed (verdict in-memory; disk write failed) }.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+        planSlug: {
+          type: 'string',
+          description: 'Plan slug. Optional; defaults to slugifying state.outcomeRubricPath.',
+        },
+        force: {
+          type: 'boolean',
+          description: 'Bypass the iteration-N.json-exists guard and the in-memory mutex.',
+        },
+      },
+      required: ['cwd'],
+    },
+  },
 ];
 
 /**
@@ -486,6 +550,9 @@ const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
       planSlug: (args as { planSlug?: string }).planSlug ?? '',
     });
   },
+  // v3.13.0 outcome-grading (T9).
+  flywheel_synthesize_rubric: async (ctx, args) => runSynthesizeRubric(ctx, args) as Promise<McpToolResult>,
+  flywheel_grade_outcome: async (ctx, args) => runGradeOutcome(ctx, args) as Promise<McpToolResult>,
 };
 
 function isKnownToolName(name: string): name is FlywheelToolName {
