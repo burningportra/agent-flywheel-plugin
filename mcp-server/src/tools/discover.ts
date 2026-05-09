@@ -1,8 +1,28 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import type { ToolContext, McpToolResult, CandidateIdea, DiscoverArgs } from '../types.js';
 import { makeNextToolStep, makeToolError, makeToolResult } from './shared.js';
+
+/**
+ * R-010 (agent-ergonomics audit pass 3) — resolve the discovery-artifact
+ * directory using XDG conventions instead of /tmp.
+ *
+ * Precedence:
+ *   1. $XDG_STATE_HOME/agent-flywheel/discovery
+ *   2. ~/.local/state/agent-flywheel/discovery (XDG default)
+ *
+ * Why: /tmp/agent-flywheel-discovery collided across cycles and
+ * disappeared on reboot. The XDG state path survives reboots and
+ * gives agents a stable place to look across sessions.
+ */
+export function resolveDiscoveryArtifactDir(): string {
+  const xdgState = process.env.XDG_STATE_HOME?.trim();
+  const root = xdgState && xdgState.length > 0
+    ? xdgState
+    : join(homedir(), '.local', 'state');
+  return join(root, 'agent-flywheel', 'discovery');
+}
 
 /**
  * flywheel_discover — Accept LLM-generated ideas and store them in state.
@@ -71,9 +91,14 @@ export async function runDiscover(ctx: ToolContext, args: DiscoverArgs): Promise
     }
   }
   try {
-    const artifactDir = join(tmpdir(), 'agent-flywheel-discovery');
+    // R-010 — was /tmp/agent-flywheel-discovery (collided across cycles,
+    // wiped on reboot). Now XDG state path; content-addressed by
+    // cycleStartSha when present, else timestamp.
+    const cycleSha = (state as { cycleStartSha?: string }).cycleStartSha;
+    const subdir = cycleSha && cycleSha.length >= 7 ? cycleSha.slice(0, 12) : `unattached-${Date.now()}`;
+    const artifactDir = join(resolveDiscoveryArtifactDir(), subdir);
     mkdirSync(artifactDir, { recursive: true });
-    writeFileSync(join(artifactDir, `ideas-${Date.now()}.md`), artifactLines.join('\n'), 'utf8');
+    writeFileSync(join(artifactDir, 'ideas.md'), artifactLines.join('\n'), 'utf8');
   } catch { /* best-effort */ }
 
   // Format idea list for the agent
