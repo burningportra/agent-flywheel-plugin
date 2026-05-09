@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`flywheel_capabilities — payload shape against the live TOOLS list > snapshot of the structural skeleton (counts + presence, not full content) 1`] = `
+{
+  "data": {
+    "contract_version": 1,
+    "deprecated_tool_count": 19,
+    "doctor_check_count": 21,
+    "env_var_count": 12,
+    "error_code_count": 47,
+    "exit_code_count": 6,
+    "first_tool_name": "flywheel_advance_wave",
+    "kind": "capabilities",
+    "last_tool_name": "orch_verify_beads",
+    "mcp_tool_count": 38,
+    "primary_tool_count": 19,
+  },
+  "phase": "idle",
+  "status": "ok",
+  "tool": "flywheel_capabilities",
+  "version": 1,
+}
+`;

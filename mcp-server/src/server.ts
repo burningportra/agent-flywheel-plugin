@@ -26,6 +26,7 @@ import { runCalibrate, CalibrateInputSchema } from './tools/calibrate.js';
 import { runConvergence } from './tools/convergence-tool.js';
 import { runSynthesizeRubric } from './tools/synthesize-rubric.js';
 import { runGradeOutcome } from './tools/grade-outcome.js';
+import { runCapabilitiesWith } from './tools/capabilities.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -511,6 +512,18 @@ const PRIMARY_TOOLS = [
       required: ['cwd'],
     },
   },
+  {
+    name: 'flywheel_capabilities',
+    description:
+      'Read-only contract surface for the flywheel MCP server. Returns the full mcp_tools list (with required/optional fields and enum values), the doctor_check_names enum, every error_code with its default hint and retryable flag, the env_var dictionary, and the exit_code_contract — all in a single call so agents can pin contract_version and discover valid actions without grepping source. Snapshot-pinned via R-001 regression test. cwd is accepted for dispatch consistency but the tool ignores it (output is a stateless server-snapshot).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (accepted for dispatch consistency; not used)' },
+      },
+      required: ['cwd'],
+    },
+  },
 ];
 
 /**
@@ -592,6 +605,9 @@ const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
   // v3.13.0 outcome-grading (T9).
   flywheel_synthesize_rubric: async (ctx, args) => runSynthesizeRubric(ctx, args) as Promise<McpToolResult>,
   flywheel_grade_outcome: async (ctx, args) => runGradeOutcome(ctx, args) as Promise<McpToolResult>,
+  // R-001 (agent-ergonomics audit pass 2) — capabilities surface.
+  flywheel_capabilities: runCapabilitiesWith(TOOLS),
+  orch_capabilities: runCapabilitiesWith(TOOLS),
 };
 
 function isKnownToolName(name: string): name is FlywheelToolName {
