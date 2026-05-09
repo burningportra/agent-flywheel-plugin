@@ -24,6 +24,8 @@ import { runCalibrate, CalibrateInputSchema } from './tools/calibrate.js';
 import { runConvergence } from './tools/convergence-tool.js';
 import { runSynthesizeRubric } from './tools/synthesize-rubric.js';
 import { runGradeOutcome } from './tools/grade-outcome.js';
+import { runCapabilitiesWith } from './tools/capabilities.js';
+import { runRobotDocs, ROBOT_DOCS_SECTIONS } from './tools/robot-docs.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -477,6 +479,34 @@ const PRIMARY_TOOLS = [
             required: ['cwd'],
         },
     },
+    {
+        name: 'flywheel_capabilities',
+        description: 'Read-only contract surface for the flywheel MCP server. Returns the full mcp_tools list (with required/optional fields and enum values), the doctor_check_names enum, every error_code with its default hint and retryable flag, the env_var dictionary, and the exit_code_contract — all in a single call so agents can pin contract_version and discover valid actions without grepping source. Snapshot-pinned via R-001 regression test. cwd is accepted for dispatch consistency but the tool ignores it (output is a stateless server-snapshot).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (accepted for dispatch consistency; not used)' },
+            },
+            required: ['cwd'],
+        },
+    },
+    {
+        name: 'flywheel_robot_docs',
+        description: 'Paste-ready agent handbook returned in a single call. Sections: getting_started, common_workflows, error_codes_decoder, dangerous_ops_safe_alt, exit_code_contract, capabilities_pointer. Default section="all" returns every section as one markdown blob. Use this instead of reading AGENTS.md (42 KB) every session. For machine-readable enums (error codes, env vars, etc.) call flywheel_capabilities.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (accepted for dispatch consistency; not used)' },
+                section: {
+                    type: 'string',
+                    enum: [...ROBOT_DOCS_SECTIONS, 'all'],
+                    default: 'all',
+                    description: 'Which section to return; "all" returns every section concatenated as markdown',
+                },
+            },
+            required: ['cwd'],
+        },
+    },
 ];
 /**
  * Deprecated `orch_*` aliases for each primary `flywheel_*` tool.
@@ -554,6 +584,12 @@ const EXTENSION_RUNNERS = {
     // v3.13.0 outcome-grading (T9).
     flywheel_synthesize_rubric: async (ctx, args) => runSynthesizeRubric(ctx, args),
     flywheel_grade_outcome: async (ctx, args) => runGradeOutcome(ctx, args),
+    // R-001 (agent-ergonomics audit pass 2) — capabilities surface.
+    flywheel_capabilities: runCapabilitiesWith(TOOLS),
+    orch_capabilities: runCapabilitiesWith(TOOLS),
+    // R-002 (agent-ergonomics audit pass 2) — paste-ready agent handbook.
+    flywheel_robot_docs: runRobotDocs,
+    orch_robot_docs: runRobotDocs,
 };
 function isKnownToolName(name) {
     return TOOLS.some((tool) => tool.name === name);
@@ -587,15 +623,89 @@ export function validateToolArgs(toolName, args) {
             };
         }
     }
+    // P-001 (pass-5 second-order finding) — enum check.
+    // Pass-6 finding-3 extension — also type-check declared properties.
+    //
+    // Walk properties in declaration order; for each present-and-non-null
+    // value, run type check first (string|number|boolean|array|object)
+    // then enum check. The first failure wins; declaration order means
+    // agents fix arguments left-to-right rather than chasing a moving
+    // target.
+    const properties = (tool.inputSchema.properties ?? {});
+    for (const [field, rawSchema] of Object.entries(properties)) {
+        const schema = rawSchema;
+        if (!(field in args))
+            continue;
+        const value = args[field];
+        if (value === undefined || value === null)
+            continue;
+        // Pass-6 finding-3 — type check. cwd has its own dedicated check
+        // above; skip here so we don't double-report.
+        if (field !== 'cwd' && typeof schema?.type === 'string') {
+            const ok = matchesJsonSchemaType(value, schema.type);
+            if (!ok) {
+                return {
+                    message: `Error: '${field}' must be of type '${schema.type}' for tool '${toolName}'; got ${jsTypeName(value)} (${JSON.stringify(value).slice(0, 60)}).`,
+                    field,
+                    reason: 'invalid_type',
+                };
+            }
+        }
+        // P-001 — enum check.
+        if (Array.isArray(schema?.enum) && schema.enum.length > 0 && !schema.enum.includes(value)) {
+            const validList = schema.enum.map((v) => JSON.stringify(v)).join(', ');
+            return {
+                message: `Error: '${field}' must be one of [${validList}] for tool '${toolName}'; got ${JSON.stringify(value)}.`,
+                field,
+                reason: 'invalid_enum_value',
+            };
+        }
+    }
     return null;
+}
+/** Pass-6 finding-3 — JSON-Schema-style type-name check, narrowed to the types our PRIMARY_TOOLS actually declare. */
+function matchesJsonSchemaType(value, type) {
+    switch (type) {
+        case 'string': return typeof value === 'string';
+        case 'number': return typeof value === 'number' && Number.isFinite(value);
+        case 'integer': return typeof value === 'number' && Number.isInteger(value);
+        case 'boolean': return typeof value === 'boolean';
+        case 'array': return Array.isArray(value);
+        case 'object': return typeof value === 'object' && value !== null && !Array.isArray(value);
+        case 'null': return value === null;
+        default: return true; // unknown type declarations skip the check
+    }
+}
+/** Pass-6 finding-3 — short JS-side type name for error messages. */
+function jsTypeName(value) {
+    if (value === null)
+        return 'null';
+    if (Array.isArray(value))
+        return 'array';
+    return typeof value;
 }
 function makeValidationErrorResult(toolName, validationError) {
     if (isKnownToolName(toolName)) {
+        // P-001 — branch hint by validation reason. invalid_enum_value points
+        // straight at flywheel_capabilities so agents can read the valid list
+        // without source grep.
+        let hint;
+        switch (validationError.reason) {
+            case 'invalid_cwd':
+                hint = 'Pass `cwd` as a non-empty absolute path to the project working directory.';
+                break;
+            case 'invalid_enum_value':
+                hint = `'${validationError.field ?? ''}' was not in the documented enum — call flywheel_capabilities and read tools[name='${toolName}'].enums for the valid set.`;
+                break;
+            case 'invalid_type':
+                hint = `'${validationError.field ?? ''}' was the wrong type — call flywheel_capabilities and read tools[name='${toolName}'] for the schema, or fetch dist/schemas/inputs/${toolName}.json directly.`;
+                break;
+            default:
+                hint = `Supply the required parameter '${validationError.field ?? ''}' and retry.`;
+        }
         return makeToolError(toolName, 'idle', 'invalid_input', validationError.message, {
             retryable: false,
-            hint: validationError.reason === 'invalid_cwd'
-                ? 'Pass `cwd` as a non-empty absolute path to the project working directory.'
-                : `Supply the required parameter '${validationError.field ?? ''}' and retry.`,
+            hint,
             details: {
                 field: validationError.field,
                 reason: validationError.reason,

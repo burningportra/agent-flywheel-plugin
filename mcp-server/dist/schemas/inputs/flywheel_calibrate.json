@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_calibrate.json",
+  "title": "flywheel: flywheel_calibrate input",
+  "description": "Aggregate closed-bead actual vs estimated durations per template. Prefers git first-commit ts as work-start proxy (capped at 200 git calls/run; falls back to created_ts when over cap or no commit). Drops samples with clock-skew. Writes report to .pi-flywheel/calibration.json and returns it.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "sinceDays": {
+      "type": "number",
+      "description": "Filter to beads created within this many days (1-365, default 90)",
+      "minimum": 1,
+      "maximum": 365,
+      "default": 90
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

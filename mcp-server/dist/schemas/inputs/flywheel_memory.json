@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_memory.json",
+  "title": "flywheel: flywheel_memory input",
+  "description": "Search and interact with CASS memory (cm CLI). Use to recall past decisions, gotchas, and patterns from prior flywheel runs. Requires cm CLI to be installed.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory"
+    },
+    "query": {
+      "type": "string",
+      "description": "Search query for CASS memory"
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "search",
+        "store",
+        "draft_postmortem",
+        "draft_solution_doc",
+        "refresh_learnings"
+      ],
+      "default": "search",
+      "description": "search=find entries, store=add new entry, draft_postmortem=synthesize a read-only session post-mortem draft (never auto-commits), draft_solution_doc=synthesize a docs/solutions/ entry paired with a CASS entry_id (read-only; caller writes the file), refresh_learnings=sweep docs/solutions/ and classify entries Keep/Update/Consolidate/Replace/Delete (read-only; caller archives)"
+    },
+    "content": {
+      "type": "string",
+      "description": "Content to store (required when operation=store)"
+    },
+    "entryId": {
+      "type": "string",
+      "description": "CASS entry id from a prior store call (required when operation=draft_solution_doc)"
+    },
+    "refreshRoot": {
+      "type": "string",
+      "description": "Optional override for the docs/solutions/ root scanned by operation=refresh_learnings. Defaults to <cwd>/docs/solutions."
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

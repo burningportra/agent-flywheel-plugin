@@ -1,7 +1,7 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.11.5 ▓▒░
+░▒▓ CLAUDE // AGENT-FLYWHEEL v3.15.0 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code.**
@@ -110,7 +110,7 @@ ntm spawn agent-flywheel --label impl --pi=4 --cc=2 --stagger-mode=smart
 
 ---
 
-## What's new in v3.11.0 (2026-04-30)
+## What's new in v3.15.0 (2026-04-30)
 
 The duel-winner runtime safety substrate. Three composable features, all behind feature flags so existing installs continue working:
 
@@ -251,7 +251,7 @@ Pre-conditions: ntm + ≥ 2 of {cc, cod, gmi} healthy (run `/flywheel-doctor` to
 |---|---|
 | `.pi-flywheel/checkpoint.json` | Atomic session state. Never edit directly — use `flywheel_*` tools. |
 | `.pi-flywheel/error-counts.json` | Telemetry spool for `FlywheelErrorCode` aggregation. |
-| `.pi-flywheel/completion/<beadId>.json` | Per-bead completion attestation (v3.11.0+). |
+| `.pi-flywheel/completion/<beadId>.json` | Per-bead completion attestation (v3.15.0+). |
 | `.pi-flywheel/profile-cache.json` | Repo-profile cache, keyed on git HEAD. |
 | `.pi-flywheel/tender-events.log` | Tender-daemon event log (NDJSON). |
 | `docs/plans/` | Plan artifacts from deep-plan + duel-plan sessions. |

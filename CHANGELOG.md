@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
-## [Unreleased] - agent-ergonomics audit (passes 1–5)
+## [3.15.0] - 2026-05-09
 
-A 4-pass audit + apply cycle landed 11 of 12 ranked recommendations from the `/agent-ergonomics-and-intuitiveness-maximization-for-cli-tools` skill plus 1 second-order finding from the verification simulation. **Median surface-ergonomics score: 562 → ~825 (+263 weighted, all 3 Polish-Bar violations closed). Tests: 1826 → 1915 (+89 vitest assertions). 12 bash regression tests pinning the new contracts.**
+A 6-pass agent-ergonomics audit + apply cycle landed 11 of 12 ranked recommendations from the `/agent-ergonomics-and-intuitiveness-maximization-for-cli-tools` skill plus 3 second-order findings from two verification simulations. **Median surface-ergonomics score: 562 → ~845 (+283 weighted, all 3 Polish-Bar violations closed). Tests: 1826 → 1920 (+94 vitest assertions). 14 bash regression tests pinning the new contracts. Per-task agent round-trips: 2.25 → 1.0 average (verified by re-simulation).**
 
 ### Added
 
@@ -22,6 +22,9 @@ A 4-pass audit + apply cycle landed 11 of 12 ranked recommendations from the `/a
 - **`hooks/_run-hook.sh` wrapper (R-009 warn-only stage).** All 3 hooks now log failures to `$XDG_STATE_HOME/agent-flywheel/hook-errors.log` instead of swallowing via `2>/dev/null || true`. Documents the 0/1/2/3 exit-code contract for hook authors. `FW_HOOK_LOG` and `FW_HOOK_LOG_LEVEL` env overrides.
 - **`loadFlywheelConfigWithWarnings()` + `suggestKey()` (R-008 warn-only stage).** Strict-key validation for `flywheel.config.yaml` with Levenshtein-1 typo suggestions. Pathological case fixed: typo `convergance:` previously caused silent loss of explicit `gate_advance_wave: false`; now surfaces a structured `FlywheelConfigWarning` with `suggestion: "convergence"`.
 - **Validator enum check (P-001 — second-order finding from pass-5 simulation).** `validateToolArgs` now rejects bad enum values BEFORE runner dispatch. Pre-P-001, `flywheel_review action:"review"` would surface `"beadId is required"` (wrong field). Post-P-001, surfaces `"action must be one of [hit-me|looks-good|skip]; got 'review'"` plus a hint pointing at `flywheel_capabilities`.
+- **Top-level `data.tools` alias on `flywheel_capabilities` (P-002 — pass-6).** `data.mcp_tools` was implementer-leaking; agents calling `Object.keys(envelope.data)` and looking for the inventory missed it. Now `data.tools` and `data.mcp_tools` point at the same array (deprecated alias drops in v4.0).
+- **Structured `references.handbook_call` (P-002 — pass-6).** Parallel structured form `{tool, args, description}` next to the existing prose `references.handbook` so smaller models / programmatic agents can pattern-match the next call instead of text-extracting it.
+- **Validator type check (P-003 — pass-6 second-order).** `validateToolArgs` now type-checks declared properties (`string|number|boolean|array|object|null`) BEFORE the enum check, in declaration order. New `invalid_type` reason; hint points at `flywheel_capabilities` plus the per-tool `dist/schemas/inputs/<tool>.json`.
 
 ### Fixed
 
@@ -35,7 +38,7 @@ A 4-pass audit + apply cycle landed 11 of 12 ranked recommendations from the `/a
 
 ### Why
 
-The audit asked a single question: would the FIRST command an AI agent guesses against this server "just work"? Pass 1 found three Polish-Bar violations (no `capabilities`, no `robot-docs`, no JSON Schemas), 24/24 slash commands with no `argument-hint`, two destructive commands with no gate, and silent `|| true` swallows on every hook. Passes 2–5 closed all of those plus added a `try_this` field to every error envelope so an agent that hits any failure gets a paste-ready recovery path. The validator enum check (P-001) was caught by a fresh-eyes simulation against the merged result — the audit's own verification phase paying for itself.
+The audit asked a single question: would the FIRST command an AI agent guesses against this server "just work"? Pass 1 found three Polish-Bar violations (no `capabilities`, no `robot-docs`, no JSON Schemas), 24/24 slash commands with no `argument-hint`, two destructive commands with no gate, and silent `|| true` swallows on every hook. Passes 2–4 closed all of those plus added a `try_this` field to every error envelope so an agent that hits any failure gets a paste-ready recovery path. Two fresh-eyes simulations (passes 5 and 7) caught three second-order findings (P-001 enum check, P-002 top-level `tools` + structured handbook, P-003 type check) that only became visible after the foundation landed. The pass-7 re-simulation measured the result: per-task agent round-trips dropped from 2.25 (pass-5) to 1.0 (pass-7) on a more demanding 7-task script — the audit's own verification phase paying for itself.
 
 Full per-pass scorecards, recommendations playbook, simulation transcripts, and applied-changes manifest live in the sibling `agent-flywheel__agent_ergonomics_audit/` workspace.
 

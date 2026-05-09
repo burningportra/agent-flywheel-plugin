@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_plan.json",
+  "title": "flywheel: orch_plan input",
+  "description": "[DEPRECATED — use flywheel_plan instead; removed in v4.0] Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. mode=duel triggers /dueling-idea-wizards for adversarial 2-agent cross-scoring. Provide planFile (preferred) or planContent to register a completed plan and transition to bead creation.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "deep",
+        "duel"
+      ],
+      "default": "standard",
+      "description": "standard=single-model plan prompt, deep=multi-model angle agents, duel=/dueling-idea-wizards adversarial cross-scoring"
+    },
+    "planFile": {
+      "type": "string",
+      "description": "Path (relative to cwd) of an already-written plan file on disk. Preferred over planContent for large plans — avoids passing large payloads over stdio."
+    },
+    "planContent": {
+      "type": "string",
+      "description": "Pre-synthesized plan content (inline). For large plans, write to disk first and use planFile instead to prevent stdio stalling."
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "picked-up-existing-plan"
+      ],
+      "description": "Provenance signal. Set to \"picked-up-existing-plan\" when registering a plan via the Step 0d \"Pick up existing plan\" route; this gates Step 5.45 (the Validate / Approve / Refine / Scrap menu) before bead creation. Omit for fresh plans coming out of /brainstorming, mode=deep, or mode=duel — those flow straight to Step 5.5."
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

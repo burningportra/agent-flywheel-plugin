@@ -7,7 +7,7 @@ type ToolRunnerMap = Partial<Record<FlywheelToolName, ToolRunner>>;
 interface ToolValidationError {
     message: string;
     field?: string;
-    reason: 'missing_required_parameter' | 'invalid_cwd';
+    reason: 'missing_required_parameter' | 'invalid_cwd' | 'invalid_enum_value' | 'invalid_type';
 }
 interface CallToolHandlerDependencies {
     makeExec: typeof makeExec;
@@ -64,6 +64,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -190,6 +191,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -238,6 +240,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -298,6 +301,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -399,6 +403,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -461,6 +466,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -513,6 +519,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -579,6 +586,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -634,6 +642,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -696,6 +705,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -741,6 +751,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -790,6 +801,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -841,6 +853,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -899,6 +912,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -947,6 +961,7 @@ export declare const TOOLS: ({
             autoConfirm?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -1020,6 +1035,7 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            section?: undefined;
         };
         required: string[];
     };
@@ -1069,6 +1085,58 @@ export declare const TOOLS: ({
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
+            section?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            section: {
+                type: string;
+                enum: string[];
+                default: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+            planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
         };

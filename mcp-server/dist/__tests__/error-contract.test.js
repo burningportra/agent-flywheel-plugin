@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FLYWHEEL_ERROR_CODES, FlywheelErrorCodeSchema, FlywheelToolErrorSchema, FlywheelStructuredErrorSchema, DEFAULT_RETRYABLE, DEFAULT_HINTS, FlywheelError, throwFlywheelError, makeFlywheelErrorResult, classifyExecError, } from '../errors.js';
+import { FLYWHEEL_ERROR_CODES, FlywheelErrorCodeSchema, FlywheelToolErrorSchema, FlywheelStructuredErrorSchema, DEFAULT_RETRYABLE, DEFAULT_HINTS, DEFAULT_TRY_THIS, FlywheelError, throwFlywheelError, makeFlywheelErrorResult, classifyExecError, } from '../errors.js';
 describe('FLYWHEEL_ERROR_CODES', () => {
     it('has exactly 47 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode + 7 22i remediation/bundle/viewer + 2 xsz attestation + 8 v3.13.0 outcome-grading + 1 v3.14.0 compliance)', () => {
         expect(FLYWHEEL_ERROR_CODES).toHaveLength(47);
@@ -223,13 +223,17 @@ describe('hint propagation through the Zod envelope', () => {
         const result = makeFlywheelErrorResult('flywheel_review', 'implementing', err.toJSON());
         expect(result.structuredContent.data.error.hint).toBe(hint);
     });
-    it('hint is optional — omitting it produces a valid envelope without hint', () => {
+    it('R-007 — omitting hint auto-fills from DEFAULT_HINTS (the envelope is no longer hint-less)', () => {
         const result = makeFlywheelErrorResult('flywheel_memory', 'idle', {
             code: 'cli_not_available',
             message: 'cm CLI is not available.',
         });
         expect(() => FlywheelStructuredErrorSchema.parse(result.structuredContent)).not.toThrow();
-        expect(result.structuredContent.data.error.hint).toBeUndefined();
+        // Pre-R-007 contract: hint was undefined when omitted.
+        // Post-R-007 contract: hint is always present, defaulted from DEFAULT_HINTS,
+        // because agents need actionable guidance on every error.
+        expect(result.structuredContent.data.error.hint).toBe('A required CLI is not installed or not on PATH — install it (e.g. `npm install -g <tool>`) and verify with `<tool> --version`, then retry.');
+        expect(result.structuredContent.data.error.try_this).toMatch(/^Install /);
     });
 });
 // ─── agent-flywheel-plugin-9p3: hint contract over ALL error codes ─
@@ -272,6 +276,59 @@ describe('FlywheelError hint contract (all 46 codes)', () => {
         const result = makeFlywheelErrorResult('flywheel_profile', 'idle', err.toJSON());
         const parsed = FlywheelStructuredErrorSchema.parse(result.structuredContent);
         expect(parsed.data.error.hint).toBe(DEFAULT_HINTS[code]);
+    });
+});
+// ─── R-007 (agent-ergonomics audit pass 3): try_this contract ────
+//
+// Parallel to DEFAULT_HINTS: every error code MUST have a paste-ready
+// try_this string. Where DEFAULT_HINTS describes what went wrong,
+// DEFAULT_TRY_THIS tells the agent the exact next call/command. The
+// rules below are stricter than hint:
+//   (a) starts with an imperative verb (Run / Call / Set / Install / etc.)
+//   (b) length > 30 chars
+//   (c) does not echo the code name
+//   (d) makeFlywheelErrorResult auto-fills it when the call site omits it
+//   (e) per-call try_this overrides the default
+describe('R-007 — DEFAULT_TRY_THIS contract', () => {
+    it('covers every FlywheelErrorCode (Record completeness)', () => {
+        expect(Object.keys(DEFAULT_TRY_THIS).sort()).toEqual([...FLYWHEEL_ERROR_CODES].sort());
+    });
+    const IMPERATIVE_VERBS = [
+        'Run', 'Call', 'Set', 'Install', 'Read', 'Reopen', 'Wait', 'Start',
+        'Pass', 'Capture', 'Verify', 'Inspect', 'Refine', 'Re-run', 'Re-call',
+        'List', 'Commit', 'Accept', 'Retry', 'Confirm', 'Check', 'Raise',
+        'Add', 'Make', 'Skip', 'Use', 'Try', 'Fix', 'Reset', 'Update',
+        'No action', 'The implementor', 'This was',
+    ];
+    it.each(FLYWHEEL_ERROR_CODES)('try_this[%s] is imperative, > 30 chars, and does not echo the code', (code) => {
+        const tt = DEFAULT_TRY_THIS[code];
+        expect(tt, `try_this for ${code}`).toBeDefined();
+        expect(tt.length).toBeGreaterThan(30);
+        expect(tt.toLowerCase()).not.toBe(code.toLowerCase());
+        const startsImperative = IMPERATIVE_VERBS.some((verb) => tt.startsWith(verb));
+        expect(startsImperative, `try_this for ${code} should start with an imperative verb; got: "${tt.slice(0, 40)}"`).toBe(true);
+    });
+    it('makeFlywheelErrorResult auto-fills try_this from the default', () => {
+        const result = makeFlywheelErrorResult('flywheel_doctor', 'idle', {
+            code: 'cli_failure',
+            message: 'br exited 1',
+        });
+        expect(result.structuredContent.data.error.try_this).toBe(DEFAULT_TRY_THIS.cli_failure);
+    });
+    it('per-call try_this wins over the default', () => {
+        const custom = 'Call flywheel_observe(cwd) and inspect data.beads.ready[0].id, then retry with that beadId.';
+        const result = makeFlywheelErrorResult('flywheel_review', 'idle', {
+            code: 'not_found',
+            message: 'beadId zzz not found',
+            try_this: custom,
+        });
+        expect(result.structuredContent.data.error.try_this).toBe(custom);
+    });
+    it('FlywheelError class auto-fills try_this and exposes it on toJSON()', () => {
+        const err = new FlywheelError({ code: 'invalid_input', message: 'bad action enum' });
+        expect(err.try_this).toBe(DEFAULT_TRY_THIS.invalid_input);
+        const json = err.toJSON();
+        expect(json.try_this).toBe(DEFAULT_TRY_THIS.invalid_input);
     });
 });
 //# sourceMappingURL=error-contract.test.js.map

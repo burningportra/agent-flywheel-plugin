@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_compliance_audit.json",
+  "title": "flywheel: orch_compliance_audit input",
+  "description": "[DEPRECATED — use flywheel_compliance_audit instead; removed in v4.0] Audit a wave of closed beads for compliance with their acceptance criteria via the standalone /beads-compliance-and-completion-verification skill. Returns per-bead scores; reopens false-closed beads; bumps telemetry; persists scores to CASS. Default mode is single-bead parallel (~5-10 min for 5 beads). Honors FW_COMPLIANCE_OVERRIDE env for emergency skip.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory"
+    },
+    "beadIds": {
+      "type": "array",
+      "description": "Bead IDs in this wave to audit",
+      "items": {
+        "type": "string"
+      }
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "single-bead",
+        "standard"
+      ],
+      "description": "Audit mode (default: single-bead)"
+    },
+    "threshold": {
+      "type": "number",
+      "description": "Score threshold below which a bead is false-closed (default: 700)"
+    },
+    "parallelism": {
+      "type": "number",
+      "description": "Max parallel skill spawns (default: 5, max: 5)"
+    },
+    "skipEnv": {
+      "type": "string",
+      "description": "Comma-separated bead IDs to skip; if any provided, audit is short-circuited"
+    }
+  },
+  "required": [
+    "cwd",
+    "beadIds"
+  ]
+}

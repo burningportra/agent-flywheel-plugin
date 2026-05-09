@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_profile.json",
+  "title": "flywheel: orch_profile input",
+  "description": "[DEPRECATED — use flywheel_profile instead; removed in v4.0] Scan the current repository to collect its tech stack, structure, commits, TODOs, and key files. Returns a structured profile and discovery instructions. Call this first before any other flywheel tool.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "goal": {
+      "type": "string",
+      "description": "Optional initial goal to target discovery"
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Force a fresh scan, bypassing the profile cache"
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

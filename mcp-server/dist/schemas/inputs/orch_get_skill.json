@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_get_skill.json",
+  "title": "flywheel: orch_get_skill input",
+  "description": "[DEPRECATED — use flywheel_get_skill instead; removed in v4.0] Return a skill's frontmatter + body in one round-trip. Backed by a deterministic build-time bundle with 4-layer drift defense (manifest integrity check, per-entry stale warn, FW_SKILL_BUNDLE=off bypass, transparent disk fallback). Pass name as `<plugin>:<skill-name>` (e.g. `agent-flywheel:start`, `agent-flywheel:start_planning`). Returns `{ name, frontmatter, body, source: \"bundle\"|\"disk\", staleWarn? }`.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Skill identifier in `<plugin>:<skill-name>` form, e.g. `agent-flywheel:start`.",
+      "pattern": "^[a-z0-9_-]+:[a-z0-9_-]+$"
+    }
+  },
+  "required": [
+    "cwd",
+    "name"
+  ]
+}

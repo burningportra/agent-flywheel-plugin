@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_discover.json",
+  "title": "flywheel: orch_discover input",
+  "description": "[DEPRECATED — use flywheel_discover instead; removed in v4.0] Accept LLM-generated project ideas based on the repo profile. Call flywheel_profile first. Pass 5-15 structured ideas; this tool stores them and instructs you to call flywheel_select next.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory"
+    },
+    "ideas": {
+      "type": "array",
+      "description": "3-15 project ideas based on the repo profile",
+      "minItems": 3,
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique kebab-case identifier"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title"
+          },
+          "description": {
+            "type": "string",
+            "description": "2-3 sentence description"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "feature",
+              "refactor",
+              "docs",
+              "dx",
+              "performance",
+              "reliability",
+              "security",
+              "testing"
+            ]
+          },
+          "effort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why this idea — cite repo evidence"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "top",
+              "honorable"
+            ]
+          },
+          "sourceEvidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scores": {
+            "type": "object",
+            "properties": {
+              "useful": {
+                "type": "number"
+              },
+              "pragmatic": {
+                "type": "number"
+              },
+              "accretive": {
+                "type": "number"
+              },
+              "robust": {
+                "type": "number"
+              },
+              "ergonomic": {
+                "type": "number"
+              }
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "synergies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "category",
+          "effort",
+          "impact",
+          "rationale",
+          "tier"
+        ]
+      }
+    }
+  },
+  "required": [
+    "cwd",
+    "ideas"
+  ]
+}

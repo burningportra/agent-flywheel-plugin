@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_robot_docs.json",
+  "title": "flywheel: orch_robot_docs input",
+  "description": "[DEPRECATED — use flywheel_robot_docs instead; removed in v4.0] Paste-ready agent handbook returned in a single call. Sections: getting_started, common_workflows, error_codes_decoder, dangerous_ops_safe_alt, exit_code_contract, capabilities_pointer. Default section=\"all\" returns every section as one markdown blob. Use this instead of reading AGENTS.md (42 KB) every session. For machine-readable enums (error codes, env vars, etc.) call flywheel_capabilities.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (accepted for dispatch consistency; not used)"
+    },
+    "section": {
+      "type": "string",
+      "enum": [
+        "getting_started",
+        "common_workflows",
+        "error_codes_decoder",
+        "dangerous_ops_safe_alt",
+        "exit_code_contract",
+        "capabilities_pointer",
+        "all"
+      ],
+      "default": "all",
+      "description": "Which section to return; \"all\" returns every section concatenated as markdown"
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}
