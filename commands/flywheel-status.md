@@ -1,9 +1,22 @@
 ---
 description: Show current flywheel status, bead progress, and inbox messages.
-argument-hint: ""
+argument-hint: "[--json]"
 ---
 
+**First action:** Parse `$ARGUMENTS` for `--json`. If `--json`, call the underlying status assembly (checkpoint + `br list --json` + `bv --json` + `fetch_inbox` + calibration) and print a single JSON envelope `{tool:"flywheel_status", version, status, phase, data:{checkpoint, beads, inbox, calibration, duel}}` to stdout, then exit. Otherwise render the human-friendly sections below.
+
 Show flywheel status for this project.
+
+## --json output schema
+
+When invoked with `--json`, this command emits to stdout a single JSON envelope
+combining checkpoint, live beads, inbox, and calibration data. Pin the contract
+shape via `flywheel_capabilities` (`data.contract_version`).
+
+Top-level: `{tool:"flywheel_status", version, status, phase, data}`
+Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
+`data` keys: `checkpoint`, `beads[]`, `inbox[]`, `calibration?`, `duel?`.
+
 
 1. **Checkpoint**: Read `.pi-flywheel/checkpoint.json`. Display:
    - Current phase

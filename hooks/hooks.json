@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/startup.js\" 2>/dev/null || true"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh\" node \"${CLAUDE_PLUGIN_ROOT}/hooks/startup.js\""
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\" 2>/dev/null || true"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh\" node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\""
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\" --release-reservations 2>/dev/null || true"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh\" node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\" --release-reservations"
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\" --release-reservations 2>/dev/null || true"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh\" node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\" --release-reservations"
           }
         ]
       }

@@ -1,9 +1,23 @@
 ---
 description: Check the status of running swarm agents and bead progress.
-argument-hint: ""
+argument-hint: "[--json]"
 ---
 
+**First action:** Parse `$ARGUMENTS` for `--json`. Run `br list --json` and `fetch_inbox` either way. If `--json`, assemble a single JSON envelope `{tool:"flywheel_swarm_status", version, status, phase, data:{beads, inbox, stuck, recommendation}}`, print it to stdout, and exit. Otherwise render the human-friendly sections below.
+
 Check swarm status.
+
+## --json output schema
+
+When invoked with `--json`, this command emits to stdout a single JSON envelope
+combining the live bead table, agent-mail inbox, stuck-bead detection, and the
+recommended next action. Pin the contract shape via `flywheel_capabilities`
+(`data.contract_version`).
+
+Top-level: `{tool:"flywheel_swarm_status", version, status, phase, data}`
+Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
+`data` keys: `beads[]`, `inbox[]`, `stuck[]`, `recommendation`.
+
 
 1. Run `br list --json` via Bash. Display a status table:
    ```
