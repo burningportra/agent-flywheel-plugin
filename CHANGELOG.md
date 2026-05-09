@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [Unreleased] - agent-ergonomics audit (passes 1–5)
+
+A 4-pass audit + apply cycle landed 11 of 12 ranked recommendations from the `/agent-ergonomics-and-intuitiveness-maximization-for-cli-tools` skill plus 1 second-order finding from the verification simulation. **Median surface-ergonomics score: 562 → ~825 (+263 weighted, all 3 Polish-Bar violations closed). Tests: 1826 → 1915 (+89 vitest assertions). 12 bash regression tests pinning the new contracts.**
+
+### Added
+
+- **`flywheel_capabilities` MCP tool (R-001).** Returns the entire contract surface in one call: 40 tools with required/optional/enum/schema_url, 47 error codes with `default_hint` + `default_try_this` + retryable, 21 doctor check names, FW_* env-var dictionary, exit-code contract. Snapshot-pinned via `mcp-server/src/__tests__/capabilities.test.ts`. Also exposed under the deprecated `orch_capabilities` alias.
+- **`flywheel_robot_docs` MCP tool (R-002).** Paste-ready 6-section agent handbook (~6 KB): `getting_started`, `common_workflows`, `error_codes_decoder`, `dangerous_ops_safe_alt`, `exit_code_contract`, `capabilities_pointer`. Replaces the day-one cost of reading `AGENTS.md`. Section selection via `section=` arg; default `"all"`. Also exposed as `orch_robot_docs`.
+- **JSON Schema artifacts (R-003).** `npm run build` now emits 40 draft-07 schema documents to `mcp-server/dist/schemas/inputs/<tool>.json` plus a sha256-stamped `dist/schemas/index.json`. Cross-referenced from `flywheel_capabilities.references.schemas_url` and per-tool `mcp_tools[].schema_url`.
+- **`DEFAULT_TRY_THIS` dictionary (R-007).** Per-error-code paste-ready next-step guidance. Auto-filled on every error envelope by `makeFlywheelErrorResult` and `FlywheelError.toJSON()`. Surfaced via `flywheel_capabilities.error_codes[].default_try_this`. Per-call `try_this` overrides the default.
+- **`--json` mode on 6 read-side slash commands (R-005).** `/flywheel-status`, `/flywheel-doctor`, `/flywheel-healthcheck`, `/flywheel-swarm-status`, `/flywheel-bead-viewer`, `/flywheel-drift-check` now declare `[--json]` in `argument-hint:`, branch on `$ARGUMENTS`, and document the JSON envelope shape in a `## --json output schema` section.
+- **`argument-hint:` frontmatter on all 24 slash commands (R-004).** Empty hints (`""`) used explicitly for no-arg commands so the contract is visible from `/help`.
+- **`**First action:**` lines on 11 vague slash commands (R-012).** doctor, healthcheck, reality-check, rollback, cleanup, stop, scan, setup, tool-feedback, start, memory now lead with one imperative line naming the exact MCP tool or shell command to issue first.
+- **`hooks/_run-hook.sh` wrapper (R-009 warn-only stage).** All 3 hooks now log failures to `$XDG_STATE_HOME/agent-flywheel/hook-errors.log` instead of swallowing via `2>/dev/null || true`. Documents the 0/1/2/3 exit-code contract for hook authors. `FW_HOOK_LOG` and `FW_HOOK_LOG_LEVEL` env overrides.
+- **`loadFlywheelConfigWithWarnings()` + `suggestKey()` (R-008 warn-only stage).** Strict-key validation for `flywheel.config.yaml` with Levenshtein-1 typo suggestions. Pathological case fixed: typo `convergance:` previously caused silent loss of explicit `gate_advance_wave: false`; now surfaces a structured `FlywheelConfigWarning` with `suggestion: "convergence"`.
+- **Validator enum check (P-001 — second-order finding from pass-5 simulation).** `validateToolArgs` now rejects bad enum values BEFORE runner dispatch. Pre-P-001, `flywheel_review action:"review"` would surface `"beadId is required"` (wrong field). Post-P-001, surfaces `"action must be one of [hit-me|looks-good|skip]; got 'review'"` plus a hint pointing at `flywheel_capabilities`.
+
+### Fixed
+
+- **`/flywheel-swarm-stop` and `/flywheel-refine-skills` were destructive on bare invocation (R-006).** Both now print a safe-alt block and exit unless `--yes` is passed; `--dry-run` available for preview. The pre-fix bare invocation could kill all swarm agents + release reservations, or rewrite loaded `SKILL.md` files, with no confirmation.
+- **`flywheel_discover` artifact moved from `/tmp` to XDG state path (R-010).** `/tmp/agent-flywheel-discovery/ideas-<ts>.md` collided across cycles and disappeared on reboot. Now `$XDG_STATE_HOME/agent-flywheel/discovery/<cycleSha>/ideas.md`. Honors XDG, survives reboot, content-addressed by cycle SHA.
+
+### Deprecated (planned for v4.0 — call out for users)
+
+- **R-008 strict YAML cutover.** Unknown keys in `flywheel.config.yaml` will become hard errors instead of warnings in v4.0. Users have one minor-version cycle to fix typos detected by the new warning surface.
+- **R-009 hook exit-code propagation.** `hooks/_run-hook.sh` will drop its always-zero exit in v4.0; SessionStart and PreToolUse hook failures will propagate to Claude Code. Stop / SubagentStop should remain warn-only — failing those would block session shutdown.
+
+### Why
+
+The audit asked a single question: would the FIRST command an AI agent guesses against this server "just work"? Pass 1 found three Polish-Bar violations (no `capabilities`, no `robot-docs`, no JSON Schemas), 24/24 slash commands with no `argument-hint`, two destructive commands with no gate, and silent `|| true` swallows on every hook. Passes 2–5 closed all of those plus added a `try_this` field to every error envelope so an agent that hits any failure gets a paste-ready recovery path. The validator enum check (P-001) was caught by a fresh-eyes simulation against the merged result — the audit's own verification phase paying for itself.
+
+Full per-pass scorecards, recommendations playbook, simulation transcripts, and applied-changes manifest live in the sibling `agent-flywheel__agent_ergonomics_audit/` workspace.
+
 ## [3.14.1] - 2026-05-08
 
 ### Fixed
