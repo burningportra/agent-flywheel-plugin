@@ -1,9 +1,20 @@
 ---
 description: Full health check of the codebase and flywheel dependencies.
-argument-hint: "[options]"
+argument-hint: "[--json] [options]"
 ---
 
-**First action:** Call `flywheel_doctor({cwd})` first for the read-only toolchain snapshot, then fan out the dependency/codebase/bead/duel checks listed below in parallel via Bash.
+**First action:** Parse `$ARGUMENTS` for `--json`. Call `flywheel_doctor({cwd})` first for the read-only toolchain snapshot. If `--json`, fan out the dependency/codebase/bead/duel checks, assemble a single JSON envelope `{tool:"flywheel_healthcheck", version, status, phase, data:{doctor, dependencies, codebase, beads, duel, score}}`, print it to stdout, and exit. Otherwise render the human-friendly health report below.
+
+## --json output schema
+
+When invoked with `--json`, this command emits to stdout a single JSON envelope
+that wraps the doctor report plus dependency/codebase/bead/duel sections. Pin
+the contract shape via `flywheel_capabilities` (`data.contract_version`).
+
+Top-level: `{tool:"flywheel_healthcheck", version, status, phase, data}`
+Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
+`data` keys: `doctor` (raw `flywheel_doctor` envelope), `dependencies`, `codebase`, `beads`, `duel`, `score`.
+
 
 **See also (triage chain):** `flywheel-healthcheck` is the **third** step: a deep periodic audit of the codebase, bead graph, and dependencies. For a fast, read-only toolchain snapshot, run `/flywheel-doctor` first; it is safe and finishes in under 2s. To install missing tools or repair configuration flagged by doctor, run `/flywheel-setup`. Do not use healthcheck for fresh-clone setup problems; use `flywheel-doctor` → `flywheel-setup`.
 

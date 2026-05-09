@@ -1,9 +1,22 @@
 ---
 description: Open the bead-graph visualizer in your browser.
-argument-hint: ""
+argument-hint: "[--json]"
 ---
 
+**First action:** Parse `$ARGUMENTS` for `--json`. Spawn the bead-viewer HTTP server either way (see Invocation below). If `--json`, print `{"viewer_url":"http://127.0.0.1:<port>","port":<port>,"pid":<pid>}` to stdout and exit immediately (do not block, do not auto-open the browser — pass `--no-open`). Otherwise render the standard human-friendly launch message and let the server run in the foreground.
+
 Launch the read-only bead-graph viewer.
+
+## --json output schema
+
+When invoked with `--json`, this command spawns the local HTTP viewer in the
+background (no browser auto-launch) and emits one JSON line to stdout describing
+the running instance, then exits.
+
+Shape: `{"viewer_url":"http://127.0.0.1:<port>","port":<int>,"pid":<int>}`
+On failure: `{"status":"error","error":{"code","message","hint","try_this","retryable"}}`
+The HTTP server itself is not an MCP tool — there is no `flywheel_capabilities` contract for the spawned process. The viewer is hard-bound to `127.0.0.1`.
+
 
 The viewer renders `br list --json` + `br dep list --json` as a Cytoscape graph
 with cycle highlighting and click-to-detail. Read-only — no PATCH/POST routes.

@@ -1,9 +1,23 @@
 ---
 description: Check if the codebase has drifted from the implementation plan.
-argument-hint: "[options]"
+argument-hint: "[--json] [options]"
 ---
 
+**First action:** Parse `$ARGUMENTS` for `--json`. Run `br list --json` + `bv --json` + the plan-vs-code comparison either way. If `--json`, assemble a single JSON envelope `{tool:"flywheel_drift_check", version, status, phase, data:{plan_path, on_track[], stale[], blocked[], new_opportunities[]}}`, print it to stdout, and exit (do NOT prompt). Otherwise render the human-friendly drift report and prompt for the polish loop.
+
 Run a strategic drift check. $ARGUMENTS
+
+## --json output schema
+
+When invoked with `--json`, this command emits to stdout a single JSON envelope
+classifying every bead against the active plan. The `--json` path skips the
+interactive polish-loop prompt — callers must invoke `flywheel_approve_beads`
+themselves. Pin the contract shape via `flywheel_capabilities` (`data.contract_version`).
+
+Top-level: `{tool:"flywheel_drift_check", version, status, phase, data}`
+Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
+`data` keys: `plan_path`, `on_track[]`, `stale[]`, `blocked[]`, `new_opportunities[]`.
+
 
 1. Read the plan document path from `.pi-flywheel/checkpoint.json` (`planDocument` field). If not found, scan `docs/plans/` for the most recent plan file.
 

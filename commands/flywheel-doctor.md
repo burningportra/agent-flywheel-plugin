@@ -1,9 +1,20 @@
 ---
 description: One-shot diagnostic of every flywheel dependency. Reports MCP connectivity, Agent Mail, br/bv/ntm/cm, node, git, dist drift, orphaned worktrees, and checkpoint validity with a single glyph per line.
-argument-hint: "[options]"
+argument-hint: "[--json] [options]"
 ---
 
-**First action:** Call `flywheel_doctor({cwd: $(git rev-parse --show-toplevel)})` and parse `data.report.checks[]` for any non-green entries before printing the rendered checklist.
+**First action:** Parse `$ARGUMENTS` for `--json`. Call `flywheel_doctor({cwd: $(git rev-parse --show-toplevel)})` either way. If `--json`, print `structuredContent` (the full envelope) to stdout and exit. Otherwise parse `data.report.checks[]` for any non-green entries before printing the rendered `[OK]` / `[WARN]` / `[FAIL]` checklist.
+
+## --json output schema
+
+When invoked with `--json`, this command emits to stdout exactly the
+`structuredContent` returned by `flywheel_doctor`. Pin contract version
+via `flywheel_capabilities` (`data.contract_version`).
+
+Top-level: `{tool:"flywheel_doctor", version, status, phase, data}`
+Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
+`data.report.checks[]`: `[{name, status:"ok"|"warn"|"fail", message, remediation?}]`.
+
 
 **See also (triage chain):** `flywheel-doctor` is the **first** step — a read-only snapshot, always safe. If doctor reports problems, run `/flywheel-setup` next to apply fixes (install missing tools, register MCP, configure hooks). Run `/flywheel-healthcheck` periodically for a deeper codebase + bead-graph audit — not for setup problems.
 
