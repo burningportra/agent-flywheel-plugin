@@ -3,6 +3,8 @@ description: One-shot diagnostic of every flywheel dependency. Reports MCP conne
 argument-hint: "[options]"
 ---
 
+**First action:** Call `flywheel_doctor({cwd: $(git rev-parse --show-toplevel)})` and parse `data.report.checks[]` for any non-green entries before printing the rendered checklist.
+
 **See also (triage chain):** `flywheel-doctor` is the **first** step — a read-only snapshot, always safe. If doctor reports problems, run `/flywheel-setup` next to apply fixes (install missing tools, register MCP, configure hooks). Run `/flywheel-healthcheck` periodically for a deeper codebase + bead-graph audit — not for setup problems.
 
 Invoke the `flywheel-doctor` skill. $ARGUMENTS

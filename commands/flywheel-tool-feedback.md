@@ -3,6 +3,8 @@ description: Submit structured feedback about a tool or command to improve futur
 argument-hint: "<tool-name>: <feedback>"
 ---
 
+**First action:** Parse $ARGUMENTS for `<tool-name>: <feedback>`; if the tool name is missing, ask "Which tool or command are you giving feedback on?" before collecting the survey fields.
+
 Submit tool feedback: $ARGUMENTS
 
 Record feedback to improve the agent-flywheel.

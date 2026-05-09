@@ -3,6 +3,8 @@ description: Set up flywheel prerequisites for this project.
 argument-hint: "[options]"
 ---
 
+**First action:** Run `br --version`, `bv --version`, `ntm --version`, `dcg --version`, `cass --version`, `cm --version`, and `command -v mcp-agent-mail` in parallel via Bash to count missing ACFS stack tools; if 3+ are missing, offer the curl|bash stack installer.
+
 **See also (triage chain):** `flywheel-setup` is the **second** step — the apply-fixes stage. Run `/flywheel-doctor` first to get a read-only snapshot of what's broken; setup then installs missing tools, registers the MCP server, and configures hooks. For ongoing codebase health trends (TODOs, test ratio, bead graph), use `/flywheel-healthcheck` periodically — not for fresh-clone fixup.
 
 Set up the agent-flywheel for this project. $ARGUMENTS

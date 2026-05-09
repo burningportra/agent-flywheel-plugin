@@ -3,6 +3,8 @@ description: Targeted scan of specific paths or concerns without a full flywheel
 argument-hint: "[path-or-focus-area]"
 ---
 
+**First action:** If $ARGUMENTS specifies a path or focus area, call `flywheel_profile({cwd, goal: "$ARGUMENTS"})` immediately; otherwise ask the user for the focus area before invoking the tool.
+
 Targeted repository scan. $ARGUMENTS (optional: path or focus area)
 
 1. Ask the user what to focus on (if not specified in $ARGUMENTS):

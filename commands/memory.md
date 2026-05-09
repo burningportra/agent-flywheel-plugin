@@ -3,6 +3,8 @@ description: Search, store, or manage CASS long-term memory.
 argument-hint: "[stats|search <query>|store <content>|view|prune]"
 ---
 
+**First action:** Parse $ARGUMENTS for the sub-action (`stats`/`search`/`store`/`view`/`prune`); if it doesn't match a known subcommand, treat the whole string as a query and call `flywheel_memory({cwd, operation: "search", query: "$ARGUMENTS"})`.
+
 Memory operation: $ARGUMENTS
 
 **Subcommands** (parse from $ARGUMENTS):

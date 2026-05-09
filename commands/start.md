@@ -3,6 +3,8 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
 argument-hint: "[goal-or-options]"
 ---
 
+**First action:** Invoke `Skill(skill: "agent-flywheel:start", args: "$ARGUMENTS")` immediately; do NOT inline the menu/routing logic — the skill at `skills/start/SKILL.md` is the single source of truth.
+
 # `/agent-flywheel:start` — thin pointer to the canonical skill
 
 This slash command delegates to the canonical start-skill at `skills/start/SKILL.md`. Maintaining the menu/routing logic in two places (here + the SKILL) caused drift across v3.5.4 → v3.6.2: edits to SKILL.md (Auto-swarm, Deslop pass, ScheduleWakeup wiring, Stay-in-turn rule) silently failed to reach the slash command. Replaced with a pointer in v3.6.3.

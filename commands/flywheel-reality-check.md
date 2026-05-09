@@ -3,6 +3,8 @@ description: Strategic gap analysis between vision (AGENTS.md / README.md / plan
 argument-hint: "[--duel] [options]"
 ---
 
+**First action:** Invoke `Skill(skill: "agent-flywheel:flywheel-reality-check", args: "$ARGUMENTS")` and let the skill drive the depth-selection `AskUserQuestion`; do NOT inline the prompts here.
+
 # `/agent-flywheel:flywheel-reality-check` — direct entry to the gap-analysis pass
 
 Run a strategic reality-check pass on the current project — the "come-to-Jesus" alignment check between what was promised (AGENTS.md / README.md / plan docs) and what's actually implemented. $ARGUMENTS

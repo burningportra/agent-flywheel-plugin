@@ -3,6 +3,8 @@ description: Full health check of the codebase and flywheel dependencies.
 argument-hint: "[options]"
 ---
 
+**First action:** Call `flywheel_doctor({cwd})` first for the read-only toolchain snapshot, then fan out the dependency/codebase/bead/duel checks listed below in parallel via Bash.
+
 **See also (triage chain):** `flywheel-healthcheck` is the **third** step: a deep periodic audit of the codebase, bead graph, and dependencies. For a fast, read-only toolchain snapshot, run `/flywheel-doctor` first; it is safe and finishes in under 2s. To install missing tools or repair configuration flagged by doctor, run `/flywheel-setup`. Do not use healthcheck for fresh-clone setup problems; use `flywheel-doctor` → `flywheel-setup`.
 
 Run a health check. $ARGUMENTS

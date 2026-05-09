@@ -3,6 +3,8 @@ description: Clean up orphaned git worktrees from crashed or stopped sessions.
 argument-hint: ""
 ---
 
+**First action:** Run `git worktree list --porcelain` via Bash and diff the result against `.pi-flywheel/checkpoint.json` to identify orphaned worktrees before prompting the user.
+
 Clean up orphaned git worktrees.
 
 1. Run `git worktree list --porcelain` via Bash to list all active worktrees.

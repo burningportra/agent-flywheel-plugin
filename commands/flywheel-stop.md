@@ -3,6 +3,8 @@ description: Stop the current flywheel session and reset state.
 argument-hint: ""
 ---
 
+**First action:** Read `.pi-flywheel/checkpoint.json`; if absent, print "No active session found" and stop. Otherwise show phase/goal/bead progress and ask the user to confirm before calling `flywheel_approve_beads({action: "reject"})`.
+
 Stop the active flywheel session for this project.
 
 1. Read `.pi-flywheel/checkpoint.json`. If no active session, say "No active session found."
