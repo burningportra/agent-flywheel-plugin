@@ -50,6 +50,8 @@ interface ToolSummary {
   enums: Record<string, readonly string[]>;
   deprecated: boolean;
   deprecation_replacement?: string;
+  /** R-003: relative path inside the MCP server install root pointing at the JSON Schema for this tool's input. */
+  schema_url: string;
 }
 
 interface CapabilitiesData {
@@ -154,6 +156,7 @@ export function summarizeTool(tool: ToolDescriptor): ToolSummary {
     deprecation_replacement: deprecated
       ? tool.name.replace(/^orch_/, 'flywheel_')
       : undefined,
+    schema_url: `schemas/inputs/${tool.name}.json`,
   };
 }
 
@@ -187,7 +190,7 @@ export function buildCapabilitiesPayload(
       env_vars: FLYWHEEL_ENV_VARS,
       exit_code_contract: EXIT_CODE_CONTRACT,
       references: {
-        schemas_url: null,
+        schemas_url: 'schemas/index.json',
         robot_docs_tool: null,
         handbook: 'See AGENTS.md in the agent-flywheel repo, or call flywheel_robot_docs (R-002) once available.',
       },

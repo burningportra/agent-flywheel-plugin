@@ -60,6 +60,15 @@ describe('flywheel_capabilities — contract surface', () => {
     expect(s.deprecation_replacement).toBe('flywheel_doctor');
   });
 
+  it('summarizeTool emits a schema_url pointing at dist/schemas/inputs (R-003)', () => {
+    const s = summarizeTool({
+      name: 'flywheel_observe',
+      description: 'observe',
+      inputSchema: { type: 'object', properties: { cwd: {} }, required: ['cwd'] },
+    });
+    expect(s.schema_url).toBe('schemas/inputs/flywheel_observe.json');
+  });
+
   it('every FLYWHEEL_ERROR_CODE has a default hint and retryable flag', () => {
     for (const code of FLYWHEEL_ERROR_CODES) {
       expect(DEFAULT_HINTS[code], `hint for ${code}`).toBeDefined();
@@ -109,6 +118,16 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
       expect(Array.isArray(t.required), `${t.name}.required`).toBe(true);
       expect(Array.isArray(t.optional), `${t.name}.optional`).toBe(true);
     }
+  });
+
+  it('every tool entry carries a schema_url (R-003)', () => {
+    for (const t of payload.data.mcp_tools) {
+      expect(t.schema_url, `${t.name}.schema_url`).toBe(`schemas/inputs/${t.name}.json`);
+    }
+  });
+
+  it('references.schemas_url points at the manifest (R-003)', () => {
+    expect(payload.data.references.schemas_url).toBe('schemas/index.json');
   });
 
   it('error_codes count matches FLYWHEEL_ERROR_CODES', () => {
