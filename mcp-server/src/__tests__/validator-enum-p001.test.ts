@@ -79,3 +79,68 @@ describe('P-001 — validateToolArgs enum check', () => {
     expect(err).toBeNull();
   });
 });
+
+// ─── Pass-6 finding-3 — validator type checking + declaration order ──
+
+describe('Pass-6 finding-3 — validateToolArgs type check', () => {
+  it('rejects a non-string for a string-typed field', () => {
+    // flywheel_review.beadId is type:'string'. Passing a number should
+    // surface invalid_type, not a downstream runner crash.
+    const err = validateToolArgs('flywheel_review', {
+      cwd: '/tmp',
+      beadId: 42, // wrong type
+      action: 'hit-me',
+    });
+    expect(err).not.toBeNull();
+    expect(err?.field).toBe('beadId');
+    expect(err?.reason).toBe('invalid_type');
+    expect(err?.message).toContain("'string'");
+    expect(err?.message).toContain('number');
+  });
+
+  it('rejects a non-array for an array-typed field', () => {
+    // flywheel_compliance_audit.beadIds is type:'array'. Passing a
+    // string (a common agent confusion) should surface invalid_type.
+    const err = validateToolArgs('flywheel_compliance_audit', {
+      cwd: '/tmp',
+      beadIds: 'br-1', // wrong type
+    });
+    expect(err?.reason).toBe('invalid_type');
+    expect(err?.field).toBe('beadIds');
+  });
+
+  it('rejects a non-boolean for a boolean-typed field', () => {
+    // flywheel_profile.force is type:'boolean'.
+    const err = validateToolArgs('flywheel_profile', {
+      cwd: '/tmp',
+      force: 'true', // string, not boolean
+    });
+    expect(err?.reason).toBe('invalid_type');
+    expect(err?.field).toBe('force');
+  });
+
+  it('type check runs BEFORE enum check (declaration order)', () => {
+    // flywheel_plan.mode declares both type:'string' and enum:[…]. If
+    // the value is the wrong type, we report invalid_type first; only
+    // when the type is right do we check the enum.
+    const errBadType = validateToolArgs('flywheel_plan', {
+      cwd: '/tmp',
+      mode: 42, // wrong type — should fail type, NOT enum
+    });
+    expect(errBadType?.reason).toBe('invalid_type');
+
+    const errBadEnum = validateToolArgs('flywheel_plan', {
+      cwd: '/tmp',
+      mode: 'super-deep', // right type, wrong enum
+    });
+    expect(errBadEnum?.reason).toBe('invalid_enum_value');
+  });
+
+  it('valid value passes type + enum check together', () => {
+    const err = validateToolArgs('flywheel_plan', {
+      cwd: '/tmp',
+      mode: 'standard',
+    });
+    expect(err).toBeNull();
+  });
+});

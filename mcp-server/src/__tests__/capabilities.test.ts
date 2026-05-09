@@ -130,6 +130,22 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
     expect(payload.data.references.schemas_url).toBe('schemas/index.json');
   });
 
+  it('Pass-6 finding-1 — data.tools alias mirrors data.mcp_tools (same array reference)', () => {
+    // Same reference, not a copy — future writes must not drift.
+    expect(payload.data.tools).toBe(payload.data.mcp_tools);
+    expect(payload.data.tools.length).toBe(payload.data.mcp_tools.length);
+    expect(payload.data.tools.length).toBeGreaterThan(0);
+  });
+
+  it('Pass-6 finding-2 — references.handbook_call is a structured {tool, args} pair', () => {
+    const hc = payload.data.references.handbook_call;
+    expect(hc).not.toBeNull();
+    expect(hc!.tool).toBe('flywheel_robot_docs');
+    expect(hc!.args).toEqual({ cwd: '<repo-root>', section: 'all' });
+    expect(typeof hc!.description).toBe('string');
+    expect(hc!.description.length).toBeGreaterThan(20);
+  });
+
   it('error_codes count matches FLYWHEEL_ERROR_CODES', () => {
     expect(payload.data.error_codes.length).toBe(FLYWHEEL_ERROR_CODES.length);
   });

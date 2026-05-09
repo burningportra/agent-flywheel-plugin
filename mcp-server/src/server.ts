@@ -47,7 +47,7 @@ type ToolRunnerMap = Partial<Record<FlywheelToolName, ToolRunner>>;
 interface ToolValidationError {
   message: string;
   field?: string;
-  reason: 'missing_required_parameter' | 'invalid_cwd' | 'invalid_enum_value';
+  reason: 'missing_required_parameter' | 'invalid_cwd' | 'invalid_enum_value' | 'invalid_type';
 }
 
 interface CallToolHandlerDependencies {
@@ -670,37 +670,67 @@ export function validateToolArgs(toolName: string, args: Record<string, unknown>
   }
 
   // P-001 (pass-5 second-order finding) — enum check.
+  // Pass-6 finding-3 extension — also type-check declared properties.
   //
-  // Pre-P-001: enums declared in inputSchema were only enforced inside
-  // each tool's runner, AFTER dispatch. A bad enum value (e.g.
-  // flywheel_review action:"review" instead of "hit-me") would slip
-  // through validation, hit the runner's required-field check, and
-  // surface a message about the WRONG field ("beadId is required")
-  // because the runner aborted on the first per-field check it ran
-  // before reaching the enum branch. Discovered by the pass-5
-  // simulation transcript.
-  //
-  // Post-P-001: any property declaring an `enum` array is checked here.
-  // Failure surfaces the field name, the rejected value, and the valid
-  // values — agents get the corrected invocation in one round-trip.
+  // Walk properties in declaration order; for each present-and-non-null
+  // value, run type check first (string|number|boolean|array|object)
+  // then enum check. The first failure wins; declaration order means
+  // agents fix arguments left-to-right rather than chasing a moving
+  // target.
   const properties =
-    ((tool.inputSchema as unknown as { properties?: Record<string, { enum?: unknown[] }> }).properties ?? {});
+    ((tool.inputSchema as unknown as { properties?: Record<string, { type?: string; enum?: unknown[] }> }).properties ?? {});
   for (const [field, rawSchema] of Object.entries(properties)) {
-    const schema = rawSchema as { enum?: unknown[] };
-    if (!Array.isArray(schema?.enum) || schema.enum.length === 0) continue;
+    const schema = rawSchema as { type?: string; enum?: unknown[] };
     if (!(field in args)) continue;
     const value = args[field];
     if (value === undefined || value === null) continue;
-    if (schema.enum.includes(value)) continue;
-    const validList = schema.enum.map((v) => JSON.stringify(v)).join(', ');
-    return {
-      message: `Error: '${field}' must be one of [${validList}] for tool '${toolName}'; got ${JSON.stringify(value)}.`,
-      field,
-      reason: 'invalid_enum_value',
-    };
+
+    // Pass-6 finding-3 — type check. cwd has its own dedicated check
+    // above; skip here so we don't double-report.
+    if (field !== 'cwd' && typeof schema?.type === 'string') {
+      const ok = matchesJsonSchemaType(value, schema.type);
+      if (!ok) {
+        return {
+          message: `Error: '${field}' must be of type '${schema.type}' for tool '${toolName}'; got ${jsTypeName(value)} (${JSON.stringify(value).slice(0, 60)}).`,
+          field,
+          reason: 'invalid_type',
+        };
+      }
+    }
+
+    // P-001 — enum check.
+    if (Array.isArray(schema?.enum) && schema.enum.length > 0 && !schema.enum.includes(value)) {
+      const validList = schema.enum.map((v) => JSON.stringify(v)).join(', ');
+      return {
+        message: `Error: '${field}' must be one of [${validList}] for tool '${toolName}'; got ${JSON.stringify(value)}.`,
+        field,
+        reason: 'invalid_enum_value',
+      };
+    }
   }
 
   return null;
+}
+
+/** Pass-6 finding-3 — JSON-Schema-style type-name check, narrowed to the types our PRIMARY_TOOLS actually declare. */
+function matchesJsonSchemaType(value: unknown, type: string): boolean {
+  switch (type) {
+    case 'string':  return typeof value === 'string';
+    case 'number':  return typeof value === 'number' && Number.isFinite(value);
+    case 'integer': return typeof value === 'number' && Number.isInteger(value);
+    case 'boolean': return typeof value === 'boolean';
+    case 'array':   return Array.isArray(value);
+    case 'object':  return typeof value === 'object' && value !== null && !Array.isArray(value);
+    case 'null':    return value === null;
+    default:        return true; // unknown type declarations skip the check
+  }
+}
+
+/** Pass-6 finding-3 — short JS-side type name for error messages. */
+function jsTypeName(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
 }
 
 function makeValidationErrorResult(toolName: string, validationError: ToolValidationError): McpToolResult {
@@ -714,7 +744,10 @@ function makeValidationErrorResult(toolName: string, validationError: ToolValida
         hint = 'Pass `cwd` as a non-empty absolute path to the project working directory.';
         break;
       case 'invalid_enum_value':
-        hint = `'${validationError.field ?? ''}' was not in the documented enum — call flywheel_capabilities and read mcp_tools[name='${toolName}'].enums for the valid set.`;
+        hint = `'${validationError.field ?? ''}' was not in the documented enum — call flywheel_capabilities and read tools[name='${toolName}'].enums for the valid set.`;
+        break;
+      case 'invalid_type':
+        hint = `'${validationError.field ?? ''}' was the wrong type — call flywheel_capabilities and read tools[name='${toolName}'] for the schema, or fetch dist/schemas/inputs/${toolName}.json directly.`;
         break;
       default:
         hint = `Supply the required parameter '${validationError.field ?? ''}' and retry.`;

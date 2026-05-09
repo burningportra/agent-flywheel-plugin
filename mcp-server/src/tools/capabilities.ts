@@ -58,6 +58,14 @@ interface CapabilitiesData {
   kind: 'capabilities';
   contract_version: typeof CAPABILITIES_CONTRACT_VERSION;
   generated_at: string;
+  /**
+   * Pass-6 finding-1 — top-level alias for `mcp_tools`. The simulator hit
+   * the universal first-call confusion: `Object.keys(envelope.data)` shows
+   * `mcp_tools` and an agent has to recognize the `mcp_` prefix is
+   * implementer-leaking. `tools` is the plain name. Both are kept for
+   * backward compatibility (additive change; same array reference).
+   */
+  tools: ToolSummary[];
   mcp_tools: ToolSummary[];
   doctor_check_names: readonly string[];
   error_codes: Array<{
@@ -72,7 +80,18 @@ interface CapabilitiesData {
   references: {
     schemas_url: string | null;
     robot_docs_tool: string | null;
+    /** Prose pointer (legacy field — kept for narrative readers). */
     handbook: string;
+    /**
+     * Pass-6 finding-2 — structured `{tool, args}` form so smaller models
+     * can pattern-match the next call instead of text-extracting it from
+     * a sentence. Mirrors the same intent as `handbook`.
+     */
+    handbook_call: {
+      tool: string;
+      args: Record<string, unknown>;
+      description: string;
+    } | null;
   };
 }
 
@@ -187,6 +206,10 @@ export function buildCapabilitiesPayload(
       kind: 'capabilities',
       contract_version: CAPABILITIES_CONTRACT_VERSION,
       generated_at: now(),
+      // Pass-6 finding-1 — both keys point at the SAME summaries array
+      // so future writes don't drift. `tools` is the plain name; `mcp_tools`
+      // stays as a deprecated alias for one minor cycle (drop in v4.0).
+      tools: summaries,
       mcp_tools: summaries,
       doctor_check_names: [...DOCTOR_CHECK_NAMES].sort(),
       error_codes: errorCodes,
@@ -197,6 +220,13 @@ export function buildCapabilitiesPayload(
         robot_docs_tool: 'flywheel_robot_docs',
         handbook:
           'Call flywheel_robot_docs (default section="all") for the paste-ready handbook. AGENTS.md in the repo root is the verbose long-form.',
+        // Pass-6 finding-2 — structured form parallel to `handbook`.
+        // Smaller models pattern-match this; larger ones can use either.
+        handbook_call: {
+          tool: 'flywheel_robot_docs',
+          args: { cwd: '<repo-root>', section: 'all' },
+          description: 'Returns the 6-section paste-ready handbook in one call.',
+        },
       },
     },
   };
