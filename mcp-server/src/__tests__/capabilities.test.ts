@@ -134,6 +134,15 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
     expect(payload.data.error_codes.length).toBe(FLYWHEEL_ERROR_CODES.length);
   });
 
+  it('every error_code carries default_hint AND default_try_this (R-007)', () => {
+    for (const entry of payload.data.error_codes) {
+      expect(entry.default_hint, `${entry.code}.default_hint`).toBeDefined();
+      expect(entry.default_hint.length).toBeGreaterThan(20);
+      expect(entry.default_try_this, `${entry.code}.default_try_this`).toBeDefined();
+      expect(entry.default_try_this.length).toBeGreaterThan(20);
+    }
+  });
+
   it('doctor_check_names matches the source enum, sorted', () => {
     expect([...payload.data.doctor_check_names].sort()).toEqual(payload.data.doctor_check_names);
     expect(payload.data.doctor_check_names.length).toBe(DOCTOR_CHECK_NAMES.length);

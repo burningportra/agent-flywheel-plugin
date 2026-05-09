@@ -3,6 +3,8 @@ description: Roll back a completed bead implementation.
 argument-hint: "[bead-id]"
 ---
 
+**First action:** If $ARGUMENTS contains a bead ID, run `br show <id>` via Bash; otherwise run `br list --json --status closed` and present completed beads for the user to choose from.
+
 Roll back a bead implementation. $ARGUMENTS (optional: bead ID)
 
 1. If a bead ID is provided in $ARGUMENTS, use it. Otherwise, run `br list --json` and show completed beads for the user to choose from.

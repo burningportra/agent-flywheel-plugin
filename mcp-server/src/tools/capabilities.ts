@@ -13,7 +13,7 @@
  */
 
 import type { McpToolResult, ToolContext } from '../types.js';
-import { FLYWHEEL_ERROR_CODES, DEFAULT_HINTS, DEFAULT_RETRYABLE } from '../errors.js';
+import { FLYWHEEL_ERROR_CODES, DEFAULT_HINTS, DEFAULT_RETRYABLE, DEFAULT_TRY_THIS } from '../errors.js';
 import { DOCTOR_CHECK_NAMES } from './doctor.js';
 import { makeToolResult } from './shared.js';
 
@@ -63,6 +63,8 @@ interface CapabilitiesData {
   error_codes: Array<{
     code: string;
     default_hint: string;
+    /** R-007 (pass 3) — paste-ready next-step. Parallel to default_hint. */
+    default_try_this: string;
     retryable: boolean;
   }>;
   env_vars: Record<string, string>;
@@ -173,6 +175,7 @@ export function buildCapabilitiesPayload(
   const errorCodes = [...FLYWHEEL_ERROR_CODES].sort().map((code) => ({
     code,
     default_hint: DEFAULT_HINTS[code],
+    default_try_this: DEFAULT_TRY_THIS[code],
     retryable: DEFAULT_RETRYABLE[code],
   }));
   return {
