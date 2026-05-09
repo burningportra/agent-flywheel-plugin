@@ -1,5 +1,6 @@
 ---
 description: Sweep docs/solutions/ for stale, duplicate, and contradictory learnings — Keep / Update / Consolidate / Replace / Delete.
+argument-hint: "[options]"
 ---
 
 Run a compound-engineering refresh sweep over `docs/solutions/`.

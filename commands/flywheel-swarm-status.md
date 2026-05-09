@@ -1,5 +1,6 @@
 ---
 description: Check the status of running swarm agents and bead progress.
+argument-hint: ""
 ---
 
 Check swarm status.

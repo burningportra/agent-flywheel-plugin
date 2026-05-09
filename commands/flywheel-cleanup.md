@@ -1,5 +1,6 @@
 ---
 description: Clean up orphaned git worktrees from crashed or stopped sessions.
+argument-hint: ""
 ---
 
 Clean up orphaned git worktrees.

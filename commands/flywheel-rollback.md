@@ -1,5 +1,6 @@
 ---
 description: Roll back a completed bead implementation.
+argument-hint: "[bead-id]"
 ---
 
 Roll back a bead implementation. $ARGUMENTS (optional: bead ID)

@@ -1,5 +1,6 @@
 ---
 description: Deep research on an external GitHub repository to extract implementation insights.
+argument-hint: "<github-url>"
 ---
 
 Research an external GitHub repository: $ARGUMENTS

@@ -1,5 +1,6 @@
 ---
 description: Check if the codebase has drifted from the implementation plan.
+argument-hint: "[options]"
 ---
 
 Run a strategic drift check. $ARGUMENTS

@@ -1,5 +1,6 @@
 ---
 description: Audit the codebase for bugs, security issues, test gaps, and dead code.
+argument-hint: "[full|quick]"
 ---
 
 Run a codebase audit. $ARGUMENTS

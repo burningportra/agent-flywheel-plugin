@@ -1,5 +1,6 @@
 ---
 description: One-shot diagnostic of every flywheel dependency. Reports MCP connectivity, Agent Mail, br/bv/ntm/cm, node, git, dist drift, orphaned worktrees, and checkpoint validity with a single glyph per line.
+argument-hint: "[options]"
 ---
 
 **See also (triage chain):** `flywheel-doctor` is the **first** step — a read-only snapshot, always safe. If doctor reports problems, run `/flywheel-setup` next to apply fixes (install missing tools, register MCP, configure hooks). Run `/flywheel-healthcheck` periodically for a deeper codebase + bead-graph audit — not for setup problems.

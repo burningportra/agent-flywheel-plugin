@@ -1,5 +1,6 @@
 ---
 description: Launch a parallel swarm of agents to implement multiple beads simultaneously.
+argument-hint: "[goal-or-options]"
 ---
 
 Launch a parallel swarm of implementation agents. $ARGUMENTS

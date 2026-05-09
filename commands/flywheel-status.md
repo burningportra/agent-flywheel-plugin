@@ -1,5 +1,6 @@
 ---
 description: Show current flywheel status, bead progress, and inbox messages.
+argument-hint: ""
 ---
 
 Show flywheel status for this project.
