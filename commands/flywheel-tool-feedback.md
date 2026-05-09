@@ -1,5 +1,6 @@
 ---
 description: Submit structured feedback about a tool or command to improve future flywheel sessions.
+argument-hint: "<tool-name>: <feedback>"
 ---
 
 Submit tool feedback: $ARGUMENTS

@@ -1,5 +1,6 @@
 ---
 description: Run a state-aware /dueling-idea-wizards duel. Routes artifacts into the flywheel pipeline (discovery, plan, review) based on current phase.
+argument-hint: "[--mode=ideas|architecture|security|ux|performance|reliability|innovation] [--top=N] [--rounds=N] [--expand] [--beads] [--focus=<topic>]"
 ---
 
 Run a flywheel-aware dueling-idea-wizards duel: $ARGUMENTS

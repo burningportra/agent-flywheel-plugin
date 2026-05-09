@@ -1,5 +1,6 @@
 ---
 description: Refine a specific agent skill using session evidence and feedback.
+argument-hint: "<skill-name>"
 ---
 
 Refine a specific skill: $ARGUMENTS (skill name required)

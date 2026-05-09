@@ -1,5 +1,6 @@
 ---
 description: Targeted scan of specific paths or concerns without a full flywheel scan.
+argument-hint: "[path-or-focus-area]"
 ---
 
 Targeted repository scan. $ARGUMENTS (optional: path or focus area)

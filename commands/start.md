@@ -1,5 +1,6 @@
 ---
 description: "Start or resume the full agentic coding flywheel. Drives the complete workflow: scan → discover → plan → implement → review."
+argument-hint: "[goal-or-options]"
 ---
 
 # `/agent-flywheel:start` — thin pointer to the canonical skill

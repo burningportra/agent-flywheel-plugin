@@ -1,5 +1,6 @@
 ---
 description: Search, store, or manage CASS long-term memory.
+argument-hint: "[stats|search <query>|store <content>|view|prune]"
 ---
 
 Memory operation: $ARGUMENTS

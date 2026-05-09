@@ -1,5 +1,32 @@
 ---
 description: Review and improve all loaded agent skills based on session patterns and feedback.
+argument-hint: "[--yes | --dry-run | --skill <name>]   rewrites SKILL.md files; bare invocation prints safe-alts and exits"
+---
+
+**First action:** Parse `$ARGUMENTS` for `--yes`, `--dry-run`, or `--skill <name>`.
+
+- If none of those flags are present (bare invocation), **stop and print this safe-alt block, then exit without acting**:
+  ```
+  /flywheel-refine-skills is destructive: it spawns analysis agents and
+  rewrites SKILL.md files in skills/. Skills are loaded into every
+  Claude Code session, so a regression here propagates project-wide.
+
+  Safe alternatives:
+    /agent-flywheel:flywheel-refine-skill <name>   — refine a single skill in isolation
+    /flywheel-refine-skills --skill <name>         — same effect; explicit
+    /flywheel-refine-skills --dry-run              — analyze and write proposals
+                                                     to docs/skill-refine-*.md
+                                                     without touching SKILL.md
+  Re-run with --yes to proceed across ALL skills.
+  ```
+  Do NOT spawn agents, do NOT modify any SKILL.md. Return.
+
+- If `--dry-run`: run steps 1 through 7 below — analysis agents write proposals to `docs/skill-refine-<name>-proposed.md` — but **skip step 8 onward** (do not apply changes). Print the list of proposals and exit.
+
+- If `--skill <name>`: route to `/agent-flywheel:flywheel-refine-skill <name>` (single-skill path) and exit.
+
+- If `--yes`: proceed to step 1 and run the full sequence.
+
 ---
 
 Refine all agent skills.

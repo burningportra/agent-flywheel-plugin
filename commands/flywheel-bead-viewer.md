@@ -1,5 +1,6 @@
 ---
 description: Open the bead-graph visualizer in your browser.
+argument-hint: ""
 ---
 
 Launch the read-only bead-graph viewer.

@@ -1,5 +1,6 @@
 ---
 description: Stop the current flywheel session and reset state.
+argument-hint: ""
 ---
 
 Stop the active flywheel session for this project.

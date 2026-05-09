@@ -1,5 +1,6 @@
 ---
 description: Fast path to apply a targeted fix without running the full flywheel.
+argument-hint: "<description>"
 ---
 
 Apply a targeted fix: $ARGUMENTS

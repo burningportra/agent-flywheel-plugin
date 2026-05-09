@@ -1,5 +1,6 @@
 ---
 description: Strategic gap analysis between vision (AGENTS.md / README.md / plan docs) and actual implementation. Reads docs, investigates code, applies /reality-check-for-project exhaustively, converts gaps to tagged beads, optionally launches a 3+3 swarm.
+argument-hint: "[--duel] [options]"
 ---
 
 # `/agent-flywheel:flywheel-reality-check` — direct entry to the gap-analysis pass

@@ -1,5 +1,27 @@
 ---
 description: Stop all running swarm agents and release their file reservations.
+argument-hint: "[--yes | --dry-run]   destructive; bare invocation prints safe-alts and exits"
+---
+
+**First action:** Parse `$ARGUMENTS` for `--yes`, `--dry-run`, or neither.
+
+- If neither flag is present (bare invocation), **stop and print this safe-alt block, then exit without acting**:
+  ```
+  /flywheel-swarm-stop is destructive: it kills all running swarm agents
+  and releases every file reservation held under this project.
+
+  Safe alternatives:
+    /agent-flywheel:flywheel-swarm-status   — see what is running first
+    /flywheel-swarm-stop --dry-run          — preview without acting
+
+  Re-run with --yes to proceed.
+  ```
+  Do NOT call `release_file_reservations`, do NOT signal agents, do NOT mutate beads. Return.
+
+- If `--dry-run`: run steps 1 through 5 below in **read-only mode** — fetch the agent list, list which reservations would be released, list which beads would be reset, but do NOT call any mutating tool. Print the would-be summary and exit.
+
+- If `--yes`: proceed to step 1 and run the full sequence.
+
 ---
 
 Stop the swarm and clean up.
