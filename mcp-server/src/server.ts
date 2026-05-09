@@ -47,7 +47,7 @@ type ToolRunnerMap = Partial<Record<FlywheelToolName, ToolRunner>>;
 interface ToolValidationError {
   message: string;
   field?: string;
-  reason: 'missing_required_parameter' | 'invalid_cwd';
+  reason: 'missing_required_parameter' | 'invalid_cwd' | 'invalid_enum_value';
 }
 
 interface CallToolHandlerDependencies {
@@ -669,17 +669,59 @@ export function validateToolArgs(toolName: string, args: Record<string, unknown>
     }
   }
 
+  // P-001 (pass-5 second-order finding) — enum check.
+  //
+  // Pre-P-001: enums declared in inputSchema were only enforced inside
+  // each tool's runner, AFTER dispatch. A bad enum value (e.g.
+  // flywheel_review action:"review" instead of "hit-me") would slip
+  // through validation, hit the runner's required-field check, and
+  // surface a message about the WRONG field ("beadId is required")
+  // because the runner aborted on the first per-field check it ran
+  // before reaching the enum branch. Discovered by the pass-5
+  // simulation transcript.
+  //
+  // Post-P-001: any property declaring an `enum` array is checked here.
+  // Failure surfaces the field name, the rejected value, and the valid
+  // values — agents get the corrected invocation in one round-trip.
+  const properties =
+    ((tool.inputSchema as unknown as { properties?: Record<string, { enum?: unknown[] }> }).properties ?? {});
+  for (const [field, rawSchema] of Object.entries(properties)) {
+    const schema = rawSchema as { enum?: unknown[] };
+    if (!Array.isArray(schema?.enum) || schema.enum.length === 0) continue;
+    if (!(field in args)) continue;
+    const value = args[field];
+    if (value === undefined || value === null) continue;
+    if (schema.enum.includes(value)) continue;
+    const validList = schema.enum.map((v) => JSON.stringify(v)).join(', ');
+    return {
+      message: `Error: '${field}' must be one of [${validList}] for tool '${toolName}'; got ${JSON.stringify(value)}.`,
+      field,
+      reason: 'invalid_enum_value',
+    };
+  }
+
   return null;
 }
 
 function makeValidationErrorResult(toolName: string, validationError: ToolValidationError): McpToolResult {
   if (isKnownToolName(toolName)) {
+    // P-001 — branch hint by validation reason. invalid_enum_value points
+    // straight at flywheel_capabilities so agents can read the valid list
+    // without source grep.
+    let hint: string;
+    switch (validationError.reason) {
+      case 'invalid_cwd':
+        hint = 'Pass `cwd` as a non-empty absolute path to the project working directory.';
+        break;
+      case 'invalid_enum_value':
+        hint = `'${validationError.field ?? ''}' was not in the documented enum — call flywheel_capabilities and read mcp_tools[name='${toolName}'].enums for the valid set.`;
+        break;
+      default:
+        hint = `Supply the required parameter '${validationError.field ?? ''}' and retry.`;
+    }
     return makeToolError(toolName, 'idle', 'invalid_input', validationError.message, {
       retryable: false,
-      hint:
-        validationError.reason === 'invalid_cwd'
-          ? 'Pass `cwd` as a non-empty absolute path to the project working directory.'
-          : `Supply the required parameter '${validationError.field ?? ''}' and retry.`,
+      hint,
       details: {
         field: validationError.field,
         reason: validationError.reason,
