@@ -27,6 +27,7 @@ import { runConvergence } from './tools/convergence-tool.js';
 import { runSynthesizeRubric } from './tools/synthesize-rubric.js';
 import { runGradeOutcome } from './tools/grade-outcome.js';
 import { runCapabilitiesWith } from './tools/capabilities.js';
+import { runRobotDocs, ROBOT_DOCS_SECTIONS } from './tools/robot-docs.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -524,6 +525,24 @@ const PRIMARY_TOOLS = [
       required: ['cwd'],
     },
   },
+  {
+    name: 'flywheel_robot_docs',
+    description:
+      'Paste-ready agent handbook returned in a single call. Sections: getting_started, common_workflows, error_codes_decoder, dangerous_ops_safe_alt, exit_code_contract, capabilities_pointer. Default section="all" returns every section as one markdown blob. Use this instead of reading AGENTS.md (42 KB) every session. For machine-readable enums (error codes, env vars, etc.) call flywheel_capabilities.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (accepted for dispatch consistency; not used)' },
+        section: {
+          type: 'string',
+          enum: [...ROBOT_DOCS_SECTIONS, 'all'],
+          default: 'all',
+          description: 'Which section to return; "all" returns every section concatenated as markdown',
+        },
+      },
+      required: ['cwd'],
+    },
+  },
 ];
 
 /**
@@ -608,6 +627,9 @@ const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
   // R-001 (agent-ergonomics audit pass 2) — capabilities surface.
   flywheel_capabilities: runCapabilitiesWith(TOOLS),
   orch_capabilities: runCapabilitiesWith(TOOLS),
+  // R-002 (agent-ergonomics audit pass 2) — paste-ready agent handbook.
+  flywheel_robot_docs: runRobotDocs as ToolRunner,
+  orch_robot_docs: runRobotDocs as ToolRunner,
 };
 
 function isKnownToolName(name: string): name is FlywheelToolName {

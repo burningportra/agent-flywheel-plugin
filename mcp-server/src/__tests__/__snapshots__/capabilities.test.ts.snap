@@ -4,7 +4,7 @@ exports[`flywheel_capabilities — payload shape against the live TOOLS list > s
 {
   "data": {
     "contract_version": 1,
-    "deprecated_tool_count": 19,
+    "deprecated_tool_count": 20,
     "doctor_check_count": 21,
     "env_var_count": 12,
     "error_code_count": 47,
@@ -12,8 +12,8 @@ exports[`flywheel_capabilities — payload shape against the live TOOLS list > s
     "first_tool_name": "flywheel_advance_wave",
     "kind": "capabilities",
     "last_tool_name": "orch_verify_beads",
-    "mcp_tool_count": 38,
-    "primary_tool_count": 19,
+    "mcp_tool_count": 40,
+    "primary_tool_count": 20,
   },
   "phase": "idle",
   "status": "ok",

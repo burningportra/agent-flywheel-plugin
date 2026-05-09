@@ -191,8 +191,9 @@ export function buildCapabilitiesPayload(
       exit_code_contract: EXIT_CODE_CONTRACT,
       references: {
         schemas_url: 'schemas/index.json',
-        robot_docs_tool: null,
-        handbook: 'See AGENTS.md in the agent-flywheel repo, or call flywheel_robot_docs (R-002) once available.',
+        robot_docs_tool: 'flywheel_robot_docs',
+        handbook:
+          'Call flywheel_robot_docs (default section="all") for the paste-ready handbook. AGENTS.md in the repo root is the verbose long-form.',
       },
     },
   };
