@@ -80,6 +80,13 @@ export const FlywheelToolErrorSchema = z.object({
   message: z.string(),
   retryable: z.boolean().optional(),
   hint: z.string().optional(),
+  /**
+   * R-007 — concrete next-step the caller can paste/execute. Where `hint`
+   * is narrative ("a required prerequisite is missing"), `try_this` is
+   * imperative ("Run flywheel_profile(cwd: <repo-root>) first."). Always
+   * defaulted from DEFAULT_TRY_THIS; per-call overrides win.
+   */
+  try_this: z.string().optional(),
   cause: z.string().optional(),
   phase: z.string().optional(),
   tool: z.string().optional(),
@@ -213,6 +220,118 @@ export const DEFAULT_HINTS: Record<FlywheelErrorCode, string> = {
     'Another grader is in flight for this plan — wait for it to complete, or pass force=true to override the in-memory mutex.',
 };
 
+/**
+ * R-007 — default `try_this` per error code. Imperative, paste-ready.
+ *
+ * Where DEFAULT_HINTS describes what went wrong, DEFAULT_TRY_THIS tells
+ * the agent the exact next call/command to make. Call sites SHOULD pass
+ * a more specific try_this when they have one (e.g. naming the exact
+ * field, the rejected enum value, the sample corrected invocation) —
+ * the per-call value wins.
+ *
+ * Contract (enforced by error-contract.test.ts and capabilities snapshot):
+ *   - every entry MUST be present (TypeScript Record enforces)
+ *   - every entry MUST start with an imperative verb (Run, Call, Set, etc.)
+ *   - every entry MUST be > 30 chars
+ *   - every entry MUST NOT echo the code name verbatim
+ */
+export const DEFAULT_TRY_THIS: Record<FlywheelErrorCode, string> = {
+  missing_prerequisite:
+    'Run flywheel_profile(cwd: <repo-root>) first; if that does not clear the error, run /flywheel-doctor and remediate the failing checks.',
+  invalid_input:
+    'Call flywheel_capabilities to see required/optional fields and enum values for this tool, then re-call with the corrected shape.',
+  not_found:
+    "Run `br list --json | jq -r '.[].id'` to see valid bead IDs (or flywheel_memory operation:'search') before retrying.",
+  cli_failure:
+    'Re-run the underlying CLI by hand to see the raw stderr; set FW_LOG_LEVEL=debug for the wrapped trace, then retry.',
+  cli_not_available:
+    'Install the missing CLI (see the message for the binary name) and re-run /flywheel-doctor to confirm it is on PATH.',
+  compliance_false_closed:
+    'Reopen the false-closed bead with `br update <id> --status open`, fix the implementation or evidence, then re-run flywheel_compliance_audit.',
+  parse_failure:
+    'Set FW_LOG_LEVEL=debug, re-run, and inspect the raw payload in the trace; if the upstream shape is wrong, file an upstream bug.',
+  exec_timeout:
+    'Retry once. If it persists, raise the timeout via the relevant FW_*_TIMEOUT_MS env var (see flywheel_capabilities env_vars) or split the work.',
+  exec_aborted:
+    'This was a caller-initiated abort and is not auto-retried; re-issue the call when ready.',
+  blocked_state:
+    'Call flywheel_observe(cwd) to see the current phase, then run the appropriate transition tool before retrying.',
+  concurrent_write:
+    'Wait briefly and retry. If a stuck lock is suspected, run /flywheel-cleanup --dry-run first to see what would be released.',
+  agent_mail_unreachable:
+    'Start the agent-mail server with `am serve-http` (or `mcp-agent-mail serve`); verify with `lsof -i :8765` then retry.',
+  deep_plan_all_failed:
+    'Run /flywheel-doctor to inspect provider health (codex, claude, gemini); fix credentials/rate limits; retry flywheel_plan.',
+  empty_plan:
+    'Refine the goal with concrete acceptance criteria (one paragraph), then re-run flywheel_plan; pass mode:"deep" if a richer plan is needed.',
+  already_closed:
+    'No action needed. To re-open intentionally: `br update <id> --status open`.',
+  unsupported_action:
+    'Call flywheel_capabilities and read mcp_tools[] for the action enum valid in this phase; pick one of those values.',
+  internal_error:
+    'Capture the cause string for the bug report, then retry once. If it reproduces, set FW_LOG_LEVEL=debug for a fuller trace.',
+  doctor_check_failed:
+    'Read the cause field for the failing check, fix the underlying issue, then re-run /flywheel-doctor.',
+  doctor_partial_report:
+    'Inspect details.skipped to see which checks did not run; the remaining report is still actionable.',
+  hotspot_parse_failure:
+    'Verify the input file exists and is well-formed JSON/markdown (cat or jq it), then retry.',
+  hotspot_bead_body_unparseable:
+    'Run `br show <id>` to inspect the bead body; reformat to match the hotspot schema, then retry.',
+  postmortem_empty_session:
+    'Confirm `.pi-flywheel/checkpoint.json` and `.pi-flywheel/telemetry/` exist; if not, no session has been run yet — start a flywheel cycle first.',
+  postmortem_checkpoint_stale:
+    'Pass an explicit `--since <iso-date>` argument to widen the analysis window, or start a fresh flywheel cycle.',
+  template_not_found:
+    'List available templates via the bead-templates tool; verify the slug spelling, then retry with the correct slug.',
+  template_placeholder_missing:
+    'Read details.missing for the field list, then re-call with all required placeholders provided.',
+  template_expansion_failed:
+    'Inspect cause for the underlying error; if it mentions reload, retry once — template library may have been mid-refresh.',
+  telemetry_store_failed:
+    'Check filesystem permissions on `.pi-flywheel/telemetry/`; if the disk is full, free space and retry.',
+  wave_collision_detected:
+    'Re-run the colliding beads serially via `flywheel_review(cwd, beadId, action:"hit-me")` one at a time.',
+  review_mode_gate_failed:
+    'Read the gate findings, address each one manually (commit the fixes), then re-run flywheel_review with the same beadId.',
+  review_headless_findings:
+    'Read the findings list, act on each, then re-run flywheel_review(action:"looks-good") to close the bead.',
+  remediation_unavailable:
+    'Read the failing doctor check\'s manual hint; flywheel_remediate has no automated handler for this check.',
+  remediation_requires_confirm:
+    'Re-call flywheel_remediate with autoConfirm:true after the user approves the dry_run plan.',
+  remediation_failed:
+    'Inspect the captured stderr in the response; re-run /flywheel-doctor to see whether the original symptom persists.',
+  remediate_already_running:
+    'Wait for the in-flight remediation to settle (see the lock holder in details), then retry.',
+  bundle_integrity_failed:
+    'Run `npm run build` in mcp-server/ to regenerate skills.bundle.json; the server falls back to disk reads in the meantime.',
+  bundle_stale:
+    'Run `npm run build` to refresh the bundle; or set FW_SKILL_BUNDLE=off to bypass and read live from disk.',
+  viewer_port_in_use:
+    'Pass `--port <N>` with a free port (e.g. 8766), or kill the existing viewer (lsof -i :<port>).',
+  attestation_missing:
+    'The implementor must write `.pi-flywheel/completion/<beadId>.json` (CompletionReport schema) before flywheel_advance_wave can proceed.',
+  attestation_invalid:
+    'Run `cat .pi-flywheel/completion/<beadId>.json | jq .` to see the current shape; fix per the schema_url for CompletionReport, then retry.',
+  rubric_synth_invalid:
+    'Re-run flywheel_synthesize_rubric with force:true; or hand-edit `.pi-flywheel/plans/<slug>/rubric.md` and the source field flips to "user".',
+  rubric_missing:
+    'Run flywheel_synthesize_rubric(cwd, planSlug:"<slug>") first; or pass force:true on grade_outcome to skip the rubric gate.',
+  grader_timeout:
+    'Raise FW_GRADER_TIMEOUT_MS (default 180000) or pass artifactRefs.modifiedFilePaths to scope the grader to a smaller diff.',
+  verdict_invalid:
+    'Set FW_LOG_LEVEL=debug and re-run; inspect the raw grader stdout in the trace. The auto-retry has already fired once.',
+  grader_unavailable:
+    'Run /flywheel-doctor to triage codex_cli and claude_cli health; install the missing one or set FW_GRADER_FORCE_CLAUDE=1.',
+  cycle_start_sha_unset:
+    'Commit a baseline (git commit --allow-empty -m "baseline"), or pass an explicit cycleStartSha; the fallback (HEAD~50) is in use.',
+  outcome_iteration_capped:
+    'Accept the current verdict, abort the cycle, or raise FW_MAX_OUTCOME_ITERATIONS (max 5) before starting the next cycle.',
+  concurrent_grade:
+    'Wait for the in-flight grader to settle, or pass force:true to override the in-memory mutex.',
+};
+
 export const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean> = {
   missing_prerequisite: false,
   invalid_input: false,
@@ -278,17 +397,20 @@ export class FlywheelError extends Error {
   readonly code: FlywheelErrorCode;
   readonly retryable: boolean;
   readonly hint?: string;
+  /** R-007 — paste-ready next-step. Defaulted from DEFAULT_TRY_THIS. */
+  readonly try_this?: string;
   override readonly cause?: string;
   readonly details?: Record<string, unknown>;
 
-  constructor(input: { code: FlywheelErrorCode; message: string; retryable?: boolean; hint?: string; cause?: string; details?: Record<string, unknown> }) {
+  constructor(input: { code: FlywheelErrorCode; message: string; retryable?: boolean; hint?: string; try_this?: string; cause?: string; details?: Record<string, unknown> }) {
     super(input.message);
     this.name = 'FlywheelError';
     this.code = input.code;
     this.retryable = input.retryable ?? DEFAULT_RETRYABLE[input.code];
-    // Fall back to DEFAULT_HINTS so every FlywheelError carries an
-    // actionable hint even if the call site forgot to pass one.
+    // Fall back to DEFAULT_HINTS / DEFAULT_TRY_THIS so every FlywheelError
+    // carries actionable guidance even if the call site forgot to pass it.
     this.hint = input.hint ?? DEFAULT_HINTS[input.code];
+    this.try_this = input.try_this ?? DEFAULT_TRY_THIS[input.code];
     this.cause = input.cause;
     this.details = input.details;
   }
@@ -299,13 +421,14 @@ export class FlywheelError extends Error {
       message: this.message,
       retryable: this.retryable,
       ...(this.hint !== undefined && this.hint !== null && { hint: this.hint }),
+      ...(this.try_this !== undefined && this.try_this !== null && { try_this: this.try_this }),
       ...(this.cause !== undefined && this.cause !== null && { cause: this.cause }),
       ...(this.details !== undefined && this.details !== null && { details: this.details }),
     };
   }
 }
 
-export function throwFlywheelError(input: { code: FlywheelErrorCode; message: string; retryable?: boolean; hint?: string; cause?: string; details?: Record<string, unknown> }): never {
+export function throwFlywheelError(input: { code: FlywheelErrorCode; message: string; retryable?: boolean; hint?: string; try_this?: string; cause?: string; details?: Record<string, unknown> }): never {
   throw new FlywheelError(input);
 }
 
@@ -352,6 +475,10 @@ export function makeFlywheelErrorResult(
   const error: FlywheelToolError = {
     ...input,
     retryable: input.retryable ?? DEFAULT_RETRYABLE[input.code],
+    // R-007 — auto-fill hint and try_this from the per-code defaults so
+    // every error envelope carries both fields. Per-call values win.
+    hint: input.hint ?? DEFAULT_HINTS[input.code],
+    try_this: input.try_this ?? DEFAULT_TRY_THIS[input.code],
     ...(input.cause !== undefined && input.cause !== null && { cause: sanitizeCause(input.cause) }),
     phase,
     tool,
