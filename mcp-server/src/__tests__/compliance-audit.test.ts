@@ -33,12 +33,14 @@ describe('runComplianceAudit', () => {
   });
 
   it('returns ok with empty arrays when beadIds is empty', async () => {
-    const result = await runComplianceAudit(stubCtx(), { cwd: '/tmp', beadIds: [] });
+    const exec = vi.fn();
+    const result = await runComplianceAudit(stubCtx({ exec }), { cwd: '/tmp', beadIds: [] });
     expect(result.isError).toBeUndefined();
     const data = (result.structuredContent as any).data;
     expect(data.status).toBe('ok');
     expect(data.passed).toEqual([]);
     expect(data.failed).toEqual([]);
+    expect(exec).not.toHaveBeenCalled();
   });
 
   it('returns invalid_input when beadIds is not an array', async () => {
@@ -53,22 +55,26 @@ describe('runComplianceAudit', () => {
 
   it('returns skipped when FW_COMPLIANCE_OVERRIDE env is set', async () => {
     process.env.FW_COMPLIANCE_OVERRIDE = 'agent-flywheel-001,agent-flywheel-002';
-    const result = await runComplianceAudit(stubCtx(), {
+    const exec = vi.fn();
+    const result = await runComplianceAudit(stubCtx({ exec }), {
       cwd: '/tmp',
       beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
     });
     const data = (result.structuredContent as any).data;
     expect(data.status).toBe('skipped');
+    expect(exec).not.toHaveBeenCalled();
   });
 
   it('returns skipped when skipEnv argument is set', async () => {
-    const result = await runComplianceAudit(stubCtx(), {
+    const exec = vi.fn();
+    const result = await runComplianceAudit(stubCtx({ exec }), {
       cwd: '/tmp',
       beadIds: ['agent-flywheel-001'],
       skipEnv: 'agent-flywheel-001',
     });
     const data = (result.structuredContent as any).data;
     expect(data.status).toBe('skipped');
+    expect(exec).not.toHaveBeenCalled();
   });
 });
 
