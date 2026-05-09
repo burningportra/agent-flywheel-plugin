@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.14.1] - 2026-05-08
+
+### Fixed
+
+- **`compliance-audit` schema parser too permissive** — `ComplianceResultSchema` accepted `schema_version=2`, missing required fields, and arbitrary extras via `.passthrough()`. A schema-shifted skill emit could silently parse as `0 passed, 0 failed` and false-green the wrap-up gate. Now requires `schema_version: z.literal(1)` plus `pass_utc`/`mode`/`threshold`/`beads`; rejects unknown fields. Commit `cc076ef`.
+- **`compliance_false_closed` counter under-counted** — bumped once per audit instead of once per failed bead (spec §4.4). A wave with 3 false-closed beads registered count=1 instead of 3. Now loops `recordErrorCode` per bead with per-bead `hashable`. Commit `2522638`.
+- **15-min audit timeout silently bypassed the gate** — generic catch returned `status: "error"` with `errors.spawn`, never parsing partial `result.json` or marking individual beads as `errors[id]="timeout"`. `_review.md` treats `error` as advisory, so a hung scorer shipped through wrap-up. Now detects timeout/abort, salvages the latest pass directory, and marks missing IDs as timed-out so partial results still gate the wave. Commit `1b12c8c`.
+- **Integration test `execSync` calls lacked timeout** — `compliance-audit-integration.test.ts` violated AGENTS.md hard rule (all `exec` calls must include `timeout`). `RUN_INTEGRATION=1` could hang CI on slow `br`/`git`. Now adds `timeout: 10000` to every call site. Commit `ad47c1c`.
+- **Skip-path tests didn't verify skill-spawn was bypassed** — `FW_COMPLIANCE_OVERRIDE` and `skipEnv` tests asserted `status === 'skipped'` but never `expect(exec).not.toHaveBeenCalled()`, so a regression where the skip branch fell through to the spawn block would still pass. Now asserts the spawn was bypassed in all three skip-paths. Commit `ada622f`.
+
+### Changed
+
+- **Spec `cass-helpers.ts` contract narrowed** — Section 4.5 of `docs/superpowers/specs/2026-05-08-beads-compliance-integration-design.md` previously mandated three exports (`storeMemoryRecord`, `searchMemoryRecords`, `searchPriorComplianceScores`) plus a `memory.ts` refactor. v3.14.0 shipped only `storeComplianceScore` since the v2 helpers are queued for a future "low-score-N-sessions-in-a-row" surface. Spec amended to record the v1 narrowing; the deferred work is now in Section 8 "Out of scope". Commit `d428063`.
+
+### Why
+
+Post-v3.14.0 audit pass found 1 CRITICAL + 5 HIGH issues across spec drift, anti-theater test gaps, and AGENTS.md hard-rule violations. All six are now fixed in surgical commits. The compliance gate's value depended on these fixes — false-greens, under-counted telemetry, and timeout-bypass would have masked exactly the failures the gate exists to catch.
+
 ## [3.14.0] - 2026-05-08
 
 ### Added
