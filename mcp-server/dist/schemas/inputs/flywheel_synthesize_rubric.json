@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_synthesize_rubric.json",
+  "title": "flywheel: flywheel_synthesize_rubric input",
+  "description": "Synthesize / validate / edit / regenerate the cycle-level outcome rubric at .pi-flywheel/plans/<slug>/rubric.md. Called from skills/start/_planning.md Step 5.6 after the plan-ready gate fires. Discriminator on success: kind ∈ { rubric_synthesized, rubric_preserved (cache hit on edited/user source), rubric_edited (action=edit), rubric_validated (action=validate) }. Errors surface FlywheelErrorCode envelopes (rubric_synth_invalid, rubric_missing, invalid_input).",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "planSlug": {
+      "type": "string",
+      "description": "Plan slug. Optional; falls back to slugifying state.outcomeRubricPath / planPath / state.planDocument."
+    },
+    "planPath": {
+      "type": "string",
+      "description": "Path to the plan markdown (relative to cwd or absolute). Required for synthesize/regenerate when state.planDocument is unset."
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "synthesize",
+        "validate",
+        "edit",
+        "regenerate"
+      ],
+      "default": "synthesize",
+      "description": "synthesize=spawn synthesizer (cache + edited-source guard); validate=parse current rubric.md; edit=apply editIntent; regenerate=force=true synth (overrides edited-source guard)."
+    },
+    "editIntent": {
+      "type": "object",
+      "description": "Required when action=edit. Tighten/add/remove are deterministic transforms; custom routes through the LLM.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "tighten",
+            "add",
+            "remove",
+            "custom"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "description": "Free-form instruction or single criterion text."
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ]
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Bypass the planContentSha cache and the edited-source guard. Equivalent to action=regenerate."
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

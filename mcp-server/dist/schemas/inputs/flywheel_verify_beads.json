@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_verify_beads.json",
+  "title": "flywheel: flywheel_verify_beads input",
+  "description": "Verify a wave of beads is closed; auto-close stragglers that have matching commits. Call after impl agents report back, before moving to the next wave. Returns {verified, autoClosed, unclosedNoCommit, errors}.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory"
+    },
+    "beadIds": {
+      "type": "array",
+      "description": "Bead IDs completed in this wave to reconcile",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "cwd",
+    "beadIds"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_observe.json",
+  "title": "flywheel: flywheel_observe input",
+  "description": "Single-call read-only session-state snapshot. Aggregates checkpoint, beads, agent-mail, ntm, git, WIZARD artifacts, and a cached doctor verdict (60s TTL) into one structured envelope. Idempotent + non-mutating; designed for fast session recovery without staging multiple round-trips. Wall-clock budget < 1.5s; degraded probes mark their sub-section as `unavailable: true`.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

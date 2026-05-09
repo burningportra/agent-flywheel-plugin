@@ -107,6 +107,7 @@ export declare const FlywheelToolErrorSchema: z.ZodObject<{
     message: z.ZodString;
     retryable: z.ZodOptional<z.ZodBoolean>;
     hint: z.ZodOptional<z.ZodString>;
+    try_this: z.ZodOptional<z.ZodString>;
     cause: z.ZodOptional<z.ZodString>;
     phase: z.ZodOptional<z.ZodString>;
     tool: z.ZodOptional<z.ZodString>;
@@ -174,6 +175,7 @@ export declare const FlywheelStructuredErrorSchema: z.ZodObject<{
             message: z.ZodString;
             retryable: z.ZodOptional<z.ZodBoolean>;
             hint: z.ZodOptional<z.ZodString>;
+            try_this: z.ZodOptional<z.ZodString>;
             cause: z.ZodOptional<z.ZodString>;
             phase: z.ZodOptional<z.ZodString>;
             tool: z.ZodOptional<z.ZodString>;
@@ -199,11 +201,29 @@ export type FlywheelStructuredError = z.infer<typeof FlywheelStructuredErrorSche
  * DEFAULT_RETRYABLE.
  */
 export declare const DEFAULT_HINTS: Record<FlywheelErrorCode, string>;
+/**
+ * R-007 — default `try_this` per error code. Imperative, paste-ready.
+ *
+ * Where DEFAULT_HINTS describes what went wrong, DEFAULT_TRY_THIS tells
+ * the agent the exact next call/command to make. Call sites SHOULD pass
+ * a more specific try_this when they have one (e.g. naming the exact
+ * field, the rejected enum value, the sample corrected invocation) —
+ * the per-call value wins.
+ *
+ * Contract (enforced by error-contract.test.ts and capabilities snapshot):
+ *   - every entry MUST be present (TypeScript Record enforces)
+ *   - every entry MUST start with an imperative verb (Run, Call, Set, etc.)
+ *   - every entry MUST be > 30 chars
+ *   - every entry MUST NOT echo the code name verbatim
+ */
+export declare const DEFAULT_TRY_THIS: Record<FlywheelErrorCode, string>;
 export declare const DEFAULT_RETRYABLE: Record<FlywheelErrorCode, boolean>;
 export declare class FlywheelError extends Error {
     readonly code: FlywheelErrorCode;
     readonly retryable: boolean;
     readonly hint?: string;
+    /** R-007 — paste-ready next-step. Defaulted from DEFAULT_TRY_THIS. */
+    readonly try_this?: string;
     readonly cause?: string;
     readonly details?: Record<string, unknown>;
     constructor(input: {
@@ -211,6 +231,7 @@ export declare class FlywheelError extends Error {
         message: string;
         retryable?: boolean;
         hint?: string;
+        try_this?: string;
         cause?: string;
         details?: Record<string, unknown>;
     });
@@ -221,6 +242,7 @@ export declare function throwFlywheelError(input: {
     message: string;
     retryable?: boolean;
     hint?: string;
+    try_this?: string;
     cause?: string;
     details?: Record<string, unknown>;
 }): never;

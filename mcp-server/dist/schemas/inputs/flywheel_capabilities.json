@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_capabilities.json",
+  "title": "flywheel: flywheel_capabilities input",
+  "description": "Read-only contract surface for the flywheel MCP server. Returns the full mcp_tools list (with required/optional fields and enum values), the doctor_check_names enum, every error_code with its default hint and retryable flag, the env_var dictionary, and the exit_code_contract — all in a single call so agents can pin contract_version and discover valid actions without grepping source. Snapshot-pinned via R-001 regression test. cwd is accepted for dispatch consistency but the tool ignores it (output is a stateless server-snapshot).",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (accepted for dispatch consistency; not used)"
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

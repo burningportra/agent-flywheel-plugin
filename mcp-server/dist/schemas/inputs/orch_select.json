@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_select.json",
+  "title": "flywheel: orch_select input",
+  "description": "[DEPRECATED — use flywheel_select instead; removed in v4.0] Set the selected goal and transition to planning phase. After presenting ideas to the user (via conversation), call this with their chosen goal. Returns workflow instructions for plan-first, deep-plan, or direct-to-beads.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory"
+    },
+    "goal": {
+      "type": "string",
+      "description": "The selected goal to pursue (from ideas or custom)"
+    }
+  },
+  "required": [
+    "cwd",
+    "goal"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/orch_grade_outcome.json",
+  "title": "flywheel: orch_grade_outcome input",
+  "description": "[DEPRECATED — use flywheel_grade_outcome instead; removed in v4.0] Grade the cycle outcome with a model strictly decorrelated from the impl swarm — codex primary, fresh-CC fallback. Called from skills/start/_wrapup.md Step 9.5 before commit review. Reads state.outcomeRubricPath; short-circuits to kind=grading_skipped when state.outcomeGradingSkipped is true. Persists verdict to .pi-flywheel/plans/<slug>/grading/iteration-<N>.json. Discriminator on success: kind ∈ { grader_verdict, grading_skipped, grading_capped (max_iterations_reached server-side coerced), grading_persistence_failed (verdict in-memory; disk write failed) }.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "planSlug": {
+      "type": "string",
+      "description": "Plan slug. Optional; defaults to slugifying state.outcomeRubricPath."
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Bypass the iteration-N.json-exists guard and the in-memory mutex."
+    }
+  },
+  "required": [
+    "cwd"
+  ]
+}

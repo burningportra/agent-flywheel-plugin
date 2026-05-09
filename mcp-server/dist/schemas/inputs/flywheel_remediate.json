@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_remediate.json",
+  "title": "flywheel: flywheel_remediate input",
+  "description": "Apply the canonical fix for a failing doctor check. Default mode is dry_run; pass mode:'execute' + autoConfirm:true to actually mutate. Per-check mutex prevents concurrent calls.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "checkName": {
+      "type": "string",
+      "enum": [
+        "mcp_connectivity",
+        "agent_mail_liveness",
+        "br_binary",
+        "bv_binary",
+        "ntm_binary",
+        "cm_binary",
+        "node_version",
+        "git_status",
+        "dist_drift",
+        "orphaned_worktrees",
+        "checkpoint_validity",
+        "claude_cli",
+        "codex_cli",
+        "gemini_cli",
+        "swarm_model_ratio",
+        "codex_config_compat",
+        "rescues_last_30d"
+      ],
+      "description": "The doctor check name to remediate"
+    },
+    "autoConfirm": {
+      "type": "boolean",
+      "default": false,
+      "description": "Required to be true when mode=execute and the remediation is mutating"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "dry_run",
+        "execute"
+      ],
+      "default": "dry_run",
+      "description": "dry_run=return plan only, execute=apply the fix"
+    }
+  },
+  "required": [
+    "cwd",
+    "checkName"
+  ]
+}

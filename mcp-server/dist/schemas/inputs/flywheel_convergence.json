@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_convergence.json",
+  "title": "flywheel: flywheel_convergence input",
+  "description": "Read the persisted convergence state for a plan slug from .pi-flywheel/plans/<slug>/convergence.json. Returns { tool, version: 1, status: \"ok\" | \"not_found\" | \"error\", data: ConvergenceState | null }. Pure read; never mutates. Status \"error\" with code \"score_version_mismatch\" signals the on-disk state was written by a different scoreVersion and must be recomputed before use.",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "planSlug": {
+      "type": "string",
+      "description": "Plan slug or original plan path. Slugified to a filesystem-safe directory name; same slug used by writers."
+    }
+  },
+  "required": [
+    "cwd",
+    "planSlug"
+  ]
+}

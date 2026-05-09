@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/index.json",
+  "title": "flywheel input-schema manifest",
+  "generated_by": "mcp-server/scripts/emit-schemas.ts",
+  "tool_count": 40,
+  "sha256": "6b046f8c7a13925f88003f9af9739c656ffea704b4d4ca2e6d33f8ff7177744f",
+  "schemas": [
+    {
+      "tool": "flywheel_advance_wave",
+      "path": "schemas/inputs/flywheel_advance_wave.json"
+    },
+    {
+      "tool": "flywheel_approve_beads",
+      "path": "schemas/inputs/flywheel_approve_beads.json"
+    },
+    {
+      "tool": "flywheel_calibrate",
+      "path": "schemas/inputs/flywheel_calibrate.json"
+    },
+    {
+      "tool": "flywheel_capabilities",
+      "path": "schemas/inputs/flywheel_capabilities.json"
+    },
+    {
+      "tool": "flywheel_compliance_audit",
+      "path": "schemas/inputs/flywheel_compliance_audit.json"
+    },
+    {
+      "tool": "flywheel_convergence",
+      "path": "schemas/inputs/flywheel_convergence.json"
+    },
+    {
+      "tool": "flywheel_discover",
+      "path": "schemas/inputs/flywheel_discover.json"
+    },
+    {
+      "tool": "flywheel_doctor",
+      "path": "schemas/inputs/flywheel_doctor.json"
+    },
+    {
+      "tool": "flywheel_get_skill",
+      "path": "schemas/inputs/flywheel_get_skill.json"
+    },
+    {
+      "tool": "flywheel_grade_outcome",
+      "path": "schemas/inputs/flywheel_grade_outcome.json"
+    },
+    {
+      "tool": "flywheel_memory",
+      "path": "schemas/inputs/flywheel_memory.json"
+    },
+    {
+      "tool": "flywheel_observe",
+      "path": "schemas/inputs/flywheel_observe.json"
+    },
+    {
+      "tool": "flywheel_plan",
+      "path": "schemas/inputs/flywheel_plan.json"
+    },
+    {
+      "tool": "flywheel_profile",
+      "path": "schemas/inputs/flywheel_profile.json"
+    },
+    {
+      "tool": "flywheel_remediate",
+      "path": "schemas/inputs/flywheel_remediate.json"
+    },
+    {
+      "tool": "flywheel_review",
+      "path": "schemas/inputs/flywheel_review.json"
+    },
+    {
+      "tool": "flywheel_robot_docs",
+      "path": "schemas/inputs/flywheel_robot_docs.json"
+    },
+    {
+      "tool": "flywheel_select",
+      "path": "schemas/inputs/flywheel_select.json"
+    },
+    {
+      "tool": "flywheel_synthesize_rubric",
+      "path": "schemas/inputs/flywheel_synthesize_rubric.json"
+    },
+    {
+      "tool": "flywheel_verify_beads",
+      "path": "schemas/inputs/flywheel_verify_beads.json"
+    },
+    {
+      "tool": "orch_advance_wave",
+      "path": "schemas/inputs/orch_advance_wave.json"
+    },
+    {
+      "tool": "orch_approve_beads",
+      "path": "schemas/inputs/orch_approve_beads.json"
+    },
+    {
+      "tool": "orch_calibrate",
+      "path": "schemas/inputs/orch_calibrate.json"
+    },
+    {
+      "tool": "orch_capabilities",
+      "path": "schemas/inputs/orch_capabilities.json"
+    },
+    {
+      "tool": "orch_compliance_audit",
+      "path": "schemas/inputs/orch_compliance_audit.json"
+    },
+    {
+      "tool": "orch_convergence",
+      "path": "schemas/inputs/orch_convergence.json"
+    },
+    {
+      "tool": "orch_discover",
+      "path": "schemas/inputs/orch_discover.json"
+    },
+    {
+      "tool": "orch_doctor",
+      "path": "schemas/inputs/orch_doctor.json"
+    },
+    {
+      "tool": "orch_get_skill",
+      "path": "schemas/inputs/orch_get_skill.json"
+    },
+    {
+      "tool": "orch_grade_outcome",
+      "path": "schemas/inputs/orch_grade_outcome.json"
+    },
+    {
+      "tool": "orch_memory",
+      "path": "schemas/inputs/orch_memory.json"
+    },
+    {
+      "tool": "orch_observe",
+      "path": "schemas/inputs/orch_observe.json"
+    },
+    {
+      "tool": "orch_plan",
+      "path": "schemas/inputs/orch_plan.json"
+    },
+    {
+      "tool": "orch_profile",
+      "path": "schemas/inputs/orch_profile.json"
+    },
+    {
+      "tool": "orch_remediate",
+      "path": "schemas/inputs/orch_remediate.json"
+    },
+    {
+      "tool": "orch_review",
+      "path": "schemas/inputs/orch_review.json"
+    },
+    {
+      "tool": "orch_robot_docs",
+      "path": "schemas/inputs/orch_robot_docs.json"
+    },
+    {
+      "tool": "orch_select",
+      "path": "schemas/inputs/orch_select.json"
+    },
+    {
+      "tool": "orch_synthesize_rubric",
+      "path": "schemas/inputs/orch_synthesize_rubric.json"
+    },
+    {
+      "tool": "orch_verify_beads",
+      "path": "schemas/inputs/orch_verify_beads.json"
+    }
+  ]
+}
