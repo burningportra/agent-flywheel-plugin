@@ -115,7 +115,13 @@ describe('runComplianceAudit - skill spawn + parse', () => {
       {
         beadId: 'agent-flywheel-001',
         score: 850,
-        reportPath: join(tmp, 'beads_compliance_audit', 'passes', '2026-05-08T19-14-22Z', 'beads/agent-flywheel-001/scorecard.md'),
+        reportPath: join(
+          tmp,
+          'beads_compliance_audit',
+          'passes',
+          '2026-05-08T19-14-22Z',
+          'beads/agent-flywheel-001/scorecard.md',
+        ),
       },
     ]);
     expect(data.failed).toEqual([]);
@@ -169,6 +175,75 @@ describe('runComplianceAudit - skill spawn + parse', () => {
     expect(data.status).toBe('error');
     expect(data.errors.spawn).toContain('exit 1');
     expect(data.errors.spawn).toContain('skill not found');
+  });
+
+  it('parses partial result.json on spawn timeout and marks missing beads as timeout', async () => {
+    setupFakePassDirWithResult(tmp, {
+      schema_version: 1,
+      pass_utc: '2026-05-08T19:14:22Z',
+      mode: 'flywheel-gate',
+      threshold: 700,
+      beads: [
+        {
+          id: 'agent-flywheel-001',
+          score: 850,
+          passed: true,
+          scorecard_path: 'beads/agent-flywheel-001/scorecard.md',
+        },
+      ],
+    });
+    const timeoutError = Object.assign(
+      new Error('Timed out after 900000ms: claude -p --permission-mode bypassPermissions'),
+      { timedOut: true },
+    );
+    const exec = vi.fn(async (cmd: string) => {
+      if (cmd === 'claude') {
+        throw timeoutError;
+      }
+      return { code: 0, stdout: cmd === 'git' ? 'abc123\n' : '', stderr: '' };
+    });
+
+    const result = await runComplianceAudit(stubCtx({ exec }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.status).toBe('ok');
+    expect(data.passed).toEqual([
+      {
+        beadId: 'agent-flywheel-001',
+        score: 850,
+        reportPath: join(
+          tmp,
+          'beads_compliance_audit',
+          'passes',
+          '2026-05-08T19-14-22Z',
+          'beads/agent-flywheel-001/scorecard.md',
+        ),
+      },
+    ]);
+    expect(data.failed).toEqual([
+      {
+        beadId: 'agent-flywheel-002',
+        score: 0,
+        reportPath: join(
+          tmp,
+          'beads_compliance_audit',
+          'passes',
+          '2026-05-08T19-14-22Z',
+          'REPORT.md',
+        ),
+        reasons: ['timeout'],
+      },
+    ]);
+    expect(data.errors['agent-flywheel-002']).toBe('timeout');
+    expect(data.errors.spawn).toContain('Timed out after 900000ms');
+    expect(exec).toHaveBeenCalledWith(
+      'br',
+      ['update', 'agent-flywheel-002', '--status', 'open'],
+      { cwd: tmp, timeout: 10000, signal: undefined },
+    );
   });
 
   it('returns status=error when the passes directory is missing', async () => {

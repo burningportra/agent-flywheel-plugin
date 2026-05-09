@@ -46,6 +46,182 @@ function okComplianceResult(text, startedAt, overrides = {}) {
 function errorComplianceResult(text, startedAt, errors) {
     return makeOkToolResult('flywheel_compliance_audit', 'reviewing', text, complianceOutcome('error', startedAt, { errors }));
 }
+function isTimeoutError(err) {
+    if (err instanceof Error && /abort|timed?\s*out|timeout/i.test(err.message)) {
+        return true;
+    }
+    if (!err || typeof err !== 'object') {
+        return false;
+    }
+    const record = err;
+    return record.timedOut === true
+        || record.code === 'ETIMEDOUT'
+        || record.name === 'AbortError'
+        || record.signal === 'SIGTERM';
+}
+function readLatestComplianceResult(cwd) {
+    const passesRoot = join(cwd, 'beads_compliance_audit', 'passes');
+    if (!existsSync(passesRoot)) {
+        return {
+            ok: false,
+            text: 'Skill ran but produced no passes directory.',
+            errors: { parse: `passes directory missing: ${passesRoot}` },
+        };
+    }
+    let subdirs;
+    try {
+        subdirs = readdirSync(passesRoot, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => {
+            const fullPath = join(passesRoot, entry.name);
+            return { name: entry.name, mtime: statSync(fullPath).mtimeMs };
+        })
+            .sort((a, b) => b.mtime - a.mtime);
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+            ok: false,
+            text: `Could not inspect pass directories: ${message}`,
+            errors: { parse: message },
+        };
+    }
+    if (subdirs.length === 0) {
+        return {
+            ok: false,
+            text: 'No pass directories found.',
+            errors: { parse: 'no pass dirs' },
+        };
+    }
+    const latestPassDir = join(passesRoot, subdirs[0].name);
+    const resultJsonPath = join(latestPassDir, 'result.json');
+    if (!existsSync(resultJsonPath)) {
+        return {
+            ok: false,
+            text: 'result.json missing in latest pass.',
+            errors: { parse: `result.json not found at ${resultJsonPath}` },
+        };
+    }
+    try {
+        const rawResult = JSON.parse(readFileSync(resultJsonPath, 'utf8'));
+        const schemaResult = ComplianceResultSchema.safeParse(rawResult);
+        if (!schemaResult.success) {
+            const issues = schemaResult.error.issues
+                .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+                .join('; ');
+            return {
+                ok: false,
+                text: `result.json schema validation failed: ${issues}`,
+                errors: { parse: issues },
+            };
+        }
+        return {
+            ok: true,
+            value: { parsedResult: schemaResult.data, latestPassDir },
+        };
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+            ok: false,
+            text: `result.json parse failed: ${message}`,
+            errors: { parse: message },
+        };
+    }
+}
+async function finalizeComplianceAudit(ctx, args, threshold, startedAt, parsedResult, latestPassDir, options = {}) {
+    const passed = [];
+    const failed = [];
+    for (const bead of parsedResult.beads) {
+        const reportPath = join(latestPassDir, bead.scorecard_path);
+        if (bead.passed) {
+            passed.push({ beadId: bead.id, score: bead.score, reportPath });
+        }
+        else {
+            failed.push({
+                beadId: bead.id,
+                score: bead.score,
+                reportPath,
+                reasons: bead.top_failures ?? [],
+            });
+        }
+    }
+    const errors = { ...(options.initialErrors ?? {}) };
+    for (const beadId of options.timeoutMissingBeadIds ?? []) {
+        errors[beadId] = 'timeout';
+        failed.push({
+            beadId,
+            score: 0,
+            reportPath: join(latestPassDir, 'REPORT.md'),
+            reasons: ['timeout'],
+        });
+    }
+    for (const bead of failed) {
+        try {
+            const updateResult = await ctx.exec('br', ['update', bead.beadId, '--status', 'open'], { cwd: args.cwd, timeout: 10000, signal: ctx.signal });
+            if (updateResult.code !== 0) {
+                const errorKey = errors[bead.beadId] ? `${bead.beadId}:reopen` : bead.beadId;
+                errors[errorKey] = `br update failed (exit ${updateResult.code}): ${(updateResult.stderr || updateResult.stdout).slice(0, 500)}`;
+                continue;
+            }
+            const commentBody = `Compliance audit reopened - score ${bead.score}/1000. See ${bead.reportPath}`;
+            const commentResult = await ctx.exec('br', ['comments', 'add', bead.beadId, '--message', commentBody], { cwd: args.cwd, timeout: 10000, signal: ctx.signal });
+            if (commentResult.code !== 0) {
+                errors[`${bead.beadId}:comment`] = `br comment failed (exit ${commentResult.code}): ${(commentResult.stderr || commentResult.stdout).slice(0, 500)}`;
+            }
+        }
+        catch (err) {
+            const errorKey = errors[bead.beadId] ? `${bead.beadId}:reopen` : bead.beadId;
+            errors[errorKey] = err instanceof Error ? err.message : String(err);
+        }
+    }
+    for (const bead of failed) {
+        recordErrorCode('compliance_false_closed', {
+            hashable: bead.beadId,
+        });
+    }
+    let gitHead = 'unknown';
+    try {
+        const gitResult = await ctx.exec('git', ['rev-parse', 'HEAD'], { cwd: args.cwd, timeout: 5000, signal: ctx.signal });
+        const trimmed = gitResult.stdout.trim();
+        if (gitResult.code === 0 && trimmed.length > 0) {
+            gitHead = trimmed;
+        }
+        else {
+            errors.gitHead = `git rev-parse HEAD failed (exit ${gitResult.code}): ${(gitResult.stderr || gitResult.stdout || 'empty stdout').slice(0, 500)}`;
+        }
+    }
+    catch (err) {
+        errors.gitHead = err instanceof Error ? err.message : String(err);
+    }
+    for (const bead of parsedResult.beads) {
+        try {
+            storeComplianceScore(args.cwd, {
+                beadId: bead.id,
+                score: bead.score,
+                threshold,
+                passed: bead.passed,
+                rubric: bead.rubric_breakdown ?? {},
+                passUtc: parsedResult.pass_utc,
+                sessionId: process.env.FW_SESSION_ID ?? null,
+                gitHead,
+            });
+        }
+        catch (err) {
+            errors[`cass:${bead.id}`] = err instanceof Error ? err.message : String(err);
+        }
+    }
+    const timedOut = (options.timeoutMissingBeadIds?.length ?? 0) > 0;
+    const text = timedOut
+        ? `Compliance audit timed out with partial result: ${passed.length} passed, ${failed.length} failed.`
+        : `Compliance audit complete: ${passed.length} passed, ${failed.length} failed.`;
+    return okComplianceResult(text, startedAt, {
+        passed,
+        failed,
+        passUtc: parsedResult.pass_utc,
+        errors,
+    });
+}
 export async function runComplianceAudit(ctx, rawArgs) {
     const startedAt = Date.now();
     const parsed = ComplianceAuditArgsSchema.safeParse(rawArgs);
@@ -92,125 +268,24 @@ export async function runComplianceAudit(ctx, rawArgs) {
     }
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        if (isTimeoutError(err)) {
+            const latestResult = readLatestComplianceResult(args.cwd);
+            if (!latestResult.ok) {
+                return errorComplianceResult(`Skill spawn timed out; ${latestResult.text}`, startedAt, { spawn: message, ...latestResult.errors });
+            }
+            const parsedBeadIds = new Set(latestResult.value.parsedResult.beads.map((bead) => bead.id));
+            const timeoutMissingBeadIds = args.beadIds.filter((beadId) => !parsedBeadIds.has(beadId));
+            return finalizeComplianceAudit(ctx, args, threshold, startedAt, latestResult.value.parsedResult, latestResult.value.latestPassDir, {
+                initialErrors: { spawn: message },
+                timeoutMissingBeadIds,
+            });
+        }
         return errorComplianceResult(`Skill spawn threw: ${message}`, startedAt, { spawn: message });
     }
-    const passesRoot = join(args.cwd, 'beads_compliance_audit', 'passes');
-    if (!existsSync(passesRoot)) {
-        return errorComplianceResult('Skill ran but produced no passes directory.', startedAt, { parse: `passes directory missing: ${passesRoot}` });
+    const latestResult = readLatestComplianceResult(args.cwd);
+    if (!latestResult.ok) {
+        return errorComplianceResult(latestResult.text, startedAt, latestResult.errors);
     }
-    let subdirs;
-    try {
-        subdirs = readdirSync(passesRoot, { withFileTypes: true })
-            .filter((entry) => entry.isDirectory())
-            .map((entry) => {
-            const fullPath = join(passesRoot, entry.name);
-            return { name: entry.name, mtime: statSync(fullPath).mtimeMs };
-        })
-            .sort((a, b) => b.mtime - a.mtime);
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return errorComplianceResult(`Could not inspect pass directories: ${message}`, startedAt, { parse: message });
-    }
-    if (subdirs.length === 0) {
-        return errorComplianceResult('No pass directories found.', startedAt, { parse: 'no pass dirs' });
-    }
-    const latestPassDir = join(passesRoot, subdirs[0].name);
-    const resultJsonPath = join(latestPassDir, 'result.json');
-    if (!existsSync(resultJsonPath)) {
-        return errorComplianceResult('result.json missing in latest pass.', startedAt, { parse: `result.json not found at ${resultJsonPath}` });
-    }
-    let parsedResult;
-    try {
-        const rawResult = JSON.parse(readFileSync(resultJsonPath, 'utf8'));
-        const schemaResult = ComplianceResultSchema.safeParse(rawResult);
-        if (!schemaResult.success) {
-            const issues = schemaResult.error.issues
-                .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
-                .join('; ');
-            return errorComplianceResult(`result.json schema validation failed: ${issues}`, startedAt, { parse: issues });
-        }
-        parsedResult = schemaResult.data;
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return errorComplianceResult(`result.json parse failed: ${message}`, startedAt, { parse: message });
-    }
-    const passed = [];
-    const failed = [];
-    for (const bead of parsedResult.beads ?? []) {
-        const reportPath = join(latestPassDir, bead.scorecard_path);
-        if (bead.passed) {
-            passed.push({ beadId: bead.id, score: bead.score, reportPath });
-        }
-        else {
-            failed.push({
-                beadId: bead.id,
-                score: bead.score,
-                reportPath,
-                reasons: bead.top_failures ?? [],
-            });
-        }
-    }
-    const errors = {};
-    for (const bead of failed) {
-        try {
-            const updateResult = await ctx.exec('br', ['update', bead.beadId, '--status', 'open'], { cwd: args.cwd, timeout: 10000, signal: ctx.signal });
-            if (updateResult.code !== 0) {
-                errors[bead.beadId] = `br update failed (exit ${updateResult.code}): ${(updateResult.stderr || updateResult.stdout).slice(0, 500)}`;
-                continue;
-            }
-            const commentBody = `Compliance audit reopened - score ${bead.score}/1000. See ${bead.reportPath}`;
-            const commentResult = await ctx.exec('br', ['comments', 'add', bead.beadId, '--message', commentBody], { cwd: args.cwd, timeout: 10000, signal: ctx.signal });
-            if (commentResult.code !== 0) {
-                errors[`${bead.beadId}:comment`] = `br comment failed (exit ${commentResult.code}): ${(commentResult.stderr || commentResult.stdout).slice(0, 500)}`;
-            }
-        }
-        catch (err) {
-            errors[bead.beadId] = err instanceof Error ? err.message : String(err);
-        }
-    }
-    for (const bead of failed) {
-        recordErrorCode('compliance_false_closed', {
-            hashable: bead.beadId,
-        });
-    }
-    let gitHead = 'unknown';
-    try {
-        const gitResult = await ctx.exec('git', ['rev-parse', 'HEAD'], { cwd: args.cwd, timeout: 5000, signal: ctx.signal });
-        const trimmed = gitResult.stdout.trim();
-        if (gitResult.code === 0 && trimmed.length > 0) {
-            gitHead = trimmed;
-        }
-        else {
-            errors.gitHead = `git rev-parse HEAD failed (exit ${gitResult.code}): ${(gitResult.stderr || gitResult.stdout || 'empty stdout').slice(0, 500)}`;
-        }
-    }
-    catch (err) {
-        errors.gitHead = err instanceof Error ? err.message : String(err);
-    }
-    for (const bead of parsedResult.beads ?? []) {
-        try {
-            storeComplianceScore(args.cwd, {
-                beadId: bead.id,
-                score: bead.score,
-                threshold,
-                passed: bead.passed,
-                rubric: bead.rubric_breakdown ?? {},
-                passUtc: parsedResult.pass_utc ?? '',
-                sessionId: process.env.FW_SESSION_ID ?? null,
-                gitHead,
-            });
-        }
-        catch (err) {
-            errors[`cass:${bead.id}`] = err instanceof Error ? err.message : String(err);
-        }
-    }
-    return okComplianceResult(`Compliance audit complete: ${passed.length} passed, ${failed.length} failed.`, startedAt, {
-        passed,
-        failed,
-        passUtc: parsedResult.pass_utc ?? null,
-        errors,
-    });
+    return finalizeComplianceAudit(ctx, args, threshold, startedAt, latestResult.value.parsedResult, latestResult.value.latestPassDir);
 }
 //# sourceMappingURL=compliance-audit.js.map
