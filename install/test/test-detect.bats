@@ -68,6 +68,12 @@ teardown() {
   [[ "$output" == *"Unknown flag"* ]]
 }
 
+@test "install.sh --help exits 0 with usage" {
+  run bash "$REPO_ROOT/install.sh" --noninteractive --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
 @test "install.sh writes log to ~/.agent-flywheel/install.log" {
   run bash "$REPO_ROOT/install.sh" --noninteractive
   [ "$status" -eq 0 ]
