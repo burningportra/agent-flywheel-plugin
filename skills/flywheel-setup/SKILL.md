@@ -7,6 +7,10 @@ Set up the agent-flywheel for this project. $ARGUMENTS
 
 Check and configure all prerequisites. For each missing tool, ask the user before installing. On refusal, print the manual install command and continue.
 
+## 0. Parallel pre-flight detection (v3.16.0+)
+
+Before walking the section-by-section flow below, call `detectInstallState({ cwd })` (exported from `mcp-server/src/setup-detector.ts`) to run every probe in parallel via `Promise.all`. The returned `InstallPlan` partitions the work into five buckets — `install`, `register`, `start`, `configure`, `skip` — that the skill body can render in a single AskUserQuestion prompt rather than asking one question per tool. The sections below remain as the per-tool reference for missing items and the manual-install fallback path the user gets on refusal of the batch prompt.
+
 ## 0. ACFS stack shortcut
 
 Before checking individual tools, count how many of the ACFS stack tools are missing (br, bv, ntm, dcg, cass, cm, agent-mail). Run `br --version`, `bv --version`, `ntm --version`, `dcg --version`, `cass --version`, `cm --version`, and `command -v mcp-agent-mail >/dev/null || command -v am >/dev/null` via Bash to check. (The Rust port `mcp_agent_mail_rust` is the **primary** distribution; either binary — `mcp-agent-mail` or `am` — counts as installed. Fall back to `python3 -c "import mcp_agent_mail"` only when neither Rust binary is present, for legacy installs.)
@@ -233,6 +237,12 @@ Behavior rules:
 - If `overall: "green"`: confirm "setup verified — flywheel is healthy" and stop.
 
 If step 11 reported any Required failure, **skip** the doctor run (mirrors `runSetupAndVerify`'s `setup_unhealthy` verdict — no point running the deeper sweep when the install itself is incomplete).
+
+After the post-flight summary (whether doctor ran or was skipped), append the glossary footer — single source of truth `GLOSSARY_LINE` in `mcp-server/src/glossary.ts` — so a first-time operator finishing setup always sees the core vocabulary:
+
+```
+Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
+```
 
 ## See also (triage chain)
 
