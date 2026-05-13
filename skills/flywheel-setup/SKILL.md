@@ -59,6 +59,15 @@ AskUserQuestion(questions: [{
 
 `Retry` re-invokes the matching `BatchExecutor` method with the original argument; `Skip` records the failure in the batch report and moves on; `Abort` stops processing remaining results (the un-retried slice is left for the next `/flywheel-setup` invocation, which will detect the same misses through `detectInstallState` and re-plan accordingly).
 
+### Step 4: Post-flight verify (T3.4)
+
+After the batch run finishes (regardless of how many retry/skip/abort decisions happened along the way), call `runPostFlight({ cwd, doctor: flywheel_doctor })` (exported from `mcp-server/src/setup-detector.ts`). It invokes `flywheel_doctor` exactly once and returns a rendered summary:
+
+- `overall === "green"` → `"✓ Setup complete. Run /agent-flywheel:start to begin."` — print and exit 0.
+- `overall === "yellow"` or `"red"` → `"⚠ Setup left N issue(s):"` followed by one `  • <name>: <message>\n    Try: <hint>"` row per non-green check. Checks without a `hint` get the generic fallback `"see /flywheel-doctor"`. Print, then exit with a non-zero status so callers (CI, install.sh) can react.
+
+Skip the post-flight call **only** when the batch was aborted before any meaningful step ran (i.e., the user picked Cancel at Step 2). Every other path — full batch success, partial failure, or per-tool review — runs the post-flight so the operator always sees the final health snapshot.
+
 ## 0. ACFS stack shortcut
 
 Before checking individual tools, count how many of the ACFS stack tools are missing (br, bv, ntm, dcg, cass, cm, agent-mail). Run `br --version`, `bv --version`, `ntm --version`, `dcg --version`, `cass --version`, `cm --version`, and `command -v mcp-agent-mail >/dev/null || command -v am >/dev/null` via Bash to check. (The Rust port `mcp_agent_mail_rust` is the **primary** distribution; either binary — `mcp-agent-mail` or `am` — counts as installed. Fall back to `python3 -c "import mcp_agent_mail"` only when neither Rust binary is present, for legacy installs.)

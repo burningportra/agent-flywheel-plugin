@@ -220,6 +220,51 @@ export async function performSymlink(
   }
 }
 
+// ─── T3.4 — Post-flight verify ────────────────────────────────────────────
+
+/**
+ * Structural subset of the doctor report the post-flight render needs.
+ * Decoupled from the canonical DoctorReport type so this module stays
+ * import-free of doctor.ts (which depends on heavy probe wiring) and can
+ * be exercised by lightweight unit tests.
+ */
+export type DoctorReportLike = {
+  overall: "green" | "yellow" | "red";
+  checks: Array<{
+    name: string;
+    severity: "green" | "yellow" | "red";
+    message?: string;
+    hint?: string;
+  }>;
+};
+
+/**
+ * Step 4 of `/flywheel-setup`. Invokes the injected doctor once, then
+ * stringifies the report into either a success banner or a list of
+ * failing checks (yellow + red) with each one's `hint` surfaced inline.
+ * Falls back to a generic "see /flywheel-doctor" pointer when a check has
+ * no hint of its own.
+ */
+export async function runPostFlight(opts: {
+  cwd: string;
+  doctor: (input: { cwd: string }) => Promise<DoctorReportLike>;
+}): Promise<string> {
+  const report = await opts.doctor({ cwd: opts.cwd });
+  if (report.overall === "green") {
+    return "✓ Setup complete. Run /agent-flywheel:start to begin.";
+  }
+  const failing = report.checks.filter((c) => c.severity !== "green");
+  return [
+    `⚠ Setup left ${failing.length} issue(s):`,
+    ...failing.map(
+      (c) =>
+        `  • ${c.name}: ${c.message ?? "(no message)"}\n    Try: ${
+          c.hint ?? "see /flywheel-doctor"
+        }`,
+    ),
+  ].join("\n");
+}
+
 /**
  * Idempotent MCP-server registration: merges `mcpServers["agent-flywheel"]`
  * into `~/.claude.json` via atomic tmp+rename. Existing `mcpServers` keys
