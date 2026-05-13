@@ -81,6 +81,12 @@ export const DOCTOR_CHECK_NAMES = [
     // RubricSchemaV1 — green when no rubric or rubric parses with criteria,
     // yellow on missing-file / parse failure, red on empty-criteria.
     'outcome_rubric_validity',
+    // T6.1 (v3.16.0 noob-onboarding). Green when ntm is absent or when
+    // `<projects_base>/<basename(cwd)>` is reachable. Yellow when ntm is
+    // installed and configured with a projects_base but the symlink/dir is
+    // missing — the flywheel will silently fall back to `Agent()` without
+    // this. Auto-remediable via flywheel_remediate.
+    'projects_base_misconfig',
 ];
 // ─── Actionable hints ─────────────────────────────────────────────────────
 // DoctorCheck.hint must be a human-readable remediation sentence, not an
@@ -99,6 +105,7 @@ const VERSION_DRIFT_HINT = 'Run `/flywheel-setup` (or `cd mcp-server && npm run 
 const OUTCOME_RUBRIC_GREEN_HINT = 'No action needed; continue the flywheel.';
 const OUTCOME_RUBRIC_YELLOW_HINT = 'Open the rubric gate and choose Re-edit or Regenerate before creating beads.';
 const OUTCOME_RUBRIC_RED_HINT = 'Regenerate the rubric now; an empty criteria list cannot grade the cycle.';
+const PROJECTS_BASE_MISCONFIG_HINT = 'Symlink this repo into the NTM projects_base so multi-agent panes resolve the same workdir: `ln -s "<cwd>" "<projects_base>/<basename(cwd)>"`. Or call `flywheel_remediate({ checkName: "projects_base_misconfig", mode: "execute", autoConfirm: true })`.';
 /**
  * Run all 11 health checks in parallel. Never throws.
  *
@@ -177,6 +184,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         () => checkOrphanTenderDaemons(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkConvergenceStateValidity(cwd, combined, now),
         () => checkOutcomeRubricValidity(cwd, combined, now),
+        () => checkProjectsBase(exec, cwd, combined, perCheckTimeoutMs, now),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -426,6 +434,64 @@ async function checkNtmBinary(exec, cwd, signal, timeout, now) {
     return checkBinary('ntm_binary', 'ntm', exec, cwd, signal, timeout, now, {
         requiredSeverity: 'yellow',
     });
+}
+/**
+ * T6.1 (v3.16.0). `ntm spawn <name>` resolves to `projects_base/<name>` and
+ * silently lands in the wrong tree (or falls back to plain Agent()) when
+ * the current project's basename is not reachable under projects_base.
+ *
+ * Green when ntm is absent or when `<projects_base>/<basename(cwd)>` exists
+ * as a path. Yellow when ntm is installed AND `ntm config show` returns a
+ * projects_base but the symlink/dir is missing — autoremediable.
+ */
+async function checkProjectsBase(exec, cwd, signal, timeout, now) {
+    const start = now();
+    try {
+        const ntmConfig = await exec('ntm', ['config', 'show'], { cwd, timeout, signal });
+        if (ntmConfig.code !== 0) {
+            return {
+                name: 'projects_base_misconfig',
+                severity: 'green',
+                message: 'ntm not installed or config unreadable — projects_base check is non-applicable.',
+                durationMs: now() - start,
+            };
+        }
+        const match = ntmConfig.stdout.match(/projects_base\s*[=:]\s*"?([^"\n]+)"?/);
+        const ntmBase = match?.[1]?.trim() ?? null;
+        if (ntmBase === null) {
+            return {
+                name: 'projects_base_misconfig',
+                severity: 'green',
+                message: 'ntm config did not surface a projects_base — check is non-applicable.',
+                durationMs: now() - start,
+            };
+        }
+        const expected = `${ntmBase.replace(/\/+$/, '')}/${cwd.split('/').pop() ?? ''}`;
+        const { existsSync } = await import('node:fs');
+        if (existsSync(expected)) {
+            return {
+                name: 'projects_base_misconfig',
+                severity: 'green',
+                message: `${expected} is reachable under projects_base.`,
+                durationMs: now() - start,
+            };
+        }
+        return {
+            name: 'projects_base_misconfig',
+            severity: 'yellow',
+            message: `ntm projects_base=${ntmBase} does not contain ${expected}; ntm spawn will land in the wrong tree.`,
+            hint: `Symlink it with \`ln -s "${cwd}" "${expected}"\` or call flywheel_remediate({ checkName: 'projects_base_misconfig', mode: 'execute' }).`,
+            durationMs: now() - start,
+        };
+    }
+    catch (err) {
+        return {
+            name: 'projects_base_misconfig',
+            severity: 'green',
+            message: `projects_base probe inconclusive: ${err instanceof Error ? err.message : String(err)}`,
+            durationMs: now() - start,
+        };
+    }
 }
 /** 6. cm (CASS) binary (optional). */
 async function checkCmBinary(exec, cwd, signal, timeout, now) {

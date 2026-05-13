@@ -26,11 +26,12 @@ export declare const RemediateInputSchema: z.ZodObject<{
         npm_marketplace_version_drift: "npm_marketplace_version_drift";
         convergence_state_validity: "convergence_state_validity";
         outcome_rubric_validity: "outcome_rubric_validity";
+        projects_base_misconfig: "projects_base_misconfig";
     }>;
     autoConfirm: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
     mode: z.ZodDefault<z.ZodOptional<z.ZodEnum<{
-        dry_run: "dry_run";
         execute: "execute";
+        dry_run: "dry_run";
     }>>>;
 }, z.core.$strip>;
 export type RemediateInput = z.infer<typeof RemediateInputSchema>;
