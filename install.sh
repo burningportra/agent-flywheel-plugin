@@ -51,10 +51,55 @@ export LOG_FILE NONINTERACTIVE
 source "$SCRIPT_DIR/install/lib/log.sh"
 # shellcheck source=install/lib/detect.sh
 source "$SCRIPT_DIR/install/lib/detect.sh"
+# shellcheck source=install/lib/install-tool.sh
+source "$SCRIPT_DIR/install/lib/install-tool.sh"
 
 log "install.sh started: $(date -u +%FT%TZ)"
 log "flags: noninteractive=$NONINTERACTIVE skip_launch=$SKIP_LAUNCH skip_mcp_register=$SKIP_MCP_REGISTER skip_agent_mail=$SKIP_AGENT_MAIL"
-log "host: os=$(detect_os) arch=$(detect_arch) pkg=$(detect_pkg)"
 
-# Subsequent steps (CC + tools, agent-mail, finalize) land in T2.2 / T2.3.
-ok "install.sh skeleton complete (T2.1)"
+PKG="$(detect_pkg)"
+export PKG
+log "host: os=$(detect_os) arch=$(detect_arch) pkg=$PKG"
+
+# Claude Code
+if ! command -v claude >/dev/null 2>&1; then
+  if prompt "Claude Code not found. Install via $PKG?"; then
+    install_claude_code || err "Claude Code install failed (continuing)"
+  else
+    log "Skipping Claude Code install"
+  fi
+else
+  ok "Claude Code already installed"
+fi
+
+# Required CLIs
+MISSING=()
+for tool in br bv cm dcg ntm; do
+  command -v "$tool" >/dev/null 2>&1 || MISSING+=("$tool")
+done
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  log "Missing tools: ${MISSING[*]}"
+  if prompt "Install ${#MISSING[@]} tool(s) (${MISSING[*]}) via $PKG?"; then
+    for tool in "${MISSING[@]}"; do
+      install_tool "$tool" || err "Failed to install $tool (continuing)"
+    done
+  else
+    log "Skipping required-CLI install"
+  fi
+else
+  ok "All required CLIs (br/bv/cm/dcg/ntm) already on PATH"
+fi
+
+# Re-source shell config so brew installs land on PATH for the rest of the script.
+if [ -f "$HOME/.zshrc" ]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.zshrc" 2>/dev/null || true
+fi
+if [ -f "$HOME/.bashrc" ]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.bashrc" 2>/dev/null || true
+fi
+
+# Subsequent steps (agent-mail, Node, MCP register, launch) land in T2.3.
+ok "install.sh through T2.2 complete"
