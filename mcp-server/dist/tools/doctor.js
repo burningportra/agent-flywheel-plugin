@@ -105,7 +105,6 @@ const VERSION_DRIFT_HINT = 'Run `/flywheel-setup` (or `cd mcp-server && npm run 
 const OUTCOME_RUBRIC_GREEN_HINT = 'No action needed; continue the flywheel.';
 const OUTCOME_RUBRIC_YELLOW_HINT = 'Open the rubric gate and choose Re-edit or Regenerate before creating beads.';
 const OUTCOME_RUBRIC_RED_HINT = 'Regenerate the rubric now; an empty criteria list cannot grade the cycle.';
-const PROJECTS_BASE_MISCONFIG_HINT = 'Symlink this repo into the NTM projects_base so multi-agent panes resolve the same workdir: `ln -s "<cwd>" "<projects_base>/<basename(cwd)>"`. Or call `flywheel_remediate({ checkName: "projects_base_misconfig", mode: "execute", autoConfirm: true })`.';
 /**
  * Run all 11 health checks in parallel. Never throws.
  *

@@ -1,7 +1,7 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.15.0 ▓▒░
+░▒▓ CLAUDE // AGENT-FLYWHEEL v3.16.0 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code.**
