@@ -57,6 +57,8 @@ source "$SCRIPT_DIR/install/lib/install-tool.sh"
 log "install.sh started: $(date -u +%FT%TZ)"
 log "flags: noninteractive=$NONINTERACTIVE skip_launch=$SKIP_LAUNCH skip_mcp_register=$SKIP_MCP_REGISTER skip_agent_mail=$SKIP_AGENT_MAIL"
 
+# Step 1: OS detect — establish host platform + package manager for the rest
+# of the script. Mirrors install.ps1 Step 1.
 PKG="$(detect_pkg)"
 export PKG
 log "host: os=$(detect_os) arch=$(detect_arch) pkg=$PKG"
