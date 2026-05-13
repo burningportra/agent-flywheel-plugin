@@ -8,6 +8,7 @@ import { agentMailLivenessHandler } from './remediations/agent_mail_liveness.js'
 import { orphanedWorktreesHandler } from './remediations/orphaned_worktrees.js';
 import { checkpointValidityHandler } from './remediations/checkpoint_validity.js';
 import { projectsBaseMisconfigHandler } from './remediations/projects_base_misconfig.js';
+import { orphanTenderDaemonsHandler } from './remediations/orphan_tender_daemons.js';
 import { brBinaryHandler, bvBinaryHandler, ntmBinaryHandler, cmBinaryHandler, } from './remediations/cli_binary.js';
 const OUTPUT_CAP_BYTES = 4 * 1024;
 export const RemediateInputSchema = z.object({
@@ -43,9 +44,11 @@ export const REMEDIATION_REGISTRY = {
     codex_config_compat: null,
     rescues_last_30d: null,
     npm_marketplace_version_drift: null,
-    // n3a — auto-remediation not offered: killing tender-daemons is destructive
-    // and operator-driven (see hint with explicit `kill -TERM <pid>`).
-    orphan_tender_daemons: null,
+    // T6.2 (v3.16.0 noob-onboarding) — escalates SIGTERM → 1s grace → SIGKILL
+    // for each orphan tender-daemon PID surfaced by the n3a probe. Still
+    // destructive (process state is lost), so the dispatcher requires
+    // autoConfirm:true in execute mode. Skip route remains the SKILL.md hint.
+    orphan_tender_daemons: orphanTenderDaemonsHandler,
     // B-AC2 — convergence state corruption is operator-driven recovery: regen the
     // ring buffer or delete the file. Auto-remediation could mask scoreVersion
     // drift across releases (the very thing the score_version_mismatch error
