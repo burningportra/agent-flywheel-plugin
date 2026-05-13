@@ -116,7 +116,47 @@ Print:
 >
 > Next: run `/agent-flywheel:start` anytime to enter the regular menu — or run `/agent-flywheel:flywheel-doctor` to verify everything is wired up."
 
-Then offer a rollback path (handled by T5.4): an `AskUserQuestion` that lets the operator either keep the tutorial commit or undo it via `git reset --hard HEAD~1` (only safe because the tutorial just made the commit).
+Then offer the rollback gate below.
+
+## Step 7b — Rollback option (T5.4)
+
+```
+AskUserQuestion(questions: [{
+  question: "Tour complete. Keep the CHANGELOG entry + commit, or roll back?",
+  header: "Cleanup",
+  options: [
+    { label: "Keep (Recommended)", description: "Leave CHANGELOG.md and the commit; real work, ship it" },
+    { label: "Roll back",          description: "Reverse the tutorial commit, remove CHANGELOG entry, delete the tutorial plan + bead — repo back to pre-tour state" },
+    { label: "Keep CHANGELOG, drop plan/bead", description: "Preserve the CHANGELOG addition but remove docs/plans/<date>-tutorial.md and the tutorial bead row, then amend the commit message" }
+  ],
+  multiSelect: false
+}])
+```
+
+Route the choice:
+
+- **Keep** → no-op. Jump to `skills/start/SKILL.md` Step 0d main menu (the operator now sees the regular menu with the tutorial commit on `HEAD`).
+- **Roll back** → in a single Bash block (atomic on success, abort on first non-zero):
+  ```bash
+  git reset --soft HEAD~ \
+    && git restore --staged CHANGELOG.md docs/plans/<YYYY-MM-DD>-tutorial.md \
+    && git checkout HEAD -- CHANGELOG.md 2>/dev/null || rm -f CHANGELOG.md \
+    && rm -f docs/plans/<YYYY-MM-DD>-tutorial.md \
+    && br delete <TUTORIAL_BEAD_ID>
+  ```
+  If `CHANGELOG.md` existed before the tutorial (we prepended), `git checkout HEAD -- CHANGELOG.md` restores the pre-tour content; if it didn't exist, the file is removed entirely. Then jump to Step 0d.
+- **Keep CHANGELOG, drop plan/bead** → amend the commit to keep only the CHANGELOG change:
+  ```bash
+  git reset --soft HEAD~ \
+    && git restore --staged docs/plans/<YYYY-MM-DD>-tutorial.md \
+    && rm -f docs/plans/<YYYY-MM-DD>-tutorial.md \
+    && br delete <TUTORIAL_BEAD_ID> \
+    && git add CHANGELOG.md \
+    && git commit -m "docs: CHANGELOG entry (post-tutorial cleanup)"
+  ```
+  Then jump to Step 0d.
+
+All three routes leave the working tree in a clean, well-defined state — every command above runs only against artifacts the tutorial just created (the CHANGELOG diff, the dated plan file, the single tutorial bead), so a rollback cannot accidentally clobber a parallel agent's work.
 
 ## Failure handling
 
