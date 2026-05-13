@@ -91,15 +91,48 @@ else
   ok "All required CLIs (br/bv/cm/dcg/ntm) already on PATH"
 fi
 
-# Re-source shell config so brew installs land on PATH for the rest of the script.
-if [ -f "$HOME/.zshrc" ]; then
-  # shellcheck disable=SC1091
-  source "$HOME/.zshrc" 2>/dev/null || true
-fi
-if [ -f "$HOME/.bashrc" ]; then
-  # shellcheck disable=SC1091
-  source "$HOME/.bashrc" 2>/dev/null || true
+# Re-evaluate brew shellenv into the current process so freshly-installed
+# brew formulas land on PATH for the rest of install.sh. We avoid sourcing
+# the user's full .zshrc / .bashrc — those may contain shell-specific syntax
+# (zsh under bash) or interactive-only commands that break under `set -e`.
+if command -v brew >/dev/null 2>&1; then
+  eval "$(brew shellenv 2>/dev/null)" || true
 fi
 
-# Subsequent steps (agent-mail, Node, MCP register, launch) land in T2.3.
-ok "install.sh through T2.2 complete"
+# shellcheck source=install/lib/agent-mail.sh
+source "$SCRIPT_DIR/install/lib/agent-mail.sh"
+
+# Node 20+ — required for the MCP server and the Claude Code plugin.
+node_ok || err "Node 20+ required — install with: nvm install 20"
+
+# agent-mail HTTP service.
+if [ "$SKIP_AGENT_MAIL" -eq 0 ]; then
+  if prompt "Start agent-mail HTTP service on :8765?"; then
+    start_agent_mail || err "agent-mail failed to start (continuing — see log)"
+  else
+    log "Skipping agent-mail start (--skip-agent-mail or declined)"
+  fi
+else
+  log "Skipping agent-mail start (--skip-agent-mail)"
+fi
+
+# Final handoff: print the three CC commands the user runs next.
+cat <<'EOF'
+
+✓ Bootstrap complete. Now inside Claude Code, run:
+
+  /plugin marketplace add burningportra/agent-flywheel-plugin
+  /plugin install agent-flywheel@agent-flywheel
+  /agent-flywheel:flywheel-setup
+
+EOF
+
+# Optional Claude Code launch. Implicitly skipped in --noninteractive mode
+# (CI must never drop into a TUI even if no --skip-launch was passed).
+if [ "$SKIP_LAUNCH" -eq 0 ] && [ "$NONINTERACTIVE" -eq 0 ] && command -v claude >/dev/null 2>&1; then
+  if prompt "Launch Claude Code now?"; then
+    claude
+  fi
+fi
+
+ok "install.sh complete"
