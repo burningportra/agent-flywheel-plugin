@@ -9,6 +9,7 @@ import { mcpConnectivityHandler } from './remediations/mcp_connectivity.js';
 import { agentMailLivenessHandler } from './remediations/agent_mail_liveness.js';
 import { orphanedWorktreesHandler } from './remediations/orphaned_worktrees.js';
 import { checkpointValidityHandler } from './remediations/checkpoint_validity.js';
+import { projectsBaseMisconfigHandler } from './remediations/projects_base_misconfig.js';
 import {
   brBinaryHandler,
   bvBinaryHandler,
@@ -100,6 +101,11 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   // overwrite operator edits (`source: 'edited'`); the doctor hint already
   // points at the right gate.
   outcome_rubric_validity: null,
+  // T6.1 (v3.16.0 noob-onboarding) — `ntm` is installed and configured with
+  // a projects_base, but `<projects_base>/<basename(cwd)>` is missing. The
+  // handler reads the projects_base from `ntm config show` then issues a
+  // single `ln -s`. Reversible (a symlink that can be removed).
+  projects_base_misconfig: projectsBaseMisconfigHandler,
 };
 
 export function assertExhaustive(_: never): never {
