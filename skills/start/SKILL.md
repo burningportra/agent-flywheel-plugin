@@ -181,6 +181,30 @@ If `DOCTOR_REPORT.overall === "red"`, under the banner list every failing check 
 >
 > Run `/agent-flywheel:flywheel-doctor` for the full report and remediation steps.
 
+#### Pre-flight issue surfacing (T4.1)
+
+Call `renderPreflightBanner(DOCTOR_REPORT)` (exported from `mcp-server/src/preflight.ts`). It returns `null` when none of the 6 critical checks (`br_binary`, `bv_binary`, `cm_binary`, `agent_mail_liveness`, `mcp_connectivity`, `projects_base_misconfig`) is non-green — in that case skip this gate entirely.
+
+When it returns a string, print the block above the menu and then surface the AskUserQuestion gate so the operator can route to setup, continue with degraded features, or inspect the details before deciding:
+
+```
+AskUserQuestion(questions: [{
+  question: "Pre-flight issues detected. How to proceed?",
+  header: "Pre-flight",
+  options: [
+    { label: "Run setup now (Recommended)", description: "Launches /agent-flywheel:flywheel-setup which detects + batches + verifies" },
+    { label: "Continue with degraded",      description: "Skip setup, fall through to the menu — features tied to the failing checks will degrade" },
+    { label: "Show me what's degraded",     description: "Print the doctor report row by row, then re-prompt this question" }
+  ],
+  multiSelect: false
+}])
+```
+
+Route the choice:
+- **Run setup now** → invoke `/agent-flywheel:flywheel-setup` and re-enter Step 0 from the top after it returns.
+- **Continue with degraded** → fall through to the welcome banner + main menu unchanged; downstream gates may surface the same checks again.
+- **Show me what's degraded** → print the full `DOCTOR_REPORT.checks` table verbatim then re-prompt this same gate (so the operator can decide with full context).
+
 If CASS returned learnings from prior sessions, display them below the banner:
 
 > **From prior sessions:**
