@@ -122,20 +122,50 @@ Earlier highlights: `flywheel_doctor` (v3.4) · bead templates with effort tiers
 
 ---
 
-## Installation
+## Install
 
-### Recommended: Claude Code plugin marketplace
+**macOS / Linux:**
 
 ```bash
-/plugin marketplace add burningportra/agent-flywheel-plugin
-/plugin install agent-flywheel@agent-flywheel
-/reload-plugins
-/agent-flywheel:flywheel-setup
+curl -sSL https://raw.githubusercontent.com/burningportra/agent-flywheel-plugin/main/install.sh | bash
 ```
 
-`/flywheel-setup` detects missing CLIs and offers a one-shot install. If a lot is missing it can install the full ACFS stack via Homebrew.
+**Windows (PowerShell 7):**
 
-### From source (contributors)
+```powershell
+iwr -useb https://raw.githubusercontent.com/burningportra/agent-flywheel-plugin/main/install.ps1 | iex
+```
+
+**Verify the script before running** (recommended) — SHA-256 of the v3.16.0 release:
+
+- `install.sh` → `1ef009cdfc67edee0629d8edd6d7adad48d75e1440a9e298244a56cbf706153e`
+- `install.ps1` → `0e3883868133f7095477ffe96ede772c8e43604c2dd9b6b87089537f839e87db`
+
+The installer detects your OS + package manager, installs Claude Code + the required CLIs (`br`, `bv`, `cm`, `dcg`, `ntm`), starts the `agent-mail` HTTP service on `:8765`, and prints the three Claude Code commands you run to finish setup. Flags: `--noninteractive` (CI), `--skip-launch`, `--skip-mcp-register`, `--skip-agent-mail`. Log lands at `~/.agent-flywheel/install.log`.
+
+### First time?
+
+After install, run `/agent-flywheel:start` — the flywheel detects fresh projects and offers a 5-min guided tour that runs a real micro-bead end-to-end (scan → plan → bead → implement → commit) so you see the loop fire once on real work. The tour is skippable and reversible (`Roll back` option at the end undoes the commit + removes the tutorial bead).
+
+<details>
+<summary>Manual install (no curl|bash)</summary>
+
+1. **Claude Code:** `brew install anthropic/cc/claude` or `npm install -g @anthropic-ai/claude-cli`
+2. **Required CLIs:** `brew install burningportra/tap/{br,bv,cm,dcg,ntm}`
+3. **agent-mail:** `brew install burningportra/tap/agent-mail` then `nohup am serve-http --port 8765 &`
+4. **Inside Claude Code:**
+   ```
+   /plugin marketplace add burningportra/agent-flywheel-plugin
+   /plugin install agent-flywheel@agent-flywheel
+   /agent-flywheel:flywheel-setup
+   ```
+
+`/agent-flywheel:flywheel-setup` runs the same detection + batch-install flow the curl|bash installer ends with, so you can pick this path if you prefer to read every step before it executes.
+
+</details>
+
+<details>
+<summary>From source (contributors)</summary>
 
 ```bash
 git clone https://github.com/burningportra/agent-flywheel-plugin.git
@@ -147,25 +177,21 @@ claude --plugin-dir .
 
 After editing `mcp-server/src/`, rebuild with `npm run build --prefix mcp-server` and commit the updated `mcp-server/dist/` in the same PR. The `dist-drift` CI job enforces this.
 
-### Required CLIs
+</details>
 
-| CLI | Purpose | Source |
-|---|---|---|
-| `br` | Bead tracker (issue graph) | [Dicklesworthstone/beads_rust](https://github.com/Dicklesworthstone/beads_rust) |
-| `bv` | Bead visualizer + dependency triage | [Dicklesworthstone/beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) |
-| `agent-mail` | Multi-agent coordination over HTTP | [Dicklesworthstone/mcp_agent_mail_rust](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) (Rust port — primary; [Python build](https://github.com/Dicklesworthstone/mcp_agent_mail) still works on the same transport) |
+### What gets installed
 
-### Recommended CLIs
+| Tier | CLI | Purpose | Source |
+|---|---|---|---|
+| Required | `br` | Bead tracker (issue graph) | [Dicklesworthstone/beads_rust](https://github.com/Dicklesworthstone/beads_rust) |
+| Required | `bv` | Bead visualizer + dependency triage | [Dicklesworthstone/beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) |
+| Required | `agent-mail` | Multi-agent coordination over HTTP | [Dicklesworthstone/mcp_agent_mail_rust](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) (Rust port — primary; [Python build](https://github.com/Dicklesworthstone/mcp_agent_mail) still works on the same transport) |
+| Recommended | `ntm` | Parallel tmux-pane orchestration (tmux-based — Linux/macOS/WSL2 only) | [Dicklesworthstone/ntm](https://github.com/Dicklesworthstone/ntm) |
+| Recommended | `dcg` | Destructive-command guard | [Dicklesworthstone/destructive_command_guard](https://github.com/Dicklesworthstone/destructive_command_guard) |
+| Recommended | `cass` | Session search across past agent runs | [Dicklesworthstone/coding_agent_session_search](https://github.com/Dicklesworthstone/coding_agent_session_search) |
+| Recommended | `cm` | Persistent CASS memory | [Dicklesworthstone/cass_memory_system](https://github.com/Dicklesworthstone/cass_memory_system) |
 
-| CLI | Purpose | Source |
-|---|---|---|
-| `ntm` | Parallel tmux-pane orchestration | [Dicklesworthstone/ntm](https://github.com/Dicklesworthstone/ntm) |
-| `dcg` | Destructive-command guard | [Dicklesworthstone/destructive_command_guard](https://github.com/Dicklesworthstone/destructive_command_guard) |
-| `cass` | Session search across past agent runs | [Dicklesworthstone/coding_agent_session_search](https://github.com/Dicklesworthstone/coding_agent_session_search) |
-| `cm` | Persistent CASS memory | [Dicklesworthstone/cass_memory_system](https://github.com/Dicklesworthstone/cass_memory_system) |
-| `jsm` | Skill-marketplace manager | (used by sibling skills) |
-
-Prerequisites: [Claude Code](https://github.com/anthropics/claude-code) (latest) and Node.js ≥ 18.18.
+Prerequisites: [Claude Code](https://github.com/anthropics/claude-code) (latest) and Node.js ≥ 20. On native Windows, `ntm` is unavailable (tmux-only) — the installer surfaces a WSL2 recommendation for full parallel-swarm features; the auto-swarm path falls back to sequential `Agent()` dispatch otherwise.
 
 ---
 
