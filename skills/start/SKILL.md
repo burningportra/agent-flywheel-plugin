@@ -147,6 +147,8 @@ Gather context silently (do NOT display raw output yet). Run checks 1-8 in paral
 
 8. **Doctor smoke check**: Call `flywheel_doctor` with `cwd`. Cache the returned `DoctorReport` as `DOCTOR_REPORT` for use in the welcome banner (step 0c). If the call fails outright (MCP tool missing, tool error), set `DOCTOR_REPORT = null` and proceed — doctor is advisory, not blocking. If `DOCTOR_REPORT.overall === "red"`, the banner will mark the session as warning-state and surface the failing check names; the user is not blocked, but they should consider running `/agent-flywheel:flywheel-doctor` before continuing.
 
+9. **First-run detection (T5.1)**: Call `isFirstRun({ cwd, brList, cassSearch })` (exported from `mcp-server/src/first-run.ts`). Wire `brList` to `br list --json` and `cassSearch` to `cm search --json`. Cache the boolean as `IS_FIRST_RUN`. True only when **all five** signals are absent: no `.pi-flywheel/checkpoint.json`, no beads, no `docs/plans/*.md`, no `.pi-orchestrator/`, no CASS entries for this cwd. The tutorial-bead offer in Step 0d depends on this; if any signal fires, suppress the tutorial and route to the appropriate session-resume / open-beads menu instead.
+
 ### 0c. Display the welcome banner
 
 Display a single cohesive welcome message. Example:
