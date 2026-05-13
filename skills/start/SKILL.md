@@ -257,6 +257,8 @@ More entry points (type the label into "Other" or run the slash command directly
   • Research repo       — paste a GitHub URL → /flywheel-research
   • Audit               — /agent-flywheel:flywheel-audit
   • Setup               — /agent-flywheel:flywheel-setup
+
+Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
 
 Then call:
@@ -299,6 +301,8 @@ More entry points (type the label into "Other" or run the slash command directly
   • Research repo       — paste a GitHub URL → /flywheel-research
   • Audit               — /agent-flywheel:flywheel-audit
   • Setup               — /agent-flywheel:flywheel-setup
+
+Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
 
 Then call:
@@ -343,6 +347,8 @@ More entry points (type the label into "Other" or run the slash command directly
   • Setup               — /agent-flywheel:flywheel-setup
   • Quick fix           — /agent-flywheel:flywheel-fix
   • Auto-swarm          — in-flight resume; only meaningful with active beads
+
+Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
 
 Then call:

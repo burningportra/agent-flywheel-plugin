@@ -1,0 +1,2 @@
+export declare const GLOSSARY_LINE = "Glossary: bead=atomic task \u00B7 plan=grouped beads \u00B7 flywheel=full loop \u00B7 NTM=tmux multi-agent \u00B7 agent-mail=inter-agent inbox \u00B7 MCP=Model Context Protocol";
+//# sourceMappingURL=glossary.d.ts.map

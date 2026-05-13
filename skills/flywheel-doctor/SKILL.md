@@ -58,6 +58,12 @@ Render the `DoctorReport` envelope as:
 
 Glyph mapping: `green → [OK]`, `yellow → [WARN]`, `red → [FAIL]`. If `partial: true`, prefix the header with `[PARTIAL — sweep budget exhausted]` and list only the checks that finished.
 
+Append the glossary footer (single source of truth in `mcp-server/src/glossary.ts` — `GLOSSARY_LINE`) immediately below the report so new operators have one-line context for the core vocabulary:
+
+```
+Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
+```
+
 ## Inline remediation
 
 After rendering the report, for **each** failing check (yellow or red severity), immediately present a prompt **inline** — spatially adjacent to that check's row — before moving to the next failing check.
