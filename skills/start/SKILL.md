@@ -351,10 +351,11 @@ AskUserQuestion(questions: [{
 
 > **Menu visibility rule (MANDATORY).** `AskUserQuestion` caps at 4 labeled options. Before calling it, print the **full menu** (all top-level + sub-options the routing table can reach in this state) as a visible markdown block so the user can see every entry point at load. Do NOT hide options behind an "Other" sub-menu — surface them. The 4 options inside `AskUserQuestion` are the most-common entry points; the extras (Simplify pass, Duel, Audit, Setup, Auto-swarm, Quick fix) are reachable via the printed block by typing the label into "Other" or by invoking the matching `/flywheel-*` slash command directly. Apply this same rule to the previous-session-exists and open-beads-exist menus above.
 
-Print this block first:
+Print this block first (the `• Take the 5-min tour` row appears ONLY when `IS_FIRST_RUN === true` per Step 0b check 9):
 
 ```
 Primary entry points:
+  • Take the 5-min tour — first time? guided tutorial-bead walkthrough  [only when IS_FIRST_RUN]
   • Set a goal          — type your goal in Other; runs /brainstorming if ambiguous, then flywheel_select
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps straight to bead creation
   • Scan & discover     — profile the repo and surface improvement ideas
@@ -377,27 +378,31 @@ More entry points (type the label into "Other" or run the slash command directly
 Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
 
-Then call:
+Then call (when `IS_FIRST_RUN === true`, **substitute** the "Take the 5-min tour" row for whichever existing option would otherwise have been Recommended — keep the 4-option cap):
 
 ```
 AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
+    // IS_FIRST_RUN === true: this row replaces the lowest-priority Recommended candidate
+    { label: "Take the 5-min tour (Recommended)", description: "Guided tour — runs a real micro-bead end-to-end so you see scan → plan → bead → implement → commit fire once. See skills/start/_tutorial_bead.md" },
     { label: "Set a goal", description: "Type the goal directly in Other — runs /brainstorming when ambiguous, then flywheel_select. The most direct path when you know what you want to build" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps. Skips brainstorming + scan" },
-    { label: "Scan & discover", description: "Profile the repo and find improvement opportunities (greenfield default)" },
-    { label: "Reality check", description: "Step back and gap-check actual implementation against AGENTS.md/README.md/plan vision — exhaustive 15-20 min /reality-check-for-project pass, optionally convert gaps to beads, optionally run swarm. See skills/start/_reality_check.md" }
+    { label: "Scan & discover", description: "Profile the repo and find improvement opportunities (greenfield default)" }
   ],
   multiSelect: false
 }])
 ```
 
+When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-option set: `Set a goal`, `Pick up existing plan`, `Scan & discover`, `Reality check`.
+
 **Conditional Recommendation (fresh-start menu only).** Pick the `(Recommended)` row dynamically from this priority chain:
 
-1. **`RECENT_PLAN_PATHS.length > 0`** → "Pick up existing plan (Recommended)" — a ready-to-go plan is the strongest available signal; the operator almost always wants to pick it up.
-2. **`HAS_VISION_DOCS === true`** (AGENTS.md or README.md at root, detected by Glob in 0b) → "Reality check (Recommended)" — vision docs exist; gap-check before adding more.
-3. **Otherwise (greenfield)** → "Scan & discover (Recommended)" — no docs, no plans; profile first.
+1. **`IS_FIRST_RUN === true`** → "Take the 5-min tour (Recommended)" — first-run trumps every other signal; the operator hasn't seen the loop yet and the tour exists specifically for this case (T5.1+T5.2).
+2. **`RECENT_PLAN_PATHS.length > 0`** → "Pick up existing plan (Recommended)" — a ready-to-go plan is the strongest available signal once first-run is past; the operator almost always wants to pick it up.
+3. **`HAS_VISION_DOCS === true`** (AGENTS.md or README.md at root, detected by Glob in 0b) → "Reality check (Recommended)" — vision docs exist; gap-check before adding more.
+4. **Otherwise (greenfield)** → "Scan & discover (Recommended)" — no docs, no plans; profile first.
 
 "Set a goal" is never auto-Recommended on the fresh-start menu; if the operator already knows their goal, they can pick it directly. This avoids the bias toward "type something" when the project already has structure to lean on.
 
@@ -408,6 +413,7 @@ AskUserQuestion(questions: [{
 | Choice | Action |
 |--------|--------|
 | **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 pi + 2 cc; fall back to 4 cod only if Pi is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
+| **Take the 5-min tour** | Read `skills/start/_tutorial_bead.md` end-to-end and execute it verbatim — the 7 sections drive the operator through scan → plan → bead → implement → commit on a real trivial goal so they see the loop fire once. The skill returns to the Step 0d main menu on completion (or to the rollback gate handled by T5.4 on the wrap-up step). Only surface this route when `IS_FIRST_RUN === true` (Step 0b check 9). |
 | **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Research repo / Simplify pass / Duel / Audit / Setup / Quick fix / Auto-swarm`. Open-beads-exist: `Reality check / Duel / New goal / Simplify pass / Research repo / Audit / Setup`. Previous-session-exists: `Work on beads / New goal / Reality check / Duel / Simplify pass / Research repo / Audit / Setup`. **Special handling:** if the typed text starts with a path-like token (e.g. `docs/plans/`, ends in `.md`, or matches one of the surfaced `RECENT_PLAN_PATHS`), route as **Pick up existing plan** with the typed text as `<plan-path>`. Otherwise route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches AND it isn't path-shaped, treat the free-text as a custom goal and route to **Set a goal** with the typed text as `<goal>`. |
 | **Simplify pass** (a.k.a. Deslop pass) | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the canonical skill `/simplify-and-refactor-code-isomorphically` is the engine of every mode, with `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm` orchestrating around it. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove isomorphism preservation. |
 | **Duel** | Invoke `/agent-flywheel:flywheel-duel` (state-aware routing — picks `mode=ideas` for fresh starts, `mode=architecture` when a goal is selected but no plan exists, `mode=reliability\|security` when reviewing risky open beads). Pre-flight (MANDATORY): run `which ntm` + `which claude codex gemini 2>/dev/null` (real binaries behind the `cc/cod/gmi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) — need ntm + ≥2 of {claude, codex, gemini}; on failure, emit a one-line warning and surface a sub-menu offering `Deep (idea-wizard) / Triangulated / Cancel`. After the duel completes, parse `DUELING_WIZARDS_REPORT.md`, stamp `state.planSource = "duel"` (or the discovery equivalent so `_beads.md` Provenance block fires), and continue into the standard goal-selection or plan-approval flow per current phase. Do NOT skip the alignment check at Step 5.55 — duels surface contested decisions the alignment check exists to surface. |
