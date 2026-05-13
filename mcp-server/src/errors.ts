@@ -75,6 +75,23 @@ export const FLYWHEEL_ERROR_CODES = [
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
 export type FlywheelErrorCode = z.infer<typeof FlywheelErrorCodeSchema>;
 
+/**
+ * T1.2 (v3.16.0 noob-onboarding) — type-level enforcement that every
+ * FlywheelErrorCode carries both a narrative `hint` and an imperative,
+ * paste-ready `tryThis`. The data itself lives in `errors-try-this.ts`
+ * as `ERROR_META: Record<FlywheelErrorCode, ErrorMeta>`; a missing key
+ * (compile-time) or empty string (runtime test + verify-error-meta.js
+ * build gate) fails the build.
+ *
+ * Field naming: snake_case (`try_this`) is preserved on the wire
+ * envelope (`FlywheelToolError`); camelCase (`tryThis`) is the
+ * internal-only meta shape consumed by `format-error.ts` (T1.3).
+ */
+export type ErrorMeta = {
+  readonly hint: string;
+  readonly tryThis: string;
+};
+
 export const FlywheelToolErrorSchema = z.object({
   code: FlywheelErrorCodeSchema,
   message: z.string(),

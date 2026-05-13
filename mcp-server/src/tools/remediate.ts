@@ -9,6 +9,8 @@ import { mcpConnectivityHandler } from './remediations/mcp_connectivity.js';
 import { agentMailLivenessHandler } from './remediations/agent_mail_liveness.js';
 import { orphanedWorktreesHandler } from './remediations/orphaned_worktrees.js';
 import { checkpointValidityHandler } from './remediations/checkpoint_validity.js';
+import { projectsBaseMisconfigHandler } from './remediations/projects_base_misconfig.js';
+import { orphanTenderDaemonsHandler } from './remediations/orphan_tender_daemons.js';
 import {
   brBinaryHandler,
   bvBinaryHandler,
@@ -87,9 +89,11 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   codex_config_compat: null,
   rescues_last_30d: null,
   npm_marketplace_version_drift: null,
-  // n3a — auto-remediation not offered: killing tender-daemons is destructive
-  // and operator-driven (see hint with explicit `kill -TERM <pid>`).
-  orphan_tender_daemons: null,
+  // T6.2 (v3.16.0 noob-onboarding) — escalates SIGTERM → 1s grace → SIGKILL
+  // for each orphan tender-daemon PID surfaced by the n3a probe. Still
+  // destructive (process state is lost), so the dispatcher requires
+  // autoConfirm:true in execute mode. Skip route remains the SKILL.md hint.
+  orphan_tender_daemons: orphanTenderDaemonsHandler,
   // B-AC2 — convergence state corruption is operator-driven recovery: regen the
   // ring buffer or delete the file. Auto-remediation could mask scoreVersion
   // drift across releases (the very thing the score_version_mismatch error
@@ -100,6 +104,11 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   // overwrite operator edits (`source: 'edited'`); the doctor hint already
   // points at the right gate.
   outcome_rubric_validity: null,
+  // T6.1 (v3.16.0 noob-onboarding) — `ntm` is installed and configured with
+  // a projects_base, but `<projects_base>/<basename(cwd)>` is missing. The
+  // handler reads the projects_base from `ntm config show` then issues a
+  // single `ln -s`. Reversible (a symlink that can be removed).
+  projects_base_misconfig: projectsBaseMisconfigHandler,
 };
 
 export function assertExhaustive(_: never): never {

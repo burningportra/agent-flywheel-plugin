@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.16.0] - 2026-05-13
+
+The noob-onboarding release. A first-time operator should now be able to get from `git clone` (or a curl one-liner) to a green `/agent-flywheel:start` in under five minutes, on macOS, Linux, or Windows, with zero hand-holding from the project owner.
+
+### Added
+
+- **`install.sh` (macOS/Linux) and `install.ps1` (Windows PowerShell 7) bootstrappers.** Detect OS + package manager, install Claude Code + the required CLIs (`br`/`bv`/`cm`/`dcg`/`ntm`), start `agent-mail serve-http`, and print the three Claude Code commands to finish setup. Flags: `--noninteractive` (CI), `--skip-launch`, `--skip-mcp-register`, `--skip-agent-mail`. Log lands at `~/.agent-flywheel/install.log`. SHA-256 published in README so users can verify before piping to bash. (T2.1–T2.5)
+- **GitHub Actions install matrix.** `.github/workflows/install.yml` runs bats + smoke + idempotency on macos-latest, ubuntu-22.04, fresh debian:12 Docker, plus Pester + smoke + idempotency on windows-latest. Each leg re-invokes the installer to assert a second run is a no-op. (T2.5)
+- **`/flywheel-setup` parallel pre-flight + single-batch consent.** `detectInstallState({ cwd })` runs every probe in parallel via `Promise.all` and returns an `InstallPlan` partitioned into 5 buckets (install / register / start / configure / skip). `renderPlan()` stringifies it; `executeBatch(plan, exec)` walks the plan in fixed order with no short-circuit on failure so the operator can retry/skip/abort per step. `performSymlink` for projects_base; `registerMcpAtomic` for tmp+rename merge of `~/.claude.json` (preserves existing `mcpServers` keys). `runPostFlight({ cwd, doctor })` invokes `flywheel_doctor` exactly once and renders a green/yellow/red summary. (T3.1–T3.4)
+- **Pre-flight banner on `/agent-flywheel:start`.** `renderPreflightBanner` (`mcp-server/src/preflight.ts`) surfaces missing-deps inline above the menu when any of 6 critical checks (`br_binary`, `bv_binary`, `cm_binary`, `agent_mail_liveness`, `mcp_connectivity`, `projects_base_misconfig`) is non-green; falls back through tryThis → hint → "/flywheel-doctor" pointer. Returns null on all-green so Step 0c skips the gate entirely. (T4.1)
+- **Inline glossary footer.** Single source of truth in `mcp-server/src/glossary.ts` (`GLOSSARY_LINE`), printed below all three Step 0d main-menu variants, the doctor report table render, and the setup post-flight summary. (T4.2)
+- **First-run detection + tutorial-bead skill.** `isFirstRun({ cwd, brList, cassSearch })` (Step 0b check 9) returns true only when all 5 signals are absent (no checkpoint, no beads, no plans, no .pi-orchestrator, no CASS entries). When IS_FIRST_RUN, Step 0d substitutes "Take the 5-min tour (Recommended)" into the AskUserQuestion and routes to `skills/start/_tutorial_bead.md` which walks the operator through scan → plan → bead → implement → commit on a trivial CHANGELOG goal. End-of-tour rollback gate offers Keep / Roll back / Keep CHANGELOG only. (T5.1–T5.4)
+- **Windows-native `Agent()` fallback in `_inflight_prompt.md`.** When `process.platform === 'win32'` AND `NTM_AVAILABLE === false`, the swarm dispatches serially via `Agent()` instead of parallel ntm panes; the looper drops to one-shot per Agent return. WSL2 is surfaced as the recommended swarm host. (T5.5)
+- **Doctor inline-remediation for `projects_base_misconfig` and `orphan_tender_daemons`.** Both follow the buildPlan/execute/verifyProbe pattern, dry-run/execute/skip routing. `projects_base_misconfig` reads `ntm config show`, emits `ln -s <cwd> <projects_base>/<basename(cwd)>`, idempotent on the already-symlinked case. `orphan_tender_daemons` escalates SIGTERM → 1s grace → SIGKILL via shared `mcp-server/src/platform.ts` wrappers; verifies with `process.kill(pid, 0)`. (T6.1, T6.2)
+
+### Changed
+
+- **README install section rewritten.** Curl|bash + iwr|iex one-liners as the primary path; manual install and "From source" each collapsed into `<details>` blocks. New "First time?" pointer to the tutorial-bead. CLI table consolidated to one 3-column tier (Required / Recommended). Prereq bumped to Node ≥ 20 to match the installer's `node_ok` gate. (T7.1)
+- **Renderable error envelope.** `renderError(errorResult)` (T1.3) centralizes the inline rendering of `hint` + `tryThis` so every call site surfaces the same shape. `DEFAULT_TRY_THIS` now exhaustively typed against `FlywheelErrorCode` via the new `ERROR_META: Record<FlywheelErrorCode, ErrorMeta>` (T1.2); CI gate `verify:error-meta` fails the build if any code is missing either field (T1.1).
+
+### Compatibility
+
+- No breaking changes. Existing installs with checkpoint + beads are untouched.
+- `ERROR_META` subsumes `DEFAULT_HINTS` and `DEFAULT_TRY_THIS`; the two map-style exports stay as backwards-compat shims so older agent prompts that read them directly still resolve.
+- `agent_mail_liveness` and `projects_base_misconfig` remediations are now auto-remediable; the prior manual hints remain in `SKILL.md` for operators who pick "Skip" on the inline gate.
+
 ## [3.15.0] - 2026-05-09
 
 A 6-pass agent-ergonomics audit + apply cycle landed 11 of 12 ranked recommendations from the `/agent-ergonomics-and-intuitiveness-maximization-for-cli-tools` skill plus 3 second-order findings from two verification simulations. **Median surface-ergonomics score: 562 → ~845 (+283 weighted, all 3 Polish-Bar violations closed). Tests: 1826 → 1920 (+94 vitest assertions). 14 bash regression tests pinning the new contracts. Per-task agent round-trips: 2.25 → 1.0 average (verified by re-simulation).**

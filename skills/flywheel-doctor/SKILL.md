@@ -58,11 +58,17 @@ Render the `DoctorReport` envelope as:
 
 Glyph mapping: `green → [OK]`, `yellow → [WARN]`, `red → [FAIL]`. If `partial: true`, prefix the header with `[PARTIAL — sweep budget exhausted]` and list only the checks that finished.
 
+Append the glossary footer (single source of truth in `mcp-server/src/glossary.ts` — `GLOSSARY_LINE`) immediately below the report so new operators have one-line context for the core vocabulary:
+
+```
+Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
+```
+
 ## Inline remediation
 
 After rendering the report, for **each** failing check (yellow or red severity), immediately present a prompt **inline** — spatially adjacent to that check's row — before moving to the next failing check.
 
-**Automated remediation is available for 9 checks:** `dist_drift`, `mcp_connectivity`, `agent_mail_liveness`, `orphaned_worktrees`, `checkpoint_validity`, `br_binary`, `bv_binary`, `ntm_binary`, `cm_binary`. For these, present:
+**Automated remediation is available for 10 checks:** `dist_drift`, `mcp_connectivity`, `agent_mail_liveness`, `orphaned_worktrees`, `checkpoint_validity`, `br_binary`, `bv_binary`, `ntm_binary`, `cm_binary`, `projects_base_misconfig`. For these, present:
 
 ```
 AskUserQuestion(questions: [{
@@ -105,6 +111,8 @@ This entry feeds the "time-to-healthy" rollup in a future calibration enhancemen
 The four flywheel-owned CLI checks (`br_binary`, `bv_binary`, `ntm_binary`, `cm_binary`) are now auto-remediated via the canonical curl|bash installers. `flywheel_remediate` runs the install command and re-probes `<binary> --version` afterwards. If the install fails (network/permission), the result envelope reports `verifiedGreen:false` with stderr captured for inspection.
 
 `agent_mail_liveness` remediation is service-aware: it stops the supervised Agent Mail runtime to release `.mailbox.activity.lock`, runs `am doctor repair --yes` and `am doctor archive-normalize --yes`, restarts the service, then verifies `/health/liveness`. This is the canonical fix for the common `Resource is temporarily busy ... mailbox activity lock is busy` failure. Do not tell agents to delete the lock files.
+
+`projects_base_misconfig` remediation (v3.16.0 noob-onboarding) reads `projects_base` from `ntm config show`, then issues `ln -s <cwd> <projects_base>/<basename(cwd)>` so `ntm spawn` resolves to the correct working tree. The handler is idempotent — a present symlink at the target short-circuits with `stepsRun: 0`. Verification re-probes the symlink after execute. Reversible: remove the symlink with `rm` to restore the prior state.
 
 ### `--auto` / unattended mode
 

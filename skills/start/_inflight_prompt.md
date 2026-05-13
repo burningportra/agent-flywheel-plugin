@@ -48,7 +48,7 @@
 
 ## Pre-conditions checklist (run before dispatching the swarm)
 
-1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight). If misconfigured, surface fix-or-fallback `AskUserQuestion`.
+1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight). If misconfigured, surface fix-or-fallback `AskUserQuestion`. **Windows-native branch** below covers the case where ntm is structurally unavailable (not just misconfigured).
 2. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture your registration token.
    - When writing `.pi-flywheel/inflight-briefing.md` for spawned panes, its STEP 0 must tell agents to reuse NTM's pane identity: if `$NTM_AGENT_NAME` is set, call `macro_start_session(..., agent_name: "$NTM_AGENT_NAME")` and use that same value for `AGENT_NAME` in git commands.
    - If `$NTM_AGENT_NAME` is absent, call `macro_start_session` without `agent_name`, capture the generated name, and note that audit trails will remain split until NTM exports the pane identity. Current `ntm spawn --help` exposes `NTM_SPAWN_*` metadata but no `NTM_AGENT_NAME` / `--agent-name` support.
@@ -59,6 +59,28 @@
 7. **Looper schedule** — invoke `Skill: loop` with `4m` interval and the marching-orders prompt referenced in the operator-decoder table.
 
 After all 7 pass, dispatch the swarm and enter the monitor loop documented in `_implement.md` Pre-loop / Implementation loop / Post-wave bridge.
+
+### Windows-native fallback (T5.5)
+
+If `process.platform === 'win32'` AND `NTM_AVAILABLE === false` (no tmux on native Windows), the parallel-swarm path is structurally unavailable. Replace the 4 pi + 2 cc / 4 cod + 2 cc plan with sequential bead processing through `Agent()`. Before announcing the dispatch, display:
+
+```
+ℹ Windows-native detected without NTM. Auto-swarm will run beads SEQUENTIALLY via Agent()
+  rather than in parallel tmux panes. For full parallel swarm, run inside WSL2:
+    wsl -e bash -c "cd $(pwd) && claude"
+  then re-run /agent-flywheel:start from inside the WSL shell.
+```
+
+Then re-frame the rest of the in-flight prompt:
+
+- **Pane spawning** → replaced with serial `Agent()` calls carrying the same marching-orders body (subagent_type matching the original pane type: `cc` panes map to a CC subagent; `cod` panes are not yet a built-in subagent and should fall back to `general-purpose`).
+- **Concurrency** → drops from 6 concurrent to 1 sequential. The 4-min looper is unnecessary because there's nothing to tend between dispatches — invoke `flywheel_advance_wave` once after each `Agent()` returns rather than scheduling a recurring `loop`.
+- **Tender-daemon** → still spawn it (it observes Beads + Agent Mail regardless of pane backing) but at the lower 60s interval since there's no pane stall risk to catch.
+- **Build mutex** → not needed; sequential dispatch can't deadlock against itself.
+
+All other pre-conditions (Agent Mail bootstrap, CLI capability check, disk-space guard, bead snapshot) run unchanged. The pane-type priority rule in the operator-decoder table is moot on this branch — there are no panes.
+
+WSL2 is the recommended path for any real swarm work on Windows; the native fallback exists so a Windows operator can still complete a `/start` invocation end-to-end (just slower and serially) without being told to go install tmux first.
 
 ---
 

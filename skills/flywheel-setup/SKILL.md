@@ -7,6 +7,67 @@ Set up the agent-flywheel for this project. $ARGUMENTS
 
 Check and configure all prerequisites. For each missing tool, ask the user before installing. On refusal, print the manual install command and continue.
 
+## 0. Parallel pre-flight detection (v3.16.0+)
+
+Before walking the section-by-section flow below, call `detectInstallState({ cwd })` (exported from `mcp-server/src/setup-detector.ts`) to run every probe in parallel via `Promise.all`. The returned `InstallPlan` partitions the work into five buckets — `install`, `register`, `start`, `configure`, `skip` — that the skill body can render in a single AskUserQuestion prompt rather than asking one question per tool. The sections below remain as the per-tool reference for missing items and the manual-install fallback path the user gets on refusal of the batch prompt.
+
+### Step 2: Render the plan and ask for consent (single AskUserQuestion)
+
+After `detectInstallState({ cwd })` returns, **short-circuit if there is no work to do**: `if (isPlanEmpty(plan)) { /* print "Everything already configured. Run /flywheel-doctor to verify." and exit */ }`. `isPlanEmpty()` ignores the `skip` bucket — a skip-only plan is a no-op.
+
+Otherwise call `renderPlan(plan)` (also exported from `setup-detector.ts`) and surface its output verbatim in the AskUserQuestion `question` field, then ask the user how to proceed:
+
+```ts
+AskUserQuestion({
+  questions: [{
+    header: "Setup plan",
+    question: `${renderPlan(plan)}\n\nHow do you want to proceed?`,
+    options: [
+      { label: "Run the whole batch (Recommended)", description: "Execute every action in the plan in one pass without per-tool prompts." },
+      { label: "Review each step",                  description: "Fall back to the legacy per-tool consent prompts in sections 1–11 below." },
+      { label: "Cancel",                            description: "Exit setup without running anything. Re-run /flywheel-setup later." },
+    ],
+    multiSelect: false,
+  }],
+});
+```
+
+`renderPlan` always emits a stable header `Install plan:` followed by four bulleted rows (`Install`, `Register`, `Symlink`, `Start`) and an optional fifth `Skip (already configured)` row when non-empty. Buckets with zero items render `(none)` so the user sees the full shape of the plan at a glance.
+
+Route the choice:
+
+- **Run the whole batch** → call `executeBatch(plan, exec)` (exported from `mcp-server/src/setup-detector.ts`) which walks the plan in the fixed order `install` → `register` → `configure` (symlinks) → `start` (services). Skip the per-tool prompts in sections 1–11 entirely. Each step appends to `~/.agent-flywheel/setup.log`. The default `exec` uses `performSymlink` for the `configure` bucket and `registerMcpAtomic` (tmp+rename merge of `~/.claude.json` — preserves pre-existing `mcpServers` keys) for the `register` bucket.
+- **Review each step** → fall through to the legacy per-tool flow (sections 1–11 below). Each section already has its own AskUserQuestion call.
+- **Cancel** → print "Setup cancelled. Re-run `/flywheel-setup` when ready." and exit.
+
+### Step 3: Failure handling inside the batch run
+
+`executeBatch` does NOT short-circuit on a failed step — it returns a `BatchResult[]` so the skill can decide per-failure how to recover. After the batch completes, iterate the results; for each `{ status: "error" }` entry render the `error` via `renderError` (so the operator sees `tryThis` inline), then:
+
+```
+AskUserQuestion(questions: [{
+  question: "[<step>] failed: <error.message>. What now?",
+  header: "Step failed",
+  options: [
+    { label: "Retry",  description: "Re-run this single step; keep going on success" },
+    { label: "Skip",   description: "Leave this step failed and continue with the rest of the plan" },
+    { label: "Abort",  description: "Stop the setup batch; user fixes manually and re-runs /flywheel-setup" }
+  ],
+  multiSelect: false
+}])
+```
+
+`Retry` re-invokes the matching `BatchExecutor` method with the original argument; `Skip` records the failure in the batch report and moves on; `Abort` stops processing remaining results (the un-retried slice is left for the next `/flywheel-setup` invocation, which will detect the same misses through `detectInstallState` and re-plan accordingly).
+
+### Step 4: Post-flight verify (T3.4)
+
+After the batch run finishes (regardless of how many retry/skip/abort decisions happened along the way), call `runPostFlight({ cwd, doctor: flywheel_doctor })` (exported from `mcp-server/src/setup-detector.ts`). It invokes `flywheel_doctor` exactly once and returns a rendered summary:
+
+- `overall === "green"` → `"✓ Setup complete. Run /agent-flywheel:start to begin."` — print and exit 0.
+- `overall === "yellow"` or `"red"` → `"⚠ Setup left N issue(s):"` followed by one `  • <name>: <message>\n    Try: <hint>"` row per non-green check. Checks without a `hint` get the generic fallback `"see /flywheel-doctor"`. Print, then exit with a non-zero status so callers (CI, install.sh) can react.
+
+Skip the post-flight call **only** when the batch was aborted before any meaningful step ran (i.e., the user picked Cancel at Step 2). Every other path — full batch success, partial failure, or per-tool review — runs the post-flight so the operator always sees the final health snapshot.
+
 ## 0. ACFS stack shortcut
 
 Before checking individual tools, count how many of the ACFS stack tools are missing (br, bv, ntm, dcg, cass, cm, agent-mail). Run `br --version`, `bv --version`, `ntm --version`, `dcg --version`, `cass --version`, `cm --version`, and `command -v mcp-agent-mail >/dev/null || command -v am >/dev/null` via Bash to check. (The Rust port `mcp_agent_mail_rust` is the **primary** distribution; either binary — `mcp-agent-mail` or `am` — counts as installed. Fall back to `python3 -c "import mcp_agent_mail"` only when neither Rust binary is present, for legacy installs.)
@@ -233,6 +294,12 @@ Behavior rules:
 - If `overall: "green"`: confirm "setup verified — flywheel is healthy" and stop.
 
 If step 11 reported any Required failure, **skip** the doctor run (mirrors `runSetupAndVerify`'s `setup_unhealthy` verdict — no point running the deeper sweep when the install itself is incomplete).
+
+After the post-flight summary (whether doctor ran or was skipped), append the glossary footer — single source of truth `GLOSSARY_LINE` in `mcp-server/src/glossary.ts` — so a first-time operator finishing setup always sees the core vocabulary:
+
+```
+Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
+```
 
 ## See also (triage chain)
 

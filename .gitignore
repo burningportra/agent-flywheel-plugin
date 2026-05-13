@@ -45,3 +45,6 @@ storage.sqlite3-wal
 /WIZARD_STEELMAN_*.md
 /WIZARD_BLINDSPOTS_*.md
 /DUELING_WIZARDS_REPORT.md
+
+# Beads compliance audit dir (managed by /beads-compliance-and-completion-verification skill)
+/beads_compliance_audit/

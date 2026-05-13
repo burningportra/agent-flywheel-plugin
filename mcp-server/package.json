@@ -1,6 +1,6 @@
 {
   "name": "agent-flywheel-mcp",
-  "version": "3.15.0",
+  "version": "3.16.0",
   "description": "MCP server for agent-flywheel — state + CLI glue for the agentic coding flywheel",
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "build:bundle": "node dist/scripts/build-skills-bundle.js",
     "build:schemas": "node dist/scripts/emit-schemas.js",
     "check:skills-bundle": "node dist/scripts/check-skills-bundle.js",
+    "verify:error-meta": "node scripts/verify-error-meta.mjs",
     "bead-viewer": "node dist/scripts/bead-viewer.js",
     "dev": "tsc --watch",
     "test": "vitest run --passWithNoTests",

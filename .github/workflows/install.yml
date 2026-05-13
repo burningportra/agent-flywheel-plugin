@@ -1,0 +1,114 @@
+name: install-script
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'install.sh'
+      - 'install.ps1'
+      - 'install/**'
+      - '.github/workflows/install.yml'
+  pull_request:
+    paths:
+      - 'install.sh'
+      - 'install.ps1'
+      - 'install/**'
+      - '.github/workflows/install.yml'
+  workflow_dispatch: {}
+
+jobs:
+  unix:
+    name: bats + smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats + shellcheck
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            brew install bats-core shellcheck
+          else
+            sudo apt-get update
+            sudo apt-get install -y bats shellcheck
+          fi
+
+      - name: Shellcheck
+        run: shellcheck -x install.sh install/lib/*.sh
+
+      - name: Bats unit tests
+        run: bats install/test/*.bats
+
+      - name: install.sh smoke (first run)
+        run: |
+          bash install.sh --noninteractive --skip-launch --skip-mcp-register --skip-agent-mail | tee run1.log
+          test -f "$HOME/.agent-flywheel/install.log"
+
+      - name: install.sh idempotency (second run is no-op)
+        run: |
+          bash install.sh --noninteractive --skip-launch --skip-mcp-register --skip-agent-mail | tee run2.log
+          # Second pass must report at least one "already" / "Skipping" line and exit 0.
+          grep -E '(already|Skipping|complete)' run2.log
+
+      - name: Verify CLIs visible on PATH
+        run: |
+          for t in br bv cm dcg ntm; do
+            command -v "$t" >/dev/null 2>&1 && echo "[OK] $t" || echo "[MISS] $t"
+          done
+
+  docker:
+    name: bats + smoke (debian:12 docker)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run install.sh in fresh debian:12
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work debian:12 bash -c '
+            set -e
+            apt-get update
+            apt-get install -y curl bash bats shellcheck
+            shellcheck -x install.sh install/lib/*.sh
+            bats install/test/*.bats
+            bash install.sh --noninteractive --skip-launch --skip-mcp-register --skip-agent-mail
+            test -f "$HOME/.agent-flywheel/install.log"
+            # Idempotency
+            bash install.sh --noninteractive --skip-launch --skip-mcp-register --skip-agent-mail | tee run2.log
+            grep -E "(already|Skipping|complete)" run2.log
+          '
+
+  windows:
+    name: Pester + smoke (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -Force -SkipPublisherCheck -MinimumVersion 5.0.0
+          Get-Module Pester -ListAvailable | Select-Object -First 1
+
+      - name: Pester tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-Pester -Path install/test/ -Output Detailed -CI
+
+      - name: install.ps1 smoke (first run)
+        shell: pwsh
+        run: |
+          .\install.ps1 -Noninteractive -SkipLaunch -SkipMcpRegister -SkipAgentMail
+          if (-not (Test-Path "$HOME\.agent-flywheel\install.log")) { throw "install.log not written" }
+
+      - name: install.ps1 idempotency (second run is no-op)
+        shell: pwsh
+        run: |
+          .\install.ps1 -Noninteractive -SkipLaunch -SkipMcpRegister -SkipAgentMail *>&1 | Tee-Object -FilePath run2.log
+          if (-not (Select-String -Path run2.log -Pattern 'already|Skipping|complete' -Quiet)) {
+            throw "Second run did not report no-op markers"
+          }
