@@ -10,10 +10,18 @@ export declare function countCommitsSinceLastBatchReview(cwd: string, sha: strin
 /**
  * Pure check: should the coordinator dispatch a batch review now? Returns
  * true iff the feature is enabled (`commitBatchThreshold` is a positive
- * integer) AND the counter has reached the threshold. 0/undefined threshold
- * disables the feature — the existing post-wave gate flow is unchanged.
+ * integer) AND the live commit count has reached the threshold. 0/undefined
+ * threshold disables the feature — the existing post-wave gate flow is
+ * unchanged.
+ *
+ * The caller MUST compute `count` from `countCommitsSinceLastBatchReview(cwd,
+ * state.lastBatchReviewSha)` and pass it in. This intentionally keeps the
+ * boolean check pure-synchronous: callers handle the I/O for testability and
+ * to make the data-flow visible in `advance-wave.ts` (we count commits at
+ * gate-time, not from a stored counter — `state.commitBatchCounter` is
+ * deprecated and unused by this function).
  */
-export declare function shouldTriggerBatchReview(state: FlywheelState): boolean;
+export declare function shouldTriggerBatchReview(state: FlywheelState, count: number): boolean;
 /**
  * Record a dispatched batch review against the state. Returns a NEW state
  * object — the input is not mutated. Sets `lastBatchReviewSha` to the

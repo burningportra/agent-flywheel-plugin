@@ -108,33 +108,33 @@ describe("countCommitsSinceLastBatchReview", () => {
 });
 // ─── shouldTriggerBatchReview ────────────────────────────────────────────
 describe("shouldTriggerBatchReview", () => {
-    it("returns false when counter is below threshold", () => {
-        const s = baseState({ commitBatchCounter: 7, commitBatchThreshold: 8 });
-        expect(shouldTriggerBatchReview(s)).toBe(false);
+    it("returns false when live count is below threshold", () => {
+        const s = baseState({ commitBatchThreshold: 8 });
+        expect(shouldTriggerBatchReview(s, 7)).toBe(false);
     });
-    it("returns true when counter equals threshold", () => {
-        const s = baseState({ commitBatchCounter: 8, commitBatchThreshold: 8 });
-        expect(shouldTriggerBatchReview(s)).toBe(true);
+    it("returns true when live count equals threshold", () => {
+        const s = baseState({ commitBatchThreshold: 8 });
+        expect(shouldTriggerBatchReview(s, 8)).toBe(true);
     });
-    it("returns true when counter exceeds threshold", () => {
-        const s = baseState({ commitBatchCounter: 9, commitBatchThreshold: 8 });
-        expect(shouldTriggerBatchReview(s)).toBe(true);
+    it("returns true when live count exceeds threshold", () => {
+        const s = baseState({ commitBatchThreshold: 8 });
+        expect(shouldTriggerBatchReview(s, 9)).toBe(true);
     });
     it("returns false when threshold is 0 (feature disabled)", () => {
-        const s = baseState({ commitBatchCounter: 8, commitBatchThreshold: 0 });
-        expect(shouldTriggerBatchReview(s)).toBe(false);
+        const s = baseState({ commitBatchThreshold: 0 });
+        expect(shouldTriggerBatchReview(s, 8)).toBe(false);
     });
     it("returns false when threshold is undefined (feature unset)", () => {
-        const s = baseState({ commitBatchCounter: 8 });
-        expect(shouldTriggerBatchReview(s)).toBe(false);
+        const s = baseState();
+        expect(shouldTriggerBatchReview(s, 8)).toBe(false);
     });
     it("returns false when threshold is negative", () => {
-        const s = baseState({ commitBatchCounter: 8, commitBatchThreshold: -3 });
-        expect(shouldTriggerBatchReview(s)).toBe(false);
+        const s = baseState({ commitBatchThreshold: -3 });
+        expect(shouldTriggerBatchReview(s, 8)).toBe(false);
     });
     it("returns false when threshold is non-integer", () => {
-        const s = baseState({ commitBatchCounter: 8, commitBatchThreshold: 8.5 });
-        expect(shouldTriggerBatchReview(s)).toBe(false);
+        const s = baseState({ commitBatchThreshold: 8.5 });
+        expect(shouldTriggerBatchReview(s, 8)).toBe(false);
     });
 });
 // ─── recordBatchReview ───────────────────────────────────────────────────

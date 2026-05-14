@@ -594,9 +594,12 @@ export interface FlywheelState {
   // All fields optional/additive; v3.16.x checkpoints continue to load.
   // See `docs/plans/2026-05-13-fresh-eyes-auto-trigger.md`.
 
-  /** Number of commits accumulated since the last batch-review baseline.
-   *  Incremented as impl agents commit; reset when a batch review is dispatched.
-   *  Optional so existing checkpoints (v3.16.0 and earlier) remain valid. */
+  /** @deprecated since 3.17.0 — unused. The batch-review gate computes
+   *  commit count LIVE via `countCommitsSinceLastBatchReview(cwd,
+   *  state.lastBatchReviewSha)` at gate-time rather than reading a stored
+   *  counter, so no production code writes to this field. Kept for checkpoint
+   *  forward-compat with the v3.17.0 release entry which initially declared it;
+   *  remove in a future major bump. */
   commitBatchCounter?: number;
 
   /** Threshold (commits) that triggers an auto fresh-eyes review.

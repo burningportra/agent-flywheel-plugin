@@ -443,15 +443,23 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
       new Error('execFile mock: not configured for this test');
   });
 
-  it('returns batch_review_due nextStep when threshold crossed', async () => {
+  it('returns batch_review_due nextStep when live commit count crosses threshold', async () => {
+    // Live count via `git rev-list --count abc123..HEAD` returns 8 → meets threshold 8.
+    // Then `git rev-parse HEAD` returns the reviewSha.
     gitExecHandler = (cmd, args) => {
       expect(cmd).toBe('git');
-      expect(args).toEqual(['rev-parse', 'HEAD']);
-      return 'def456\n';
+      if (args[0] === 'rev-list') {
+        expect(args).toEqual(['rev-list', '--count', 'abc123..HEAD']);
+        return '8\n';
+      }
+      if (args[0] === 'rev-parse') {
+        expect(args).toEqual(['rev-parse', 'HEAD']);
+        return 'def456\n';
+      }
+      throw new Error(`unexpected git args: ${args.join(' ')}`);
     };
     const { ctx } = makeCtx(
       {
-        commitBatchCounter: 8,
         commitBatchThreshold: 8,
         lastBatchReviewSha: 'abc123',
       },
@@ -472,16 +480,20 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
     // Wave isn't fully done until the review verdict lands.
     expect(data.nextWave).toBeNull();
     expect(data.waveComplete).toBe(false);
-    // No br ready was invoked — gate short-circuits before next-frontier compute.
-    expect(execFileMock).toHaveBeenCalledTimes(1);
+    // Two git calls: rev-list --count then rev-parse HEAD. No br ready.
+    expect(execFileMock).toHaveBeenCalledTimes(2);
     expect(result.content[0].text).toContain('Batch-review threshold crossed');
   });
 
-  it('omits batch_review_due when threshold counter is below the gate', async () => {
-    // 7 < 8 — feature enabled but counter hasn't crossed yet.
+  it('omits batch_review_due when live commit count is below the threshold', async () => {
+    // Live count of 7 < threshold 8 → feature enabled but doesn't fire yet.
+    gitExecHandler = (cmd, args) => {
+      expect(cmd).toBe('git');
+      expect(args).toEqual(['rev-list', '--count', 'abc123..HEAD']);
+      return '7\n';
+    };
     const { ctx } = makeCtx(
       {
-        commitBatchCounter: 7,
         commitBatchThreshold: 8,
         lastBatchReviewSha: 'abc123',
       },
@@ -498,13 +510,14 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
     expect(data.nextWave).not.toBeNull();
     expect(data.nextWave.beadIds).toEqual(['next-1']);
     expect(data.waveComplete).toBe(true);
-    expect(execFileMock).not.toHaveBeenCalled();
+    // Only the rev-list count call fired; no rev-parse HEAD since gate didn't trip.
+    expect(execFileMock).toHaveBeenCalledTimes(1);
   });
 
   it('regression: feature-disabled state preserves legacy nextWave shape', async () => {
-    // threshold=0 explicitly disables the feature.
+    // threshold=0 explicitly disables the feature — no live count call should fire.
     const { ctx } = makeCtx(
-      { commitBatchCounter: 99, commitBatchThreshold: 0 },
+      { commitBatchThreshold: 0 },
       [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])],
     );
 
@@ -518,6 +531,7 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
     expect(data.nextWave).not.toBeNull();
     expect(data.nextWave.beadIds).toEqual(['next-1']);
     expect(data.waveComplete).toBe(true);
+    // No git calls at all — gate short-circuits on the threshold check.
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
@@ -539,11 +553,10 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
-  it('graceful degrade: git failure during gate skips to legacy nextWave', async () => {
+  it('graceful degrade: git rev-list failure during gate skips to legacy nextWave', async () => {
     gitExecHandler = () => new Error('not a git repository');
     const { ctx } = makeCtx(
       {
-        commitBatchCounter: 8,
         commitBatchThreshold: 8,
         lastBatchReviewSha: 'abc123',
       },
@@ -556,7 +569,7 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
     });
 
     const data = (result.structuredContent as any).data;
-    // git failed → gate is skipped → caller sees the existing legacy flow.
+    // rev-list failed → count=0 → gate skipped → legacy flow.
     expect(data.nextStep).toBeUndefined();
     expect(data.nextWave).not.toBeNull();
     expect(data.nextWave.beadIds).toEqual(['next-1']);
