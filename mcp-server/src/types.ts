@@ -589,6 +589,31 @@ export interface FlywheelState {
    * test output).
    */
   cycleEndTestOutput?: string;
+
+  // ─── v3.17.0 fresh-eyes auto-trigger additions ──────────────
+  // All fields optional/additive; v3.16.x checkpoints continue to load.
+  // See `docs/plans/2026-05-13-fresh-eyes-auto-trigger.md`.
+
+  /** Number of commits accumulated since the last batch-review baseline.
+   *  Incremented as impl agents commit; reset when a batch review is dispatched.
+   *  Optional so existing checkpoints (v3.16.0 and earlier) remain valid. */
+  commitBatchCounter?: number;
+
+  /** Threshold (commits) that triggers an auto fresh-eyes review.
+   *  Default 8 (set by checkpoint migration guard). 0 or unset disables the
+   *  feature; existing post-wave gate flow is unchanged. */
+  commitBatchThreshold?: number;
+
+  /** Baseline SHA used by the next batch-review diff. Updated when a batch
+   *  review dispatches (set to HEAD at dispatch time, NOT after verdict, so
+   *  in-flight commits during the review don't double-trigger the next batch). */
+  lastBatchReviewSha?: string;
+
+  /** Per-sha-range record of bead IDs auto-synthesized from blocking verdicts.
+   *  Key = `<from-sha>..<to-sha>`; value = ordered bead IDs created by
+   *  synthesizeBeadsFromFindings. Used for the rollback path
+   *  (rollbackSynthesizedBeads) when the user picks Reject all / Approve subset. */
+  batchReviewSynthesizedBeads?: Record<string, string[]>;
 }
 
 // ─── Checkpoint Persistence ─────────────────────────────────
@@ -914,3 +939,58 @@ export const ErrorCodeTelemetrySchema = z.object({
   })),
 });
 export type ErrorCodeTelemetry = z.infer<typeof ErrorCodeTelemetrySchema>;
+
+// ─── v3.17.0 batch-review contracts (fresh-eyes auto-trigger) ──
+// See `docs/plans/2026-05-13-fresh-eyes-auto-trigger.md`. Plain-TS
+// interfaces are paired with Zod schemas (suffix `Schema`) so the review
+// subagent's JSON output can be validated at the MCP boundary in
+// `commit-batch.ts` / `tools/review.ts` before any auto-bead-synthesis.
+
+/** Severity enum for batch-review findings. Validated via SeveritySchema
+ *  when parsing reviewer subagent output. */
+export type Severity = "low" | "medium" | "high" | "critical";
+
+/** A single finding emitted by the fresh-eyes review subagent. Shape is
+ *  contract-enforced via FindingSchema (see commit-batch.ts). */
+export interface Finding {
+  severity: Severity;
+  /** One-line description of the issue. */
+  summary: string;
+  /** Title for the auto-synthesized bead. */
+  suggested_bead_title: string;
+  /** Paths the finding touches (relative to cwd). */
+  affected_files: string[];
+  /** 2-10 line code excerpt or git-log line. */
+  evidence_excerpt: string;
+}
+
+/** Top-level shape of a batch-review verdict persisted to
+ *  `.pi-flywheel/batch-reviews/<sha-range>.json`. */
+export interface BatchReviewVerdict {
+  status: "pass" | "needs_attention" | "blocking";
+  findings: Finding[];
+  /** Adjective+noun pool name of the reviewer subagent (informational). */
+  reviewer_agent_name?: string;
+  /** How long the review subagent ran (ms). */
+  duration_ms?: number;
+  /** `<from-sha>..<to-sha>`. */
+  sha_range: string;
+}
+
+export const SeveritySchema = z.enum(["low", "medium", "high", "critical"]);
+
+export const FindingSchema = z.object({
+  severity: SeveritySchema,
+  summary: z.string().min(1),
+  suggested_bead_title: z.string().min(1),
+  affected_files: z.array(z.string()).min(1),
+  evidence_excerpt: z.string().min(1),
+});
+
+export const BatchReviewVerdictSchema = z.object({
+  status: z.enum(["pass", "needs_attention", "blocking"]),
+  findings: z.array(FindingSchema),
+  reviewer_agent_name: z.string().optional(),
+  duration_ms: z.number().nonnegative().optional(),
+  sha_range: z.string().regex(/^[0-9a-f]+\.\.[0-9a-f]+$/i),
+});
