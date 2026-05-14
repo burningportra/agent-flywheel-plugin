@@ -40,6 +40,21 @@ export interface AdvanceWaveOutcome {
         status: string | null;
         reason: 'auto_approve_recommended' | 'below_threshold' | 'no_state' | 'kill_switch_off' | 'no_active_plan';
     };
+    /**
+     * v3.17.0 fresh-eyes auto-trigger (plan
+     * `docs/plans/2026-05-13-fresh-eyes-auto-trigger.md`). When set, the
+     * coordinator MUST dispatch a fresh-eyes review over `lastBaselineSha..
+     * reviewSha` before advancing to the next wave. `nextWave` is `null` in
+     * this case and `waveComplete` is `false` — the wave isn't done until
+     * the review verdict lands.
+     */
+    nextStep?: {
+        kind: 'batch_review_due';
+        /** HEAD sha captured at gate time (dispatch baseline — risk #3). */
+        reviewSha: string;
+        /** Prior baseline; undefined on the very first batch review of the session. */
+        lastBaselineSha?: string;
+    };
 }
 export declare function runAdvanceWave(ctx: ToolContext, args: AdvanceWaveArgs): Promise<McpToolResult>;
 export {};

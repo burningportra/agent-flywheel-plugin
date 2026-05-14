@@ -1,10 +1,26 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { runAdvanceWave } from '../../tools/advance-wave.js';
-import { writeCompletionReport } from '../../completion-report.js';
-import { createMockExec, makeState } from '../helpers/mocks.js';
+import { promisify } from 'node:util';
+let gitExecHandler = () => new Error('execFile mock: not configured for this test');
+const execFileMock = vi.fn((_cmd, _args, _opts, _callback) => ({ pid: 1, kill: vi.fn() }));
+execFileMock[promisify.custom] = (cmd, args, opts) => {
+    execFileMock(cmd, args, opts, () => undefined);
+    const result = gitExecHandler(cmd, args);
+    if (result instanceof Error)
+        return Promise.reject(result);
+    return Promise.resolve({ stdout: result, stderr: '' });
+};
+vi.mock('node:child_process', async () => {
+    const actual = await vi.importActual('node:child_process');
+    return { ...actual, execFile: execFileMock };
+});
+// Module under test must be imported AFTER vi.mock so promisify(execFile)
+// binds the mock at module load time.
+const { runAdvanceWave } = await import('../../tools/advance-wave.js');
+const { writeCompletionReport } = await import('../../completion-report.js');
+const { createMockExec, makeState } = await import('../helpers/mocks.js');
 // ─── Helpers ──────────────────────────────────────────────────
 function makeBead(overrides = {}) {
     return {
@@ -319,6 +335,106 @@ describe('runAdvanceWave — attestation gate', () => {
             const data = result.structuredContent.data;
             expect(data.needsEvidence).toBe(true);
         }
+    });
+});
+// ─── v3.17.0 fresh-eyes auto-trigger (batch-review gate) ─────────
+describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
+    beforeEach(() => {
+        execFileMock.mockClear();
+        gitExecHandler = () => new Error('execFile mock: not configured for this test');
+    });
+    it('returns batch_review_due nextStep when threshold crossed', async () => {
+        gitExecHandler = (cmd, args) => {
+            expect(cmd).toBe('git');
+            expect(args).toEqual(['rev-parse', 'HEAD']);
+            return 'def456\n';
+        };
+        const { ctx } = makeCtx({
+            commitBatchCounter: 8,
+            commitBatchThreshold: 8,
+            lastBatchReviewSha: 'abc123',
+        }, [brShowClosed('done-1')]);
+        const result = await runAdvanceWave(ctx, {
+            cwd: '/fake/project',
+            closedBeadIds: ['done-1'],
+        });
+        expect(result.isError).toBeUndefined();
+        const data = result.structuredContent.data;
+        expect(data.nextStep).toBeDefined();
+        expect(data.nextStep.kind).toBe('batch_review_due');
+        expect(data.nextStep.reviewSha).toBe('def456');
+        expect(data.nextStep.lastBaselineSha).toBe('abc123');
+        // Wave isn't fully done until the review verdict lands.
+        expect(data.nextWave).toBeNull();
+        expect(data.waveComplete).toBe(false);
+        // No br ready was invoked — gate short-circuits before next-frontier compute.
+        expect(execFileMock).toHaveBeenCalledTimes(1);
+        expect(result.content[0].text).toContain('Batch-review threshold crossed');
+    });
+    it('omits batch_review_due when threshold counter is below the gate', async () => {
+        // 7 < 8 — feature enabled but counter hasn't crossed yet.
+        const { ctx } = makeCtx({
+            commitBatchCounter: 7,
+            commitBatchThreshold: 8,
+            lastBatchReviewSha: 'abc123',
+        }, [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])]);
+        const result = await runAdvanceWave(ctx, {
+            cwd: '/fake/project',
+            closedBeadIds: ['done-1'],
+        });
+        const data = result.structuredContent.data;
+        expect(data.nextStep).toBeUndefined();
+        expect(data.nextWave).not.toBeNull();
+        expect(data.nextWave.beadIds).toEqual(['next-1']);
+        expect(data.waveComplete).toBe(true);
+        expect(execFileMock).not.toHaveBeenCalled();
+    });
+    it('regression: feature-disabled state preserves legacy nextWave shape', async () => {
+        // threshold=0 explicitly disables the feature.
+        const { ctx } = makeCtx({ commitBatchCounter: 99, commitBatchThreshold: 0 }, [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])]);
+        const result = await runAdvanceWave(ctx, {
+            cwd: '/fake/project',
+            closedBeadIds: ['done-1'],
+        });
+        const data = result.structuredContent.data;
+        expect(data.nextStep).toBeUndefined();
+        expect(data.nextWave).not.toBeNull();
+        expect(data.nextWave.beadIds).toEqual(['next-1']);
+        expect(data.waveComplete).toBe(true);
+        expect(execFileMock).not.toHaveBeenCalled();
+    });
+    it('regression: legacy state (threshold undefined) preserves legacy shape', async () => {
+        // No batch-review fields at all — v3.16 and earlier checkpoints.
+        const { ctx } = makeCtx({}, [
+            brShowClosed('done-1'),
+            brReadyCall([makeBead({ id: 'next-1' })]),
+        ]);
+        const result = await runAdvanceWave(ctx, {
+            cwd: '/fake/project',
+            closedBeadIds: ['done-1'],
+        });
+        const data = result.structuredContent.data;
+        expect(data.nextStep).toBeUndefined();
+        expect(data.nextWave).not.toBeNull();
+        expect(execFileMock).not.toHaveBeenCalled();
+    });
+    it('graceful degrade: git failure during gate skips to legacy nextWave', async () => {
+        gitExecHandler = () => new Error('not a git repository');
+        const { ctx } = makeCtx({
+            commitBatchCounter: 8,
+            commitBatchThreshold: 8,
+            lastBatchReviewSha: 'abc123',
+        }, [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])]);
+        const result = await runAdvanceWave(ctx, {
+            cwd: '/fake/project',
+            closedBeadIds: ['done-1'],
+        });
+        const data = result.structuredContent.data;
+        // git failed → gate is skipped → caller sees the existing legacy flow.
+        expect(data.nextStep).toBeUndefined();
+        expect(data.nextWave).not.toBeNull();
+        expect(data.nextWave.beadIds).toEqual(['next-1']);
+        expect(execFileMock).toHaveBeenCalledTimes(1);
     });
 });
 //# sourceMappingURL=advance-wave.test.js.map
