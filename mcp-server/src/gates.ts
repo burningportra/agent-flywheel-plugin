@@ -8,6 +8,28 @@ import { detectUbs } from "./coordination.js";
 import { resilientExec } from "./cli-exec.js";
 import { getDomainChecklist, formatDomainReviewItems } from "./domain-knowledge.js";
 
+export interface FreshEyesPromptOpts {
+  round: number;
+  memoryContext: string;
+  allArtifacts: string[];
+  callbackHint: string;
+  regressionHint: string;
+  /** `<from-sha>..<to-sha>` placeholder echoed into the structured-findings contract block when the batch-review path is the caller. */
+  shaRange?: string;
+  /** When true, append the `Finding[]` verdict contract used by the `review.ts` batch_review auto-synthesis path. The wave-gate caller passes `false` so its prompt is byte-identical to the legacy form. */
+  emitStructuredFindings?: boolean;
+}
+
+export function buildFreshEyesPrompt(opts: FreshEyesPromptOpts): string {
+  const { round, memoryContext, allArtifacts, callbackHint, regressionHint, shaRange, emitStructuredFindings } = opts;
+  const filesBlock = allArtifacts.map((a) => `- ${a}`).join("\n");
+  const shaRangePlaceholder = shaRange ?? "<from-sha>..<to-sha>";
+  const structuredFindingsBlock = emitStructuredFindings
+    ? `\n\n## STRUCTURED FINDINGS REQUIRED\nWhen you finish your fresh-eyes pass, append a JSON object (and ONLY this object) at the end of your response, fenced in \`\`\`json ... \`\`\`:\n\n\`\`\`json\n{\n  "status": "pass" | "needs_attention" | "blocking",\n  "findings": [\n    {\n      "severity": "low" | "medium" | "high" | "critical",\n      "summary": "<one-line description>",\n      "suggested_bead_title": "<verb-phrase title for the auto-synthesized bead>",\n      "affected_files": ["<relative path>", "..."],\n      "evidence_excerpt": "<2-10 lines of code or git log excerpt>"\n    }\n  ],\n  "sha_range": "${shaRangePlaceholder}"\n}\n\`\`\`\n\n- \`status = "pass"\` when the diff is clean.\n- \`status = "needs_attention"\` when findings exist but none warrant an auto-bead.\n- \`status = "blocking"\` when at least one finding is severe enough to auto-synthesize a bead (every finding in the array will become a \`br create\`).\n- \`findings = []\` is mandatory for \`status = "pass"\`.`
+    : "";
+  return `## Fresh Self-Review - Round ${round}${memoryContext}\n\n**⚠ DO NOT close, kill, restart, or retire any NTM panes during this gate.** If an impl swarm is still alive (tmux session present, panes responsive), the live codex/claude-code agents in those panes are the right reviewers — they wrote the code and have the most context. Self-review is delegation, not coordinator solo work, and it MUST NOT trigger pane teardown.\n\n**Routing:**\n1. Run \`list_window_identities\` (Agent Mail) and \`ntm --robot-tail\` to confirm which NTM panes are still alive and which agent identity each holds.\n2. For each closed bead in this wave, dispatch the self-review back to the *same* pane that implemented it via \`ntm --robot-send\` (NOT \`ntm send\` — CASS-dedup will silently abort it). One pane = one bead's self-review.\n3. If a pane has gone silent or been recycled, fall back to coordinator-side review for that bead's files only — do NOT spawn fresh reviewers and do NOT touch other panes.\n4. The tender daemon should already be \`kill -TERM\`'d at this point (see \`_implement.md\` Post-wave bridge). Do NOT start a new daemon and do NOT issue \`ntm --robot-restart-pane\`, \`--hard-kill\`, or \`tmux kill-pane\` against any pane that is responsive.\n\n**Self-review prompt to dispatch to each pane (substitute the pane's bead ID + files):**\n\nCarefully re-read ALL new and modified code with fresh eyes. For each file changed, work through these 4 questions:\n\n1. **Is it correct?** Does the implementation actually do what the bead description says it should?\n2. **Are edge cases handled?** Empty inputs, concurrent access, error paths, boundary conditions - what breaks under stress?\n3. **Are there similar issues elsewhere?** If you found a bug, search for the same pattern in other files. Bugs travel in packs.\n4. **Was the approach right?** Sometimes the implementation is correct but there's a simpler or more robust alternative. Consider it now, not after review.\n\nFix everything you find. If you find a bug, do the pattern search (#3) before moving on. Report findings back to the coordinator via Agent Mail with subject \`[review] <bead-id> self-review\`.\n\nFiles changed (all-wave, partition by bead before dispatch):\n${filesBlock}${structuredFindingsBlock}\n\nUse ultrathink.${callbackHint}${regressionHint}`;
+}
+
 export async function runGuidedGates(
   exec: ExecFn,
   cwd: string,
@@ -130,7 +152,14 @@ export async function runGuidedGates(
       content: [
         {
           type: "text",
-          text: `## Fresh Self-Review - Round ${round}${memoryContext}\n\n**⚠ DO NOT close, kill, restart, or retire any NTM panes during this gate.** If an impl swarm is still alive (tmux session present, panes responsive), the live codex/claude-code agents in those panes are the right reviewers — they wrote the code and have the most context. Self-review is delegation, not coordinator solo work, and it MUST NOT trigger pane teardown.\n\n**Routing:**\n1. Run \`list_window_identities\` (Agent Mail) and \`ntm --robot-tail\` to confirm which NTM panes are still alive and which agent identity each holds.\n2. For each closed bead in this wave, dispatch the self-review back to the *same* pane that implemented it via \`ntm --robot-send\` (NOT \`ntm send\` — CASS-dedup will silently abort it). One pane = one bead's self-review.\n3. If a pane has gone silent or been recycled, fall back to coordinator-side review for that bead's files only — do NOT spawn fresh reviewers and do NOT touch other panes.\n4. The tender daemon should already be \`kill -TERM\`'d at this point (see \`_implement.md\` Post-wave bridge). Do NOT start a new daemon and do NOT issue \`ntm --robot-restart-pane\`, \`--hard-kill\`, or \`tmux kill-pane\` against any pane that is responsive.\n\n**Self-review prompt to dispatch to each pane (substitute the pane's bead ID + files):**\n\nCarefully re-read ALL new and modified code with fresh eyes. For each file changed, work through these 4 questions:\n\n1. **Is it correct?** Does the implementation actually do what the bead description says it should?\n2. **Are edge cases handled?** Empty inputs, concurrent access, error paths, boundary conditions - what breaks under stress?\n3. **Are there similar issues elsewhere?** If you found a bug, search for the same pattern in other files. Bugs travel in packs.\n4. **Was the approach right?** Sometimes the implementation is correct but there's a simpler or more robust alternative. Consider it now, not after review.\n\nFix everything you find. If you find a bug, do the pattern search (#3) before moving on. Report findings back to the coordinator via Agent Mail with subject \`[review] <bead-id> self-review\`.\n\nFiles changed (all-wave, partition by bead before dispatch):\n${allArtifacts.map((a) => `- ${a}`).join("\n")}\n\nUse ultrathink.${callbackHint}${regressionHint}`,
+          text: buildFreshEyesPrompt({
+            round,
+            memoryContext,
+            allArtifacts,
+            callbackHint,
+            regressionHint,
+            emitStructuredFindings: false,
+          }),
         },
       ],
       details: { iterating: true, round, selfReview: true, preserveNtmPanes: true },
