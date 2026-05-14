@@ -478,6 +478,23 @@ export interface FlywheelState {
      * test output).
      */
     cycleEndTestOutput?: string;
+    /** Number of commits accumulated since the last batch-review baseline.
+     *  Incremented as impl agents commit; reset when a batch review is dispatched.
+     *  Optional so existing checkpoints (v3.16.0 and earlier) remain valid. */
+    commitBatchCounter?: number;
+    /** Threshold (commits) that triggers an auto fresh-eyes review.
+     *  Default 8 (set by checkpoint migration guard). 0 or unset disables the
+     *  feature; existing post-wave gate flow is unchanged. */
+    commitBatchThreshold?: number;
+    /** Baseline SHA used by the next batch-review diff. Updated when a batch
+     *  review dispatches (set to HEAD at dispatch time, NOT after verdict, so
+     *  in-flight commits during the review don't double-trigger the next batch). */
+    lastBatchReviewSha?: string;
+    /** Per-sha-range record of bead IDs auto-synthesized from blocking verdicts.
+     *  Key = `<from-sha>..<to-sha>`; value = ordered bead IDs created by
+     *  synthesizeBeadsFromFindings. Used for the rollback path
+     *  (rollbackSynthesizedBeads) when the user picks Reject all / Approve subset. */
+    batchReviewSynthesizedBeads?: Record<string, string[]>;
 }
 /** On-disk checkpoint envelope — wraps FlywheelState with crash-recovery metadata. */
 export interface CheckpointEnvelope {
@@ -611,11 +628,14 @@ export type ReviewMode = "autofix" | "report-only" | "headless" | "interactive";
 export interface ReviewArgs {
     cwd: string;
     beadId: string;
-    action: "hit-me" | "looks-good" | "skip";
+    action: "hit-me" | "looks-good" | "skip" | "batch_review";
     /** Review-mode matrix (default "interactive"). */
     mode?: ReviewMode;
     /** Hint that reviewers can run in parallel without stepping on each other. */
     parallelSafe?: boolean;
+    /** Sha range `<from-sha>..<to-sha>` for action="batch_review" (T4 — fresh-eyes
+     *  auto-trigger). Required when action="batch_review"; ignored otherwise. */
+    shaRange?: string;
 }
 export interface VerifyBeadsArgs {
     cwd: string;
@@ -789,4 +809,72 @@ export declare const ErrorCodeTelemetrySchema: z.ZodObject<{
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export type ErrorCodeTelemetry = z.infer<typeof ErrorCodeTelemetrySchema>;
+/** Severity enum for batch-review findings. Validated via SeveritySchema
+ *  when parsing reviewer subagent output. */
+export type Severity = "low" | "medium" | "high" | "critical";
+/** A single finding emitted by the fresh-eyes review subagent. Shape is
+ *  contract-enforced via FindingSchema (see commit-batch.ts). */
+export interface Finding {
+    severity: Severity;
+    /** One-line description of the issue. */
+    summary: string;
+    /** Title for the auto-synthesized bead. */
+    suggested_bead_title: string;
+    /** Paths the finding touches (relative to cwd). */
+    affected_files: string[];
+    /** 2-10 line code excerpt or git-log line. */
+    evidence_excerpt: string;
+}
+/** Top-level shape of a batch-review verdict persisted to
+ *  `.pi-flywheel/batch-reviews/<sha-range>.json`. */
+export interface BatchReviewVerdict {
+    status: "pass" | "needs_attention" | "blocking";
+    findings: Finding[];
+    /** Adjective+noun pool name of the reviewer subagent (informational). */
+    reviewer_agent_name?: string;
+    /** How long the review subagent ran (ms). */
+    duration_ms?: number;
+    /** `<from-sha>..<to-sha>`. */
+    sha_range: string;
+}
+export declare const SeveritySchema: z.ZodEnum<{
+    low: "low";
+    medium: "medium";
+    high: "high";
+    critical: "critical";
+}>;
+export declare const FindingSchema: z.ZodObject<{
+    severity: z.ZodEnum<{
+        low: "low";
+        medium: "medium";
+        high: "high";
+        critical: "critical";
+    }>;
+    summary: z.ZodString;
+    suggested_bead_title: z.ZodString;
+    affected_files: z.ZodArray<z.ZodString>;
+    evidence_excerpt: z.ZodString;
+}, z.core.$strip>;
+export declare const BatchReviewVerdictSchema: z.ZodObject<{
+    status: z.ZodEnum<{
+        pass: "pass";
+        needs_attention: "needs_attention";
+        blocking: "blocking";
+    }>;
+    findings: z.ZodArray<z.ZodObject<{
+        severity: z.ZodEnum<{
+            low: "low";
+            medium: "medium";
+            high: "high";
+            critical: "critical";
+        }>;
+        summary: z.ZodString;
+        suggested_bead_title: z.ZodString;
+        affected_files: z.ZodArray<z.ZodString>;
+        evidence_excerpt: z.ZodString;
+    }, z.core.$strip>>;
+    reviewer_agent_name: z.ZodOptional<z.ZodString>;
+    duration_ms: z.ZodOptional<z.ZodNumber>;
+    sha_range: z.ZodString;
+}, z.core.$strip>;
 //# sourceMappingURL=types.d.ts.map

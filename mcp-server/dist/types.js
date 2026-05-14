@@ -114,4 +114,19 @@ export const ErrorCodeTelemetrySchema = z.object({
         ctxHash: z.string().optional(),
     })),
 });
+export const SeveritySchema = z.enum(["low", "medium", "high", "critical"]);
+export const FindingSchema = z.object({
+    severity: SeveritySchema,
+    summary: z.string().min(1),
+    suggested_bead_title: z.string().min(1),
+    affected_files: z.array(z.string()).min(1),
+    evidence_excerpt: z.string().min(1),
+});
+export const BatchReviewVerdictSchema = z.object({
+    status: z.enum(["pass", "needs_attention", "blocking"]),
+    findings: z.array(FindingSchema),
+    reviewer_agent_name: z.string().optional(),
+    duration_ms: z.number().nonnegative().optional(),
+    sha_range: z.string().regex(/^[0-9a-f]+\.\.[0-9a-f]+$/i),
+});
 //# sourceMappingURL=types.js.map

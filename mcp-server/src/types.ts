@@ -794,11 +794,14 @@ export type ReviewMode = "autofix" | "report-only" | "headless" | "interactive";
 export interface ReviewArgs {
   cwd: string;
   beadId: string;
-  action: "hit-me" | "looks-good" | "skip";
+  action: "hit-me" | "looks-good" | "skip" | "batch_review";
   /** Review-mode matrix (default "interactive"). */
   mode?: ReviewMode;
   /** Hint that reviewers can run in parallel without stepping on each other. */
   parallelSafe?: boolean;
+  /** Sha range `<from-sha>..<to-sha>` for action="batch_review" (T4 — fresh-eyes
+   *  auto-trigger). Required when action="batch_review"; ignored otherwise. */
+  shaRange?: string;
 }
 export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
 export interface AdvanceWaveArgs { cwd: string; closedBeadIds: string[]; maxNextWave?: number }
