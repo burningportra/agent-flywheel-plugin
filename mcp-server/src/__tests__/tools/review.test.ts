@@ -1,8 +1,43 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// ── T11 mocks (must be hoisted before review.ts is imported) ──
+// These cover the modules `handleBatchReview` (T4) calls that aren't
+// reachable via the existing `createMockExec` harness: filesystem reads
+// of the verdict file, bead-synthesis side effects, and CASS notes.
+// Non-batch_review code paths in review.ts do not touch these modules,
+// so the mocks are inert for the rest of the suite.
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    promises: {
+      ...actual.promises,
+      readFile: vi.fn(async () => {
+        const err = Object.assign(new Error('not mocked'), { code: 'ENOENT' });
+        throw err;
+      }),
+      mkdir: vi.fn(async () => undefined),
+    },
+  };
+});
+
+vi.mock('../../commit-batch.js', () => ({
+  synthesizeBeadsFromFindings: vi.fn(),
+  rollbackSynthesizedBeads: vi.fn(async () => ({ deleted: [], closed: [], failed: [] })),
+}));
+
+vi.mock('../../memory.js', () => ({
+  readMemory: vi.fn(() => ''),
+  appendMemory: vi.fn(() => true),
+}));
+
+import { promises as fsPromises } from 'node:fs';
 import { runReview } from '../../tools/review.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import type { FlywheelState, Bead } from '../../types.js';
+import type { FlywheelState, Bead, Finding } from '../../types.js';
 import type { ExecCall } from '../helpers/mocks.js';
+import { synthesizeBeadsFromFindings, rollbackSynthesizedBeads } from '../../commit-batch.js';
+import { appendMemory, readMemory } from '../../memory.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -751,6 +786,187 @@ describe('runReview', () => {
       for (const task of structured.data.agentTasks) {
         expect(task.task).toContain('Review mode: autofix');
       }
+    });
+  });
+
+  // ── T11 — action=batch_review verdict-handling branches ───────
+  // Covers the Phase-2 (verdict file present) paths of `handleBatchReview`:
+  //   blocking      → `synthesized_beads_pending` with bead IDs + mapping
+  //   pass          → `advance_wave` (no synth)
+  //   malformed     → `needs_attention` fallback + CASS note via appendMemory
+  describe('batch_review action', () => {
+    const SHA_RANGE = 'abc123..def456';
+
+    function makeFinding(overrides: Partial<Finding> = {}): Finding {
+      return {
+        severity: 'medium',
+        summary: 'Boundary check missing on user input',
+        suggested_bead_title: 'Add bounds check to handler',
+        affected_files: ['src/handler.ts'],
+        evidence_excerpt: 'if (n > MAX) { /* never asserted */ }',
+        ...overrides,
+      };
+    }
+
+    function setVerdictFile(payload: unknown): void {
+      vi.mocked(fsPromises.readFile).mockResolvedValueOnce(
+        typeof payload === 'string' ? payload : JSON.stringify(payload),
+      );
+    }
+
+    beforeEach(() => {
+      vi.mocked(fsPromises.readFile).mockReset();
+      vi.mocked(fsPromises.mkdir).mockReset();
+      vi.mocked(synthesizeBeadsFromFindings).mockReset();
+      vi.mocked(rollbackSynthesizedBeads).mockReset();
+      vi.mocked(appendMemory).mockReset();
+      vi.mocked(readMemory).mockReset();
+      // Restore sane defaults so unrelated paths in the run never hit real fs.
+      vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+      vi.mocked(rollbackSynthesizedBeads).mockResolvedValue({ deleted: [], closed: [], failed: [] });
+      vi.mocked(appendMemory).mockReturnValue(true);
+      vi.mocked(readMemory).mockReturnValue('');
+    });
+
+    it('blocking verdict → synthesized_beads_pending with 3 findings (mixed severities) and finding-to-bead mapping', async () => {
+      const findings: Finding[] = [
+        makeFinding({ severity: 'low', suggested_bead_title: 'Tidy log line', affected_files: ['src/log.ts'] }),
+        makeFinding({ severity: 'high', suggested_bead_title: 'Fix off-by-one', affected_files: ['src/iter.ts'] }),
+        makeFinding({ severity: 'critical', suggested_bead_title: 'Patch SQL injection', affected_files: ['src/query.ts'] }),
+      ];
+      setVerdictFile({
+        status: 'blocking',
+        findings,
+        sha_range: SHA_RANGE,
+      });
+      const fakeIds = [
+        'wonderful-bhaskara-3e2f85-aaa',
+        'wonderful-bhaskara-3e2f85-bbb',
+        'wonderful-bhaskara-3e2f85-ccc',
+      ];
+      vi.mocked(synthesizeBeadsFromFindings).mockResolvedValueOnce(fakeIds);
+
+      const { ctx } = makeCtx();
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: '',
+        action: 'batch_review',
+        shaRange: SHA_RANGE,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const structured = result.structuredContent as {
+        data: {
+          kind: string;
+          verdict: { status: string; findings: Finding[] };
+          nextStep: {
+            kind: string;
+            beadIds: string[];
+            mapping: Array<{ beadId: string; finding: Finding }>;
+          };
+        };
+      };
+      expect(structured.data.kind).toBe('batch_review_verdict');
+      expect(structured.data.verdict.status).toBe('blocking');
+      expect(structured.data.nextStep.kind).toBe('synthesized_beads_pending');
+      expect(structured.data.nextStep.beadIds).toEqual(fakeIds);
+      // mapping is finding-index → bead-id, in order
+      expect(structured.data.nextStep.mapping).toHaveLength(3);
+      for (let i = 0; i < 3; i++) {
+        expect(structured.data.nextStep.mapping[i].beadId).toBe(fakeIds[i]);
+        expect(structured.data.nextStep.mapping[i].finding.severity).toBe(findings[i].severity);
+        expect(structured.data.nextStep.mapping[i].finding.suggested_bead_title).toBe(findings[i].suggested_bead_title);
+      }
+      expect(vi.mocked(synthesizeBeadsFromFindings)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(synthesizeBeadsFromFindings)).toHaveBeenCalledWith(
+        '/fake/cwd',
+        expect.any(Object),
+        findings,
+        SHA_RANGE,
+      );
+      // No malformed-verdict CASS note on the happy path.
+      expect(vi.mocked(appendMemory)).not.toHaveBeenCalled();
+    });
+
+    it('pass verdict → advance_wave, with no bead synthesis', async () => {
+      setVerdictFile({
+        status: 'pass',
+        findings: [],
+        sha_range: SHA_RANGE,
+      });
+
+      const { ctx } = makeCtx();
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: '',
+        action: 'batch_review',
+        shaRange: SHA_RANGE,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const structured = result.structuredContent as {
+        data: { kind: string; nextStep: { kind: string }; verdict: { status: string } };
+      };
+      expect(structured.data.kind).toBe('batch_review_verdict');
+      expect(structured.data.verdict.status).toBe('pass');
+      expect(structured.data.nextStep.kind).toBe('advance_wave');
+      // Hard assertion from the marching orders: no synthesis on pass.
+      expect(vi.mocked(synthesizeBeadsFromFindings)).not.toHaveBeenCalled();
+      expect(vi.mocked(appendMemory)).not.toHaveBeenCalled();
+    });
+
+    it('malformed Finding[] (missing severity) → Zod fails → needs_attention fallback + CASS note via appendMemory', async () => {
+      // First finding is missing the required `severity` field. JSON.parse
+      // succeeds (it's valid JSON); BatchReviewVerdictSchema.safeParse fails
+      // because FindingSchema requires `severity ∈ {low, medium, high, critical}`.
+      const malformedFinding = {
+        // severity intentionally omitted
+        summary: 'Boundary check missing on user input',
+        suggested_bead_title: 'Add bounds check to handler',
+        affected_files: ['src/handler.ts'],
+        evidence_excerpt: 'if (n > MAX) { /* never asserted */ }',
+      };
+      setVerdictFile({
+        status: 'blocking',
+        findings: [malformedFinding],
+        sha_range: SHA_RANGE,
+      });
+
+      const { ctx } = makeCtx();
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: '',
+        action: 'batch_review',
+        shaRange: SHA_RANGE,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const structured = result.structuredContent as {
+        data: {
+          kind: string;
+          malformed?: boolean;
+          reason?: string;
+          rawVerdictSnippet?: string;
+          nextStep: { kind: string; findings: Finding[] };
+        };
+      };
+      expect(structured.data.kind).toBe('batch_review_verdict');
+      expect(structured.data.malformed).toBe(true);
+      expect(structured.data.nextStep.kind).toBe('needs_attention');
+      expect(structured.data.nextStep.findings).toEqual([]);
+      // The schema-failure reason should mention severity (the missing field).
+      expect(structured.data.reason).toMatch(/schema|severity/i);
+      // Raw reviewer output is surfaced so a human still sees what landed.
+      expect(structured.data.rawVerdictSnippet).toContain('Boundary check missing');
+      // CASS note recorded under the 'batch-review' category.
+      expect(vi.mocked(appendMemory)).toHaveBeenCalledTimes(1);
+      const [appendCwd, appendContent, appendCategory] = vi.mocked(appendMemory).mock.calls[0];
+      expect(appendCwd).toBe('/fake/cwd');
+      expect(appendContent).toMatch(/malformed batch-review verdict/i);
+      expect(appendContent).toContain(SHA_RANGE);
+      expect(appendCategory).toBe('batch-review');
+      // No bead synthesis on schema failure.
+      expect(vi.mocked(synthesizeBeadsFromFindings)).not.toHaveBeenCalled();
     });
   });
 });
