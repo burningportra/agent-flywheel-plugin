@@ -79,7 +79,7 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 # and asks you to approve.
 
 # After approval, the swarm spawns:
-ntm spawn agent-flywheel --label impl --pi=4 --cc=2 --stagger-mode=smart
+ntm spawn agent-flywheel --label impl --cc=2 --cod=2 --gmi=2 --stagger-mode=smart
 
 # Each pane gets a marching-orders message via Agent Mail. The
 # tender daemon nudges stalled panes. When all beads close,
@@ -225,7 +225,7 @@ Stuck? Run the diagnostic triage chain:
 
 | Order | Command | Role | Run when |
 |---|---|---|---|
-| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 21 checks, ~2s | First — always safe |
+| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 23 checks, ~2s | First — always safe |
 | 2 | `/agent-flywheel:flywheel-setup` | Apply fixes (install / register / configure) | Only if doctor is yellow / red |
 | 3 | `/agent-flywheel:flywheel-healthcheck` | Deep periodic audit (codebase + dep graph) | Periodically; not for setup problems |
 

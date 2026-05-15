@@ -82,7 +82,7 @@ Current-tool index (HEAD = v3.12.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_calibrate({ sinceDays? })`** — bead-template effort calibration from closed `br list` rows.
 - **`flywheel_convergence({ planSlug })`** — read-only `ConvergenceState` from `.pi-flywheel/plans/<slug>/convergence.json` (multi-signal score + B6 oscillation flag). v3.12.0+. See "MCP tools added in v3.12.0" for B6 semantics.
 - **`flywheel_discover`** — surface ranked improvement ideas after a profile pass.
-- **`flywheel_doctor`** — health sweep, currently 21 checks (incl. v3.12.0 `convergence_state_validity` and v3.13.0 `outcome_rubric_validity`). Read-only.
+- **`flywheel_doctor`** — health sweep, currently 23 checks (incl. v3.12.0 `convergence_state_validity`, v3.13.0 `outcome_rubric_validity`, v3.18.0 `gemini_model_compat`, `orphan_tender_daemons`, `npm_marketplace_version_drift`, `projects_base_misconfig`). Read-only.
 - **`flywheel_get_skill({ name })`** — bundled skill body in one round-trip. Preferred over `Read` for skill lookups.
 - **`flywheel_memory({ operation, query?, content? })`** — CASS memory; operations: `search | store | draft_postmortem | draft_solution_doc | refresh_learnings`. The `refresh_learnings` op classifies `docs/solutions/` entries Keep/Update/Consolidate/Replace/Delete.
 - **`flywheel_observe`** — single-call session-state snapshot; surfaces hints from missing completion attestations.
