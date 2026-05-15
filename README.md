@@ -1,14 +1,14 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.17.0 ▓▒░
+░▒▓ CLAUDE // AGENT-FLYWHEEL v3.18.0 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code.**
 Scan → discover → plan → implement → review — with checkpoints, gates, and adversarial review at every seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.17.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.18.0-blue.svg)](#)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.18-brightgreen)](#)
 [![CI](https://github.com/burningportra/agent-flywheel-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/burningportra/agent-flywheel-plugin/actions)
@@ -109,6 +109,18 @@ ntm spawn agent-flywheel --label impl --pi=4 --cc=2 --stagger-mode=smart
 7. **Completion is evidence-backed, not narrative.** Every closed bead writes a `CompletionReportSchemaV1` JSON file with UBS results, verify-command exitCodes, self-review summary, and bead-close verification. `flywheel_advance_wave` gates on it (Stage 1 warn-only by default; flip `FW_ATTESTATION_REQUIRED=1` for hard-block).
 
 ---
+
+## What's new in v3.18.0 (2026-05-15)
+
+The reality-check hardening release. A self-driven reality check ran the full `/agent-flywheel:start → Reality check → Full pipeline` loop and closed 19 gap-closure beads with a 4-pane all-cc swarm. Highlights are the rule changes and lint/remediate gates that prevent the same drift class from re-emerging.
+
+- **NTM pane priority — canonical mixed `cc:cod:gem` 1:1:1.** AGENTS.md, `_inflight_prompt.md`, `_reality_check.md`, `SKILL.md`, `_implement.md`, `_planning.md`, and `_deslop.md` all reconciled to the single rule with a documented substitution ladder (`gmi → cod → pi → cc`). Supersedes the v3.12.0 cod-first rule and the older pi-first remnants. (claude-orchestrator-ao9u + 2gno + 2dcn + 1ogv + 3ihi)
+- **`PANE001` lint rule.** New `mcp-server/src/lint/rules/pane001.ts` parses AGENTS.md for the canonical pane-priority block and flags any skill body that disagrees. Severity is `warn` for one release cycle (matches the existing `RESERVE001` rollout) before promoting to `error`. CI runs it via the existing `lint:skill` job. (claude-orchestrator-34ok)
+- **`flywheel_remediate codex_config_compat` handler.** The doctor check was already flagging `~/.codex/config.toml` with `model = "gpt-5*"` as ChatGPT-account-incompatible; the remediate dispatch entry was `null`. Now there's a `buildPlan / execute / verifyProbe` handler that comments out the offending line with a millisecond-precision timestamped backup, default `dry_run` mode. (claude-orchestrator-3s58)
+- **`gemini_model_compat` doctor check (sweep count 21 → 22).** New check probes Gemini CLI's reachable model against an allowlist (currently `{gemini-3.1-flash-preview, ...}` per `mcp-server/src/model-detection.ts`). Surfaces yellow when the CLI is pinned to an unsupported model so the pre-flight gate (below) downgrades the `--gmi` lane before crash. (claude-orchestrator-37n6)
+- **Pre-flight model-config gate before `--cod` / `--gmi` spawns.** Every pre-flight in `_inflight_prompt.md`, `_implement.md`, `_planning.md`, `_reality_check.md`, `_deslop.md` now checks `codex_config_compat` + `gemini_model_compat` and downgrades the affected lane (`--cod=N → 0, bump --cc by N`; same for `--gmi`) with a one-line warning instead of crashing on the first pane spawn. Fixes the 2026-05-15 `gpt-5.5-xhigh` 400 crash. (claude-orchestrator-2wcd)
+
+Also: Step 0c now surfaces **yellow** doctor checks above the menu (was red-only); README sweep-count + skill-count drift reconciled; two stale `docs/skill-refine-*-proposed.md` proposal docs archived to `docs/archive/` with disposition tables.
 
 ## What's new in v3.17.0 (2026-05-14)
 
