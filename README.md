@@ -55,7 +55,7 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 | Completion attestation ledger | ✅ Zod-validated JSON | ✗ | ✗ | ✗ |
 | Bead-graph dependency view | ✅ `bv` + Cytoscape viewer | ✗ | ✗ | ✗ |
 | Auto-recovery (stalled beads, drift) | ✅ tender daemon + 4-min looper | ✗ | ✗ | partial |
-| Doctor / setup / healthcheck triage | ✅ 22-check sweep | ✗ | ✗ | ✗ |
+| Doctor / setup / healthcheck triage | ✅ 23-check sweep | ✗ | ✗ | ✗ |
 
 ---
 
@@ -336,7 +336,7 @@ claude --plugin-dir .
      │    ├── server.ts                ← MCP tool registration
      │    ├── tools/                   ← 14 flywheel_* tools
      │    │    ├── observe.ts          ← session-state snapshot (v3.11)
-     │    │    ├── doctor.ts           ← 22-check toolchain probe
+     │    │    ├── doctor.ts           ← 23-check toolchain probe
      │    │    ├── remediate.ts        ← one-tap doctor fixes
      │    │    ├── advance-wave.ts     ← wave gating + attestation read
      │    │    ├── verify-beads.ts     ← bead-close reconciliation
