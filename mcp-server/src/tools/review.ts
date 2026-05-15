@@ -1,8 +1,14 @@
-import type { ToolContext, McpToolResult, Bead, ReviewArgs, FlywheelPhase, ReviewMode } from '../types.js';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import type { ToolContext, McpToolResult, Bead, ReviewArgs, FlywheelPhase, ReviewMode, BatchReviewVerdict } from '../types.js';
+import { BatchReviewVerdictSchema } from '../types.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { createLogger } from '../logger.js';
 import { makeOkToolResult } from './shared.js';
+import { buildFreshEyesPrompt } from '../gates.js';
+import { synthesizeBeadsFromFindings, rollbackSynthesizedBeads } from '../commit-batch.js';
+import { readMemory, appendMemory } from '../memory.js';
 
 const log = createLogger('review');
 
@@ -119,6 +125,13 @@ function looksLikeBead(value: unknown): value is Bead {
  */
 export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<McpToolResult> {
   const { exec, cwd, state, saveState, signal } = ctx;
+
+  // ── action: batch_review (T4 — fresh-eyes auto-trigger) ──────
+  // Does NOT use a beadId (it reviews a sha-range of commits, not a single
+  // bead), so this branch runs BEFORE the beadId guard below.
+  if (args.action === 'batch_review') {
+    return handleBatchReview(ctx, args);
+  }
 
   if (!args.beadId) {
     return errorResult(
@@ -445,9 +458,319 @@ Report what you found. Fix obvious issues directly.`,
   return errorResult(
     state.phase,
     'unsupported_action',
-    `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip`,
+    `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip, batch_review`,
     { beadId, action: args.action },
-    'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer).',
+    'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer), "batch_review" (T4 fresh-eyes auto-trigger over a sha range).',
+  );
+}
+
+// ── action="batch_review" handler (T4) ─────────────────────────
+//
+// Two-call lifecycle, keyed off the verdict file at
+// `.pi-flywheel/batch-reviews/<shaRange>.json`:
+//
+//   1. Verdict file ABSENT  → emit a dispatch payload (the fresh-eyes prompt
+//      built via `buildFreshEyesPrompt({ emitStructuredFindings: true })`
+//      plus the verdict path). Coordinator routes the prompt to NTM
+//      `--robot-send` (primary) or `Agent(subagent_type="general-purpose")`
+//      (fallback). Reviewer writes its JSON verdict to the path.
+//
+//   2. Verdict file PRESENT → parse, validate via `BatchReviewVerdictSchema`,
+//      branch on `status`:
+//        • "pass"           → nextStep.kind="advance_wave"
+//        • "needs_attention"→ nextStep.kind="needs_attention" with findings
+//        • "blocking"       → call `synthesizeBeadsFromFindings`. On success
+//                              nextStep.kind="synthesized_beads_pending" with
+//                              bead IDs + finding-to-bead mapping. On synth
+//                              failure, partial-rollback via
+//                              `rollbackSynthesizedBeads` and fall back to
+//                              needs_attention.
+//
+// Malformed verdict (invalid JSON or schema parse failure) → record a CASS
+// note and fall back to needs_attention with the raw verdict text surfaced
+// so a human still sees the reviewer output.
+async function handleBatchReview(
+  ctx: ToolContext,
+  args: ReviewArgs,
+): Promise<McpToolResult> {
+  const { exec, cwd, state, saveState, signal } = ctx;
+
+  const shaRange = args.shaRange ?? '';
+  if (!/^[0-9a-f]+\.\.[0-9a-f]+$/i.test(shaRange)) {
+    return errorResult(
+      state.phase,
+      'invalid_input',
+      `Invalid or missing shaRange for action="batch_review": ${JSON.stringify(args.shaRange)}. Expected "<from-sha>..<to-sha>" (hex chars only).`,
+      { shaRange: args.shaRange },
+      'Pass shaRange as `<lastBatchReviewSha>..HEAD` (or any pair of commit SHAs). State.lastBatchReviewSha holds the prior baseline.',
+    );
+  }
+
+  const verdictDir = path.join(cwd, '.pi-flywheel', 'batch-reviews');
+  const verdictPath = path.join(verdictDir, `${shaRange}.json`);
+
+  let rawVerdict: string | undefined;
+  try {
+    rawVerdict = await fs.readFile(verdictPath, 'utf-8');
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      return errorResult(
+        state.phase,
+        'internal_error',
+        `Failed to read batch-review verdict file: ${errMsg(err)}`,
+        { verdictPath },
+        'Check that .pi-flywheel/batch-reviews/ is readable and the reviewer subagent has write permission. If permission denied, run `chmod -R u+rw .pi-flywheel/`.',
+      );
+    }
+    // ENOENT → verdict not yet present; fall through to dispatch.
+  }
+
+  // ── Phase 1: verdict absent → emit dispatch payload ───────────
+  if (rawVerdict === undefined) {
+    try {
+      await fs.mkdir(verdictDir, { recursive: true });
+    } catch (err: unknown) {
+      log.warn('mkdir batch-reviews dir failed (non-fatal — subagent may still create it)', {
+        verdictDir,
+        err: errMsg(err),
+      });
+    }
+
+    const diffResult = await exec('git', ['diff', '--name-only', shaRange], { cwd, timeout: 8000, signal });
+    const changedFiles = diffResult.code === 0
+      ? diffResult.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    let memoryContext = '';
+    try {
+      const mem = readMemory(cwd, `batch review patterns ${state.selectedGoal ?? ''}`);
+      if (mem) memoryContext = `\n\n## Prior Session Learnings\n${mem}\n`;
+    } catch { /* CASS unavailable — proceed without */ }
+
+    const callbackHint =
+      `\n\nWrite your verdict JSON to \`${verdictPath}\` (parent dir already exists). ` +
+      `Then notify the coordinator (Agent Mail subject \`[batch-review] ${shaRange} verdict ready\`, ` +
+      `or pane reply if dispatched via NTM) so it can call \`flywheel_review\` with ` +
+      `\`action="batch_review"\` and \`shaRange="${shaRange}"\` again to read and branch on the verdict.`;
+
+    const prompt = buildFreshEyesPrompt({
+      round: 1,
+      memoryContext,
+      allArtifacts: changedFiles,
+      callbackHint,
+      regressionHint: '',
+      shaRange,
+      emitStructuredFindings: true,
+    });
+
+    const text =
+      `## Batch Review Dispatch — ${shaRange}\n\n` +
+      `**Verdict file (reviewer writes here):** \`${verdictPath}\`\n` +
+      `**Changed files:** ${changedFiles.length}\n\n` +
+      `**Coordinator: dispatch the prompt below.**\n` +
+      `- Primary path: NTM \`--robot-send\` to the implementor pane (warm context, lowest latency).\n` +
+      `- Fallback: \`Agent(subagent_type="general-purpose")\` with the prompt as the task description.\n\n` +
+      `When the reviewer writes its verdict JSON, call \`flywheel_review\` with \`action="batch_review"\`, \`shaRange="${shaRange}"\` again to read and branch.\n\n` +
+      `---\n\n${prompt}`;
+
+    return okResult(state.phase, text, {
+      kind: 'batch_review_dispatch',
+      shaRange,
+      verdictPath,
+      changedFiles,
+      prompt,
+    });
+  }
+
+  // ── Phase 2: verdict present → parse + validate + branch ──────
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(rawVerdict);
+  } catch (err: unknown) {
+    return needsAttentionFallback(
+      ctx,
+      shaRange,
+      verdictPath,
+      rawVerdict,
+      `Verdict JSON parse failed: ${errMsg(err)}`,
+    );
+  }
+
+  const parseResult = BatchReviewVerdictSchema.safeParse(parsedJson);
+  if (!parseResult.success) {
+    const issues = parseResult.error.issues
+      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('; ');
+    try {
+      appendMemory(
+        cwd,
+        `malformed batch-review verdict (sha range ${shaRange}): ${issues}`,
+        'batch-review',
+      );
+    } catch { /* best-effort */ }
+    return needsAttentionFallback(
+      ctx,
+      shaRange,
+      verdictPath,
+      rawVerdict,
+      `Verdict schema validation failed (BatchReviewVerdictSchema): ${issues}`,
+    );
+  }
+
+  const verdict = parseResult.data;
+
+  // Echo back: the reviewer's sha_range field MUST match the path's shaRange
+  // — otherwise the reviewer wrote to the wrong file. Treat as malformed.
+  if (verdict.sha_range !== shaRange) {
+    try {
+      appendMemory(
+        cwd,
+        `batch-review verdict sha_range mismatch (path=${shaRange}, verdict=${verdict.sha_range})`,
+        'batch-review',
+      );
+    } catch { /* best-effort */ }
+    return needsAttentionFallback(
+      ctx,
+      shaRange,
+      verdictPath,
+      rawVerdict,
+      `Verdict sha_range field "${verdict.sha_range}" does not match the path "${shaRange}". Treating as malformed.`,
+    );
+  }
+
+  // ── status: pass ────────────────────────────────────────────
+  if (verdict.status === 'pass') {
+    return okResult(
+      state.phase,
+      `## Batch Review: PASS — ${shaRange}\n\nNo findings. Coordinator: advance the wave normally.`,
+      {
+        kind: 'batch_review_verdict',
+        verdict,
+        nextStep: { kind: 'advance_wave' as const },
+      },
+    );
+  }
+
+  // ── status: needs_attention ─────────────────────────────────
+  if (verdict.status === 'needs_attention') {
+    return okResult(
+      state.phase,
+      `## Batch Review: NEEDS ATTENTION — ${shaRange}\n\n` +
+        `${verdict.findings.length} finding(s) surfaced. Coordinator: prompt the user (Continue / Synthesize beads / Pause / Regress).`,
+      {
+        kind: 'batch_review_verdict',
+        verdict,
+        nextStep: { kind: 'needs_attention' as const, findings: verdict.findings },
+      },
+    );
+  }
+
+  // ── status: blocking → synthesize beads ─────────────────────
+  let synthesisError: string | undefined;
+  let synthesizedIds: string[] = [];
+  try {
+    synthesizedIds = await synthesizeBeadsFromFindings(cwd, state, verdict.findings, shaRange);
+  } catch (err: unknown) {
+    synthesisError = errMsg(err);
+    const partialIds = state.batchReviewSynthesizedBeads?.[shaRange] ?? [];
+    if (partialIds.length > 0) {
+      try {
+        const rb = await rollbackSynthesizedBeads(cwd, partialIds);
+        log.warn('batch_review: partial-rollback after synthesize failure', {
+          shaRange,
+          deleted: rb.deleted.length,
+          closed: rb.closed.length,
+          failed: rb.failed.length,
+        });
+      } catch (rbErr: unknown) {
+        log.error('batch_review: rollback also failed', { err: errMsg(rbErr) });
+      }
+      // Clear the partial record so a future call sees a clean slate.
+      if (state.batchReviewSynthesizedBeads) {
+        delete state.batchReviewSynthesizedBeads[shaRange];
+      }
+    }
+    try {
+      appendMemory(
+        cwd,
+        `batch-review synthesize failure (sha range ${shaRange}): ${synthesisError}`,
+        'batch-review',
+      );
+    } catch { /* best-effort */ }
+  }
+
+  await saveState(state);
+
+  if (synthesisError) {
+    return okResult(
+      state.phase,
+      `## Batch Review: BLOCKING — ${shaRange} (synthesis failed)\n\n` +
+        `Verdict was blocking but bead synthesis failed: ${synthesisError}. ` +
+        `Partial-rollback ran on the in-flight set. Surfacing as needs_attention so the operator can decide.`,
+      {
+        kind: 'batch_review_verdict',
+        verdict,
+        nextStep: { kind: 'needs_attention' as const, findings: verdict.findings },
+        synthesisError,
+      },
+    );
+  }
+
+  const mapping = synthesizedIds.map((beadId, i) => ({
+    beadId,
+    finding: verdict.findings[i],
+  }));
+
+  return okResult(
+    state.phase,
+    `## Batch Review: BLOCKING — ${shaRange}\n\n` +
+      `Synthesized ${synthesizedIds.length} bead(s) from findings (all severities). ` +
+      `Coordinator: surface the four-option Approve/Reject gate (Approve all / Approve subset / Reject all / Regress to plan).\n\n` +
+      `Created beads: ${synthesizedIds.join(', ')}`,
+    {
+      kind: 'batch_review_verdict',
+      verdict,
+      nextStep: {
+        kind: 'synthesized_beads_pending' as const,
+        beadIds: synthesizedIds,
+        mapping,
+      },
+    },
+  );
+}
+
+function needsAttentionFallback(
+  ctx: ToolContext,
+  shaRange: string,
+  verdictPath: string,
+  rawVerdict: string,
+  reason: string,
+): McpToolResult {
+  const { state } = ctx;
+  log.warn('batch_review: falling back to needs_attention', { shaRange, reason });
+  // Surface the first ~2 KiB of raw verdict so the operator can still read
+  // what the reviewer wrote even if the schema parse failed.
+  const rawSnippet = rawVerdict.length > 2048 ? rawVerdict.slice(0, 2048) + '\n…(truncated)' : rawVerdict;
+  const fallback: BatchReviewVerdict = {
+    status: 'needs_attention',
+    findings: [],
+    sha_range: shaRange,
+  };
+  return okResult(
+    state.phase,
+    `## Batch Review: NEEDS ATTENTION (fallback) — ${shaRange}\n\n` +
+      `${reason}\n\n` +
+      `Verdict file: \`${verdictPath}\`\n\n` +
+      `**Raw reviewer output (first 2 KiB):**\n\n\`\`\`\n${rawSnippet}\n\`\`\`\n\n` +
+      `Coordinator: surface the raw output to the user; do not auto-synthesize.`,
+    {
+      kind: 'batch_review_verdict',
+      verdict: fallback,
+      nextStep: { kind: 'needs_attention' as const, findings: [] },
+      malformed: true,
+      reason,
+      rawVerdictSnippet: rawSnippet,
+    },
   );
 }
 

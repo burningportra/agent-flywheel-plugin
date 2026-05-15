@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.17.0] - 2026-05-14
+
+The fresh-eyes auto-trigger release. During long implementation runs, the coordinator now fires an automatic fresh-eyes review whenever commits accumulate past a configurable threshold — catching issues mid-wave instead of waiting for the post-wave gate. Blocking verdicts auto-synthesize beads from each finding (all severities) and surface a four-option Approve/Reject gate so the operator stays in control.
+
+### Added
+
+- **Commit-batch counter + threshold (`state.commitBatchCounter`, `state.commitBatchThreshold`, `state.lastBatchReviewSha`, `state.batchReviewSynthesizedBeads`).** New optional state fields in `FlywheelState`. Default threshold is `8` (configurable via `FW_COMMIT_BATCH_THRESHOLD` env var or the implement-phase Pre-flight `AskUserQuestion`). `0` or unset disables auto-trigger entirely — existing post-wave gate flow is unchanged. Backwards-compatible with v3.16.0 checkpoints (all fields optional). (T1)
+- **`mcp-server/src/commit-batch.ts` — 5 pure-ish helpers.** `countCommitsSinceLastBatchReview(cwd, sha)` wraps `git rev-list --count` via `execFile`; `shouldTriggerBatchReview(state)` returns the boolean threshold check; `recordBatchReview(state, sha, verdict)` advances the baseline transactionally; `synthesizeBeadsFromFindings(cwd, state, findings, range)` iterates **all severities** (low/medium/high/critical — explicit operator choice from alignment-check round 2), runs `br create` per finding with `auto-batch-review` label, records bead IDs to `state.batchReviewSynthesizedBeads[range]` incrementally so partial-failure rollback is well-defined; `rollbackSynthesizedBeads(cwd, beadIds)` tries `br delete` then falls back to `br update --notes "rejected via batch-review approve/reject gate" --status closed` (note: `br update` uses `--notes` not `--reason`). All inputs Zod-validated via `FindingSchema` + `BatchReviewVerdictSchema`. (T2)
+- **`flywheel_advance_wave` returns `batch_review_due` nextStep.** When `shouldTriggerBatchReview(state)` is true, the tool returns `{ nextStep: { kind: "batch_review_due", reviewSha, lastBaselineSha }, waveComplete: false }` INSTEAD of `nextWave` — gating the next dispatch on the review verdict. Baseline (`state.lastBatchReviewSha`) advances at DISPATCH time, not after verdict, so in-flight commits during review don't double-trigger. (T3)
+- **`flywheel_review` `action: "batch_review"` + `synthesized_beads_pending` nextStep.** New action dispatches the fresh-eyes prompt via NTM (`--robot-send` to implementor pane — reuses warm context) or Agent fallback. Persists verdict to `.pi-flywheel/batch-reviews/<sha-range>.json`. On `blocking` verdict, calls `synthesizeBeadsFromFindings` and returns `nextStep.kind === "synthesized_beads_pending"` with bead IDs + finding-to-bead mapping. On `pass`, returns `advance_wave`. On `needs_attention`, surfaces findings as a user prompt. Malformed Finding[] (Zod parse failure) falls back to `needs_attention` mode + records a CASS note for prompt iteration. (T4)
+- **`buildFreshEyesPrompt(opts)` extracted from `gates.ts`.** Both `runGuidedGates` (legacy callers) and the new `batch_review` action call this exported function instead of duplicating the prompt body. When `opts.emitStructuredFindings === true`, the prompt appends a `## STRUCTURED FINDINGS REQUIRED` contract instructing the reviewer to emit a JSON block matching `BatchReviewVerdictSchema`. Legacy behavior preserved for `runGuidedGates`. (T5)
+- **`_implement.md` Pre-flight commit-batch gate + Step 7.5.** Documents the threshold `AskUserQuestion` (Off / 5 / 8 (Recommended) / 12), the `batch_review_due` and `synthesized_beads_pending` nextStep handling, and the four-option approve/reject gate (Approve all / Approve subset paginated multi-select / Reject all / Regress to plan). Rollback semantics, race protection, and 10-min timeout all spelled out. (T8)
+- **`AGENTS.md` env knobs + state field reference.** `FW_COMMIT_BATCH_THRESHOLD` env var documented in the v3.13.0+ env knobs table; new section lists the four `state.commitBatch*` fields with their semantics and read-after-write contracts. (T9)
+- **Unit + integration test coverage.** `__tests__/commit-batch.test.ts` covers the 5 helpers (counter parsing, threshold edge cases, baseline recording, happy-path synthesize across all severities, partial-rollback contract, Zod validation, delete-happy-path, closed-fallback, total-failure-collects-failed) — 11 cases total (T7). `__tests__/tools/advance-wave.test.ts` gains threshold-crossing + disabled-regression cases (T6). `__tests__/tools/review.test.ts` gains synthesized_beads_pending + advance_wave-on-pass + malformed-Finding-fallback (T11). Plus a bonus polish commit (`791f1e7`) updates the Unknown-action contract assertion to include `batch_review`.
+
+### Changed
+
+- **No breaking changes.** The feature is opt-in via threshold. Setting `commitBatchThreshold = 0` (or leaving it unset) preserves v3.16.0 behavior exactly.
+
+### Compatibility
+
+- Existing v3.16.0 checkpoints load unchanged — all new state fields are optional.
+- `flywheel_advance_wave` return shape gains the `batch_review_due` variant in its `nextStep` union; existing callers that only pattern-match on `nextWave` continue to work (they'll see `waveComplete: false` and fall through to their no-op branch, then re-poll on next tick).
+- `flywheel_review` gains the `batch_review` action; existing `hit-me / looks-good / skip` actions unchanged.
+- `gates.ts` `runGuidedGates` legacy callers continue to receive the v3.16.0 prompt body (without the structured-findings contract).
+
+### Provenance
+
+- Plan: [`docs/plans/2026-05-13-fresh-eyes-auto-trigger.md`](docs/plans/2026-05-13-fresh-eyes-auto-trigger.md) (3-round alignment-check convergence).
+- Beads: T1 `wonderful-bhaskara-3e2f85-1nu` → T11 `-24j` (11 beads across 4 waves; T9 + T8 + T10 done inline by coordinator).
+- Triggered by the user goal *"During implementation, setting up tracking so fresh eyes reviews trigger automatically when commit batches accumulate. You can do this with subagents. The fresh eyes can be done via the claude orchestrator."*
+
 ## [3.16.0] - 2026-05-13
 
 The noob-onboarding release. A first-time operator should now be able to get from `git clone` (or a curl one-liner) to a green `/agent-flywheel:start` in under five minutes, on macOS, Linux, or Windows, with zero hand-holding from the project owner.

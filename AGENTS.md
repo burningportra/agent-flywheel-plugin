@@ -195,6 +195,14 @@ Both run in the same cycle and complement each other. `flywheel_review` ensures 
 | `FW_GRADER_FORCE_CLAUDE` | unset | When `=1`, skips the codex primary and goes straight to the fresh-CC fallback. Use for environments where codex is intentionally unavailable. |
 | `FW_RUBRIC_SYNTH_TIMEOUT_MS` | `60000` | Per-call rubric synthesizer budget. Hard-fails as `rubric_synth_invalid` on overflow. |
 | `FW_MAX_OUTCOME_ITERATIONS` | `3` (clamped to `[1,5]`) | Default for `state.maxOutcomeIterations`. Per-cycle override happens via state edits, not a flag. |
+| `FW_COMMIT_BATCH_THRESHOLD` | `8` | Commits accumulated since `state.lastBatchReviewSha` before `flywheel_advance_wave` returns `nextStep: batch_review_due` instead of `nextWave`. `0` or unset disables the auto-trigger; existing post-wave gate flow is unchanged. Overridable per session via the `_implement.md` Pre-flight `AskUserQuestion`. |
+
+State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
+
+- `state.commitBatchCounter?: number` — commits accumulated since `lastBatchReviewSha`; incremented as impl agents commit; reset to 0 on review dispatch.
+- `state.commitBatchThreshold?: number` — per-session threshold (defaults to `FW_COMMIT_BATCH_THRESHOLD`). `0` or unset disables auto-trigger.
+- `state.lastBatchReviewSha?: string` — baseline SHA for the next batch-review diff. Updated at dispatch time (NOT after verdict) so in-flight commits during review don't double-trigger.
+- `state.batchReviewSynthesizedBeads?: Record<string, string[]>` — per-sha-range record (`<from-sha>..<to-sha>` → ordered bead IDs) of beads auto-synthesized from `blocking` verdicts. Downstream tooling (rollback path, audit reports) reads this to map approve/reject decisions back to specific findings.
 
 ### Decided policy (v3.13.0)
 

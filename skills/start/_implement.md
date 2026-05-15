@@ -144,6 +144,28 @@ AskUserQuestion(questions: [{
 - **Looper-based** → continue with the wave loop above.
 - **ntm controller** → run `ntm controller "$NTM_PROJECT" --agent-type=cc` (optionally with `--prompt=.pi-flywheel/controller-prompt.md` referencing `{{.Session}}`, `{{.AgentList}}`, `{{.ProjectDir}}` template variables to inject the wave's goal). Tender-daemon still runs. The main session may then either tend alongside or exit; if it exits, the controller drives. If the controller pane dies (`ntm --robot-is-working` returns `gone` AND no Agent Mail traffic for >10 min), climb the stuck-pane ladder (`--robot-smart-restart` → `--robot-smart-restart --hard-kill` → fall back to looper-based supervision).
 
+### Commit-batch fresh-eyes auto-trigger (Pre-flight, v3.17.0+)
+
+Before the first wave dispatches, decide the commit-batch threshold that triggers an auto fresh-eyes review during long impl runs. Surface this gate verbatim:
+
+```
+AskUserQuestion(questions: [{
+  question: "Set the commit-batch threshold for the auto fresh-eyes review during impl?",
+  header: "Batch review",
+  options: [
+    { label: "Off",          description: "Disable. Only the post-wave gate fires. Same as v3.16.0 behavior" },
+    { label: "5 commits",    description: "Tighter cadence — catches issues earlier; more reviewer interrupts" },
+    { label: "8 commits (Recommended)", description: "Balanced — large enough to avoid micro-commit noise, small enough to keep reviewer scope bounded" },
+    { label: "12 commits",   description: "Looser cadence — fewer interrupts, longer feedback latency" }
+  ],
+  multiSelect: false
+}])
+```
+
+Route the answer into `state.commitBatchThreshold`. `Off` sets it to `0` (disables); the others set the integer literally. `FW_COMMIT_BATCH_THRESHOLD` env var is an alternative override path — useful for CI / unattended runs where you don't want to surface the gate. Env beats state on conflict.
+
+The threshold drives the `shouldTriggerBatchReview(state)` check inside `flywheel_advance_wave` (see Step 7.5 below).
+
 ### Pre-loop — swarm scaling + stagger
 
 **Agent ratio by open-bead count** (from `br ready --json`). Pick the smallest tier that accommodates your wave:
@@ -638,6 +660,67 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    - Force-stop with `TaskStop(task_id: "<saved-task-id>")` if the task ID is available.
    - Retire in Agent Mail: `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")`.
    - If still listed in the team, edit `~/.claude/teams/<team>/config.json` to remove from the `"members"` array, then retry `TeamDelete` when ready.
+
+### Step 7.5: Commit-batch fresh-eyes auto-trigger (v3.17.0+)
+
+When `state.commitBatchThreshold` is set to a positive integer (via the Pre-flight gate above or `FW_COMMIT_BATCH_THRESHOLD`), `flywheel_advance_wave` checks the accumulated commit count between waves. If the count ≥ threshold, it returns:
+
+```ts
+{ verification, nextStep: { kind: "batch_review_due", reviewSha: "<HEAD-sha>", lastBaselineSha: "<state.lastBatchReviewSha>" }, waveComplete: false }
+```
+
+INSTEAD of the usual `{ nextWave, waveComplete }`. The coordinator MUST handle the `batch_review_due` branch before dispatching the next wave:
+
+1. **Dispatch the review.** Call `flywheel_review` with `action: "batch_review"`, passing the sha range `<lastBaselineSha>..<reviewSha>`. The tool builds the fresh-eyes prompt via `buildFreshEyesPrompt({ emitStructuredFindings: true, shaRange, … })` (from `gates.ts`) and dispatches to either an NTM pane (preferred — reuses warm context from the implementor's pane) or a fresh `Agent()` subagent (fallback when NTM is unavailable / panes dead).
+
+2. **Wait for the verdict.** The review subagent writes structured JSON to `.pi-flywheel/batch-reviews/<sha-range>.json`. Tail the file or poll on next ScheduleWakeup tick. Verdict shape (validated by `BatchReviewVerdictSchema`):
+   ```json
+   { "status": "pass" | "needs_attention" | "blocking", "findings": [...], "sha_range": "<from>..<to>" }
+   ```
+
+3. **Branch on `verdict.status`:**
+
+   - **`pass`** → reset `state.commitBatchCounter = 0`, advance `state.lastBatchReviewSha = reviewSha`, continue to the next `flywheel_advance_wave` call. No user prompt.
+
+   - **`needs_attention`** → surface the findings via:
+     ```
+     AskUserQuestion(questions: [{
+       question: "Batch review (<sha-range>): <N> findings. <one-line summary>. What next?",
+       header: "Review",
+       options: [
+         { label: "Continue waves",     description: "Acknowledge the findings; advance to next wave anyway" },
+         { label: "Synthesize beads",   description: "Run br create for each finding (treat as if verdict were blocking)" },
+         { label: "Pause to fix",       description: "Stop here so you can inspect + fix manually" },
+         { label: "Regress to plan",    description: "Findings show plan-level rework needed; return to Step 5.6" }
+       ],
+       multiSelect: false
+     }])
+     ```
+
+   - **`blocking`** → `review.ts` ALREADY called `synthesizeBeadsFromFindings(cwd, state, verdict.findings, sha_range)`; bead IDs sit in `state.batchReviewSynthesizedBeads[sha_range]`. The nextStep is `{ kind: "synthesized_beads_pending", beadIds, mapping }`. The coordinator surfaces the four-option approve/reject gate:
+
+     ```
+     AskUserQuestion(questions: [{
+       question: "Batch review surfaced <N> findings; auto-synthesized <N> beads (IDs above). How to proceed?",
+       header: "Synthesized",
+       options: [
+         { label: "Approve all",     description: "Merge every bead into the active wave. They become the next dispatch frontier" },
+         { label: "Approve subset",  description: "Pick which beads to keep via a follow-up multi-select gate; rejected ones are rolled back" },
+         { label: "Reject all",      description: "Roll back every synthesized bead. Counter resets; wave continues from where it was" },
+         { label: "Regress to plan", description: "Findings show plan-level rework needed; return to Step 5.6" }
+       ],
+       multiSelect: false
+     }])
+     ```
+
+     - **Approve all** → merge bead IDs into `state.activeBeadIds`, advance baseline, continue.
+     - **Approve subset** → run a multi-select follow-up gate. List ≤4 beads per page with labels `<bead-id>: <title> [<severity>]`. Multi-select keeps the chosen IDs; the unchosen ones go to `rollbackSynthesizedBeads(cwd, unchosenIds)`. When there are more than 4 beads, paginate through batches of 4.
+     - **Reject all** → call `rollbackSynthesizedBeads(cwd, state.batchReviewSynthesizedBeads[sha_range])`. Returns `{ deleted: [...], closed: [...], failed: [...] }`. The rollback tries `br delete <id>` first; on error, falls back to `br update <id> --status closed --notes "rejected via batch-review approve/reject gate"`. (Note: `br update` uses `--notes`, not `--reason`.) Surface the `failed` list to the user if non-empty.
+     - **Regress to plan** → mark synthesized beads as closed (rollback semantics), return to Step 5.6.
+
+4. **Race protection.** The baseline (`state.lastBatchReviewSha`) advances to `reviewSha` at DISPATCH time, NOT after the verdict lands. This prevents commits arriving during the review window from double-triggering the next batch.
+
+5. **Timeout.** If the verdict file doesn't appear within 10 min, record `verdict: "review_timeout"`, reset the counter, advance baseline, and resume waves. A timed-out reviewer is not a blocker — the post-wave gate still fires later.
 
 ### Parallel-wave build-artifact races
 
