@@ -115,7 +115,7 @@ export const FLYWHEEL_ENV_VARS: Record<string, string> = {
   FW_GRADER_FORCE_CLAUDE:
     '"1" | "true" — force flywheel_grade_outcome to use the Claude Code fallback grader instead of probing for codex first.',
   FW_GRADER_MODEL:
-    'Override grader model id (e.g. "claude-opus-4-7"). When unset, the server picks per FW_GRADER_MODEL_DEFAULT.',
+    'Codex-primary grader model passed to codex exec --model (e.g. "gpt-5.5"). Does NOT configure the fresh-CC fallback; that path is selected by FW_GRADER_FORCE_CLAUDE=1 or Codex unavailability.',
   FW_GRADER_MODEL_DEFAULT:
     'Default grader model id used when FW_GRADER_MODEL is not set.',
   FW_GRADER_TIMEOUT_MS:

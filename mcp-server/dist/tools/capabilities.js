@@ -29,7 +29,7 @@ export const FLYWHEEL_ENV_VARS = {
     FW_ATTESTATION_REQUIRED: '"1" | "true" — when set, flywheel_advance_wave hard-blocks instead of warning when a closed bead lacks an attestation file.',
     FW_COMPLIANCE_OVERRIDE: '"1" | "true" — bypass the compliance audit gate in flywheel_compliance_audit. Only used during emergencies; logged to telemetry.',
     FW_GRADER_FORCE_CLAUDE: '"1" | "true" — force flywheel_grade_outcome to use the Claude Code fallback grader instead of probing for codex first.',
-    FW_GRADER_MODEL: 'Override grader model id (e.g. "claude-opus-4-7"). When unset, the server picks per FW_GRADER_MODEL_DEFAULT.',
+    FW_GRADER_MODEL: 'Codex-primary grader model passed to codex exec --model (e.g. "gpt-5.5"). Does NOT configure the fresh-CC fallback; that path is selected by FW_GRADER_FORCE_CLAUDE=1 or Codex unavailability.',
     FW_GRADER_MODEL_DEFAULT: 'Default grader model id used when FW_GRADER_MODEL is not set.',
     FW_GRADER_TIMEOUT_MS: 'Per-grader-invocation timeout in milliseconds. Default: 180000.',
     FW_LOG_LEVEL: '"debug" | "info" | "warn" | "error" — server log verbosity. Set to "debug" when triaging tool failures.',

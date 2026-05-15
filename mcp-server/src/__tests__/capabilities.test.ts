@@ -85,6 +85,13 @@ describe('flywheel_capabilities — contract surface', () => {
     }
   });
 
+  it('documents FW_GRADER_MODEL as a Codex-primary model only', () => {
+    const description = FLYWHEEL_ENV_VARS.FW_GRADER_MODEL;
+    expect(description).toContain('codex exec --model');
+    expect(description).toContain('FW_GRADER_FORCE_CLAUDE');
+    expect(description).not.toContain('claude-opus-4-7');
+  });
+
   it('EXIT_CODE_CONTRACT documents 0 through 5', () => {
     for (const code of ['0', '1', '2', '3', '4', '5']) {
       expect(EXIT_CODE_CONTRACT[code], `exit code ${code}`).toBeDefined();
