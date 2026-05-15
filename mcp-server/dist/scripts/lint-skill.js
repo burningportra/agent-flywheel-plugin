@@ -38,8 +38,9 @@ async function loadLintModules() {
     const implMod = (await import(`${lintBase}/rules/implicitDecisions.js`));
     const errMod = (await import(`${lintBase}/rules/errorCodeReferences.js`));
     const reserveMod = (await import(`${lintBase}/rules/reserve001.js`));
+    const paneMod = (await import(`${lintBase}/rules/pane001.js`));
     const rules = {
-        rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001],
+        rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001, paneMod.pane001],
     };
     return { lintMod, registryMod, baselineMod, manifestMod, reportersMod, rules };
 }

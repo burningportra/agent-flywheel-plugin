@@ -97,8 +97,9 @@ async function loadLintModules(): Promise<{
   const implMod = (await import(`${lintBase}/rules/implicitDecisions.js`)) as unknown as { impl001: unknown };
   const errMod = (await import(`${lintBase}/rules/errorCodeReferences.js`)) as unknown as { err001: unknown };
   const reserveMod = (await import(`${lintBase}/rules/reserve001.js`)) as unknown as { reserve001: unknown };
+  const paneMod = (await import(`${lintBase}/rules/pane001.js`)) as unknown as { pane001: unknown };
   const rules: RulesModule = {
-    rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001],
+    rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001, paneMod.pane001],
   };
   return { lintMod, registryMod, baselineMod, manifestMod, reportersMod, rules };
 }
