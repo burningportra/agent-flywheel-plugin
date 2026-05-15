@@ -9,6 +9,7 @@ import { orphanedWorktreesHandler } from './remediations/orphaned_worktrees.js';
 import { checkpointValidityHandler } from './remediations/checkpoint_validity.js';
 import { projectsBaseMisconfigHandler } from './remediations/projects_base_misconfig.js';
 import { orphanTenderDaemonsHandler } from './remediations/orphan_tender_daemons.js';
+import { codexConfigCompatHandler } from './remediations/codex_config_compat.js';
 import { brBinaryHandler, bvBinaryHandler, ntmBinaryHandler, cmBinaryHandler, } from './remediations/cli_binary.js';
 const OUTPUT_CAP_BYTES = 4 * 1024;
 export const RemediateInputSchema = z.object({
@@ -41,7 +42,11 @@ export const REMEDIATION_REGISTRY = {
     codex_cli: null,
     gemini_cli: null,
     swarm_model_ratio: null,
-    codex_config_compat: null,
+    // claude-orchestrator-3s58 — comment out top-level `model = "gpt-5*"` /
+    // `"o4-mini*"` line in ~/.codex/config.toml so the codex-companion
+    // app-server falls through to its built-in default on ChatGPT-account
+    // auth. Mutating, reversible (timestamped .bak.<ts> sibling).
+    codex_config_compat: codexConfigCompatHandler,
     // claude-orchestrator-37n6 (v3.17.0) — gemini CLI version is user-managed;
     // no automated remediation. B15 (claude-orchestrator-2wcd) pre-flight gate
     // consults the doctor row and skips `--gmi` panes when this is yellow.

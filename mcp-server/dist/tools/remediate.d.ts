@@ -5,14 +5,13 @@ import { makeFlywheelErrorResult } from '../errors.js';
 export declare const RemediateInputSchema: z.ZodObject<{
     cwd: z.ZodString;
     checkName: z.ZodEnum<{
+        orphan_tender_daemons: "orphan_tender_daemons";
+        mcp_connectivity: "mcp_connectivity";
+        agent_mail_liveness: "agent_mail_liveness";
         br_binary: "br_binary";
         bv_binary: "bv_binary";
-        cm_binary: "cm_binary";
-        agent_mail_liveness: "agent_mail_liveness";
-        mcp_connectivity: "mcp_connectivity";
-        projects_base_misconfig: "projects_base_misconfig";
-        orphan_tender_daemons: "orphan_tender_daemons";
         ntm_binary: "ntm_binary";
+        cm_binary: "cm_binary";
         node_version: "node_version";
         git_status: "git_status";
         dist_drift: "dist_drift";
@@ -28,6 +27,7 @@ export declare const RemediateInputSchema: z.ZodObject<{
         npm_marketplace_version_drift: "npm_marketplace_version_drift";
         convergence_state_validity: "convergence_state_validity";
         outcome_rubric_validity: "outcome_rubric_validity";
+        projects_base_misconfig: "projects_base_misconfig";
     }>;
     autoConfirm: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
     mode: z.ZodDefault<z.ZodOptional<z.ZodEnum<{
