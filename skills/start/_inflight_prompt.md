@@ -10,13 +10,13 @@
 
 > ❯ Reread [AGENTS.md](http://AGENTS.md) so it's still fresh in your mind.
 >
-> Then, I need you to use /ntm and /vibing-with-ntm to create a swarm comprising 4 pi instances and 2 cc instances (per the NTM pane priority in AGENTS.md, prefer pi over cod; only fall back to 4 cod if Pi is unavailable on this host). Make sure also that we don't run out of space by periodically clearing stale build artifacts. And make sure to use rch for all builds/tests (see /rch).
+> Then, I need you to use /ntm and /vibing-with-ntm to create a swarm comprising 2 cc instances, 2 cod instances, and 2 gmi instances (the canonical **cc:cod:gem 1:1:1** model-diversified shape per AGENTS.md NTM pane priority; substitution ladder `gmi→cod→pi→cc` reassigns any lane that's unavailable on this host). Make sure also that we don't run out of space by periodically clearing stale build artifacts. And make sure to use rch for all builds/tests (see /rch).
 >
 > Try to avoid excessive build contention from concurrent builds for the same project by multiple agents within the same project-level swarm. And use your looper tool every 4 minutes to pass fresh instructions to any agents in the swarms in need of further input (i.e., that are idle), guided by bv's (see /bv) triage command for open beads.
 >
 > Also look for beads that are clearly "stalled out"; that is, marked as being in progress (likely by long-dead agents), with no recent work on them whatsoever, and mark them as being open again.
 >
-> Keep going until all the beads are done; then transition into using the code review workflow in /vibing-with-ntm and using cc and pi instances from the swarm (or cod, if you fell back to Codex during the spawn).
+> Keep going until all the beads are done; then transition into using the code review workflow in /vibing-with-ntm and reuse whichever model lanes survived the substitution ladder (cc + cod + gmi by default; cc + cod if gmi was downgraded; cc-only if both cod and gmi were downgraded).
 >
 > You can also use the various skills with names beginning with the string "testing-" to improve our testing posture (e.g., /testing-perfect-e2e-integration-tests-with-logging-and-no-mocks, /testing-conformance-harnesses, /testing-golden-artifacts, /testing-fuzzing, etc., as relevant and applicable).
 >
@@ -29,7 +29,7 @@
 | Phrase in prompt | Concrete action |
 |------------------|-----------------|
 | "use /ntm and /vibing-with-ntm" | Invoke both skills via `Skill` tool BEFORE spawning. They carry the canonical orchestrator decision tree, OC cards, stuck-pane ladder. |
-| "swarm comprising 4 pi instances and 2 cc instances" | `ntm spawn $NTM_PROJECT --label inflight-resume --no-user --cc=2 --pi=4 --stagger-mode=smart`. Pane indices: cc=1,2  pi=3,4,5,6. Run NTM readiness gate (Step 7 Pre-flight in `_implement.md`) first. **Pane-type priority** (per AGENTS.md): prefer `--pi=` over `--cod=`; only fall back to `--cod=4` (with pane indices `cod=3,4,5,6`) when Pi is unavailable on the host. |
+| "swarm comprising 2 cc + 2 cod + 2 gmi" (cc:cod:gem 1:1:1, six panes) | `ntm spawn $NTM_PROJECT --label inflight-resume --no-user --cc=2 --cod=2 --gmi=2 --stagger-mode=smart`. Pane indices: cc=1,2  cod=3,4  gmi=5,6. Run NTM readiness gate (Step 7 Pre-flight in `_implement.md`) first. **Substitution ladder** (per AGENTS.md NTM pane priority): when a model is unavailable, reassign its share in order `gmi→cod→pi→cc`. Concretely: gmi missing → bump cod (`--cc=2 --cod=4`); gmi+cod both missing → bump pi (`--cc=2 --pi=4`); both pi and cod also missing → fall back to all-cc (`--cc=6`). Run §3a Model-config pre-spawn gate before dispatch — it auto-downgrades broken `--cod=`/`--gmi=` shares per the same ladder. |
 | "clearing stale build artifacts" | Every 30 min OR when disk free <5GB, run `git clean -fdX -- '<build-output-dirs>'` (respects gitignore, only removes ignored build artifacts). Never run `git clean -fdx` (lowercase x) — that nukes untracked source files. |
 | "use rch for all builds/tests (see /rch)" | Invoke `/rch` skill for the canonical build-runner contract. Pass `rch build` / `rch test` to each impl agent's prompt as the validate-gate command instead of a stack-specific `npm run build` / `cargo test`. |
 | "avoid excessive build contention" | Implement a project-level build mutex via the portable wrapper: `scripts/build-mutex.sh rch build` and `scripts/build-mutex.sh rch test`. Document this in each impl agent's STEP 2 prompt. The wrapper uses atomic `mkdir` locking and does not require the Linux-only `flock` binary. |
@@ -52,13 +52,13 @@
 2. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture your registration token.
    - When writing `.pi-flywheel/inflight-briefing.md` for spawned panes, its STEP 0 must tell agents to reuse NTM's pane identity: if `$NTM_AGENT_NAME` is set, call `macro_start_session(..., agent_name: "$NTM_AGENT_NAME")` and use that same value for `AGENT_NAME` in git commands.
    - If `$NTM_AGENT_NAME` is absent, call `macro_start_session` without `agent_name`, capture the generated name, and note that audit trails will remain split until NTM exports the pane identity. Current `ntm spawn --help` exposes `NTM_SPAWN_*` metadata but no `NTM_AGENT_NAME` / `--agent-name` support.
-3. **CLI capability check** — `which claude codex` (gemini optional). If `codex` missing, the 4-cod lane collapses; surface a degraded-mode `AskUserQuestion` before proceeding (override default cc:cod ratio? abort? proceed degraded?).
-3a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gem=N>0`).** Call `flywheel_doctor` (cached) and read `DOCTOR_REPORT.checks`. Apply per check, BEFORE `ntm spawn`:
+3. **CLI capability check** — `which claude codex gemini`. The cc:cod:gem 1:1:1 baseline assumes all three CLIs are present. Missing `codex` collapses the `--cod=` lane; missing `gemini` collapses the `--gmi=` lane; either case triggers the substitution ladder (gmi→cod→pi→cc) in §3a. Surface a degraded-mode `AskUserQuestion` only if all of cod+gmi are missing AND the operator hasn't already opted into all-cc spawning.
+3a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gmi=M>0`).** Call `flywheel_doctor` (cached) and read `DOCTOR_REPORT.checks`. Apply per check, BEFORE `ntm spawn`:
 
    | Check | Trigger | Action |
    |-------|---------|--------|
    | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Redistribute the dropped share via the substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc). Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. |
-   | `gemini_model_compat` severity ∈ {yellow, red} | `--gem=N>0` | Auto-downgrade `--gem=N → 0`. Redistribute via ladder (gmi→cod→pi→cc). Log: `⚠ gemini_model_compat=<sev>; downgrading --gem=N→0 (configured model outside allowlist; see AGENTS.md NTM pane priority substitution ladder)`. |
+   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder (gmi→cod→pi→cc). Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist; see AGENTS.md NTM pane priority substitution ladder)`. |
 
    In `--no-user` auto-resume / looper-driven contexts (this file's default), auto-downgrade with the log line — do NOT block on `AskUserQuestion`. The resumed swarm proceeds with the new pane shape; the operator sees the downgrade in the dispatch banner. For interactive `/start` variants, see `_implement.md` Step 1a for the AskUserQuestion variant. The `gemini_model_compat` doctor check is provided by bead `claude-orchestrator-37n6`; until it ships, treat the check as `green` (default open).
 
@@ -71,7 +71,7 @@ After all 7 pass, dispatch the swarm and enter the monitor loop documented in `_
 
 ### Windows-native fallback (T5.5)
 
-If `process.platform === 'win32'` AND `NTM_AVAILABLE === false` (no tmux on native Windows), the parallel-swarm path is structurally unavailable. Replace the 4 pi + 2 cc / 4 cod + 2 cc plan with sequential bead processing through `Agent()`. Before announcing the dispatch, display:
+If `process.platform === 'win32'` AND `NTM_AVAILABLE === false` (no tmux on native Windows), the parallel-swarm path is structurally unavailable. Replace the cc:cod:gem 2:2:2 plan (or whatever the substitution ladder degraded to) with sequential bead processing through `Agent()`. Before announcing the dispatch, display:
 
 ```
 ℹ Windows-native detected without NTM. Auto-swarm will run beads SEQUENTIALLY via Agent()
@@ -82,7 +82,7 @@ If `process.platform === 'win32'` AND `NTM_AVAILABLE === false` (no tmux on nati
 
 Then re-frame the rest of the in-flight prompt:
 
-- **Pane spawning** → replaced with serial `Agent()` calls carrying the same marching-orders body (subagent_type matching the original pane type: `cc` panes map to a CC subagent; `cod` panes are not yet a built-in subagent and should fall back to `general-purpose`).
+- **Pane spawning** → replaced with serial `Agent()` calls carrying the same marching-orders body (subagent_type matching the original pane type: `cc` panes map to a CC subagent; `cod` and `gmi` panes are not yet built-in subagents and should fall back to `general-purpose`).
 - **Concurrency** → drops from 6 concurrent to 1 sequential. The 4-min looper is unnecessary because there's nothing to tend between dispatches — invoke `flywheel_advance_wave` once after each `Agent()` returns rather than scheduling a recurring `loop`.
 - **Tender-daemon** → still spawn it (it observes Beads + Agent Mail regardless of pane backing) but at the lower 60s interval since there's no pane stall risk to catch.
 - **Build mutex** → not needed; sequential dispatch can't deadlock against itself.
