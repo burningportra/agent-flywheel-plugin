@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "beadId": "claude-orchestrator-3gfm",
+  "agentName": "CobaltChapel",
+  "status": "closed",
+  "changedFiles": [
+    "mcp-server/src/tools/compliance-audit.ts",
+    "mcp-server/src/__tests__/compliance-audit.test.ts",
+    "mcp-server/dist/tools/compliance-audit.js",
+    "mcp-server/dist/__tests__/compliance-audit.test.js"
+  ],
+  "commits": [],
+  "ubs": {
+    "ran": true,
+    "summary": "ubs --staged scanned 2 TypeScript files; 0 critical, 0 warning, 255 info-only items.",
+    "findingsFixed": 0,
+    "deferredBeadIds": []
+  },
+  "verify": [
+    {
+      "command": "br dep tree claude-orchestrator-3gfm",
+      "exitCode": 0,
+      "summary": "Dependency tree showed no blockers for claude-orchestrator-3gfm."
+    },
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm test --prefix mcp-server -- compliance-audit.test.ts",
+      "exitCode": 0,
+      "summary": "Vitest compliance-audit.test.ts: 29 tests passed, including manifest rubric_breakdown CASS persistence."
+    },
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm run build --prefix mcp-server",
+      "exitCode": 0,
+      "summary": "tsc, scripts build, skills bundle, and schema emission completed successfully."
+    },
+    {
+      "command": "ubs --staged",
+      "exitCode": 0,
+      "summary": "0 critical and 0 warning findings on the staged TypeScript source/test changes."
+    },
+    {
+      "command": "git diff --cached --check",
+      "exitCode": 0,
+      "summary": "No whitespace errors."
+    }
+  ],
+  "selfReview": {
+    "ran": true,
+    "summary": "Manifest parsing now accepts per-bead rubric_breakdown and carries it into the unified ComplianceResult so finalizeComplianceAudit forwards the rubric to storeComplianceScore instead of persisting an empty object."
+  },
+  "beadClosedVerified": true,
+  "createdAt": "2026-05-15T16:09:46Z"
+}

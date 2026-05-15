@@ -32,6 +32,7 @@ const ComplianceManifestBeadSchema = z.object({
     score: z.number(),
     verdict: z.string().optional(),
     gate: z.string().optional(),
+    rubric_breakdown: z.record(z.string(), z.string()).optional(),
 }).passthrough();
 const ComplianceManifestSchema = z.object({
     pass_id: z.string(),
@@ -104,6 +105,7 @@ function parseManifestJson(manifestJsonPath, latestPassDir, threshold) {
                 score: result.score,
                 passed,
                 scorecard_path: `beads/${beadId}/scorecard.md`,
+                rubric_breakdown: result.rubric_breakdown,
                 top_failures: passed
                     ? undefined
                     : [

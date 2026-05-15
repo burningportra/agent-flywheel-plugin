@@ -261,6 +261,39 @@ describe('runComplianceAudit - skill spawn + parse', () => {
             gitHead: 'abc123',
         });
     });
+    it('forwards manifest rubric_breakdown to CASS score persistence', async () => {
+        setupFakeManifestPassDir(tmp, manifestFixture({
+            results: {
+                'agent-flywheel-001': {
+                    score: 850,
+                    verdict: 'Substantially complete',
+                    gate: 'PASS',
+                    rubric_breakdown: { impl_completeness: '260/300' },
+                },
+            },
+        }));
+        const exec = vi.fn(async (cmd) => {
+            if (cmd === 'git')
+                return { code: 0, stdout: 'abc123\n', stderr: '' };
+            return { code: 0, stdout: '', stderr: '' };
+        });
+        const result = await runComplianceAudit(stubCtx({ exec }), {
+            cwd: tmp,
+            beadIds: ['agent-flywheel-001'],
+        });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('ok');
+        expect(storeComplianceScore).toHaveBeenCalledWith(tmp, {
+            beadId: 'agent-flywheel-001',
+            score: 850,
+            threshold: 700,
+            passed: true,
+            rubric: { impl_completeness: '260/300' },
+            passUtc: '2026-05-15T14:33:55Z',
+            sessionId: null,
+            gitHead: 'abc123',
+        });
+    });
     it('fails manifest beads with unrecognized gate values', async () => {
         setupFakeManifestPassDir(tmp, manifestFixture({
             results: {
