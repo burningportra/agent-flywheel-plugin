@@ -131,7 +131,7 @@ The 2026-05-06 APR-Pro adoption (`05071af`, `docs/research/research-apr-pro-land
 - **`flywheel_convergence({ cwd, planSlug })`** — read-only handler that returns the persisted `ConvergenceState` for a plan slug. State path: `.pi-flywheel/plans/<slug>/convergence.json` (per Phase 12 §12.3 — no `.flywheel/` rename). Source: `mcp-server/src/tools/convergence-tool.ts`, registered in `server.ts`. Score is multi-signal (delta-text, file-coverage, dependency-graph stability) per `convergence.ts` `SCORE_VERSION`. Result envelope includes `oscillation.detected: boolean` plus `signFlips`, `revisions`. Plan slug derived via `planSlugFromIdentifier(planPathOrId)`.
 - **B6 oscillation guard semantics.** When `signFlips > revisions / 3`, the convergence state flips to `status: "oscillating"`, surfaced via `flywheel_convergence` and the `convergence_state_validity` doctor check. Step 5.45 (picked-up-plan menu) renders the score in the question text only — never arms a default option (per Phase 12 §12.5 + README §Design Philosophy #3, every decision routes through `AskUserQuestion`). Auto-approve at score ≥ 0.90 still routes through the user gate; the kill-switch on `flywheel_advance_wave` consults convergence + oscillation flags but cannot bypass the user.
 - **`convergence_state_validity` doctor check.** Probes that the persisted `convergence.json` parses against `ConvergenceStateSchema` and the `signFlips/revisions` invariants are intact. `flywheel_doctor` surfaces it under the standard 11-check sweep (now 12 entries with this addition); severity defaults to yellow on parse failure, red only on schema-required-field violations.
-- **NTM pane priority — changed.** v3.12.0 makes `--cod=` the default secondary lane after `--cc=`; `--pi=` is demoted to fallback (was `--pi=` over `--cod=` pre-v3.12.0). See `c0cf590` and the "NTM pane priority" section below for the canonical priority list.
+- **NTM pane priority — changed.** v3.12.0 made `--cod=` the default secondary lane after `--cc=`. **Superseded in v3.17.0** by mixed `cc:cod:gem` 1:1:1 as the canonical default; see the "NTM pane priority" section below for the current rule and the substitution ladder.
 
 ## MCP tools added in v3.13.0
 
@@ -230,11 +230,31 @@ If you find yourself wanting to spawn N>1 coding workers without NTM, stop and l
 
 ## NTM pane priority
 
-When spawning NTM panes for the swarm (planning, implement, deslop, etc.), **prefer `--cod=` (and `--type=cod` for `--robot-send`) over `--pi=` / `--type=pi`**. Codex (`cod`) is the default secondary lane after Claude (`cc`); Pi (`pi`) is only a fallback when Codex is unavailable on the host (no Codex CLI, quota exhausted, or the workflow explicitly demands Pi).
+**Canonical rule (Changed in v3.17.0).** Mixed `cc:cod:gem` 1:1:1 — Claude, Codex, and Gemini at equal share — is the default for every NTM spawn. The model-diversified split is the point: three independent reasoners running in parallel surface different failure modes, and the 1:1:1 ratio is what downstream pipelines (Step 9 fresh-eyes, duel review, batch synthesis) implicitly assume when they reconcile cross-agent votes.
 
-**Gemini → Codex fallback.** When the model-diversified split (`cc:cod:gem` 1:1:1) detects that Gemini is missing/quota-exhausted, **reassign Gemini's share to Codex (`--cod=`) before redistributing to Claude or Pi**. Order of substitution for a missing Gemini lane: Codex → Pi → Claude.
+**Baseline pattern.** A six-pane spawn:
 
-Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, and any future swarm/orchestrator skill). Reviewers: reject PRs that reintroduce `--pi=` / `--type=pi` as the default without a documented Codex-unavailable justification, or that redistribute a missing Gemini lane to anything other than Codex first.
+```
+ntm spawn <project> --label <purpose> --no-user \
+  --cc=2 --cod=2 --gmi=2 --stagger-mode=smart
+```
+
+Smaller swarms scale the ratio down (e.g. `--cc=1 --cod=1 --gmi=1` for three panes); larger swarms scale it up while keeping each provider's share equal until the substitution ladder fires.
+
+**Substitution ladder when a provider is unavailable.** The doctor's `claude_cli`, `codex_cli`, `gemini_cli`, `swarm_model_ratio`, `codex_config_compat`, and (v3.17.0) `gemini_model_compat` checks together signal which lanes the host can actually fill. When a provider is missing or non-green, its share is reassigned in this order:
+
+1. **Missing `gmi` → `cod`** (closest peer in the diversity space — both are non-Claude reasoners with comparable depth).
+2. **`cod` also unavailable → `pi`** (Pi inherits the lane only when both Gemini and Codex are off the table; this is also the path the noob-onboarding flow takes when the host has no API credentials).
+3. **All three peers unavailable → `cc`** (cc-only is the last-resort floor; it works, but it gives up the cross-agent fresh-eyes signal — operators should treat it as a degraded mode and log it).
+
+The same ladder runs lane-by-lane: a four-pane spawn that loses Gemini becomes `--cc=2 --cod=2`, not `--cc=4`. The operator preference for "pure cc" swarms is the explicit override that lands at step 3 — it is not the default.
+
+**Retired rules.**
+
+- The v3.12.0 "prefer `--cod=` over `--pi=`" priority is **retired**. Cod-first only applies inside the substitution ladder above (step 1 fallback for missing Gemini); it is not the canonical secondary lane in fresh spawns.
+- The pre-v3.12.0 "pi over cod" priority is also **retired**. Pi is the second fallback (step 2), not a default.
+
+Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, `skills/start/_reality_check.md`, `skills/start/_inflight_prompt.md`, `skills/start/SKILL.md`, and any future swarm/orchestrator skill). Reviewers: reject any PR that ships `--cc=N` alone, `--cod=N` alone, or `--pi=N` alone in production swarm code without a substitution-ladder justification tied to a non-green doctor row.
 
 ## Bead Lifecycle
 
