@@ -145,7 +145,7 @@ Gather context silently (do NOT display raw output yet). Run checks 1-8 in paral
 
    Never set `NTM_AVAILABLE = true` based on `which ntm` alone — the spawn step downstream will silently fail.
 
-8. **Doctor smoke check**: Call `flywheel_doctor` with `cwd`. Cache the returned `DoctorReport` as `DOCTOR_REPORT` for use in the welcome banner (step 0c). If the call fails outright (MCP tool missing, tool error), set `DOCTOR_REPORT = null` and proceed — doctor is advisory, not blocking. If `DOCTOR_REPORT.overall === "red"`, the banner will mark the session as warning-state and surface the failing check names; the user is not blocked, but they should consider running `/agent-flywheel:flywheel-doctor` before continuing.
+8. **Doctor smoke check**: Call `flywheel_doctor` with `cwd`. Cache the returned `DoctorReport` as `DOCTOR_REPORT` for use in the welcome banner (step 0c). If the call fails outright (MCP tool missing, tool error), set `DOCTOR_REPORT = null` and proceed — doctor is advisory, not blocking. If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the banner will mark the session warning-state and surface every check whose severity is yellow or red (yellow gets a `⚠` glyph, red gets `✗`); the user is not blocked, but they should consider running `/agent-flywheel:flywheel-doctor` before continuing.
 
 9. **First-run detection (T5.1)**: Call `isFirstRun({ cwd, brList, cassSearch })` (exported from `mcp-server/src/first-run.ts`). Wire `brList` to `br list --json` and `cassSearch` to `cm search --json`. Cache the boolean as `IS_FIRST_RUN`. True only when **all five** signals are absent: no `.pi-flywheel/checkpoint.json`, no beads, no `docs/plans/*.md`, no `.pi-orchestrator/`, no CASS entries for this cwd. The tutorial-bead offer in Step 0d depends on this; if any signal fires, suppress the tutorial and route to the appropriate session-resume / open-beads menu instead.
 
@@ -175,13 +175,14 @@ Also append a `Doctor:` line to the banner using `DOCTOR_REPORT.overall` (from s
 - `red` → `Doctor: red ✗`
 - null / not run → `Doctor: not run`
 
-If `DOCTOR_REPORT.overall === "red"`, under the banner list every failing check with one line each and include a pointer to the slash command:
+If `DOCTOR_REPORT.overall === "red"` OR `DOCTOR_REPORT.overall === "yellow"`, under the banner list every check with `severity` in `{ "yellow", "red" }` — one line each — and include a pointer to the slash command. Prefix each row with a severity glyph so the operator can see the mix at a glance: `⚠` for yellow, `✗` for red.
 
 > **Doctor flagged:**
-> - `<check_name>` — <detail>
+> - `⚠ <check_name>` — <detail>     <!-- yellow rows -->
+> - `✗ <check_name>` — <detail>     <!-- red rows -->
 > - ...
 >
-> Run `/agent-flywheel:flywheel-doctor` for the full report and remediation steps.
+> Yellow checks are non-blocking (advisory — the session can proceed); red checks indicate real degradation that will likely bite downstream. Run `/agent-flywheel:flywheel-doctor` for the full report and remediation steps.
 
 #### Pre-flight issue surfacing (T4.1)
 

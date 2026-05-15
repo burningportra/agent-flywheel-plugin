@@ -87,6 +87,10 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   gemini_cli: null,
   swarm_model_ratio: null,
   codex_config_compat: null,
+  // claude-orchestrator-37n6 (v3.17.0) — gemini CLI version is user-managed;
+  // no automated remediation. B15 (claude-orchestrator-2wcd) pre-flight gate
+  // consults the doctor row and skips `--gmi` panes when this is yellow.
+  gemini_model_compat: null,
   rescues_last_30d: null,
   npm_marketplace_version_drift: null,
   // T6.2 (v3.16.0 noob-onboarding) — escalates SIGTERM → 1s grace → SIGKILL

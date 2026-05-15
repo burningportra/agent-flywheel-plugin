@@ -300,3 +300,31 @@ export function formatDetectedModels(detected: DetectedModels): string {
 
   return lines.join("\n");
 }
+
+// ─── Gemini CLI model allowlist (v3.17.0) ─────────────────────────────────
+//
+// The gemini CLI rejects spawn requests when its configured model is outside
+// a tight allowlist (the 2026-05-15 reality-check captured a spawn failure
+// driven by an unsupported model identifier). Used by the doctor's
+// `gemini_model_compat` check (bead claude-orchestrator-37n6) so the
+// pre-flight gate (bead claude-orchestrator-2wcd) can skip `--gmi` lanes
+// before they ever reach `ntm spawn`.
+
+export const GEMINI_MODEL_ALLOWLIST: readonly string[] = Object.freeze([
+  "gemini-3.1-flash-preview",
+]);
+
+export function isGeminiModelAllowed(model: string): boolean {
+  return GEMINI_MODEL_ALLOWLIST.includes(model.trim().toLowerCase());
+}
+
+/**
+ * Extract the first `gemini-…` model identifier from a CLI output blob
+ * (e.g. `gemini --version` stdout). Returns null when no match is found.
+ * The match is case-insensitive but the returned identifier is lowercased
+ * so callers can compare it to {@link GEMINI_MODEL_ALLOWLIST} directly.
+ */
+export function parseGeminiModelFromOutput(output: string): string | null {
+  const match = output.match(/gemini-[0-9][0-9a-z.-]*/i);
+  return match ? match[0].toLowerCase() : null;
+}

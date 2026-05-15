@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runDoctorChecks, computeOverallSeverity, countCriticalFails, diffVersionTriple, readManifestVersion, DOCTOR_CHECK_NAMES, parseCodexConfigTopLevelModel, isCodexIncompatibleModel, countLocalTelemetryRescuesWithin30Days, } from '../../tools/doctor.js';
+import { GEMINI_MODEL_ALLOWLIST, isGeminiModelAllowed, parseGeminiModelFromOutput, } from '../../model-detection.js';
 // ─── Shared helpers ───────────────────────────────────────────────────────
 const DAY_MS = 24 * 60 * 60 * 1000;
 function makeTmpCwd() {
@@ -711,6 +712,131 @@ describe('codex_config_compat (integrated)', () => {
             const compat = report.checks.find((c) => c.name === 'codex_config_compat');
             expect(compat.severity).toBe('green');
             expect(compat.message).toContain('o3');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
+// ─── gemini_model_compat ──────────────────────────────────────────────────
+describe('parseGeminiModelFromOutput (pure)', () => {
+    it('extracts the first gemini-* identifier from a version blob', () => {
+        expect(parseGeminiModelFromOutput('gemini 3.1.0 (model: gemini-3.1-flash-preview)'))
+            .toBe('gemini-3.1-flash-preview');
+    });
+    it('lower-cases the matched identifier', () => {
+        expect(parseGeminiModelFromOutput('Model: Gemini-3.1-Flash-Preview'))
+            .toBe('gemini-3.1-flash-preview');
+    });
+    it('returns null when no gemini-* identifier is present', () => {
+        expect(parseGeminiModelFromOutput('cli version 1.2.3')).toBeNull();
+    });
+    it('returns null on empty input', () => {
+        expect(parseGeminiModelFromOutput('')).toBeNull();
+    });
+});
+describe('isGeminiModelAllowed', () => {
+    it('accepts the documented allowlist entry', () => {
+        for (const model of GEMINI_MODEL_ALLOWLIST) {
+            expect(isGeminiModelAllowed(model)).toBe(true);
+        }
+    });
+    it('rejects unknown gemini models', () => {
+        expect(isGeminiModelAllowed('gemini-2.0-pro')).toBe(false);
+        expect(isGeminiModelAllowed('gemini-3.0-flash')).toBe(false);
+    });
+    it('is case-insensitive and trims whitespace', () => {
+        expect(isGeminiModelAllowed('  Gemini-3.1-Flash-Preview  ')).toBe(true);
+    });
+});
+describe('gemini_model_compat (integrated)', () => {
+    it('green when gemini cli is not installed (capability missing)', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            // Override the `which gemini` stub so the capability lookup reports
+            // gemini as absent — every other check stays green via allGreenStubs.
+            const stubs = [
+                {
+                    match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
+                    respond: { result: { code: 1, stdout: '', stderr: '' } },
+                },
+                ...allGreenStubs(),
+            ];
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(stubs),
+                codexConfigPath: null,
+            });
+            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
+            expect(compat.severity).toBe('green');
+            expect(compat.message).toContain('not installed');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('green when probe is disabled via geminiVersionOutput=null', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                geminiVersionOutput: null,
+            });
+            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
+            expect(compat.severity).toBe('green');
+            expect(compat.message).toContain('disabled');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('green when the advertised model is on the allowlist', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                geminiVersionOutput: 'gemini 3.1.0 (gemini-3.1-flash-preview)',
+            });
+            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
+            expect(compat.severity).toBe('green');
+            expect(compat.message).toContain('gemini-3.1-flash-preview');
+            expect(compat.message).toContain('allowlist');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('yellow when the advertised model is outside the allowlist', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                geminiVersionOutput: 'gemini 2.0.0 (gemini-2.0-pro)',
+            });
+            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
+            expect(compat.severity).toBe('yellow');
+            expect(compat.message).toContain('gemini-2.0-pro');
+            expect(compat.message).toContain('outside allowlist');
+            expect(compat.hint).toBeDefined();
+            expect(compat.hint.toLowerCase()).toContain('allowlist');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('green when the version output names no gemini model (advisory)', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+                geminiVersionOutput: 'cli version 1.2.3',
+            });
+            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
+            expect(compat.severity).toBe('green');
+            expect(compat.message).toContain('advisory');
         }
         finally {
             cleanup(cwd);

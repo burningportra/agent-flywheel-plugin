@@ -23,6 +23,7 @@ export declare const RemediateInputSchema: z.ZodObject<{
         gemini_cli: "gemini_cli";
         swarm_model_ratio: "swarm_model_ratio";
         codex_config_compat: "codex_config_compat";
+        gemini_model_compat: "gemini_model_compat";
         rescues_last_30d: "rescues_last_30d";
         npm_marketplace_version_drift: "npm_marketplace_version_drift";
         convergence_state_validity: "convergence_state_validity";

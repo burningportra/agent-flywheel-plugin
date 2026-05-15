@@ -33,6 +33,11 @@ import type { HookAdapter, WorktreeScanRoot } from '../adapters/platform/index.j
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
 import {
+  GEMINI_MODEL_ALLOWLIST,
+  isGeminiModelAllowed,
+  parseGeminiModelFromOutput,
+} from '../model-detection.js';
+import {
   readConvergenceFromDisk,
   planSlugFromIdentifier,
 } from './convergence-tool.js';
@@ -84,6 +89,13 @@ export const DOCTOR_CHECK_NAMES = [
   'swarm_model_ratio',
   // Codex companion app-server / ChatGPT-account compat (bead `cif`).
   'codex_config_compat',
+  // Gemini CLI model allowlist (bead claude-orchestrator-37n6, v3.17.0).
+  // Yellow when `gemini --version` advertises a model outside
+  // {@link GEMINI_MODEL_ALLOWLIST}; green when gemini is absent, when its
+  // version output does not name a model, or when the named model is in the
+  // allowlist. The B15 pre-flight gate (claude-orchestrator-2wcd) consults
+  // this row before spawning `--gmi` panes.
+  'gemini_model_compat',
   // Codex-rescue handoff observability (bead `agent-flywheel-plugin-1qn`).
   'rescues_last_30d',
   // Version-triple drift across mcp-server/package.json,
@@ -133,6 +145,8 @@ const POSTMORTEM_CHECKPOINT_STALE_HINT =
   'Clear the stale checkpoint with `/flywheel-stop`, or resume it with `/start` once you have confirmed the recorded goal still applies.';
 const CODEX_CONFIG_GPT5_HINT =
   'Comment out the `model = "..."` line in ~/.codex/config.toml. The codex-companion app-server path uses OpenAI API auth and rejects gpt-5*/gpt-5-codex on ChatGPT-account auth even though `codex exec` accepts them. Removing the override lets the app-server pick its built-in default.';
+const GEMINI_MODEL_COMPAT_HINT =
+  'Update the gemini CLI to a release that advertises a model on the allowlist (currently gemini-3.1-flash-preview), or skip `--gmi` panes until the B15 pre-flight gate routes around this.';
 const VERSION_DRIFT_HINT =
   'Run `/flywheel-setup` (or `cd mcp-server && npm run version-sync`) to align the manifests. Warn-only — drift does not block the run.';
 // v3.13.0 outcome-grading hints (verbatim from synthesized plan §"Doctor — Hint strings").
@@ -159,6 +173,10 @@ export interface DoctorOptions {
   /** Override path to ~/.codex/config.toml (tests). Pass a fixture path or
    * `null` to skip reading. Defaults to `~/.codex/config.toml`. */
   codexConfigPath?: string | null;
+  /** Override the `gemini --version` output (tests). When defined, bypasses
+   * the exec probe entirely — pass `null` to assert the "no version output"
+   * branch, or a string to feed the parser directly. */
+  geminiVersionOutput?: string | null;
   /** Override path to the marketplace plugin manifest (tests). Defaults to
    * `<cwd>/.claude-plugin/plugin.json`. Pass `null` to treat as missing. */
   marketplaceManifestPath?: string | null;
@@ -255,6 +273,16 @@ export async function runDoctorChecks(
         options.codexConfigPath === undefined
           ? join(homedir(), '.codex', 'config.toml')
           : options.codexConfigPath,
+      ),
+    () =>
+      checkGeminiModelCompat(
+        exec,
+        cwd,
+        combined,
+        perCheckTimeoutMs,
+        now,
+        swarmCapsPromise,
+        options.geminiVersionOutput,
       ),
     () => checkRescuesLast30d(exec, cwd, combined, perCheckTimeoutMs, now),
     () =>
@@ -1343,6 +1371,96 @@ async function checkCodexConfigCompat(
     message: `~/.codex/config.toml model="${model}" — compatible with app-server`,
     durationMs: now() - start,
   };
+}
+
+/**
+ * `gemini_model_compat` — probe the gemini CLI and compare its advertised
+ * model identifier against {@link GEMINI_MODEL_ALLOWLIST}.
+ *
+ * Severity ladder (advisory only — never red):
+ *   - green when gemini is absent (no probe possible), the version output
+ *     does not name a model, the version probe fails, or the named model
+ *     is on the allowlist.
+ *   - yellow when a model is named and it is **not** on the allowlist.
+ *
+ * Tests inject `geminiVersionOutput` to skip the exec call entirely.
+ */
+async function checkGeminiModelCompat(
+  exec: ExecFn,
+  cwd: string,
+  signal: AbortSignal,
+  timeout: number,
+  now: () => number,
+  capsPromise: Promise<CapabilitiesMap>,
+  geminiVersionOutput: string | null | undefined,
+): Promise<DoctorCheck> {
+  const start = now();
+  if (signal.aborted) return abortedCheck('gemini_model_compat');
+  try {
+    let output: string;
+    if (geminiVersionOutput !== undefined) {
+      if (geminiVersionOutput === null) {
+        return {
+          name: 'gemini_model_compat',
+          severity: 'green',
+          message: 'gemini version probe disabled (geminiVersionOutput=null)',
+          durationMs: now() - start,
+        };
+      }
+      output = geminiVersionOutput;
+    } else {
+      const caps = await capsPromise;
+      if (!caps.gemini.available) {
+        return {
+          name: 'gemini_model_compat',
+          severity: 'green',
+          message: 'gemini cli not installed — nothing to validate',
+          durationMs: now() - start,
+        };
+      }
+      const res = await exec('gemini', ['--version'], { timeout, cwd, signal });
+      if (res.code !== 0) {
+        return {
+          name: 'gemini_model_compat',
+          severity: 'green',
+          message: `gemini --version exited ${res.code} — model not determinable (advisory)`,
+          durationMs: now() - start,
+        };
+      }
+      output = `${res.stdout}\n${res.stderr}`;
+    }
+    const model = parseGeminiModelFromOutput(output);
+    if (model === null) {
+      return {
+        name: 'gemini_model_compat',
+        severity: 'green',
+        message: 'gemini --version did not advertise a model identifier — advisory',
+        durationMs: now() - start,
+      };
+    }
+    if (isGeminiModelAllowed(model)) {
+      return {
+        name: 'gemini_model_compat',
+        severity: 'green',
+        message: `gemini cli model="${model}" — in allowlist`,
+        durationMs: now() - start,
+      };
+    }
+    return {
+      name: 'gemini_model_compat',
+      severity: 'yellow',
+      message: `gemini cli model="${model}" — outside allowlist (${GEMINI_MODEL_ALLOWLIST.join(', ')})`,
+      hint: GEMINI_MODEL_COMPAT_HINT,
+      durationMs: now() - start,
+    };
+  } catch (err) {
+    return {
+      name: 'gemini_model_compat',
+      severity: 'green',
+      message: `gemini cli probe failed: ${errMsg(err)} — advisory`,
+      durationMs: now() - start,
+    };
+  }
 }
 
 async function checkRescuesLast30d(
