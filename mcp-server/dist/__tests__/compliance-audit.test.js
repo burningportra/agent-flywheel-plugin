@@ -180,6 +180,57 @@ describe('runComplianceAudit - skill spawn + parse', () => {
             },
         ]);
     });
+    it('fails requested bead ids missing from manifest results', async () => {
+        setupFakeManifestPassDir(tmp, {
+            audit_dir_version: '1.0.0',
+            pass_id: '2026-05-15T14-33-55Z-flywheel-gate',
+            pass_started_at: '2026-05-15T14:33:55Z',
+            mode: 'flywheel-gate',
+            score_threshold: 700,
+            target_beads: ['agent-flywheel-001', 'agent-flywheel-002', 'agent-flywheel-003'],
+            results: {
+                'agent-flywheel-001': {
+                    score: 920,
+                    verdict: 'Substantially complete',
+                    gate: 'PASS',
+                },
+            },
+            summary: {
+                total_beads: 3,
+                passed: 1,
+                failed: 0,
+                gate_verdict: 'PASS',
+            },
+        });
+        const exec = vi.fn(async (cmd) => {
+            if (cmd === 'git')
+                return { code: 0, stdout: 'abc123\n', stderr: '' };
+            return { code: 0, stdout: '', stderr: '' };
+        });
+        const result = await runComplianceAudit(stubCtx({ exec }), {
+            cwd: tmp,
+            beadIds: ['agent-flywheel-001', 'agent-flywheel-002', 'agent-flywheel-003'],
+        });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('ok');
+        expect(data.passed).toHaveLength(1);
+        expect(data.failed).toEqual([
+            {
+                beadId: 'agent-flywheel-002',
+                score: 0,
+                reportPath: join(tmp, 'beads_compliance_audit', 'passes', '2026-05-15T14-33-55Z-flywheel-gate', 'REPORT.md'),
+                reasons: ['missing from skill output'],
+            },
+            {
+                beadId: 'agent-flywheel-003',
+                score: 0,
+                reportPath: join(tmp, 'beads_compliance_audit', 'passes', '2026-05-15T14-33-55Z-flywheel-gate', 'REPORT.md'),
+                reasons: ['missing from skill output'],
+            },
+        ]);
+        expect(data.errors['agent-flywheel-002']).toBe('missing from skill output');
+        expect(data.errors['agent-flywheel-003']).toBe('missing from skill output');
+    });
     it('parses the 2026-05-15 five-bead manifest and matches the report verdict', async () => {
         setupFakeManifestPassDir(tmp, {
             audit_dir_version: '1.0.0',

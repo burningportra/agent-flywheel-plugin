@@ -234,6 +234,8 @@ async function finalizeComplianceAudit(ctx, args, threshold, startedAt, parsedRe
         }
     }
     const errors = { ...(options.initialErrors ?? {}) };
+    const parsedBeadIds = new Set(parsedResult.beads.map((bead) => bead.id));
+    const timeoutMissingBeadIds = new Set(options.timeoutMissingBeadIds ?? []);
     for (const beadId of options.timeoutMissingBeadIds ?? []) {
         errors[beadId] = 'timeout';
         failed.push({
@@ -241,6 +243,17 @@ async function finalizeComplianceAudit(ctx, args, threshold, startedAt, parsedRe
             score: 0,
             reportPath: join(latestPassDir, 'REPORT.md'),
             reasons: ['timeout'],
+        });
+    }
+    for (const beadId of args.beadIds) {
+        if (parsedBeadIds.has(beadId) || timeoutMissingBeadIds.has(beadId))
+            continue;
+        errors[beadId] = 'missing from skill output';
+        failed.push({
+            beadId,
+            score: 0,
+            reportPath: join(latestPassDir, 'REPORT.md'),
+            reasons: ['missing from skill output'],
         });
     }
     for (const bead of failed) {
