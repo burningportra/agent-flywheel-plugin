@@ -119,6 +119,35 @@ describe('runComplianceAudit - skill spawn + parse', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
+  const successfulExec = () =>
+    vi.fn(async (cmd: string) => {
+      if (cmd === 'git') return { code: 0, stdout: 'abc123\n', stderr: '' };
+      return { code: 0, stdout: '', stderr: '' };
+    });
+
+  const manifestFixture = (overrides: Record<string, unknown> = {}) => ({
+    audit_dir_version: '1.0.0',
+    pass_id: '2026-05-15T14-33-55Z-flywheel-gate',
+    pass_started_at: '2026-05-15T14:33:55Z',
+    mode: 'flywheel-gate',
+    score_threshold: 700,
+    target_beads: ['agent-flywheel-001'],
+    results: {
+      'agent-flywheel-001': {
+        score: 920,
+        verdict: 'Substantially complete',
+        gate: 'PASS',
+      },
+    },
+    summary: {
+      total_beads: 1,
+      passed: 1,
+      failed: 0,
+      gate_verdict: 'PASS',
+    },
+    ...overrides,
+  });
+
   it('spawns the skill and parses all-pass result', async () => {
     setupFakePassDir(tmp, 'compliance-result-pass.json');
     const exec = vi.fn().mockResolvedValue({ code: 0, stdout: '', stderr: '' });
@@ -285,6 +314,145 @@ describe('runComplianceAudit - skill spawn + parse', () => {
       sessionId: null,
       gitHead: 'abc123',
     });
+  });
+
+  it('fails manifest beads with unrecognized gate values', async () => {
+    setupFakeManifestPassDir(tmp, manifestFixture({
+      results: {
+        'agent-flywheel-001': {
+          score: 950,
+          verdict: 'Manual review required',
+          gate: 'PARTIAL',
+        },
+      },
+    }));
+
+    const result = await runComplianceAudit(stubCtx({ exec: successfulExec() }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.passed).toEqual([]);
+    expect(data.failed).toEqual([
+      {
+        beadId: 'agent-flywheel-001',
+        score: 950,
+        reportPath: join(
+          tmp,
+          'beads_compliance_audit',
+          'passes',
+          '2026-05-15T14-33-55Z-flywheel-gate',
+          'beads/agent-flywheel-001/scorecard.md',
+        ),
+        reasons: ['Manual review required', 'gate:PARTIAL'],
+      },
+    ]);
+  });
+
+  it('fails target beads missing from manifest results', async () => {
+    setupFakeManifestPassDir(tmp, manifestFixture({
+      target_beads: ['agent-flywheel-001', 'agent-flywheel-missing'],
+    }));
+
+    const result = await runComplianceAudit(stubCtx({ exec: successfulExec() }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001', 'agent-flywheel-missing'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.errors['agent-flywheel-missing']).toBe('missing from skill output');
+    expect(data.failed).toContainEqual({
+      beadId: 'agent-flywheel-missing',
+      score: 0,
+      reportPath: join(
+        tmp,
+        'beads_compliance_audit',
+        'passes',
+        '2026-05-15T14-33-55Z-flywheel-gate',
+        'REPORT.md',
+      ),
+      reasons: ['missing from skill output'],
+    });
+  });
+
+  it('fails empty manifest results for requested beads', async () => {
+    setupFakeManifestPassDir(tmp, manifestFixture({
+      results: {},
+      target_beads: ['agent-flywheel-001'],
+      summary: {
+        total_beads: 1,
+        passed: 0,
+        failed: 0,
+        gate_verdict: 'PASS',
+      },
+    }));
+
+    const result = await runComplianceAudit(stubCtx({ exec: successfulExec() }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.passed).toEqual([]);
+    expect(data.failed).toEqual([
+      {
+        beadId: 'agent-flywheel-001',
+        score: 0,
+        reportPath: join(
+          tmp,
+          'beads_compliance_audit',
+          'passes',
+          '2026-05-15T14-33-55Z-flywheel-gate',
+          'REPORT.md',
+        ),
+        reasons: ['missing from skill output'],
+      },
+    ]);
+  });
+
+  it('fails manifest beads with negative scores', async () => {
+    setupFakeManifestPassDir(tmp, manifestFixture({
+      results: {
+        'agent-flywheel-001': {
+          score: -100,
+          verdict: 'Negative score emitted',
+        },
+      },
+    }));
+
+    const result = await runComplianceAudit(stubCtx({ exec: successfulExec() }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.passed).toEqual([]);
+    expect(data.failed).toEqual([
+      expect.objectContaining({
+        beadId: 'agent-flywheel-001',
+        score: -100,
+        reasons: ['Negative score emitted'],
+      }),
+    ]);
+  });
+
+  it('falls back to manifest pass_id when pass_started_at is missing', async () => {
+    setupFakeManifestPassDir(tmp, manifestFixture({
+      pass_started_at: undefined,
+    }));
+
+    const result = await runComplianceAudit(stubCtx({ exec: successfulExec() }), {
+      cwd: tmp,
+      beadIds: ['agent-flywheel-001'],
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.passUtc).toBe('2026-05-15T14-33-55Z-flywheel-gate');
+    expect(storeComplianceScore).toHaveBeenCalledWith(tmp, expect.objectContaining({
+      beadId: 'agent-flywheel-001',
+      passUtc: '2026-05-15T14-33-55Z-flywheel-gate',
+    }));
   });
 
   it('fails requested bead ids missing from manifest results', async () => {
