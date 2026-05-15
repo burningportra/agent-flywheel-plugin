@@ -54,6 +54,7 @@ The fresh-eyes auto-trigger release. During long implementation runs, the coordi
 
 ### Changed
 
+- **NTM pane priority — canonical default flipped to `cc:cod:gem` 1:1:1.** Mixed Claude/Codex/Gemini at equal share is now the default for every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills, replacing the v3.12.0 "cod-first secondary lane" rule. Downstream pipelines (Step 9 fresh-eyes, duel review, batch synthesis) assume the 1:1:1 ratio when reconciling cross-agent votes. Substitution ladder when a provider is unavailable: `gmi` → `cod` → `pi` → `cc` (cc-only is the degraded last-resort floor, not a preferred default). The v3.12.0 "prefer `--cod=` over `--pi=`" and pre-v3.12.0 "pi over cod" priorities are both retired. See the "NTM pane priority" section in `AGENTS.md` for the full rule and ladder semantics.
 - **No breaking changes.** The feature is opt-in via threshold. Setting `commitBatchThreshold = 0` (or leaving it unset) preserves v3.16.0 behavior exactly.
 
 ### Compatibility
