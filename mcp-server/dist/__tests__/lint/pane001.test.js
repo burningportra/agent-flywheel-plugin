@@ -148,7 +148,7 @@ describe("PANE001 — rule.check (cross-file scan)", () => {
         const f = findings.find((x) => x.file.endsWith("_drift.md"));
         expect(f).toBeDefined();
         expect(f.ruleId).toBe("PANE001");
-        expect(f.severity).toBe("warn");
+        expect(f.severity).toBe("error");
         expect(f.message).toMatch(/lane ratio/);
     });
     it("suppresses a non-canonical spawn line when 'explicit override' marker is within ±6 lines", async () => {

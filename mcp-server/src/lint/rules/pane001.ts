@@ -10,7 +10,7 @@ import type { Document, Finding, Rule, RuleContext } from "../types.js";
  * (cc:cod:gem 1:1:1 as of v3.17.0) and substitution ladder
  * (gmi→cod→pi→cc). When a skill file embeds an `ntm spawn` invocation with
  * a non-canonical lane mix and no nearby "override" marker, the rule fires
- * a `warn`-severity PANE001 finding.
+ * an `error`-severity PANE001 finding.
  *
  * Override markers (recognised within ±6 lines of the offending line) let
  * a skill intentionally diverge — e.g. `_deslop.md`'s "5-Cod swarm —
@@ -28,9 +28,7 @@ import type { Document, Finding, Rule, RuleContext } from "../types.js";
  * walks `<repoRoot>/skills/start/_*.md` itself to cover the sub-skills. The
  * canonical rule is parsed from `<repoRoot>/AGENTS.md`.
  *
- * Severity: `warn` for initial rollout (matches reserve001's pattern).
- * Promote to `error` after one release cycle if the false-positive rate stays
- * acceptably low.
+ * Severity: `error` after the v3.17 soft-warn rollout window.
  *
  * Bead: claude-orchestrator-34ok.
  */
@@ -345,7 +343,7 @@ function scanLine(
   if (hasOverrideMarkerNear(source, lineIndex, OVERRIDE_PROXIMITY_LINES)) return null;
   return {
     ruleId: "PANE001",
-    severity: "warn",
+    severity: "error",
     file,
     line: lineIndex + 1,
     column: 1,
@@ -379,7 +377,7 @@ export const pane001: Rule = {
   id: "PANE001",
   description:
     "NTM pane-priority spawn shapes in skill files must match AGENTS.md canonical (cc:cod:gem 1:1:1) or document an explicit override.",
-  severity: "warn",
+  severity: "error",
   async check(doc: Document, ctx: RuleContext): Promise<Finding[]> {
     const rc = ctx as Pane001Context;
     const repoRoot = rc.repoRoot;

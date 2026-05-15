@@ -282,7 +282,7 @@ function scanLine(source, lineIndex, line, canonical, file) {
         return null;
     return {
         ruleId: "PANE001",
-        severity: "warn",
+        severity: "error",
         file,
         line: lineIndex + 1,
         column: 1,
@@ -312,7 +312,7 @@ async function scanFile(rel, abs, canonical) {
 export const pane001 = {
     id: "PANE001",
     description: "NTM pane-priority spawn shapes in skill files must match AGENTS.md canonical (cc:cod:gem 1:1:1) or document an explicit override.",
-    severity: "warn",
+    severity: "error",
     async check(doc, ctx) {
         const rc = ctx;
         const repoRoot = rc.repoRoot;
