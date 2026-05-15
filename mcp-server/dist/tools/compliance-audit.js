@@ -73,7 +73,7 @@ function parseLegacyResultJson(resultJsonPath, latestPassDir) {
         };
     }
 }
-function parseManifestJson(manifestJsonPath, latestPassDir) {
+function parseManifestJson(manifestJsonPath, latestPassDir, threshold) {
     try {
         const rawManifest = JSON.parse(readFileSync(manifestJsonPath, 'utf8'));
         const schemaResult = ComplianceManifestSchema.safeParse(rawManifest);
@@ -86,7 +86,11 @@ function parseManifestJson(manifestJsonPath, latestPassDir) {
             };
         }
         const manifest = schemaResult.data;
-        const threshold = manifest.score_threshold ?? 700;
+        const advisoryErrors = {};
+        if (manifest.score_threshold !== undefined && manifest.score_threshold !== threshold) {
+            advisoryErrors.threshold_mismatch =
+                `manifest score_threshold ${manifest.score_threshold} ignored; using requested threshold ${threshold}`;
+        }
         const orderedBeadIds = [
             ...(manifest.target_beads ?? []).filter((beadId) => manifest.results[beadId] !== undefined),
             ...Object.keys(manifest.results).filter((beadId) => !(manifest.target_beads ?? []).includes(beadId)),
@@ -120,6 +124,7 @@ function parseManifestJson(manifestJsonPath, latestPassDir) {
                     session_id: manifest.session_id ?? null,
                 },
                 latestPassDir,
+                advisoryErrors: Object.keys(advisoryErrors).length > 0 ? advisoryErrors : undefined,
             },
         };
     }
@@ -163,7 +168,7 @@ function isTimeoutError(err) {
         || record.name === 'AbortError'
         || record.signal === 'SIGTERM';
 }
-function readLatestComplianceResult(cwd) {
+function readLatestComplianceResult(cwd, threshold) {
     const passesRoot = join(cwd, 'beads_compliance_audit', 'passes');
     if (!existsSync(passesRoot)) {
         return {
@@ -201,7 +206,7 @@ function readLatestComplianceResult(cwd) {
     const manifestJsonPath = join(latestPassDir, 'manifest.json');
     const resultJsonPath = join(latestPassDir, 'result.json');
     if (existsSync(manifestJsonPath)) {
-        return parseManifestJson(manifestJsonPath, latestPassDir);
+        return parseManifestJson(manifestJsonPath, latestPassDir, threshold);
     }
     if (existsSync(resultJsonPath)) {
         return parseLegacyResultJson(resultJsonPath, latestPassDir);
@@ -369,23 +374,23 @@ export async function runComplianceAudit(ctx, rawArgs) {
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (isTimeoutError(err)) {
-            const latestResult = readLatestComplianceResult(args.cwd);
+            const latestResult = readLatestComplianceResult(args.cwd, threshold);
             if (!latestResult.ok) {
                 return errorComplianceResult(`Skill spawn timed out; ${latestResult.text}`, startedAt, { spawn: message, ...latestResult.errors });
             }
             const parsedBeadIds = new Set(latestResult.value.parsedResult.beads.map((bead) => bead.id));
             const timeoutMissingBeadIds = args.beadIds.filter((beadId) => !parsedBeadIds.has(beadId));
             return finalizeComplianceAudit(ctx, args, threshold, startedAt, latestResult.value.parsedResult, latestResult.value.latestPassDir, {
-                initialErrors: { spawn: message },
+                initialErrors: { ...(latestResult.value.advisoryErrors ?? {}), spawn: message },
                 timeoutMissingBeadIds,
             });
         }
         return errorComplianceResult(`Skill spawn threw: ${message}`, startedAt, { spawn: message });
     }
-    const latestResult = readLatestComplianceResult(args.cwd);
+    const latestResult = readLatestComplianceResult(args.cwd, threshold);
     if (!latestResult.ok) {
         return errorComplianceResult(latestResult.text, startedAt, latestResult.errors);
     }
-    return finalizeComplianceAudit(ctx, args, threshold, startedAt, latestResult.value.parsedResult, latestResult.value.latestPassDir);
+    return finalizeComplianceAudit(ctx, args, threshold, startedAt, latestResult.value.parsedResult, latestResult.value.latestPassDir, { initialErrors: latestResult.value.advisoryErrors });
 }
 //# sourceMappingURL=compliance-audit.js.map

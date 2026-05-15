@@ -66,6 +66,7 @@ const ComplianceManifestSchema = z.object({
 interface ParsedComplianceResult {
   parsedResult: ComplianceResult;
   latestPassDir: string;
+  advisoryErrors?: Record<string, string>;
 }
 
 type LatestResultRead =
@@ -104,7 +105,11 @@ function parseLegacyResultJson(resultJsonPath: string, latestPassDir: string): L
   }
 }
 
-function parseManifestJson(manifestJsonPath: string, latestPassDir: string): LatestResultRead {
+function parseManifestJson(
+  manifestJsonPath: string,
+  latestPassDir: string,
+  threshold: number,
+): LatestResultRead {
   try {
     const rawManifest = JSON.parse(readFileSync(manifestJsonPath, 'utf8')) as unknown;
     const schemaResult = ComplianceManifestSchema.safeParse(rawManifest);
@@ -118,7 +123,11 @@ function parseManifestJson(manifestJsonPath: string, latestPassDir: string): Lat
     }
 
     const manifest = schemaResult.data;
-    const threshold = manifest.score_threshold ?? 700;
+    const advisoryErrors: Record<string, string> = {};
+    if (manifest.score_threshold !== undefined && manifest.score_threshold !== threshold) {
+      advisoryErrors.threshold_mismatch =
+        `manifest score_threshold ${manifest.score_threshold} ignored; using requested threshold ${threshold}`;
+    }
     const orderedBeadIds = [
       ...(manifest.target_beads ?? []).filter((beadId) => manifest.results[beadId] !== undefined),
       ...Object.keys(manifest.results).filter(
@@ -155,6 +164,7 @@ function parseManifestJson(manifestJsonPath: string, latestPassDir: string): Lat
           session_id: manifest.session_id ?? null,
         },
         latestPassDir,
+        advisoryErrors: Object.keys(advisoryErrors).length > 0 ? advisoryErrors : undefined,
       },
     };
   } catch (err: unknown) {
@@ -225,7 +235,7 @@ function isTimeoutError(err: unknown): boolean {
     || record.signal === 'SIGTERM';
 }
 
-function readLatestComplianceResult(cwd: string): LatestResultRead {
+function readLatestComplianceResult(cwd: string, threshold: number): LatestResultRead {
   const passesRoot = join(cwd, 'beads_compliance_audit', 'passes');
   if (!existsSync(passesRoot)) {
     return {
@@ -266,7 +276,7 @@ function readLatestComplianceResult(cwd: string): LatestResultRead {
   const resultJsonPath = join(latestPassDir, 'result.json');
 
   if (existsSync(manifestJsonPath)) {
-    return parseManifestJson(manifestJsonPath, latestPassDir);
+    return parseManifestJson(manifestJsonPath, latestPassDir, threshold);
   }
 
   if (existsSync(resultJsonPath)) {
@@ -501,7 +511,7 @@ export async function runComplianceAudit(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     if (isTimeoutError(err)) {
-      const latestResult = readLatestComplianceResult(args.cwd);
+      const latestResult = readLatestComplianceResult(args.cwd, threshold);
       if (!latestResult.ok) {
         return errorComplianceResult(
           `Skill spawn timed out; ${latestResult.text}`,
@@ -520,7 +530,7 @@ export async function runComplianceAudit(
         latestResult.value.parsedResult,
         latestResult.value.latestPassDir,
         {
-          initialErrors: { spawn: message },
+          initialErrors: { ...(latestResult.value.advisoryErrors ?? {}), spawn: message },
           timeoutMissingBeadIds,
         },
       );
@@ -532,7 +542,7 @@ export async function runComplianceAudit(
     );
   }
 
-  const latestResult = readLatestComplianceResult(args.cwd);
+  const latestResult = readLatestComplianceResult(args.cwd, threshold);
   if (!latestResult.ok) {
     return errorComplianceResult(latestResult.text, startedAt, latestResult.errors);
   }
@@ -544,5 +554,6 @@ export async function runComplianceAudit(
     startedAt,
     latestResult.value.parsedResult,
     latestResult.value.latestPassDir,
+    { initialErrors: latestResult.value.advisoryErrors },
   );
 }

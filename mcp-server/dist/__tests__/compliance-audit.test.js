@@ -180,6 +180,60 @@ describe('runComplianceAudit - skill spawn + parse', () => {
             },
         ]);
     });
+    it('uses requested threshold for gate-less manifest scores and records a mismatch advisory', async () => {
+        setupFakeManifestPassDir(tmp, {
+            audit_dir_version: '1.0.0',
+            pass_id: '2026-05-15T14-33-55Z-flywheel-gate',
+            pass_started_at: '2026-05-15T14:33:55Z',
+            mode: 'flywheel-gate',
+            score_threshold: 700,
+            target_beads: ['agent-flywheel-001'],
+            results: {
+                'agent-flywheel-001': {
+                    score: 750,
+                    verdict: 'Needs more evidence',
+                },
+            },
+            summary: {
+                total_beads: 1,
+                passed: 1,
+                failed: 0,
+                gate_verdict: 'PASS',
+            },
+        });
+        const exec = vi.fn(async (cmd) => {
+            if (cmd === 'git')
+                return { code: 0, stdout: 'abc123\n', stderr: '' };
+            return { code: 0, stdout: '', stderr: '' };
+        });
+        const result = await runComplianceAudit(stubCtx({ exec }), {
+            cwd: tmp,
+            beadIds: ['agent-flywheel-001'],
+            threshold: 800,
+        });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('ok');
+        expect(data.passed).toEqual([]);
+        expect(data.failed).toEqual([
+            {
+                beadId: 'agent-flywheel-001',
+                score: 750,
+                reportPath: join(tmp, 'beads_compliance_audit', 'passes', '2026-05-15T14-33-55Z-flywheel-gate', 'beads/agent-flywheel-001/scorecard.md'),
+                reasons: ['Needs more evidence'],
+            },
+        ]);
+        expect(data.errors.threshold_mismatch).toBe('manifest score_threshold 700 ignored; using requested threshold 800');
+        expect(storeComplianceScore).toHaveBeenCalledWith(tmp, {
+            beadId: 'agent-flywheel-001',
+            score: 750,
+            threshold: 800,
+            passed: false,
+            rubric: {},
+            passUtc: '2026-05-15T14:33:55Z',
+            sessionId: null,
+            gitHead: 'abc123',
+        });
+    });
     it('fails requested bead ids missing from manifest results', async () => {
         setupFakeManifestPassDir(tmp, {
             audit_dir_version: '1.0.0',
