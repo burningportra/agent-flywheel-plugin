@@ -199,7 +199,12 @@ Both run in the same cycle and complement each other. `flywheel_review` ensures 
 
 ### FW_GRADER_MODEL safe-default cascade
 
-Outcome grading uses `FW_GRADER_MODEL` only for the Codex-primary grader lane. If unset, Codex runs with `gpt-5.5`; if `FW_GRADER_FORCE_CLAUDE=1` or Codex is unavailable, the grader skips directly to the fresh-CC fallback via `claude --print`. Keep this model cascade distinct from the NTM pane-provider substitution ladder below.
+The outcome grader chooses its model according to this canonical priority cascade:
+1. **`FW_GRADER_MODEL` (if set)** — Used for the Codex-primary lane.
+2. **`gpt-5.5` (default)** — Used if `FW_GRADER_MODEL` is unset.
+3. **`claude --print` (fallback)** — Used if `FW_GRADER_FORCE_CLAUDE=1` or if Codex is unavailable/unhealthy.
+
+This cascade is specific to the outcome grader and is distinct from the NTM pane-provider substitution ladder described in the next section.
 
 State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 
