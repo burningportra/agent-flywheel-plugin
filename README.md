@@ -312,7 +312,7 @@ Do not use `"type": "sse"` or `"type": "url"` for agent-mail — use `"http"`.
 claude --plugin-dir .
 │
 ├── commands/*.md          ← Natural-language slash commands (24)
-├── skills/*/SKILL.md      ← 40 skills + 9 phase sub-files (start/_*.md)
+├── skills/*/SKILL.md      ← 40 skills + 10 phase sub-files (start/_*.md)
 ├── hooks/hooks.json       ← SessionStart banner + tool checks
 │
 ├── .mcp.json
