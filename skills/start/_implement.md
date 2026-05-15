@@ -270,14 +270,17 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
       # --no-user omits pane 0 entirely; lanes start at pane index 1.
       # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
-      # Pane-type priority (user preference, see AGENTS.md "NTM pane priority"):
-      #   prefer `cod` over `pi` as the second lane. Only fall back to `--pi=`
-      #   if Codex is unavailable on this host (no Codex CLI / quota exhausted).
+      # Pane-type priority (Changed in v3.17.0 — see AGENTS.md "NTM pane priority"):
+      #   mixed cc:cod:gem 1:1:1 is canonical. Substitution ladder when a
+      #   provider is unavailable (driven by the Step 1a/1b doctor gates):
+      #     missing gmi → reassign to cod
+      #     missing cod also → reassign to pi
+      #     all three peers unavailable → cc-only floor (explicit override)
       ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-        --cc=<N_claude> --cod=<N_cod> --gem=<N_gemini> --stagger-mode=smart
+        --cc=<N_claude> --cod=<N_cod> --gmi=<N_gemini> --stagger-mode=smart
       ```
 
-      **Pane addressing is numeric** — `cc-1` / `cod-1` / `gem-1` style does NOT work. With `--no-user`, panes are laid out contiguously by spawn order:
+      **Pane addressing is numeric** — `cc-1` / `cod-1` / `gmi-1` style does NOT work. With `--no-user`, panes are laid out contiguously by spawn order:
 
       | Lane    | Pane indices                                              |
       |---------|------------------------------------------------------------|

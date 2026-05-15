@@ -341,8 +341,10 @@ Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes,
 
    # --no-user omits pane 0 entirely; planners get pane indices 1, 2, 3.
    # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
-   # Pane-type priority (user preference, see AGENTS.md "NTM pane priority"):
-   #   prefer `cod` over `pi`. Only fall back to `--pi=1` if Codex is unavailable.
+   # Pane-type priority (Changed in v3.17.0 — see AGENTS.md "NTM pane priority"):
+   #   mixed cc:cod:gem 1:1:1 is canonical. Substitution ladder on a missing
+   #   provider: gmi→cod (--cc=1 --cod=2), then cod→pi (--cc=1 --pi=2), then
+   #   pi→cc as the cc-only floor.
    ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
    ```
 
