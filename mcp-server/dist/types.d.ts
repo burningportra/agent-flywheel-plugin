@@ -841,15 +841,15 @@ export interface BatchReviewVerdict {
     sha_range: string;
 }
 export declare const SeveritySchema: z.ZodEnum<{
-    low: "low";
     medium: "medium";
+    low: "low";
     high: "high";
     critical: "critical";
 }>;
 export declare const FindingSchema: z.ZodObject<{
     severity: z.ZodEnum<{
-        low: "low";
         medium: "medium";
+        low: "low";
         high: "high";
         critical: "critical";
     }>;
@@ -866,8 +866,8 @@ export declare const BatchReviewVerdictSchema: z.ZodObject<{
     }>;
     findings: z.ZodArray<z.ZodObject<{
         severity: z.ZodEnum<{
-            low: "low";
             medium: "medium";
+            low: "low";
             high: "high";
             critical: "critical";
         }>;

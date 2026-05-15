@@ -19,17 +19,17 @@ export declare const SynthesizeRubricInputSchema: z.ZodObject<{
     planSlug: z.ZodOptional<z.ZodString>;
     planPath: z.ZodOptional<z.ZodString>;
     action: z.ZodDefault<z.ZodOptional<z.ZodEnum<{
-        synthesize: "synthesize";
         validate: "validate";
+        synthesize: "synthesize";
         edit: "edit";
         regenerate: "regenerate";
     }>>>;
     editIntent: z.ZodOptional<z.ZodObject<{
         kind: z.ZodEnum<{
             custom: "custom";
-            tighten: "tighten";
             add: "add";
             remove: "remove";
+            tighten: "tighten";
         }>;
         text: z.ZodString;
     }, z.core.$strip>>;
