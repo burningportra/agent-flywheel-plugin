@@ -53,6 +53,15 @@
    - When writing `.pi-flywheel/inflight-briefing.md` for spawned panes, its STEP 0 must tell agents to reuse NTM's pane identity: if `$NTM_AGENT_NAME` is set, call `macro_start_session(..., agent_name: "$NTM_AGENT_NAME")` and use that same value for `AGENT_NAME` in git commands.
    - If `$NTM_AGENT_NAME` is absent, call `macro_start_session` without `agent_name`, capture the generated name, and note that audit trails will remain split until NTM exports the pane identity. Current `ntm spawn --help` exposes `NTM_SPAWN_*` metadata but no `NTM_AGENT_NAME` / `--agent-name` support.
 3. **CLI capability check** — `which claude codex` (gemini optional). If `codex` missing, the 4-cod lane collapses; surface a degraded-mode `AskUserQuestion` before proceeding (override default cc:cod ratio? abort? proceed degraded?).
+3a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gem=N>0`).** Call `flywheel_doctor` (cached) and read `DOCTOR_REPORT.checks`. Apply per check, BEFORE `ntm spawn`:
+
+   | Check | Trigger | Action |
+   |-------|---------|--------|
+   | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Redistribute the dropped share via the substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc). Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. |
+   | `gemini_model_compat` severity ∈ {yellow, red} | `--gem=N>0` | Auto-downgrade `--gem=N → 0`. Redistribute via ladder (gmi→cod→pi→cc). Log: `⚠ gemini_model_compat=<sev>; downgrading --gem=N→0 (configured model outside allowlist; see AGENTS.md NTM pane priority substitution ladder)`. |
+
+   In `--no-user` auto-resume / looper-driven contexts (this file's default), auto-downgrade with the log line — do NOT block on `AskUserQuestion`. The resumed swarm proceeds with the new pane shape; the operator sees the downgrade in the dispatch banner. For interactive `/start` variants, see `_implement.md` Step 1a for the AskUserQuestion variant. The `gemini_model_compat` doctor check is provided by bead `claude-orchestrator-37n6`; until it ships, treat the check as `green` (default open).
+
 4. **Disk-space guard** — `df -h $PWD`. If <5GB free, run the stale-artifact cleanup BEFORE spawning so agents don't die mid-build.
 5. **Tender-daemon spawn** — start `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --project=$PWD --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &` (v3.6.0+; `--project` defaults to `process.cwd()` in v3.6.7+, but pass it explicitly for compatibility). Capture PID for shutdown.
 6. **Bead snapshot** — `br list --json` and `br ready --json`. Identify any stalled in-progress beads up front and reopen them per the rule above.

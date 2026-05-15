@@ -133,8 +133,8 @@ export declare const GraderVerdictSchemaV1: z.ZodObject<{
     }, z.core.$strip>>;
     explanation: z.ZodString;
     modelUsed: z.ZodEnum<{
-        codex: "codex";
         claude: "claude";
+        codex: "codex";
     }>;
     durationMs: z.ZodNumber;
     timestamp: z.ZodString;
@@ -301,11 +301,19 @@ export type GraderDriver = (input: {
     modelUsed: 'codex' | 'claude';
 }>;
 /**
- * Default grader driver — codex primary (when present), fresh CC fallback.
+ * Default grader driver — codex primary (when present and config-compatible),
+ * fresh CC fallback.
  *
  * Doctor health is treated as advisory: if `codex` is not on PATH the
  * exec call fails with ENOENT and we fall through to claude. The grader
  * never embeds the impl conversation; only the rubric + diff + tests.
+ *
+ * When `~/.codex/config.toml` sets an incompatible top-level model (per
+ * `isCodexConfigUsableForExec` / doctor `codex_config_compat`), the codex
+ * branch is skipped preemptively with a single warn log so the user can fix
+ * the override via `flywheel_remediate({ checkName: 'codex_config_compat',
+ * mode: 'execute', autoConfirm: true })` — avoids burning the grader
+ * timeout on a request the OpenAI API will reject.
  */
 export declare const defaultGraderDriver: GraderDriver;
 /** Build the grader prompt body. Pure (no exec); exposed for tests. */

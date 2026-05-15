@@ -16,6 +16,7 @@ import {
   GraderVerdictSchemaV1,
   RubricSchemaV1,
   buildGraderPrompt,
+  defaultGraderDriver,
   defaultSynthesizerDriver,
   gradeOutcome,
   isGradeSkipped,
@@ -406,5 +407,95 @@ describe('buildGraderPrompt + truncation', () => {
     expect(RubricSchemaV1.safeParse(r).success).toBe(true);
     const reparsed = parseRubricFrontmatter(renderRubricFrontmatter(r));
     expect(reparsed).toEqual(r);
+  });
+});
+
+describe('defaultGraderDriver — codex config compat preemption (bead claude-orchestrator-2wcd)', () => {
+  let homeDir: string;
+  let originalHome: string | undefined;
+
+  beforeEach(() => {
+    homeDir = mkdtempSync(join(tmpdir(), 'flywheel-codex-home-'));
+    mkdirSync(join(homeDir, '.codex'), { recursive: true });
+    originalHome = process.env.HOME;
+    process.env.HOME = homeDir;
+  });
+
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    rmSync(homeDir, { recursive: true, force: true });
+  });
+
+  it('skips codex when ~/.codex/config.toml sets an incompatible model (gpt-5*)', async () => {
+    writeFileSync(join(homeDir, '.codex/config.toml'), 'model = "gpt-5.5"\n', 'utf8');
+    let codexCalled = false;
+    let claudeCalled = false;
+    const fakeExec = async (cmd: string) => {
+      if (cmd === 'codex') {
+        codexCalled = true;
+        return { code: 0, stdout: '{"version":1}', stderr: '' };
+      }
+      if (cmd === 'claude') {
+        claudeCalled = true;
+        return { code: 0, stdout: '{"version":1,"fallback":"claude"}', stderr: '' };
+      }
+      return { code: 1, stdout: '', stderr: 'unexpected cmd ' + cmd };
+    };
+    const res = await defaultGraderDriver({
+      exec: fakeExec,
+      cwd: homeDir,
+      prompt: 'noop',
+      preferModel: 'codex',
+      timeoutMs: 5_000,
+    });
+    expect(codexCalled).toBe(false);
+    expect(claudeCalled).toBe(true);
+    expect(res.modelUsed).toBe('claude');
+  });
+
+  it('proceeds with codex when ~/.codex/config.toml has no model override', async () => {
+    writeFileSync(join(homeDir, '.codex/config.toml'), '# no model line\n[other_section]\nfoo = 1\n', 'utf8');
+    let codexCalled = false;
+    const fakeExec = async (cmd: string) => {
+      if (cmd === 'codex') {
+        codexCalled = true;
+        return { code: 0, stdout: '{"version":1,"from":"codex"}', stderr: '' };
+      }
+      return { code: 1, stdout: '', stderr: 'unexpected cmd ' + cmd };
+    };
+    const res = await defaultGraderDriver({
+      exec: fakeExec,
+      cwd: homeDir,
+      prompt: 'noop',
+      preferModel: 'codex',
+      timeoutMs: 5_000,
+    });
+    expect(codexCalled).toBe(true);
+    expect(res.modelUsed).toBe('codex');
+  });
+
+  it('proceeds with codex when ~/.codex/config.toml is missing', async () => {
+    // homeDir/.codex exists but config.toml is not written
+    let codexCalled = false;
+    const fakeExec = async (cmd: string) => {
+      if (cmd === 'codex') {
+        codexCalled = true;
+        return { code: 0, stdout: '{"version":1,"from":"codex-default"}', stderr: '' };
+      }
+      return { code: 1, stdout: '', stderr: 'unexpected cmd ' + cmd };
+    };
+    const res = await defaultGraderDriver({
+      exec: fakeExec,
+      cwd: homeDir,
+      prompt: 'noop',
+      preferModel: 'codex',
+      timeoutMs: 5_000,
+    });
+    expect(codexCalled).toBe(true);
+    expect(res.modelUsed).toBe('codex');
   });
 });

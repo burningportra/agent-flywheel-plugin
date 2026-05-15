@@ -60,13 +60,14 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { z } from 'zod';
 
 import { writeAtomic } from './atomic-write.js';
 import { FlywheelError, sanitizeCause, errMsg } from './errors.js';
 import { createLogger } from './logger.js';
+import { isCodexIncompatibleModel, parseCodexConfigTopLevelModel } from './tools/doctor.js';
 import type { ToolContext, FlywheelState, ExecFn } from './types.js';
 
 const log = createLogger('outcome-grading');
@@ -1044,6 +1045,18 @@ export interface GradeOutcomeArgs {
 // ─── gradeOutcome (T6) ───────────────────────────────────────────────────
 
 const GRADER_TIMEOUT_MS_DEFAULT = 120_000;
+/**
+ * Default codex model passed via `--model` to `codex exec`.
+ *
+ * Codex CLI accepts gpt-5* on ChatGPT-account auth via `codex exec`, but the
+ * codex-companion app-server transport rejects them (doctor check
+ * `codex_config_compat`). For the grader path we only use `codex exec`, which
+ * is the compatible route — see `isCodexConfigUsableForExec` below for the
+ * pre-flight check that catches misconfigured `~/.codex/config.toml`
+ * overrides (gpt-5-xhigh etc.) before we spend 30–120s on a doomed call.
+ *
+ * Override via env: `FW_GRADER_MODEL=gpt-5` or `FW_GRADER_FORCE_CLAUDE=1`.
+ */
 const FW_GRADER_MODEL_DEFAULT = 'gpt-5.5';
 const DIFF_BODY_LIMIT = 30_000;
 const TEST_OUTPUT_LIMIT = 10_000;
@@ -1070,11 +1083,45 @@ export type GraderDriver = (input: {
 }) => Promise<{ stdout: string; modelUsed: 'codex' | 'claude' }>;
 
 /**
- * Default grader driver — codex primary (when present), fresh CC fallback.
+ * Pre-flight check: does the user's `~/.codex/config.toml` set a top-level
+ * `model = ...` override that is known to fail the codex-companion app-server
+ * path? Returns `{ usable: false, configuredModel }` when the override is
+ * incompatible so the grader driver can skip codex preemptively instead of
+ * wasting the grader budget on a doomed `codex exec` call.
+ *
+ * Pure file read; no exec/network. Mirrors the doctor's `codex_config_compat`
+ * check (see `mcp-server/src/tools/doctor.ts:checkCodexConfigCompat`) so a
+ * green doctor always implies usable here. Missing file = usable (codex
+ * picks its built-in default).
+ */
+function isCodexConfigUsableForExec(): { usable: true } | { usable: false; configuredModel: string } {
+  const configPath = path.join(homedir(), '.codex', 'config.toml');
+  let content: string;
+  try {
+    content = readFileSync(configPath, 'utf8');
+  } catch {
+    return { usable: true };
+  }
+  const model = parseCodexConfigTopLevelModel(content);
+  if (model === null) return { usable: true };
+  if (isCodexIncompatibleModel(model)) return { usable: false, configuredModel: model };
+  return { usable: true };
+}
+
+/**
+ * Default grader driver — codex primary (when present and config-compatible),
+ * fresh CC fallback.
  *
  * Doctor health is treated as advisory: if `codex` is not on PATH the
  * exec call fails with ENOENT and we fall through to claude. The grader
  * never embeds the impl conversation; only the rubric + diff + tests.
+ *
+ * When `~/.codex/config.toml` sets an incompatible top-level model (per
+ * `isCodexConfigUsableForExec` / doctor `codex_config_compat`), the codex
+ * branch is skipped preemptively with a single warn log so the user can fix
+ * the override via `flywheel_remediate({ checkName: 'codex_config_compat',
+ * mode: 'execute', autoConfirm: true })` — avoids burning the grader
+ * timeout on a request the OpenAI API will reject.
  */
 export const defaultGraderDriver: GraderDriver = async ({ exec, cwd, signal, prompt, preferModel, timeoutMs }) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'flywheel-grader-'));
@@ -1082,19 +1129,27 @@ export const defaultGraderDriver: GraderDriver = async ({ exec, cwd, signal, pro
   writeFileSync(taskFile, prompt, 'utf8');
   try {
     if (preferModel === 'codex') {
-      try {
-        const model = process.env.FW_GRADER_MODEL ?? FW_GRADER_MODEL_DEFAULT;
-        const res = await exec(
-          'codex',
-          ['exec', '--model', model, '--json', `@${taskFile}`],
-          { cwd, timeout: timeoutMs, signal },
-        );
-        if (res.code === 0 && res.stdout.trim().length > 0) {
-          return { stdout: res.stdout.trim(), modelUsed: 'codex' };
+      const configCheck = isCodexConfigUsableForExec();
+      if (!configCheck.usable) {
+        log.warn('codex config incompatible — skipping codex grader, falling back to claude', {
+          configuredModel: configCheck.configuredModel,
+          hint: "flywheel_remediate({ checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true }) — or set FW_GRADER_FORCE_CLAUDE=1 to suppress this preemption",
+        });
+      } else {
+        try {
+          const model = process.env.FW_GRADER_MODEL ?? FW_GRADER_MODEL_DEFAULT;
+          const res = await exec(
+            'codex',
+            ['exec', '--model', model, '--json', `@${taskFile}`],
+            { cwd, timeout: timeoutMs, signal },
+          );
+          if (res.code === 0 && res.stdout.trim().length > 0) {
+            return { stdout: res.stdout.trim(), modelUsed: 'codex' };
+          }
+          log.debug('codex grader returned non-zero or empty', { exitCode: res.code, stderrLen: res.stderr.length });
+        } catch (err) {
+          log.debug('codex grader threw, falling back to claude', { err: errMsg(err) });
         }
-        log.debug('codex grader returned non-zero or empty', { exitCode: res.code, stderrLen: res.stderr.length });
-      } catch (err) {
-        log.debug('codex grader threw, falling back to claude', { err: errMsg(err) });
       }
     }
     // Fresh-CC fallback — explicit "blind auditor" guarantee in the prompt

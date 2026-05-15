@@ -68,6 +68,14 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
 
 1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight at top of Step 7). If misconfigured, surface fix-or-fallback `AskUserQuestion`.
 2. **CLI capability check** — `which codex` MUST succeed. If not, fall back to §5 iterative mode (don't silently degrade — surface a `AskUserQuestion` first).
+2a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gmi=M>0`).** Call `flywheel_doctor` and read `DOCTOR_REPORT.checks`. Apply per check BEFORE `ntm spawn`:
+
+   | Check | Trigger | Action |
+   |-------|---------|--------|
+   | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Per the substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc), redistribute the dropped share. Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. Then route to §5 iterative mode if the surviving cod count is 0. |
+   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. If the check is absent from `DOCTOR_REPORT.checks` (bead `claude-orchestrator-37n6` not yet shipped), treat as `green`. |
+
+   Deslop's primary lane is `cod` (per §4b). If the downgrade leaves zero usable cod panes, surface an `AskUserQuestion` offering routes: (1) proceed all-cc swarm, (2) fall back to §5 iterative mode, (3) abort. Do NOT silently spawn a degraded swarm with fewer-than-intended panes — operator should make the call.
 3. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture registration token.
 4. **Baseline capture (THE proof obligation)** — BEFORE any deslop edits, record:
    - Full test suite green: `rch test` (or stack-appropriate command). Capture pass-count + duration.

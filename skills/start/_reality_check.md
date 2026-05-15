@@ -111,6 +111,14 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 
 1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight at top of Step 7). If misconfigured, surface fix-or-fallback `AskUserQuestion`.
 2. **CLI capability check** — `which codex` AND `which claude` MUST succeed. If `codex` missing, the 3-cod lane collapses; surface a degraded-mode `AskUserQuestion` (override default 3:3 ratio? abort? proceed degraded?).
+2a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gmi=M>0`).** Call `flywheel_doctor` and read `DOCTOR_REPORT.checks`. Apply per check BEFORE `ntm spawn`:
+
+   | Check | Trigger | Action |
+   |-------|---------|--------|
+   | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Redistribute via substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc). Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. |
+   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. If the check is absent from `DOCTOR_REPORT.checks` (bead `claude-orchestrator-37n6` not yet shipped), treat as `green`. |
+
+   In interactive `/start` contexts, prefer the AskUserQuestion variants in `_implement.md` Step 1a/1b. The full-pipeline reality-check path is typically dispatched as a single user choice, so silent auto-downgrade with the log line is the default here.
 3. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture registration token.
 4. **Disk-space guard** — `df -h $PWD`. <5GB → run stale-artifact cleanup (`git clean -fdX -- '<build-output-dirs>'` only — never `-fdx`) before spawning.
 5. **Tender-daemon spawn** — `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &`. Capture PID for shutdown.

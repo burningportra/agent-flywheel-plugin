@@ -298,13 +298,29 @@ Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes,
 >   question: "Doctor flagged codex_config_compat (~/.codex/config.toml model='X' is rejected by ChatGPT-account auth). Apply the fix before spawning?",
 >   header: "Codex config",
 >   options: [
->     { label: "Apply fix and proceed (Recommended)", description: "Run: sed -i.bak -E 's/^([[:space:]]*model[[:space:]]*=)/# \\1/' ~/.codex/config.toml. Then spawn the swarm." },
+>     { label: "Apply fix and proceed (Recommended)", description: "Run: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}). Idempotent. Then spawn the swarm." },
 >     { label: "Skip cod from swarm", description: "Spawn with --cc=N --gmi=M only (no cod panes). Loses Codex perspective but avoids crash." },
 >     { label: "Continue anyway", description: "Spawn cod panes despite known incompatibility — they will likely crash within seconds." }
 >   ],
 >   multiSelect: false
 > }])
 > ```
+>
+> **Gemini model compatibility pre-spawn gate (MANDATORY when spawn includes a `gmi` pane).** If `DOCTOR_REPORT.checks` shows `gemini_model_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning. The 2026-05-15 reality-check swarm confirmed gemini CLI rejects models outside its documented allowlist (`gemini-3.1-flash-preview`). If the check is absent from `DOCTOR_REPORT.checks` entirely (bead `claude-orchestrator-37n6` not yet shipped), treat it as `green` and continue.
+>
+> ```
+> AskUserQuestion(questions: [{
+>   question: "Doctor flagged gemini_model_compat (configured gemini model outside the documented allowlist). How to handle the gmi lane?",
+>   header: "Gemini config",
+>   options: [
+>     { label: "Skip gmi from swarm (Recommended)", description: "Re-shape lane sizes via substitution ladder (gmi→cod→pi→cc). Loses Gemini perspective but avoids spawn crash." },
+>     { label: "Continue anyway", description: "Spawn gmi panes despite known incompatibility — they will likely reject the configured model and exit." }
+>   ],
+>   multiSelect: false
+> }])
+> ```
+>
+> **Looper-driven / `--no-user` contexts** auto-downgrade silently with a one-line warning to the dispatch log (`⚠ codex_config_compat=<sev>; downgrading --cod=N→0` and analogous for gemini). Redistribute the dropped share via the substitution ladder (gmi→cod→pi→cc) before computing lane sizes.
 
 1. **Bootstrap Agent Mail** — call `macro_start_session` with:
    - `human_key`: current working directory
