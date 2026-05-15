@@ -202,5 +202,74 @@ describe("PANE001 — rule.check (cross-file scan)", () => {
         const findings = await pane001.check({ source: "ntm spawn --cc=2 --cod=2 --gmi=2", filePath: "<unused>" }, { filePath: "<unused>", source: "ntm spawn --cc=2 --cod=2 --gmi=2" });
         expect(findings.length).toBe(0);
     });
+    // ─── Whole-file fallback: strict-marker semantics ──────────────────────
+    //
+    // Regression for bead claude-orchestrator-bkuy. The whole-file fallback used
+    // to accept the same loose OVERRIDE_MARKERS as the ±6 proximity check, which
+    // false-negatives in files that mention "explicit override" in unrelated
+    // discussion (e.g. _implement.md's "cc-only floor (explicit override)"
+    // sidebar comment). It now requires a strict opt-in token.
+    it("does NOT suppress a far-away drift when only the loose 'explicit override' phrase appears file-wide", async () => {
+        const dir = freshDir("pane001-loose-far-");
+        const skillsRoot = path.join(dir, "skills", "start");
+        mkdirSync(skillsRoot, { recursive: true });
+        // The "explicit override" sidebar comment is >6 lines from the spawn AND
+        // discusses an unrelated substitution-ladder case. The spawn itself has
+        // genuine drift (--cc=4 --cod=2, ratio 2:1 — not canonical 1:1:1). Under
+        // the old whole-file fallback this would be silently suppressed.
+        const padding = Array.from({ length: 20 }, () => "filler line").join("\n");
+        writeFileSync(path.join(skillsRoot, "_implement.md"), `# Impl file\n\n` +
+            `Note: all three peers unavailable → cc-only floor (explicit override).\n\n` +
+            `${padding}\n\n` +
+            "```bash\n" +
+            "ntm spawn proj --label impl-x --no-user --cc=4 --cod=2 --stagger-mode=smart\n" +
+            "```\n", "utf8");
+        const findings = await pane001.check(emptyDoc, {
+            filePath: "<unused>",
+            source: "",
+            skillsRoot,
+            canonical: CANONICAL_RULE,
+        });
+        const f = findings.find((x) => x.file.endsWith("_implement.md"));
+        expect(f).toBeDefined();
+        expect(f.ruleId).toBe("PANE001");
+        expect(f.message).toMatch(/lane ratio/);
+    });
+    it("suppresses a far-away drift when the strict `<!-- pane001-override -->` marker is present", async () => {
+        const dir = freshDir("pane001-strict-html-");
+        const skillsRoot = path.join(dir, "skills", "start");
+        mkdirSync(skillsRoot, { recursive: true });
+        const padding = Array.from({ length: 20 }, () => "filler line").join("\n");
+        writeFileSync(path.join(skillsRoot, "_deslop.md"), `# Deslop file\n\n<!-- pane001-override: codex-heavy by design -->\n\n` +
+            `${padding}\n\n` +
+            "```bash\n" +
+            "ntm spawn proj --label deslop --no-user --cod=5 --stagger-mode=smart\n" +
+            "```\n", "utf8");
+        const findings = await pane001.check(emptyDoc, {
+            filePath: "<unused>",
+            source: "",
+            skillsRoot,
+            canonical: CANONICAL_RULE,
+        });
+        expect(findings.find((f) => f.file.endsWith("_deslop.md"))).toBeUndefined();
+    });
+    it("suppresses a far-away drift when the strict `PANE001-OVERRIDE:` token is present", async () => {
+        const dir = freshDir("pane001-strict-token-");
+        const skillsRoot = path.join(dir, "skills", "start");
+        mkdirSync(skillsRoot, { recursive: true });
+        const padding = Array.from({ length: 20 }, () => "filler line").join("\n");
+        writeFileSync(path.join(skillsRoot, "_swarm.md"), `# Swarm file\n\nPANE001-OVERRIDE: experimental cod-heavy run\n\n` +
+            `${padding}\n\n` +
+            "```bash\n" +
+            "ntm spawn proj --label swarm --no-user --cc=1 --cod=4 --stagger-mode=smart\n" +
+            "```\n", "utf8");
+        const findings = await pane001.check(emptyDoc, {
+            filePath: "<unused>",
+            source: "",
+            skillsRoot,
+            canonical: CANONICAL_RULE,
+        });
+        expect(findings.find((f) => f.file.endsWith("_swarm.md"))).toBeUndefined();
+    });
 });
 //# sourceMappingURL=pane001.test.js.map

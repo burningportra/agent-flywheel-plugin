@@ -65,6 +65,30 @@ const OVERRIDE_MARKERS: ReadonlyArray<RegExp> = [
   /signature and an explicit override/i,
 ];
 
+/**
+ * Whole-file fallback markers — STRICTER than `OVERRIDE_MARKERS` on purpose.
+ *
+ * The proximity check (±6 lines) accepts loose prose like "explicit override"
+ * because the override declaration is right next to the spawn it justifies.
+ * The whole-file fallback applies file-wide, so the same loose phrasing
+ * false-negatives when "override" appears in unrelated discussion elsewhere
+ * (e.g. `_implement.md`'s "all three peers unavailable → cc-only floor
+ * (explicit override)" comment, which discusses a different override case).
+ *
+ * Files that need a file-wide override (spawn declaration too far from any
+ * prose to satisfy ±6) must opt in explicitly with an unambiguous marker:
+ *
+ *   - HTML comment:  `<!-- pane001-override -->` (or `<!-- pane001-override:reason -->`)
+ *   - Inline token:  `PANE001-OVERRIDE:`
+ *
+ * Both are deliberately project-specific tokens that won't appear in prose
+ * by accident.
+ */
+const WHOLE_FILE_OVERRIDE_MARKERS: ReadonlyArray<RegExp> = [
+  /<!--\s*pane001-override\b/i,
+  /\bPANE001-OVERRIDE:/,
+];
+
 /** Recognised NTM lane flags. `--gem=` is the deprecated synonym for `--gmi=`. */
 const LANE_FLAG_PATTERN = /--(cc|cod|gmi|gem|pi)=(\d+)/g;
 const OVERRIDE_PROXIMITY_LINES = 6;
@@ -260,11 +284,15 @@ function hasOverrideMarkerNear(
   const hi = Math.min(lines.length, zeroBasedLine + proximityLines + 1);
   const window = lines.slice(lo, hi).join("\n");
   if (OVERRIDE_MARKERS.some((re) => re.test(window))) return true;
-  // Fallback: whole-file scan. Files that declare "this mode is an explicit
-  // override of the canonical" in their intro paragraph (e.g. _deslop.md)
-  // mean the file's spawn shape is intentionally non-canonical end-to-end —
-  // even though the override marker is many lines away from the spawn line.
-  return OVERRIDE_MARKERS.some((re) => re.test(source));
+  // Fallback: whole-file scan, but only for the STRICT marker set. Files that
+  // legitimately need file-wide suppression (e.g. _deslop.md — spawn lives in
+  // a code fence too far from any prose to satisfy ±6) must opt in with an
+  // unambiguous token like `<!-- pane001-override -->` or `PANE001-OVERRIDE:`.
+  // The loose `OVERRIDE_MARKERS` set is NOT used here — that would let any
+  // file containing the word "override" in unrelated discussion (e.g.
+  // _implement.md's "cc-only floor (explicit override)" sidebar) silently
+  // suppress real drift elsewhere in the file.
+  return WHOLE_FILE_OVERRIDE_MARKERS.some((re) => re.test(source));
 }
 
 /**

@@ -88,6 +88,8 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
 
 ### 4b. Spawn the swarm
 
+<!-- pane001-override: deslop is codex-heavy by design (see §4c per-pane prompts) -->
+
 ```bash
 SESSION="${NTM_PROJECT}--deslop"
 # Pane-type priority (see AGENTS.md "NTM pane priority"):
