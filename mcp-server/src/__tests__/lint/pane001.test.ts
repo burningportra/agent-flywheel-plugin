@@ -203,14 +203,34 @@ describe("PANE001 — rule.check (cross-file scan)", () => {
     expect(f!.message).toMatch(/lane ratio/);
   });
 
-  it("suppresses a non-canonical spawn line when 'explicit override' marker is within ±6 lines", async () => {
+  it("does NOT suppress a nearby drift when only loose 'explicit override' prose is nearby", async () => {
+    const dir = freshDir("pane001-loose-near-");
+    const skillsRoot = path.join(dir, "skills", "start");
+    mkdirSync(skillsRoot, { recursive: true });
+    writeFileSync(
+      path.join(skillsRoot, "_implement.md"),
+      "# Impl file\n\nThis path mentions the cc-only floor (explicit override) in normal substitution-ladder prose.\n\n```bash\nntm spawn proj --label impl --no-user --cc=4 --cod=2 --stagger-mode=smart\n```\n",
+      "utf8",
+    );
+    const findings = await pane001.check(emptyDoc, {
+      filePath: "<unused>",
+      source: "",
+      skillsRoot,
+      canonical: CANONICAL_RULE,
+    } as never);
+    const f = findings.find((x) => x.file.endsWith("_implement.md"));
+    expect(f).toBeDefined();
+    expect(f!.ruleId).toBe("PANE001");
+    expect(f!.message).toMatch(/lane ratio/);
+  });
+
+  it("suppresses a non-canonical spawn line when a canonical override marker is within ±6 lines", async () => {
     const dir = freshDir("pane001-override-");
     const skillsRoot = path.join(dir, "skills", "start");
     mkdirSync(skillsRoot, { recursive: true });
     writeFileSync(
       path.join(skillsRoot, "_deslop.md"),
-      // The fixture mirrors the real _deslop.md "explicit override" pattern.
-      "# Deslop file\n\nThis mode is the deslop signature and an explicit override of the v3.17.0 canonical cc:cod:gem 1:1:1.\n\n```bash\nntm spawn proj --label deslop --no-user --cod=5 --stagger-mode=smart\n```\n",
+      "# Deslop file\n\n<!-- pane001-override: deslop is intentionally cod-heavy -->\n\n```bash\nntm spawn proj --label deslop --no-user --cod=5 --stagger-mode=smart\n```\n",
       "utf8",
     );
     const findings = await pane001.check(emptyDoc, {
@@ -271,11 +291,10 @@ describe("PANE001 — rule.check (cross-file scan)", () => {
 
   // ─── Whole-file fallback: strict-marker semantics ──────────────────────
   //
-  // Regression for bead claude-orchestrator-bkuy. The whole-file fallback used
-  // to accept the same loose OVERRIDE_MARKERS as the ±6 proximity check, which
-  // false-negatives in files that mention "explicit override" in unrelated
-  // discussion (e.g. _implement.md's "cc-only floor (explicit override)"
-  // sidebar comment). It now requires a strict opt-in token.
+  // Regression for beads claude-orchestrator-bkuy and claude-orchestrator-25nj.
+  // Loose "explicit override" prose in unrelated substitution-ladder
+  // documentation must not suppress drift, either nearby or file-wide. Only the
+  // canonical `<!-- pane001-override -->` and `PANE001-OVERRIDE:` markers opt in.
 
   it("does NOT suppress a far-away drift when only the loose 'explicit override' phrase appears file-wide", async () => {
     const dir = freshDir("pane001-loose-far-");

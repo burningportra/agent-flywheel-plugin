@@ -54,35 +54,14 @@ export interface CanonicalRule {
   version: string | null;
 }
 
-const OVERRIDE_MARKERS: ReadonlyArray<RegExp> = [
-  /explicit override/i,
-  /intentional override/i,
-  /signature override/i,
-  /override of the canonical/i,
-  /override of the v3\.\d+/i,
-  /signature and an explicit override/i,
-];
-
 /**
- * Whole-file fallback markers — STRICTER than `OVERRIDE_MARKERS` on purpose.
+ * Canonical PANE001 override markers.
  *
- * The proximity check (±6 lines) accepts loose prose like "explicit override"
- * because the override declaration is right next to the spawn it justifies.
- * The whole-file fallback applies file-wide, so the same loose phrasing
- * false-negatives when "override" appears in unrelated discussion elsewhere
- * (e.g. `_implement.md`'s "all three peers unavailable → cc-only floor
- * (explicit override)" comment, which discusses a different override case).
- *
- * Files that need a file-wide override (spawn declaration too far from any
- * prose to satisfy ±6) must opt in explicitly with an unambiguous marker:
- *
- *   - HTML comment:  `<!-- pane001-override -->` (or `<!-- pane001-override:reason -->`)
- *   - Inline token:  `PANE001-OVERRIDE:`
- *
- * Both are deliberately project-specific tokens that won't appear in prose
- * by accident.
+ * Both proximity and whole-file suppression require these project-specific
+ * tokens. Loose prose such as "explicit override" appears in normal
+ * substitution-ladder documentation and must not silence lane drift findings.
  */
-const WHOLE_FILE_OVERRIDE_MARKERS: ReadonlyArray<RegExp> = [
+const OVERRIDE_MARKERS: ReadonlyArray<RegExp> = [
   /<!--\s*pane001-override\b/i,
   /\bPANE001-OVERRIDE:/,
 ];
@@ -105,9 +84,8 @@ export function parseCanonicalFromAgentsMd(content: string): CanonicalRule | nul
   // Find the "## NTM pane priority" section body (until the next H2 or EOF).
   // JS regex has no \Z; use a negative-lookahead for end-of-string.
   const sectionRe = /^##\s+NTM pane priority\b[\s\S]*?(?=^##\s|(?![\s\S]))/m;
-  const sectionMatch = sectionRe.exec(content);
-  if (sectionMatch === null) return null;
-  const body = sectionMatch[0];
+  const body = sectionRe.exec(content)?.[0];
+  if (body === undefined) return null;
 
   // Ratio: cc:cod:gem 1:1:1 (the documented form; lanes always cc/cod/gem
   // because "gem" is the prose form for the "gmi" flag). Tolerate optional
@@ -116,7 +94,8 @@ export function parseCanonicalFromAgentsMd(content: string): CanonicalRule | nul
   const ratioRe = /cc:cod:gem[`\s]*(\d+):(\d+):(\d+)/i;
   const ratioMatch = ratioRe.exec(body);
   if (ratioMatch === null) return null;
-  const ratio = [Number(ratioMatch[1]), Number(ratioMatch[2]), Number(ratioMatch[3])];
+  const [, ccRatio, codRatio, gemRatio] = ratioMatch;
+  const ratio = [Number(ccRatio), Number(codRatio), Number(gemRatio)];
 
   // Substitution ladder. Two accepted forms:
   //   inline arrow form:  "gmi→cod→pi→cc" or "gmi -> cod -> pi -> cc"
@@ -282,15 +261,11 @@ function hasOverrideMarkerNear(
   const hi = Math.min(lines.length, zeroBasedLine + proximityLines + 1);
   const window = lines.slice(lo, hi).join("\n");
   if (OVERRIDE_MARKERS.some((re) => re.test(window))) return true;
-  // Fallback: whole-file scan, but only for the STRICT marker set. Files that
-  // legitimately need file-wide suppression (e.g. _deslop.md — spawn lives in
-  // a code fence too far from any prose to satisfy ±6) must opt in with an
-  // unambiguous token like `<!-- pane001-override -->` or `PANE001-OVERRIDE:`.
-  // The loose `OVERRIDE_MARKERS` set is NOT used here — that would let any
-  // file containing the word "override" in unrelated discussion (e.g.
-  // _implement.md's "cc-only floor (explicit override)" sidebar) silently
-  // suppress real drift elsewhere in the file.
-  return WHOLE_FILE_OVERRIDE_MARKERS.some((re) => re.test(source));
+  // Whole-file fallback uses the same strict marker set. Files that need
+  // file-wide suppression (e.g. a code fence too far from explanatory prose to
+  // satisfy ±6) must opt in with `<!-- pane001-override -->` or
+  // `PANE001-OVERRIDE:`.
+  return OVERRIDE_MARKERS.some((re) => re.test(source));
 }
 
 /**

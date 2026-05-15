@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "beadId": "claude-orchestrator-25nj",
+  "agentName": "CobaltChapel",
+  "status": "closed",
+  "changedFiles": [
+    "mcp-server/src/lint/rules/pane001.ts",
+    "mcp-server/src/__tests__/lint/pane001.test.ts",
+    "mcp-server/dist/lint/rules/pane001.js",
+    "mcp-server/dist/__tests__/lint/pane001.test.js"
+  ],
+  "commits": [],
+  "ubs": {
+    "ran": true,
+    "summary": "ubs --staged scanned 2 TypeScript files; 0 critical, 0 warning, 74 info-only items.",
+    "findingsFixed": 2,
+    "deferredBeadIds": []
+  },
+  "verify": [
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm test --prefix mcp-server -- pane001.test.ts",
+      "exitCode": 0,
+      "summary": "Vitest pane001.test.ts: 27 tests passed, including the loose explicit-override false-negative regression and canonical override suppression cases."
+    },
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm run build --prefix mcp-server",
+      "exitCode": 0,
+      "summary": "tsc, scripts build, skills bundle, and schema emission completed successfully."
+    },
+    {
+      "command": "ubs --staged",
+      "exitCode": 0,
+      "summary": "0 critical and 0 warning findings on the staged TypeScript source/test changes after refactoring two existing parser narrowing warnings."
+    },
+    {
+      "command": "git diff --cached --check",
+      "exitCode": 0,
+      "summary": "No whitespace errors."
+    }
+  ],
+  "selfReview": {
+    "ran": true,
+    "summary": "PANE001 override detection now uses only canonical project-specific markers for both nearby and whole-file suppression: <!-- pane001-override --> and PANE001-OVERRIDE:. Loose prose such as 'explicit override' in _implement.md substitution-ladder documentation no longer silences drift findings. Tests now assert loose nearby prose reports PANE001 while canonical markers still suppress intentional non-canonical spawns."
+  },
+  "beadClosedVerified": true,
+  "createdAt": "2026-05-15T15:37:00.000Z"
+}
