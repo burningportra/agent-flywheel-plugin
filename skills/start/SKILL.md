@@ -265,7 +265,7 @@ Print this block first (per the menu-visibility rule below):
 
 ```
 Primary entry points (active session: '<goal>' @ <phase>):
-  • Auto-swarm          — in-flight resume with 4 pi + 2 cc swarm (Recommended)
+  • Auto-swarm          — in-flight resume with cc:cod:gem 2:2:2 swarm (Recommended)
   • Resume session      — continue manually (no swarm)
   • Set a goal          — type a fresh goal in Other; appends to existing beads after drift confirm
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps to bead creation
@@ -295,7 +295,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm (pi fallback if Codex unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — cc:cod:gem 2:2:2 model-diversified swarm (substitution ladder gmi→cod→pi→cc per AGENTS.md NTM pane priority; §3a model-config gate auto-downgrades broken lanes), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends to the current bead set after a drift confirmation. Does NOT discard the checkpoint" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps" }
@@ -310,7 +310,7 @@ Print this block first (per the menu-visibility rule below):
 
 ```
 Primary entry points (<N> open beads):
-  • Auto-swarm          — in-flight resume with 4 pi + 2 cc swarm (Recommended)
+  • Auto-swarm          — in-flight resume with cc:cod:gem 2:2:2 swarm (Recommended)
   • Work on beads       — refine / implement / inspect manually
   • Set a goal          — type a fresh goal in Other; appends new beads to the current set
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; merges into the current bead set
@@ -339,7 +339,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — 4 cod + 2 cc swarm (pi fallback if Codex unavailable; see AGENTS.md NTM pane priority), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — cc:cod:gem 2:2:2 model-diversified swarm (substitution ladder gmi→cod→pi→cc per AGENTS.md NTM pane priority; §3a model-config gate auto-downgrades broken lanes), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends new beads to the existing set without discarding them" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then Step 5.45 surfaces (Validate / Approve / Refine / Scrap); validated gaps merge into the current bead set" }
@@ -413,7 +413,7 @@ When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-
 
 | Choice | Action |
 |--------|--------|
-| **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (4 pi + 2 cc; fall back to 4 cod only if Pi is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
+| **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → §3a model-config pre-spawn gate → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (cc:cod:gem 2:2:2 model-diversified default; substitution ladder gmi→cod→pi→cc when a model is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
 | **Take the 5-min tour** | Read `skills/start/_tutorial_bead.md` end-to-end and execute it verbatim — the 7 sections drive the operator through scan → plan → bead → implement → commit on a real trivial goal so they see the loop fire once. The skill returns to the Step 0d main menu on completion (or to the rollback gate handled by T5.4 on the wrap-up step). Only surface this route when `IS_FIRST_RUN === true` (Step 0b check 9). |
 | **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Research repo / Simplify pass / Duel / Audit / Setup / Quick fix / Auto-swarm`. Open-beads-exist: `Reality check / Duel / New goal / Simplify pass / Research repo / Audit / Setup`. Previous-session-exists: `Work on beads / New goal / Reality check / Duel / Simplify pass / Research repo / Audit / Setup`. **Special handling:** if the typed text starts with a path-like token (e.g. `docs/plans/`, ends in `.md`, or matches one of the surfaced `RECENT_PLAN_PATHS`), route as **Pick up existing plan** with the typed text as `<plan-path>`. Otherwise route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches AND it isn't path-shaped, treat the free-text as a custom goal and route to **Set a goal** with the typed text as `<goal>`. |
 | **Simplify pass** (a.k.a. Deslop pass) | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the canonical skill `/simplify-and-refactor-code-isomorphically` is the engine of every mode, with `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm` orchestrating around it. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove isomorphism preservation. |
