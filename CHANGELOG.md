@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.18.1] - 2026-05-15
+
+Bug-fix release. A 4-pane cc:cod:gem 2:2:2 auto-swarm closed **23 beads in ~90 min** (6 original `reality-check-2026-05-15-followup` + 17 cross-wave follow-ups) with 3 review passes converging at zero new findings. The headline fixes harden `flywheel_compliance_audit` (P2 parser misalignment + missing-results silently dropped), tighten `PANE001` lint (override-marker false-negative + warn → error promotion), close the codex-config-compat dist-mirror gap, and de-double the NTM codex spawn model alias. Adds a mandatory operator-consent gate in the auto-swarm cron loop so future runs don't auto-drive past bead drainage.
+
+### Fixed
+
+- **`flywheel_compliance_audit` parser misalignment (claude-orchestrator-pblk + dsga + 1jjz + 1hv3 + 3gfm).** Parser was looking for a nonexistent `result.json`; the underlying skill writes `REPORT.md + manifest.json + beads/<id>/{compliance,evidence,theater,scorecard}.json`. Reconciled the tool boundary to read `REPORT.md` as the authoritative source and pull per-bead scores from `manifest.json`. Also: happy-path no longer silently drops beads missing from manifest results (fails fast instead); `parseManifestJson` + `finalize` now agree on which threshold to apply; negative-test coverage gap on the manifest path filled; the rubric_breakdown is preserved through the manifest path so CASS fidelity is no longer regressed.
+- **CASS score persistence using unsupported `cm add` flags (claude-orchestrator-3oot).** `storeComplianceScore` invoked `cm add` with flags the current `cm` CLI doesn't accept; corrected to match `cm add --help` so audit scores actually persist to procedural memory.
+- **`PANE001` whole-file override fallback false-negative (claude-orchestrator-bkuy + 25nj + 3ujf).** The whole-file fallback previously reused the loose `OVERRIDE_MARKERS` regex, so prose containing the word "override" (e.g. an unrelated `_implement.md` paragraph mentioning "explicit override") spuriously suppressed real drift. Tightened to a stricter `WHOLE_FILE_OVERRIDE_MARKERS` regex that requires the canonical HTML comment `<!-- pane001-override -->` or inline token `PANE001-OVERRIDE:`. Test corpus pins the previously-loose phrases as regression guards.
+- **`codex_config_compat` collision-test dist mirrors missing (claude-orchestrator-32py + xqkp).** The `1c2d0f6` commit shipped the `mcp-server/src/__tests__/remediate-codex_config_compat.test.ts` source but the dist `.d.ts/.js` mirrors were never staged. Captured + committed in `27395c2` to keep `dist_drift` green.
+- **NTM codex spawn model alias double-renders xhigh suffix.** `~/.config/ntm/config.toml` had `default_codex = "gpt-5.5-xhigh"` while the codex command template separately injects `-c model_reasoning_effort="xhigh"`. Effective spawn rendered as `model:"gpt-5.5-xhigh"` + reasoning xhigh → pane title showed `gpt-5.5-xhigh xhigh`. Fixed the alias to bare model `default_codex = "gpt-5.5"`. (Operator-environment fix; not a code change in this repo, but saved as a cross-session memory pointer.)
+- **`FW_GRADER_MODEL` hint contradicted AGENTS.md cascade (claude-orchestrator-2vl7 + 3m51).** `mcp-server/src/capabilities.ts:118` hint text contradicted the numbered cascade list that 3m51 added to AGENTS.md. Aligned both to the same wording: `FW_GRADER_MODEL` (if set) → `gpt-5.5` (default) → `claude --print` (fallback when `FW_GRADER_FORCE_CLAUDE=1` or Codex unavailable).
+
+### Added
+
+- **First-empty-tick operator gate in the auto-swarm cron loop (claude-orchestrator-29bt).** The 4-min looper now MUST surface an `AskUserQuestion` the first iteration that observes `in_progress == 0 AND ready == 0 AND open == 0`, with labeled options `[Review wave / Saturation skills / Reality check / Wrap up now]`. Prevents the loop from auto-driving past bead drainage (impl → wave 1 → wave 2 → wave N → teardown) without operator consent — addresses the UNIVERSAL RULE 1 violation observed in the 2026-05-15 session. The 5-tick `PushNotification` teardown fallback remains as the safety net if the operator never answers. See the "wave drained → first-empty-tick gate" row in `skills/start/_inflight_prompt.md`'s operator decoder.
+
+### Changed
+
+- **README doctor sweep count `22-check sweep` → `23-check sweep` (claude-orchestrator-wr8d).** Reflects the actual count of `DOCTOR_CHECK_NAMES` after v3.18.0's additions.
+- **`AGENTS.md` `FW_GRADER_MODEL safe-default cascade` subsection rewritten as a numbered list (claude-orchestrator-2lyf follow-up).** The 1-line description shipped in `ca60329` was technically correct but hard to scan. Expanded to a 3-step numbered list with explicit fallback wording; kept the "distinct from NTM pane-provider substitution ladder" note. Co-authored attribution to WildMouse.
+- **`PANE001` default severity `warn` → `error` (claude-orchestrator-2tmf).** After one release cycle of soft-warn telemetry (v3.17.0 → v3.18.0), the corpus has stabilized; `lint:skill` now hard-blocks CI on PANE001 findings instead of just annotating.
+- **`CHANGELOG.md` v3.17.0 NTM pane-priority entry (claude-orchestrator-1jzn).** Documents the canonical mixed `cc:cod:gem` 1:1:1 rule that landed in v3.17.0 but was only described in the v3.18.0 entry.
+
+### Compatibility
+
+- No breaking API changes. The PANE001 promotion from warn → error is the only release-cycle behavior change; pre-existing skill bodies that adopt the canonical block stay green.
+- `flywheel_compliance_audit` envelope shape is unchanged; structuredContent now actually carries the gate verdict + scores instead of a spurious parse error.
+- The first-empty-tick gate adds a new operator decision point but does not change any function signatures or persisted state.
+
 ## [3.18.0] - 2026-05-15
 
 The reality-check hardening release. A self-driven reality check (CASS `b-mp6cn070-knc026`) ran the full `/agent-flywheel:start → Reality check → Full pipeline` loop on the v3.17.0 tree and closed **19 gap-closure beads** (18 original + 1 swarm-self-spawned follow-up) with a 4-pane all-cc swarm in ~25 min, landing **16 commits**. The headline change is that **NTM pane priority is now mixed `cc:cod:gem` 1:1:1** across every skill (was contradictory across AGENTS.md + 5 skill files), backed by a new lint rule that prevents the drift class from re-emerging.
