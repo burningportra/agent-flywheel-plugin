@@ -7,12 +7,21 @@ vi.mock('node:child_process', () => ({
 
 import { execFileSync } from 'node:child_process';
 
+function parseJsonPayload(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`expected cm payload to be valid JSON: ${message}`);
+  }
+}
+
 describe('storeComplianceScore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('calls cm add with compliance_score kind and required tags', () => {
+  it('calls cm add with compliance_score category and payload tags', () => {
     storeComplianceScore('/tmp/proj', {
       beadId: 'agent-flywheel-001',
       score: 850,
@@ -27,10 +36,31 @@ describe('storeComplianceScore', () => {
     expect(execFileSync).toHaveBeenCalledOnce();
     const [bin, args] = (execFileSync as any).mock.calls[0];
     expect(bin).toBe('cm');
-    expect(args).toContain('add');
-    expect(args.join(' ')).toContain('compliance_score');
-    expect(args.join(' ')).toContain('agent-flywheel-001');
-    expect(args.join(' ')).toContain('score-850-1000');
+    expect(args).toEqual([
+      'add',
+      expect.any(String),
+      '--category',
+      'compliance_score',
+      '--json',
+    ]);
+    expect(args).not.toContain('--kind');
+    expect(args).not.toContain('--tags');
+    expect(args).not.toContain('--body');
+    const payload = parseJsonPayload(args[1]);
+    expect(payload).toEqual({
+      kind: 'compliance_score',
+      tags: ['compliance', 'score', 'agent-flywheel-001', 'score-850-1000'],
+      body: {
+        beadId: 'agent-flywheel-001',
+        score: 850,
+        threshold: 700,
+        passed: true,
+        rubric: { impl_completeness: '260/300' },
+        passUtc: '2026-05-08T19:14:22Z',
+        sessionId: 'sess-abc',
+        gitHead: 'baf8fda',
+      },
+    });
   });
 
   it('buckets score correctly', () => {

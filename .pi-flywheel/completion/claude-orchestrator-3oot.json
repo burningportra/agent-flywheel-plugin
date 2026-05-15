@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "beadId": "claude-orchestrator-3oot",
+  "agentName": "CobaltChapel",
+  "status": "closed",
+  "changedFiles": [
+    "mcp-server/src/cass-helpers.ts",
+    "mcp-server/src/__tests__/cass-helpers.test.ts",
+    "mcp-server/dist/cass-helpers.js",
+    "mcp-server/dist/__tests__/cass-helpers.test.js"
+  ],
+  "commits": [],
+  "ubs": {
+    "ran": true,
+    "summary": "ubs --staged scanned 2 TypeScript/JavaScript files; 0 critical, 0 warning, 0 info items.",
+    "findingsFixed": 1,
+    "deferredBeadIds": []
+  },
+  "verify": [
+    {
+      "command": "br dep tree claude-orchestrator-3oot",
+      "exitCode": 0,
+      "summary": "Dependency tree showed no blockers for claude-orchestrator-3oot."
+    },
+    {
+      "command": "cm add --help",
+      "exitCode": 0,
+      "summary": "Confirmed installed cm add supports content, --category, and --json, and does not expose --kind, --tags, or --body."
+    },
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm test --prefix mcp-server -- cass-helpers.test.ts compliance-audit.test.ts",
+      "exitCode": 0,
+      "summary": "Vitest cass-helpers.test.ts and compliance-audit.test.ts passed: 31 tests."
+    },
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm run build --prefix mcp-server",
+      "exitCode": 0,
+      "summary": "tsc, scripts build, skills bundle, and schema emission completed successfully."
+    },
+    {
+      "command": "direct current-dist storeComplianceScore live check",
+      "exitCode": 0,
+      "summary": "storeComplianceScore succeeded against the real cm add path with the supported content + --category compliance_score + --json invocation."
+    },
+    {
+      "command": "ubs --staged",
+      "exitCode": 0,
+      "summary": "0 critical and 0 warning findings on the staged helper/test changes."
+    },
+    {
+      "command": "git diff --cached --check",
+      "exitCode": 0,
+      "summary": "No whitespace errors."
+    }
+  ],
+  "selfReview": {
+    "ran": true,
+    "summary": "storeComplianceScore now uses the installed cm add contract while preserving compliance_score kind, tags, and score body in the JSON payload. Tests assert the unsupported --kind/--tags/--body flags stay absent."
+  },
+  "beadClosedVerified": true,
+  "createdAt": "2026-05-15T16:25:36Z"
+}

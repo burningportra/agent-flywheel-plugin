@@ -15,7 +15,7 @@ export function storeComplianceScore(cwd, record) {
         tags,
         body: record,
     });
-    execFileSync('cm', ['add', '--kind', 'compliance_score', '--tags', tags.join(','), '--body', body], {
+    execFileSync('cm', ['add', body, '--category', 'compliance_score', '--json'], {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 5000,
