@@ -82,6 +82,14 @@ function setupFakePassDirWithResult(cwd, result) {
     writeFileSync(join(passDir, 'result.json'), JSON.stringify(result));
     return passDir;
 }
+function setupFakeManifestPassDir(cwd, manifest) {
+    const passUtc = '2026-05-15T14-33-55Z-flywheel-gate';
+    const passDir = join(cwd, 'beads_compliance_audit', 'passes', passUtc);
+    mkdirSync(passDir, { recursive: true });
+    writeFileSync(join(passDir, 'manifest.json'), JSON.stringify(manifest));
+    writeFileSync(join(passDir, 'REPORT.md'), '# Flywheel-Gate Audit\n');
+    return passDir;
+}
 describe('runComplianceAudit - skill spawn + parse', () => {
     let tmp;
     beforeEach(() => {
@@ -115,6 +123,119 @@ describe('runComplianceAudit - skill spawn + parse', () => {
             'bypassPermissions',
             '/beads-compliance-and-completion-verification --mode flywheel-gate --beads agent-flywheel-001 --threshold 700 --parallelism 5',
         ], { cwd: tmp, timeout: 15 * 60 * 1000, signal: undefined });
+    });
+    it('parses manifest/report output layout without result.json', async () => {
+        setupFakeManifestPassDir(tmp, {
+            audit_dir_version: '1.0.0',
+            pass_id: '2026-05-15T14-33-55Z-flywheel-gate',
+            pass_started_at: '2026-05-15T14:33:55Z',
+            mode: 'flywheel-gate',
+            score_threshold: 700,
+            target_beads: ['agent-flywheel-001', 'agent-flywheel-002'],
+            results: {
+                'agent-flywheel-001': {
+                    score: 920,
+                    verdict: 'Substantially complete',
+                    gate: 'PASS',
+                },
+                'agent-flywheel-002': {
+                    score: 640,
+                    verdict: 'Evidence missing',
+                    gate: 'FAIL',
+                },
+            },
+            summary: {
+                total_beads: 2,
+                passed: 1,
+                failed: 1,
+                gate_verdict: 'FAIL',
+            },
+        });
+        const exec = vi.fn(async (cmd) => {
+            if (cmd === 'git')
+                return { code: 0, stdout: 'abc123\n', stderr: '' };
+            return { code: 0, stdout: '', stderr: '' };
+        });
+        const result = await runComplianceAudit(stubCtx({ exec }), {
+            cwd: tmp,
+            beadIds: ['agent-flywheel-001', 'agent-flywheel-002'],
+        });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('ok');
+        expect(data.passUtc).toBe('2026-05-15T14:33:55Z');
+        expect(data.errors.parse).toBeUndefined();
+        expect(data.passed).toEqual([
+            {
+                beadId: 'agent-flywheel-001',
+                score: 920,
+                reportPath: join(tmp, 'beads_compliance_audit', 'passes', '2026-05-15T14-33-55Z-flywheel-gate', 'beads/agent-flywheel-001/scorecard.md'),
+            },
+        ]);
+        expect(data.failed).toEqual([
+            {
+                beadId: 'agent-flywheel-002',
+                score: 640,
+                reportPath: join(tmp, 'beads_compliance_audit', 'passes', '2026-05-15T14-33-55Z-flywheel-gate', 'beads/agent-flywheel-002/scorecard.md'),
+                reasons: ['Evidence missing', 'gate:FAIL'],
+            },
+        ]);
+    });
+    it('parses the 2026-05-15 five-bead manifest and matches the report verdict', async () => {
+        setupFakeManifestPassDir(tmp, {
+            audit_dir_version: '1.0.0',
+            pass_id: '2026-05-15T14-33-55Z-flywheel-gate',
+            pass_started_at: '2026-05-15T14:33:55Z',
+            mode: 'flywheel-gate',
+            score_threshold: 700,
+            target_beads: [
+                'claude-orchestrator-3s58',
+                'claude-orchestrator-ao9u',
+                'claude-orchestrator-2wcd',
+                'claude-orchestrator-37n6',
+                'claude-orchestrator-34ok',
+            ],
+            results: {
+                'claude-orchestrator-3s58': { score: 970, verdict: 'Verified', gate: 'PASS' },
+                'claude-orchestrator-ao9u': { score: 920, verdict: 'Substantially complete', gate: 'PASS' },
+                'claude-orchestrator-2wcd': { score: 910, verdict: 'Substantially complete', gate: 'PASS' },
+                'claude-orchestrator-37n6': { score: 890, verdict: 'Substantially complete', gate: 'PASS' },
+                'claude-orchestrator-34ok': { score: 855, verdict: 'Substantially complete', gate: 'PASS' },
+            },
+            summary: {
+                total_beads: 5,
+                passed: 5,
+                failed: 0,
+                mean_score: 909,
+                gate_verdict: 'PASS',
+            },
+        });
+        const exec = vi.fn(async (cmd) => {
+            if (cmd === 'git')
+                return { code: 0, stdout: 'abc123\n', stderr: '' };
+            return { code: 0, stdout: '', stderr: '' };
+        });
+        const result = await runComplianceAudit(stubCtx({ exec }), {
+            cwd: tmp,
+            beadIds: [
+                'claude-orchestrator-3s58',
+                'claude-orchestrator-ao9u',
+                'claude-orchestrator-2wcd',
+                'claude-orchestrator-37n6',
+                'claude-orchestrator-34ok',
+            ],
+        });
+        const data = result.structuredContent.data;
+        expect(data.status).toBe('ok');
+        expect(data.passUtc).toBe('2026-05-15T14:33:55Z');
+        expect(data.passed.map((bead) => [bead.beadId, bead.score])).toEqual([
+            ['claude-orchestrator-3s58', 970],
+            ['claude-orchestrator-ao9u', 920],
+            ['claude-orchestrator-2wcd', 910],
+            ['claude-orchestrator-37n6', 890],
+            ['claude-orchestrator-34ok', 855],
+        ]);
+        expect(data.failed).toEqual([]);
+        expect(data.errors.parse).toBeUndefined();
     });
     it('parses mixed result and partitions passed/failed', async () => {
         setupFakePassDir(tmp, 'compliance-result-mixed.json');
@@ -207,7 +328,7 @@ describe('runComplianceAudit - skill spawn + parse', () => {
         expect(data.status).toBe('error');
         expect(data.errors.parse).toContain('passes directory missing');
     });
-    it('returns status=error when result.json is missing', async () => {
+    it('returns status=error when manifest.json and legacy result.json are missing', async () => {
         mkdirSync(join(tmp, 'beads_compliance_audit', 'passes', '2026-05-08T19-14-22Z'), { recursive: true });
         const ctx = stubCtx({
             exec: vi.fn().mockResolvedValue({ code: 0, stdout: '', stderr: '' }),
@@ -215,7 +336,8 @@ describe('runComplianceAudit - skill spawn + parse', () => {
         const result = await runComplianceAudit(ctx, { cwd: tmp, beadIds: ['agent-flywheel-001'] });
         const data = result.structuredContent.data;
         expect(data.status).toBe('error');
-        expect(data.errors.parse).toContain('result.json not found');
+        expect(data.errors.parse).toContain('manifest.json not found');
+        expect(data.errors.parse).toContain('legacy result.json not found');
     });
     it('returns status=error when result.json is invalid JSON', async () => {
         const passDir = join(tmp, 'beads_compliance_audit', 'passes', '2026-05-08T19-14-22Z');

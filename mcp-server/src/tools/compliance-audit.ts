@@ -47,6 +47,22 @@ const ComplianceResultSchema = z.object({
 
 type ComplianceResult = z.infer<typeof ComplianceResultSchema>;
 
+const ComplianceManifestBeadSchema = z.object({
+  score: z.number(),
+  verdict: z.string().optional(),
+  gate: z.string().optional(),
+}).passthrough();
+
+const ComplianceManifestSchema = z.object({
+  pass_id: z.string(),
+  pass_started_at: z.string().optional(),
+  mode: z.string().optional(),
+  score_threshold: z.number().optional(),
+  target_beads: z.array(z.string()).optional(),
+  results: z.record(z.string(), ComplianceManifestBeadSchema),
+  session_id: z.string().nullable().optional(),
+}).passthrough();
+
 interface ParsedComplianceResult {
   parsedResult: ComplianceResult;
   latestPassDir: string;
@@ -55,6 +71,101 @@ interface ParsedComplianceResult {
 type LatestResultRead =
   | { ok: true; value: ParsedComplianceResult }
   | { ok: false; text: string; errors: Record<string, string> };
+
+function zodIssuesText(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+    .join('; ');
+}
+
+function parseLegacyResultJson(resultJsonPath: string, latestPassDir: string): LatestResultRead {
+  try {
+    const rawResult = JSON.parse(readFileSync(resultJsonPath, 'utf8')) as unknown;
+    const schemaResult = ComplianceResultSchema.safeParse(rawResult);
+    if (!schemaResult.success) {
+      const issues = zodIssuesText(schemaResult.error);
+      return {
+        ok: false,
+        text: `result.json schema validation failed: ${issues}`,
+        errors: { parse: issues },
+      };
+    }
+    return {
+      ok: true,
+      value: { parsedResult: schemaResult.data, latestPassDir },
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      text: `result.json parse failed: ${message}`,
+      errors: { parse: message },
+    };
+  }
+}
+
+function parseManifestJson(manifestJsonPath: string, latestPassDir: string): LatestResultRead {
+  try {
+    const rawManifest = JSON.parse(readFileSync(manifestJsonPath, 'utf8')) as unknown;
+    const schemaResult = ComplianceManifestSchema.safeParse(rawManifest);
+    if (!schemaResult.success) {
+      const issues = zodIssuesText(schemaResult.error);
+      return {
+        ok: false,
+        text: `manifest.json schema validation failed: ${issues}`,
+        errors: { parse: issues },
+      };
+    }
+
+    const manifest = schemaResult.data;
+    const threshold = manifest.score_threshold ?? 700;
+    const orderedBeadIds = [
+      ...(manifest.target_beads ?? []).filter((beadId) => manifest.results[beadId] !== undefined),
+      ...Object.keys(manifest.results).filter(
+        (beadId) => !(manifest.target_beads ?? []).includes(beadId),
+      ),
+    ];
+    const beads = orderedBeadIds.map((beadId) => {
+      const result = manifest.results[beadId];
+      const normalizedGate = result.gate?.toUpperCase();
+      const passed = normalizedGate === 'PASS' || (normalizedGate === undefined && result.score >= threshold);
+      return {
+        id: beadId,
+        score: result.score,
+        passed,
+        scorecard_path: `beads/${beadId}/scorecard.md`,
+        top_failures: passed
+          ? undefined
+          : [
+              result.verdict ?? 'Compliance gate failed',
+              ...(result.gate ? [`gate:${result.gate}`] : []),
+            ],
+      };
+    });
+
+    return {
+      ok: true,
+      value: {
+        parsedResult: {
+          schema_version: 1,
+          pass_utc: manifest.pass_started_at ?? manifest.pass_id,
+          mode: 'flywheel-gate',
+          threshold,
+          beads,
+          session_id: manifest.session_id ?? null,
+        },
+        latestPassDir,
+      },
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      text: `manifest.json parse failed: ${message}`,
+      errors: { parse: message },
+    };
+  }
+}
 
 function complianceOutcome(
   status: ComplianceAuditOutcome['status'],
@@ -151,39 +262,24 @@ function readLatestComplianceResult(cwd: string): LatestResultRead {
   }
 
   const latestPassDir = join(passesRoot, subdirs[0].name);
+  const manifestJsonPath = join(latestPassDir, 'manifest.json');
   const resultJsonPath = join(latestPassDir, 'result.json');
 
-  if (!existsSync(resultJsonPath)) {
-    return {
-      ok: false,
-      text: 'result.json missing in latest pass.',
-      errors: { parse: `result.json not found at ${resultJsonPath}` },
-    };
+  if (existsSync(manifestJsonPath)) {
+    return parseManifestJson(manifestJsonPath, latestPassDir);
   }
 
-  try {
-    const rawResult = JSON.parse(readFileSync(resultJsonPath, 'utf8')) as unknown;
-    const schemaResult = ComplianceResultSchema.safeParse(rawResult);
-    if (!schemaResult.success) {
-      const issues = schemaResult.error.issues
-        .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
-        .join('; ');
-      return {
-        ok: false,
-        text: `result.json schema validation failed: ${issues}`,
-        errors: { parse: issues },
-      };
-    }
-    return {
-      ok: true,
-      value: { parsedResult: schemaResult.data, latestPassDir },
-    };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+  if (existsSync(resultJsonPath)) {
+    return parseLegacyResultJson(resultJsonPath, latestPassDir);
+  }
+
+  {
     return {
       ok: false,
-      text: `result.json parse failed: ${message}`,
-      errors: { parse: message },
+      text: 'manifest.json missing in latest pass.',
+      errors: {
+        parse: `manifest.json not found at ${manifestJsonPath}; legacy result.json not found at ${resultJsonPath}`,
+      },
     };
   }
 }
