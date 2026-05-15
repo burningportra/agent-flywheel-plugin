@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "beadId": "claude-orchestrator-3m51",
+  "agentName": "CobaltChapel",
+  "status": "closed",
+  "changedFiles": [
+    "AGENTS.md"
+  ],
+  "commits": [],
+  "ubs": {
+    "ran": true,
+    "summary": "ubs --staged exited 0 and reported no recognizable languages because the staged change is Markdown-only.",
+    "findingsFixed": 0,
+    "deferredBeadIds": []
+  },
+  "verify": [
+    {
+      "command": "br dep tree claude-orchestrator-3m51",
+      "exitCode": 0,
+      "summary": "Dependency tree showed no blockers for claude-orchestrator-3m51."
+    },
+    {
+      "command": "rg -n \"FW_GRADER_MODEL|FW_GRADER_FORCE_CLAUDE|claude-3-5-sonnet\" AGENTS.md",
+      "exitCode": 0,
+      "summary": "Confirmed FW_GRADER_MODEL now describes the Codex-primary lane and the stale claude-3-5-sonnet fallback example is absent."
+    },
+    {
+      "command": "ubs --staged",
+      "exitCode": 0,
+      "summary": "Markdown-only staged diff; UBS reported no recognizable languages and no findings."
+    },
+    {
+      "command": "git diff --cached --check",
+      "exitCode": 0,
+      "summary": "No whitespace errors."
+    }
+  ],
+  "selfReview": {
+    "ran": true,
+    "summary": "AGENTS.md now states that FW_GRADER_MODEL only selects the Codex-primary grader model passed to codex exec --model, and that the fresh-CC fallback is selected by FW_GRADER_FORCE_CLAUDE=1 or Codex unavailability."
+  },
+  "beadClosedVerified": true,
+  "createdAt": "2026-05-15T15:55:28Z"
+}

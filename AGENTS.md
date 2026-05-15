@@ -190,7 +190,7 @@ Both run in the same cycle and complement each other. `flywheel_review` ensures 
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `FW_GRADER_MODEL` | `gpt-5.5` | Codex model passed to `codex exec --model`. Set to override per-environment (e.g. `claude-3-5-sonnet` for the fallback). |
+| `FW_GRADER_MODEL` | `gpt-5.5` | Codex-primary grader model passed to `codex exec --model`. It does not configure the fresh-CC fallback, which is selected by `FW_GRADER_FORCE_CLAUDE=1` or Codex unavailability. |
 | `FW_GRADER_TIMEOUT_MS` | `120000` | Per-call grader budget. Surfaced as `grader_timeout` (retryable) on overflow. |
 | `FW_GRADER_FORCE_CLAUDE` | unset | When `=1`, skips the codex primary and goes straight to the fresh-CC fallback. Use for environments where codex is intentionally unavailable. |
 | `FW_RUBRIC_SYNTH_TIMEOUT_MS` | `60000` | Per-call rubric synthesizer budget. Hard-fails as `rubric_synth_invalid` on overflow. |
