@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "beadId": "claude-orchestrator-2vl7",
+  "agentName": "WildMouse",
+  "status": "closed",
+  "changedFiles": [
+    "mcp-server/src/tools/capabilities.ts",
+    "mcp-server/src/__tests__/capabilities.test.ts",
+    "mcp-server/dist/tools/capabilities.js",
+    "mcp-server/dist/__tests__/capabilities.test.js"
+  ],
+  "commits": [
+    "000a6fc"
+  ],
+  "ubs": {
+    "ran": true,
+    "summary": "clean: 0 critical, 0 warning on capabilities source/test scan",
+    "findingsFixed": 0,
+    "deferredBeadIds": []
+  },
+  "verify": [
+    {
+      "command": "cd mcp-server && ../scripts/build-mutex.sh rch exec -- npm test -- capabilities",
+      "exitCode": 0,
+      "summary": "19/19 capabilities tests passed, including FW_GRADER_MODEL Codex-primary wording assertion."
+    },
+    {
+      "command": "cd mcp-server && ../scripts/build-mutex.sh rch exec -- npm run build",
+      "exitCode": 0,
+      "summary": "TypeScript build, skills bundle build, and schema emission completed successfully."
+    },
+    {
+      "command": "grep -A2 'FW_GRADER_MODEL:' mcp-server/src/tools/capabilities.ts",
+      "exitCode": 0,
+      "summary": "FW_GRADER_MODEL wording mentions codex exec --model and FW_GRADER_FORCE_CLAUDE, and no longer contains claude-opus-4-7."
+    }
+  ],
+  "beadClosedVerified": true,
+  "reservationsReleased": true,
+  "createdAt": "2026-05-15T16:24:08Z",
+  "notes": "Aligned flywheel_capabilities env-var hint with AGENTS.md 3m51 clarification; added regression coverage for the operator-facing hint."
+}
