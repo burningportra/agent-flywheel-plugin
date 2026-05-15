@@ -6,6 +6,7 @@ import {
   coverageFromKeywordAudit,
   formatPlanCoverage,
 } from '../plan-coverage.js';
+import { auditPlanToBeads } from '../beads.js';
 import type { Bead } from '../types.js';
 import type { PlanToBeadAudit, PlanAuditSection } from '../beads.js';
 
@@ -23,6 +24,15 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
     ...overrides,
   };
 }
+
+const threeSectionPlan = [
+  '## Alpha Parser',
+  'Alpha parser contract validates output shape.',
+  '## Beta Runner',
+  'Beta runner retries transient command failure.',
+  '## Gamma Release',
+  'Gamma release checklist records operator handoff.',
+].join('\n');
 
 // ─── parsePlanSections ──────────────────────────────────────────
 
@@ -156,6 +166,104 @@ describe('coverageFromKeywordAudit', () => {
     expect(result.coveredSections).toBe(1);
     expect(result.gaps).toHaveLength(1);
     expect(result.gaps[0].heading).toBe('API');
+  });
+
+  it('reports 100 percent coverage for three fully matched plan sections', () => {
+    const audit = auditPlanToBeads(threeSectionPlan, [
+      makeBead({
+        id: 'bead-alpha',
+        title: 'Alpha parser contract validates output shape',
+        description: 'Covers alpha parser contract and output shape validation.',
+      }),
+      makeBead({
+        id: 'bead-beta',
+        title: 'Beta runner retries transient command failure',
+        description: 'Covers beta runner retry behavior for transient command failure.',
+      }),
+      makeBead({
+        id: 'bead-gamma',
+        title: 'Gamma release checklist records operator handoff',
+        description: 'Covers gamma release checklist and operator handoff records.',
+      }),
+    ]);
+
+    const result = coverageFromKeywordAudit(audit);
+
+    expect(result.totalSections).toBe(3);
+    expect(result.coveredSections).toBe(3);
+    expect(result.overall).toBe(100);
+    expect(result.gaps).toEqual([]);
+    expect(result.sections.map((section) => section.score)).toEqual([100, 100, 100]);
+    expect(result.sections.map((section) => section.matchedBeadIds)).toEqual([
+      ['bead-alpha'],
+      ['bead-beta'],
+      ['bead-gamma'],
+    ]);
+  });
+
+  it('detects a gap when one plan section has no bead keywords', () => {
+    const audit = auditPlanToBeads(threeSectionPlan, [
+      makeBead({
+        id: 'bead-alpha',
+        title: 'Alpha parser contract validates output shape',
+        description: 'Covers alpha parser contract and output shape validation.',
+      }),
+      makeBead({
+        id: 'bead-beta',
+        title: 'Beta runner retries transient command failure',
+        description: 'Covers beta runner retry behavior for transient command failure.',
+      }),
+    ]);
+
+    const result = coverageFromKeywordAudit(audit);
+
+    expect(result.totalSections).toBe(3);
+    expect(result.coveredSections).toBe(2);
+    expect(result.gaps).toHaveLength(1);
+    expect(result.gaps[0]).toMatchObject({
+      heading: 'Gamma Release',
+      score: 0,
+      matchedBeadIds: [],
+      uncovered: true,
+    });
+  });
+
+  it('returns empty coverage for an empty plan', () => {
+    const audit = auditPlanToBeads('', [
+      makeBead({
+        id: 'bead-alpha',
+        title: 'Alpha parser contract',
+        description: 'Would cover a non-empty plan.',
+      }),
+    ]);
+
+    const result = coverageFromKeywordAudit(audit);
+
+    expect(result).toEqual({
+      overall: 0,
+      sections: [],
+      gaps: [],
+      totalSections: 0,
+      coveredSections: 0,
+    });
+  });
+
+  it('returns zero percent coverage per section when beads are empty', () => {
+    const audit = auditPlanToBeads(threeSectionPlan, []);
+
+    const result = coverageFromKeywordAudit(audit);
+
+    expect(result.totalSections).toBe(3);
+    expect(result.coveredSections).toBe(0);
+    expect(result.overall).toBe(0);
+    expect(result.sections).toHaveLength(3);
+    expect(result.sections.every((section) => section.score === 0)).toBe(true);
+    expect(result.sections.every((section) => section.uncovered)).toBe(true);
+    expect(result.gaps.map((section) => section.heading)).toEqual([
+      'Alpha Parser',
+      'Beta Runner',
+      'Gamma Release',
+    ]);
   });
 });
 
