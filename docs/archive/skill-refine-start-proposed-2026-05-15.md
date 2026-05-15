@@ -1,5 +1,21 @@
 # skills/start refinement proposal — 2026-05-08
 
+> **Status (archived 2026-05-15 by `claude-orchestrator-3ibw`)** — shipped during `reality-check-2026-05-15`. Item-by-item disposition:
+>
+> | # | Item | Status | Landed via |
+> |---|------|--------|------------|
+> | 1 | NTM `--robot-send` flag syntax (`--panes=N`, drop `--type=`) | ✓ shipped | already on disk before this cycle (`_planning.md` ~L361 / `_implement.md` ~L293) |
+> | 2 | `codex_config_compat` pre-spawn gate | ✓ shipped | `claude-orchestrator-2wcd` (commit `bf48b86`) + `claude-orchestrator-3s58` (commit `1ad2d4d`, automated remediation handler) + `claude-orchestrator-37n6` (`gemini_model_compat` doctor check, commit `530a04c`) |
+> | 3 | `br list` default-view excludes closed (`_beads.md` reference + tend-cycle note) | ✓ shipped | `_beads.md` L12 + L17 |
+> | 4 | `cycleStartSha` bootstrap gap callout in `_wrapup.md` `postmortem_empty_session` branch | ✓ shipped | `_wrapup.md` L330 |
+> | 5 | Step 5.55 "decisive convergence on synthesizer recommendations" note | follow-up beaded | `claude-orchestrator-2ekf` (`reality-check-2026-05-15-followup`, P3 task) |
+> | 6 | Solution-doc category classifier `tooling`/`coordination` vs `test` | deferred per source doc | not in scope of this archive |
+> | 7 | `mark_message_read()` integer-ID Zod validation | deferred per source doc (upstream agent-mail) | not in scope of this archive |
+>
+> **Disposition.** Items 1–4 are live in the skills as of `main@bf48b86..530a04c..1ad2d4d`. Item 5 is the only outstanding skill change; tracked in the follow-up bead above. Items 6–7 were already marked out-of-scope in the proposal itself. The doc is now historical reference — do not edit it; file new follow-ups against the relevant skill file directly.
+>
+> ---
+>
 > **Source evidence**: outcome-grading v3.13.0 cycle (60+ orchestrator turns, 3-pane deep-plan + 1-pane impl coordinator-serial)
 > **Supersedes**: prior 2026-04-21 v3.4.0-evidence proposal (now stale).
 
