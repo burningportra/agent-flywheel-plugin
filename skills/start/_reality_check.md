@@ -17,7 +17,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Reality check only", description: "Run §2 — agent reads docs + investigates code + applies /reality-check-for-project exhaustively. Stop after the gap report. Best when you want to read the findings and decide manually." },
     { label: "Reality check + beads", description: "Run §2, then §3 — convert every gap into a granular self-contained bead graph via br, with comments capturing background/reasoning. Stops before implementation. (Recommended)" },
-    { label: "Full pipeline (check + beads + swarm)", description: "Run §2, then §3, then §4 — execute the gap-closure beads via NTM swarm (3 pi + 3 cc, 3-min looper; cod fallback if Pi unavailable, per AGENTS.md NTM pane priority). Best when you want to walk away and let it run." }
+    { label: "Full pipeline (check + beads + swarm)", description: "Run §2, then §3, then §4 — execute the gap-closure beads via NTM swarm (cc:cod:gem 2:2:2, 3-min looper; substitution ladder gmi→cod→pi→cc when a provider is unavailable, per AGENTS.md NTM pane priority). Best when you want to walk away and let it run." }
   ],
   multiSelect: false
 }])
@@ -105,12 +105,12 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 >
 > THEN: start systematically and methodically and meticulously and diligently executing those remaining beads tasks that you created in the optimal logical order!
 >
-> Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch 3 pi and 3 claude code instances to do this (per AGENTS.md NTM pane priority — prefer pi over cod; only fall back to 3 codex if Pi is unavailable on this host) and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
+> Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch a mixed cc:cod:gem 2:2:2 swarm (2 claude + 2 codex + 2 gemini panes, per AGENTS.md NTM pane priority — model-diversified is the canonical default; fall back via the substitution ladder gmi→cod→pi→cc when a provider is unavailable on this host) and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
 
 ### 4a. Pre-flight (mandatory — same as `_implement.md`)
 
 1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight at top of Step 7). If misconfigured, surface fix-or-fallback `AskUserQuestion`.
-2. **CLI capability check** — `which codex` AND `which claude` MUST succeed. If `codex` missing, the 3-cod lane collapses; surface a degraded-mode `AskUserQuestion` (override default 3:3 ratio? abort? proceed degraded?).
+2. **CLI capability check** — `which claude` MUST succeed. `which codex` and `which gemini` are advisory: any missing peer triggers the substitution ladder (gmi→cod→pi→cc, per AGENTS.md NTM pane priority). If all three peers are unavailable, surface a degraded-mode `AskUserQuestion` (proceed cc-only? abort?). Use the swarm-capability output from `flywheel_doctor` (`claude_cli`, `codex_cli`, `gemini_cli`, `swarm_model_ratio`) — do not parse `which` output twice.
 2a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gmi=M>0`).** Call `flywheel_doctor` and read `DOCTOR_REPORT.checks`. Apply per check BEFORE `ntm spawn`:
 
    | Check | Trigger | Action |
@@ -127,9 +127,15 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 
 ### 4b. Spawn the swarm
 
-`ntm spawn $NTM_PROJECT --label reality-check-closure --no-user --cc=3 --pi=3 --stagger-mode=smart`. Pane indices: cc=1,2,3  pi=4,5,6.
+`ntm spawn $NTM_PROJECT --label reality-check-closure --no-user --cc=2 --cod=2 --gmi=2 --stagger-mode=smart`. Pane indices: cc=1,2  cod=3,4  gmi=5,6.
 
-**Pane-type priority** (per AGENTS.md "NTM pane priority"): prefer `--pi=` over `--cod=`; only fall back to `--cc=3 --cod=3` (with pane indices `cod=4,5,6`) when Pi is unavailable on the host.
+**Pane-type priority** (per AGENTS.md "NTM pane priority"): mixed `cc:cod:gem` 1:1:1 is the canonical default. Apply the substitution ladder when a provider is unavailable on this host (driven by Step 4a model-config gates):
+
+1. Missing `gmi` (or `gemini_model_compat` non-green) → reassign to `--cod=` (`--cc=2 --cod=4`).
+2. Missing `cod` *also* (or `codex_config_compat` non-green) → reassign to `--pi=` (`--cc=2 --cod=0 --pi=4`).
+3. All three peers unavailable → cc-only floor (`--cc=6`), explicit-override mode; log the degradation.
+
+Never reintroduce `--pi=3 --cc=3` as a default — the prior "pi over cod" priority is retired (see AGENTS.md "Retired rules").
 
 ### 4c. Supervision (3-min looper default; ntm controller alternative)
 
