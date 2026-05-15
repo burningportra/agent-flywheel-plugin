@@ -48,6 +48,10 @@ export interface SessionStage {
     /** Human-readable list of signals used to reach this conclusion. */
     inferredFrom: string[];
 }
+export interface SessionStageEvidence {
+    /** True when the planDocument path has been verified on disk; false when known missing. */
+    planDocumentExists?: boolean;
+}
 /**
  * Detect the current flywheel stage from persisted state + live bead data.
  *
@@ -60,7 +64,7 @@ export interface SessionStage {
  *    d. repoProfile but no beads → discovering
  *    e. nothing → idle
  */
-export declare function detectSessionStage(state: FlywheelState, beads: Bead[]): SessionStage;
+export declare function detectSessionStage(state: FlywheelState, beads: Bead[], evidence?: SessionStageEvidence): SessionStage;
 /**
  * Builds the multi-line header string shown inside the `/start` select
  * prompt when an existing session is detected.

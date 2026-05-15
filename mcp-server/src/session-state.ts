@@ -53,6 +53,11 @@ export interface SessionStage {
   inferredFrom: string[];
 }
 
+export interface SessionStageEvidence {
+  /** True when the planDocument path has been verified on disk; false when known missing. */
+  planDocumentExists?: boolean;
+}
+
 // ─── Phase metadata ───────────────────────────────────────────
 
 interface PhaseMeta {
@@ -64,7 +69,7 @@ interface PhaseMeta {
 
 const PHASE_META: Record<FlywheelPhase, PhaseMeta> = {
   idle: {
-    label: "Idle",
+    label: "Fresh start",
     emoji: "💤",
     nextAction: "Run /start to start.",
     buildResumePrompt: () => "Start the flywheel workflow. Call `flywheel_profile` to scan the repo.",
@@ -217,7 +222,8 @@ const PHASE_META: Record<FlywheelPhase, PhaseMeta> = {
  */
 export function detectSessionStage(
   state: FlywheelState,
-  beads: Bead[]
+  beads: Bead[],
+  evidence: SessionStageEvidence = {}
 ): SessionStage {
   const inferredFrom: string[] = [];
   let phase = state.phase;
@@ -229,21 +235,45 @@ export function detectSessionStage(
   const openBeadCount = openBeads.length;
   const completedBeadCount = completedBeads.length;
   const totalBeadCount = beads.length;
+  const planDocumentMissing = Boolean(state.planDocument && evidence.planDocumentExists === false);
+  let resolvedFromEvidence = false;
 
   // ── Step 1: if we have a concrete persisted phase, trust it ──
   // Special case: if researchState exists with incomplete phases, that takes
   // priority over a stale idle/complete phase.
-  if ((phase === "idle" || phase === "complete") && (state as any).researchState?.phasesCompleted?.length > 0) {
+  if (phase === "implementing" && openBeads.length === 0 && completedBeads.length > 0) {
+    phase = "complete";
+    confidence = "low";
+    inferredFrom.push(
+      `stale checkpoint phase "implementing": ${completedBeads.length} completed bead(s), none open`
+    );
+    resolvedFromEvidence = true;
+  } else if (planDocumentMissing && (
+    phase === "planning" ||
+    phase === "awaiting_plan_approval" ||
+    phase === "creating_beads" ||
+    phase === "awaiting_bead_approval"
+  )) {
+    confidence = "low";
+    inferredFrom.push(`plan document "${state.planDocument}" is missing`);
+    if (openBeads.length > 0) {
+      inferredFrom.push(`${openBeads.length} open bead(s) found on disk`);
+    }
+    resolvedFromEvidence = true;
+  } else if ((phase === "idle" || phase === "complete") && (state as any).researchState?.phasesCompleted?.length > 0) {
     const rs = (state as any).researchState as { url: string; externalName: string; artifactName: string; phasesCompleted: string[] };
     const totalPhases = 7;
     if (rs.phasesCompleted.length < totalPhases) {
       phase = "researching";
       confidence = "medium";
       inferredFrom.push(`research in-progress for "${rs.externalName}" (${rs.phasesCompleted.length}/${totalPhases} phases done)`);
+      resolvedFromEvidence = true;
     }
   }
 
-  if (phase !== "idle" && phase !== "complete") {
+  if (resolvedFromEvidence) {
+    // Evidence corrections above already recorded the decisive signals.
+  } else if (phase !== "idle" && phase !== "complete") {
     if (!inferredFrom.some(s => s.includes("research"))) {
       inferredFrom.push(`persisted phase "${phase}"`);
     }
@@ -275,13 +305,15 @@ export function detectSessionStage(
     } else {
       // Nothing to go on
       phase = "idle";
-      confidence = "low";
-      inferredFrom.push("no persistent signals found");
+      confidence = "high";
+      inferredFrom.push("no persistent signals found; fresh start");
     }
   }
 
   const meta = PHASE_META[phase];
-  const currentBeadId = inProgressBeads[0]?.id ?? state.currentBeadId ?? undefined;
+  const currentBeadId = phase === "complete" || phase === "idle"
+    ? undefined
+    : inProgressBeads[0]?.id ?? state.currentBeadId ?? undefined;
 
   const stageWithoutPrompt: Omit<SessionStage, "resumePrompt"> = {
     phase,
