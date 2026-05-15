@@ -162,6 +162,24 @@ describe("PANE001 — validateLaneCounts", () => {
 describe("PANE001 — rule.check (cross-file scan)", () => {
   const emptyDoc: Document = { source: "", filePath: "<unused>" };
 
+  async function findingForDriftFixture(source: string, prefix: string) {
+    const dir = freshDir(prefix);
+    const skillsRoot = path.join(dir, "skills", "start");
+    const fileName = "_implement.md";
+    mkdirSync(skillsRoot, { recursive: true });
+    writeFileSync(path.join(skillsRoot, fileName), source, "utf8");
+
+    const findings = await pane001.check(emptyDoc, {
+      filePath: "<unused>",
+      source: "",
+      canonical: CANONICAL_RULE,
+      repoRoot: dir,
+      skillsRoot,
+    } as never);
+
+    return findings.find((x) => x.file.endsWith(fileName));
+  }
+
   it("returns no findings when no skill files contain spawn lines", async () => {
     const dir = freshDir("pane001-clean-");
     const skillsRoot = path.join(dir, "skills", "start");
@@ -325,6 +343,104 @@ describe("PANE001 — rule.check (cross-file scan)", () => {
     expect(f).toBeDefined();
     expect(f!.ruleId).toBe("PANE001");
     expect(f!.message).toMatch(/lane ratio/);
+  });
+
+  it("does NOT suppress drift for any previously loose override phrase", async () => {
+    const loosePhrases = [
+      "intentional override",
+      "signature override",
+      "override of the canonical",
+      "override of the v3.17",
+      "signature and an explicit override",
+    ];
+
+    for (const [index, phrase] of loosePhrases.entries()) {
+      const f = await findingForDriftFixture(
+        "# Impl file\n\n" +
+          `This substitution-ladder note mentions ${phrase} in prose.\n\n` +
+          "```bash\n" +
+          "ntm spawn proj --label impl --no-user --cc=4 --cod=2 --stagger-mode=smart\n" +
+          "```\n",
+        `pane001-retired-loose-${index}-`,
+      );
+
+      expect(f, phrase).toBeDefined();
+      expect(f!.ruleId).toBe("PANE001");
+      expect(f!.message).toMatch(/lane ratio/);
+    }
+  });
+
+  it("does NOT suppress drift for a lowercase pane001-override token", async () => {
+    const f = await findingForDriftFixture(
+      "# Impl file\n\n" +
+        "pane001-override: experimental run\n\n" +
+        "```bash\n" +
+        "ntm spawn proj --label impl --no-user --cc=4 --cod=2 --stagger-mode=smart\n" +
+        "```\n",
+      "pane001-lower-token-",
+    );
+
+    expect(f).toBeDefined();
+    expect(f!.ruleId).toBe("PANE001");
+    expect(f!.message).toMatch(/lane ratio/);
+  });
+
+  it("does NOT suppress drift for a PANE001-OVERRIDE token without a colon", async () => {
+    const f = await findingForDriftFixture(
+      "# Impl file\n\n" +
+        "PANE001-OVERRIDE experimental run\n\n" +
+        "```bash\n" +
+        "ntm spawn proj --label impl --no-user --cc=4 --cod=2 --stagger-mode=smart\n" +
+        "```\n",
+      "pane001-token-no-colon-",
+    );
+
+    expect(f).toBeDefined();
+    expect(f!.ruleId).toBe("PANE001");
+    expect(f!.message).toMatch(/lane ratio/);
+  });
+
+  it("does NOT suppress drift when pane001-override appears later in an HTML comment", async () => {
+    const f = await findingForDriftFixture(
+      "# Impl file\n\n" +
+        "<!-- TODO: see pane001-override docs -->\n\n" +
+        "```bash\n" +
+        "ntm spawn proj --label impl --no-user --cc=4 --cod=2 --stagger-mode=smart\n" +
+        "```\n",
+      "pane001-html-text-before-marker-",
+    );
+
+    expect(f).toBeDefined();
+    expect(f!.ruleId).toBe("PANE001");
+    expect(f!.message).toMatch(/lane ratio/);
+  });
+
+  it("suppresses drift for an HTML pane001-override marker with a colon reason", async () => {
+    const f = await findingForDriftFixture(
+      "# Impl file\n\n" +
+        "<!-- pane001-override: deslop reason -->\n\n" +
+        "```bash\n" +
+        "ntm spawn proj --label impl --no-user --cc=4 --cod=2 --stagger-mode=smart\n" +
+        "```\n",
+      "pane001-html-colon-reason-",
+    );
+
+    expect(f).toBeUndefined();
+  });
+
+  it("suppresses drift when the strict PANE001-OVERRIDE token appears mid-sentence", async () => {
+    const padding = Array.from({ length: 20 }, () => "filler line").join("\n");
+    const f = await findingForDriftFixture(
+      "# Impl file\n\n" +
+        "Note: PANE001-OVERRIDE: experimental run\n\n" +
+        padding +
+        "\n\n```bash\n" +
+        "ntm spawn proj --label impl --no-user --cc=4 --cod=2 --stagger-mode=smart\n" +
+        "```\n",
+      "pane001-token-mid-sentence-",
+    );
+
+    expect(f).toBeUndefined();
   });
 
   it("suppresses a far-away drift when the strict `<!-- pane001-override -->` marker is present", async () => {

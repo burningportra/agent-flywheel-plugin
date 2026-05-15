@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "beadId": "claude-orchestrator-3ujf",
+  "agentName": "CobaltChapel",
+  "status": "closed",
+  "changedFiles": [
+    "mcp-server/src/__tests__/lint/pane001.test.ts",
+    "mcp-server/dist/__tests__/lint/pane001.test.js"
+  ],
+  "commits": [],
+  "ubs": {
+    "ran": true,
+    "summary": "ubs --staged scanned 1 TypeScript file; 0 critical, 0 warning, 98 info-only items.",
+    "findingsFixed": 0,
+    "deferredBeadIds": []
+  },
+  "verify": [
+    {
+      "command": "br dep tree claude-orchestrator-3ujf",
+      "exitCode": 0,
+      "summary": "Dependency tree showed no blockers for claude-orchestrator-3ujf."
+    },
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm test --prefix mcp-server -- src/__tests__/lint/pane001.test.ts",
+      "exitCode": 0,
+      "summary": "Vitest PANE001 suite passed with 33 tests."
+    },
+    {
+      "command": "AGENT_NAME=CobaltChapel scripts/build-mutex.sh rch exec -- npm run build --prefix mcp-server",
+      "exitCode": 0,
+      "summary": "tsc, scripts build, skills bundle, and schema emission completed successfully."
+    },
+    {
+      "command": "ubs --staged",
+      "exitCode": 0,
+      "summary": "0 critical and 0 warning findings on the staged TypeScript test change."
+    },
+    {
+      "command": "git diff --cached --check",
+      "exitCode": 0,
+      "summary": "No whitespace errors."
+    }
+  ],
+  "selfReview": {
+    "ran": true,
+    "summary": "PANE001 tests now pin the retired loose override phrases as non-suppressing, lock case-sensitive and colon-required PANE001-OVERRIDE behavior, reject pane001-override text later in an HTML comment, and document the accepted HTML colon-reason plus mid-sentence token suppression forms."
+  },
+  "beadClosedVerified": true,
+  "createdAt": "2026-05-15T16:02:56Z"
+}
