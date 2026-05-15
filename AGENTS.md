@@ -197,6 +197,10 @@ Both run in the same cycle and complement each other. `flywheel_review` ensures 
 | `FW_MAX_OUTCOME_ITERATIONS` | `3` (clamped to `[1,5]`) | Default for `state.maxOutcomeIterations`. Per-cycle override happens via state edits, not a flag. |
 | `FW_COMMIT_BATCH_THRESHOLD` | `8` | Commits accumulated since `state.lastBatchReviewSha` before `flywheel_advance_wave` returns `nextStep: batch_review_due` instead of `nextWave`. `0` or unset disables the auto-trigger; existing post-wave gate flow is unchanged. Overridable per session via the `_implement.md` Pre-flight `AskUserQuestion`. |
 
+### FW_GRADER_MODEL safe-default cascade
+
+Outcome grading uses `FW_GRADER_MODEL` only for the Codex-primary grader lane. If unset, Codex runs with `gpt-5.5`; if `FW_GRADER_FORCE_CLAUDE=1` or Codex is unavailable, the grader skips directly to the fresh-CC fallback via `claude --print`. Keep this model cascade distinct from the NTM pane-provider substitution ladder below.
+
 State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 
 - `state.commitBatchCounter?: number` — commits accumulated since `lastBatchReviewSha`; incremented as impl agents commit; reset to 0 on review dispatch.
