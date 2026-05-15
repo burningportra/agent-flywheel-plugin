@@ -1,14 +1,14 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.16.0 ▓▒░
+░▒▓ CLAUDE // AGENT-FLYWHEEL v3.17.0 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code.**
 Scan → discover → plan → implement → review — with checkpoints, gates, and adversarial review at every seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.11.5-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.17.0-blue.svg)](#)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.18-brightgreen)](#)
 [![CI](https://github.com/burningportra/agent-flywheel-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/burningportra/agent-flywheel-plugin/actions)
@@ -55,7 +55,7 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 | Completion attestation ledger | ✅ Zod-validated JSON | ✗ | ✗ | ✗ |
 | Bead-graph dependency view | ✅ `bv` + Cytoscape viewer | ✗ | ✗ | ✗ |
 | Auto-recovery (stalled beads, drift) | ✅ tender daemon + 4-min looper | ✗ | ✗ | partial |
-| Doctor / setup / healthcheck triage | ✅ 17-check sweep | ✗ | ✗ | ✗ |
+| Doctor / setup / healthcheck triage | ✅ 21-check sweep | ✗ | ✗ | ✗ |
 
 ---
 
@@ -110,15 +110,17 @@ ntm spawn agent-flywheel --label impl --pi=4 --cc=2 --stagger-mode=smart
 
 ---
 
-## What's new in v3.15.0 (2026-04-30)
+## What's new in v3.17.0 (2026-05-14)
 
-The duel-winner runtime safety substrate. Three composable features, all behind feature flags so existing installs continue working:
+The fresh-eyes auto-trigger release. During long implementation runs, the coordinator fires an automatic fresh-eyes review when commits accumulate past a configurable threshold — catching issues mid-wave instead of waiting for the post-wave gate. Blocking verdicts auto-synthesize beads from each finding (all severities) and surface a four-option Approve/Reject gate so the operator stays in control.
 
-- **`flywheel_observe({ cwd })`** — single-call session-state snapshot. One MCP round-trip returns checkpoint state, bead counts, agent-mail reachability, NTM pane state, wizard artifacts, and graded `hints[]` (info/warn/red). Idempotent, non-mutating, sub-1.5s budget.
-- **Completion Evidence Attestation (Stage 1)** — versioned `CompletionReportSchemaV1` ledger at `.pi-flywheel/completion/<beadId>.json`. Coordinator validates every closed bead before advancing the wave. Set `FW_ATTESTATION_REQUIRED=1` to flip from warn-only to hard-block.
-- **Lock-aware reservation helper + `RESERVE001` lint rule** — `reserveOrFail()` in `mcp-server/src/agent-mail-helpers.ts` treats any non-empty `conflicts` array as failure (works around the upstream agent-mail advisory-enforcement bug). The `RESERVE001` lint rule fails CI on raw `agentMailRPC("file_reservation_paths")` call sites.
+- **Commit-batch counter + threshold.** New `state.commitBatchCounter`, `commitBatchThreshold`, `lastBatchReviewSha`, `batchReviewSynthesizedBeads` fields on `FlywheelState`. Default threshold `8` (env: `FW_COMMIT_BATCH_THRESHOLD`; Pre-flight `AskUserQuestion` offers Off / 5 / 8 / 12). `0` or unset preserves v3.16.0 behavior — fully opt-in.
+- **`flywheel_advance_wave` returns `batch_review_due`.** When the threshold is crossed, the tool returns `{ nextStep: { kind: "batch_review_due", reviewSha, lastBaselineSha }, waveComplete: false }` INSTEAD of `nextWave`, gating the next dispatch on the review verdict. Baseline advances at dispatch time so in-flight commits during review don't double-trigger.
+- **`flywheel_review` `action: "batch_review"` + synthesized beads.** New action dispatches the fresh-eyes prompt via NTM `--robot-send` (reusing warm context) or Agent fallback. Persists verdict to `.pi-flywheel/batch-reviews/<sha-range>.json`. Blocking verdicts auto-synthesize beads (all severities — low/medium/high/critical) tagged `auto-batch-review`, with well-defined partial-rollback semantics. Malformed `Finding[]` falls back to `needs_attention` mode + records a CASS note.
+- **`mcp-server/src/commit-batch.ts`.** Five pure-ish helpers: `countCommitsSinceLastBatchReview`, `shouldTriggerBatchReview`, `recordBatchReview`, `synthesizeBeadsFromFindings`, `rollbackSynthesizedBeads` — all inputs Zod-validated via `FindingSchema` + `BatchReviewVerdictSchema`.
+- **`buildFreshEyesPrompt(opts)` extracted from `gates.ts`.** Both `runGuidedGates` and the new `batch_review` action call this. With `opts.emitStructuredFindings === true`, the prompt appends a `STRUCTURED FINDINGS REQUIRED` JSON contract.
 
-Earlier highlights: `flywheel_doctor` (v3.4) · bead templates with effort tiers (v3.4) · `flywheel_remediate` one-tap doctor fixes (v3.7) · `flywheel_calibrate` per-template duration aggregator (v3.7) · `flywheel_get_skill` bundled skill loader with 4-layer drift defense (v3.7) · read-only bead-graph viewer with cycle highlighting (v3.7).
+Earlier highlights: noob-onboarding installers + tutorial-bead + `projects_base_misconfig` doctor check (v3.16.0) · duel-winner runtime safety: `flywheel_observe`, Completion Evidence Attestation Stage 1, `reserveOrFail` + `RESERVE001` lint rule (v3.15.0) · `flywheel_doctor` (v3.4) · bead templates with effort tiers (v3.4) · `flywheel_remediate` one-tap doctor fixes (v3.7) · `flywheel_calibrate` per-template duration aggregator (v3.7) · `flywheel_get_skill` bundled skill loader with 4-layer drift defense (v3.7) · read-only bead-graph viewer with cycle highlighting (v3.7).
 
 ---
 
@@ -211,7 +213,7 @@ Stuck? Run the diagnostic triage chain:
 
 | Order | Command | Role | Run when |
 |---|---|---|---|
-| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 17 checks, ~2s | First — always safe |
+| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 21 checks, ~2s | First — always safe |
 | 2 | `/agent-flywheel:flywheel-setup` | Apply fixes (install / register / configure) | Only if doctor is yellow / red |
 | 3 | `/agent-flywheel:flywheel-healthcheck` | Deep periodic audit (codebase + dep graph) | Periodically; not for setup problems |
 
@@ -322,7 +324,7 @@ claude --plugin-dir .
      │    ├── server.ts                ← MCP tool registration
      │    ├── tools/                   ← 14 flywheel_* tools
      │    │    ├── observe.ts          ← session-state snapshot (v3.11)
-     │    │    ├── doctor.ts           ← 17-check toolchain probe
+     │    │    ├── doctor.ts           ← 21-check toolchain probe
      │    │    ├── remediate.ts        ← one-tap doctor fixes
      │    │    ├── advance-wave.ts     ← wave gating + attestation read
      │    │    ├── verify-beads.ts     ← bead-close reconciliation
