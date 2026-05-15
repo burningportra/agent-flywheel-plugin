@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "beadId": "claude-orchestrator-1hv3",
+  "agentName": "WildMouse",
+  "status": "closed",
+  "changedFiles": [
+    "mcp-server/src/__tests__/compliance-audit.test.ts",
+    "mcp-server/dist/__tests__/compliance-audit.test.js"
+  ],
+  "commits": [
+    "4eb6e7b"
+  ],
+  "ubs": {
+    "ran": true,
+    "summary": "clean: 0 critical, 0 warning on compliance-audit test scan",
+    "findingsFixed": 0,
+    "deferredBeadIds": []
+  },
+  "verify": [
+    {
+      "command": "cd mcp-server && ../scripts/build-mutex.sh rch exec -- npm test -- compliance-audit",
+      "exitCode": 0,
+      "summary": "28/28 compliance-audit unit tests passed; manifest negative cases cover unrecognized gate, missing target result, empty results, negative score, and missing pass_started_at."
+    },
+    {
+      "command": "cd mcp-server && ../scripts/build-mutex.sh rch exec -- npm run build",
+      "exitCode": 0,
+      "summary": "TypeScript build, skills bundle build, and schema emission completed successfully."
+    }
+  ],
+  "beadClosedVerified": true,
+  "reservationsReleased": true,
+  "createdAt": "2026-05-15T15:59:52Z",
+  "notes": "Added five manifest-path negative tests while keeping the code commit test-only for this bead."
+}
