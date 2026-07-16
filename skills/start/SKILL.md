@@ -64,7 +64,7 @@ Then route in Step 0e instead of showing the default main menu:
 **Classification heuristics**:
 - **Plan-shaped USER_INPUT** — multi-paragraph, contains `##`/`###` headers, mentions specific files, OR is an existing path matching `docs/plans/*.md` → treat as plan.
 - **Goal-shaped USER_INPUT** — ≤300 chars, no markdown headers, reads as one or two sentences → treat as goal.
-- **Ambiguous** — long unstructured prose → treat as goal but route through `/brainstorming` to refine first.
+- **Ambiguous** — long unstructured prose → treat as goal but route through the **Goal framing mode** menu (Light / Grill / Full brainstorm) before `flywheel_select`.
 
 **Routing override for Step 0e** (only when USER_INPUT is non-empty):
 
@@ -92,21 +92,54 @@ Then route in Step 0e instead of showing the default main menu:
     header: "Goal input",
     options: [
       { label: "Yes, full flywheel", description: "Skip discovery, plan and implement this goal (Recommended)" },
-      { label: "Refine first", description: "Run /brainstorming to clarify scope before planning" },
+      { label: "Refine first", description: "Pick a framing mode (Light / Grill with docs / Full brainstorm) before planning" },
       { label: "Plan only", description: "Generate a plan, stop before implementation" },
       { label: "Discard", description: "Ignore the input and show the regular start menu" }
     ],
     multiSelect: false
   }])
   ```
-  - "Yes, full flywheel" → call `flywheel_select` with USER_INPUT as goal, proceed to Step 5.
-  - "Refine first" → invoke `/brainstorming` with the input, then return to Step 4 with the refined goal.
+  - "Yes, full flywheel" → call `flywheel_select` with USER_INPUT as goal, proceed to Step 5 (Phase 0.5 still applies unless skipped).
+  - "Refine first" → run **Goal framing mode** (below) with `RAW_GOAL = USER_INPUT`, then `flywheel_select` with the enriched goal and continue to Step 5.
   - "Plan only" → call `flywheel_select`, proceed through Step 5, stop after bead creation.
   - "Discard" → fall back to the default Step 0e menu.
 
-- Ambiguous → always run `/brainstorming` first, then route as goal-shaped after refinement.
+- Ambiguous → always run **Goal framing mode** first (Recommended default: Grill with docs), then route as goal-shaped after refinement.
 
 **Hard rule**: never act on USER_INPUT directly without first showing the banner and getting an explicit menu choice. The flywheel's gates exist for a reason — pre-prompt content does NOT bypass them.
+
+#### Goal framing mode (shared by Set a goal / Refine first / Ambiguous)
+
+Use this whenever a goal needs refinement **before** `flywheel_select`. Do **not** chain multiple framing paths (no brainstorm + grill + Phase 0.5 triple interview).
+
+```
+AskUserQuestion(questions: [{
+  question: "How should we refine this goal before planning?\n\nGoal: '<RAW_GOAL>'",
+  header: "Framing",
+  options: [
+    { label: "Light (Phase 0.5 only)", description: "Skip deep interview; three pressure-test questions at Step 4.5 (floor / 10x / adjacents)" },
+    { label: "Grill with docs (Recommended)", description: "Relentless interview via skills/grill-with-docs — writes brainstorm + optional ADRs/glossary, then hands off" },
+    { label: "Full brainstorm", description: "/brainstorming design dialogue — best for greenfield product specs / mockups" },
+    { label: "Skip framing", description: "Goal is already concrete — call flywheel_select with the raw text" }
+  ],
+  multiSelect: false
+}])
+```
+
+**Default recommendation rules:**
+- **Ambiguous** USER_INPUT → mark **Grill with docs** as Recommended (already set above).
+- **Goal-shaped but operator picked Refine first** → Grill with docs Recommended.
+- **Concrete ≤300 chars** (caller already skipped this menu) → never show this menu.
+- If the goal is clearly a full product design (UI-heavy, multi-surface, greenfield), the operator may still pick Full brainstorm.
+
+**Routing:**
+
+- **Light (Phase 0.5 only)** → set `FRAMING_MODE = light`, `enrichedGoal = RAW_GOAL`. Do not write brainstorm yet. Call `flywheel_select({ goal: enrichedGoal })`, then load `_planning.md` and **run** Step 4.5 normally.
+- **Grill with docs (Recommended)** → set `FRAMING_MODE = grill`. Prefer `flywheel_get_skill({ name: "agent-flywheel:grill-with-docs" })` (fallback: `Skill(skill: "agent-flywheel:grill-with-docs")` or `Read skills/grill-with-docs/SKILL.md`). Execute the skill body with `RAW_GOAL`, `CWD`, derived `GOAL_SLUG`, `TODAY`. On `GRILL_STATUS=aborted`, return to the start menu — do **not** call `flywheel_select`. On `GRILL_STATUS=approved`, set `enrichedGoal = GRILL_ENRICHED_GOAL` (or the brainstorm path's framing synthesis if the marker is missing), set `GRILL_BRAINSTORM_PATH` from the skill output, call `flywheel_select({ goal: enrichedGoal })`, load `_planning.md`, and enter Step 4.5 which **must skip** when the brainstorm already has floor+ceiling+framing (see `_planning.md` §4.5a).
+- **Full brainstorm** → set `FRAMING_MODE = brainstorm`. Invoke `/brainstorming` (or `skills/brainstorming`). When it returns an approved design, derive `enrichedGoal` from the design's goal/scope summary (or the original RAW_GOAL if no summary), call `flywheel_select`, then Step 4.5 (usually still useful — brainstorm specs are not the same as floor/ceiling pressure-test; only skip 4.5 if the operator already answered those three dimensions explicitly in the design).
+- **Skip framing** → set `FRAMING_MODE = skip`, `enrichedGoal = RAW_GOAL`, call `flywheel_select`, then Step 4.5 with normal skip heuristics.
+
+**Anti-double-interview rule:** after Grill with docs approves, do **not** offer Full brainstorm or re-enter Goal framing mode in the same cycle. Phase 0.5 is the only remaining pressure-test, and it auto-skips on a complete grill brainstorm.
 
 ### 0a. Detect version
 
@@ -357,7 +390,7 @@ Print this block first (the `• Take the 5-min tour` row appears ONLY when `IS_
 ```
 Primary entry points:
   • Take the 5-min tour — first time? guided tutorial-bead walkthrough  [only when IS_FIRST_RUN]
-  • Set a goal          — type your goal in Other; runs /brainstorming if ambiguous, then flywheel_select
+  • Set a goal          — type your goal in Other; framing mode (Light / Grill with docs / Full brainstorm) if ambiguous, then flywheel_select
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps straight to bead creation
   • Scan & discover     — profile the repo and surface improvement ideas
   • Reality check       — /reality-check-for-project gap analysis
@@ -388,7 +421,7 @@ AskUserQuestion(questions: [{
   options: [
     // IS_FIRST_RUN === true: this row replaces the lowest-priority Recommended candidate
     { label: "Take the 5-min tour (Recommended)", description: "Guided tour — runs a real micro-bead end-to-end so you see scan → plan → bead → implement → commit fire once. See skills/start/_tutorial_bead.md" },
-    { label: "Set a goal", description: "Type the goal directly in Other — runs /brainstorming when ambiguous, then flywheel_select. The most direct path when you know what you want to build" },
+    { label: "Set a goal", description: "Type the goal directly in Other — framing mode (Light / Grill with docs / Full brainstorm) when ambiguous, then flywheel_select. The most direct path when you know what you want to build" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps. Skips brainstorming + scan" },
     { label: "Scan & discover", description: "Profile the repo and find improvement opportunities (greenfield default)" }
   ],
@@ -423,7 +456,7 @@ When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-
 | **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
-| **Set a goal** | Read the typed `<goal>` from the Other field. If empty, prompt for it via a follow-up `AskUserQuestion`. Then: run `/brainstorming` to refine the goal (skip when the goal is already concrete and ≤300 chars per the 0.preflight heuristics), and **in the same turn** call `flywheel_select` (Step 4), read `_planning.md`, and run through Step 4.5 (Phase 0.5) and Step 5's `AskUserQuestion` without pausing for user input — see "Stay-in-turn rule" below. **State-aware behavior:** on previous-session-exists, do NOT delete the checkpoint — append-mode (the new goal sits alongside the existing session). On open-beads-exist, the new beads merge into the existing set. On fresh-start, just proceed normally. |
+| **Set a goal** | Read the typed `<goal>` from the Other field. If empty, prompt for it via a follow-up `AskUserQuestion`. Then: if the goal is already concrete and ≤300 chars (0.preflight heuristics), skip framing and call `flywheel_select` directly; otherwise run **Goal framing mode** (Light / Grill with docs / Full brainstorm). After framing returns `approved` (or was skipped), **in the same turn** call `flywheel_select` (Step 4) with the enriched goal, read `_planning.md`, and run through Step 4.5 (Phase 0.5 — auto-skips when a grill brainstorm already has floor+ceiling+framing) and Step 5's `AskUserQuestion` without pausing for user input — see "Stay-in-turn rule" below. **State-aware behavior:** on previous-session-exists, do NOT delete the checkpoint — append-mode (the new goal sits alongside the existing session). On open-beads-exist, the new beads merge into the existing set. On fresh-start, just proceed normally. |
 | **Pick up existing plan** | Read the typed `<plan-path>` from the Other field. Validate: it must exist on disk AND end in `.md`. If invalid, surface a follow-up `AskUserQuestion` listing `RECENT_PLAN_PATHS` as labeled options plus an Other field for a custom path. Once a valid path is in hand: call `flywheel_select` with a synthesized goal derived from the plan's first H1/H2 header (or the filename if no header), then call `flywheel_plan({ planFile: <plan-path>, source: "picked-up-existing-plan" })`. **Do NOT jump straight to Step 5.5** — the picked-up source signal triggers **Step 5.45** (the plan-stage menu) first. Skip Step 2 (profile) and Step 3 (discover) entirely — the plan already represents committed scope. **State-aware behavior:** on previous-session-exists, run the drift check (same one used by Resume session) before registering the new plan; if drift is severe, ask whether to discard the checkpoint first. On open-beads-exist, surface a confirmation that the plan's beads will merge into the existing set (no automatic dedup at this stage — Step 5.5's coverage + dedup sweep will handle it). On fresh-start, just proceed. |
 | **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
 | **Quick fix** | Invoke `/flywheel-fix` |
@@ -660,7 +693,7 @@ AskUserQuestion(questions: [{
 ```
 
 - **"Discover ideas"** → proceed to Step 3
-- **"Set a goal"** → run `/brainstorming`, then **stay in the same turn** and call `flywheel_select` (Step 4) + enter Step 4.5 / Step 5 without waiting for user input (see "Stay-in-turn rule" below)
+- **"Set a goal"** → capture the goal (prompt via Other if needed), run **Goal framing mode** (Light / Grill with docs / Full brainstorm; skip only when concrete ≤300 chars), then **stay in the same turn** and call `flywheel_select` (Step 4) + enter Step 4.5 / Step 5 without waiting for user input (see "Stay-in-turn rule" below)
 - **"Re-scan"** → call `flywheel_profile` with `force: true`, then return to this menu
 
 #### Stay-in-turn rule (MANDATORY between every step)
@@ -670,7 +703,7 @@ Per UNIVERSAL RULE 1, every user decision flows through `AskUserQuestion`. Betwe
 **Rule:** after writing a file, calling a tool, or invoking a sub-skill, the next thing in your response must be EITHER another tool call (including the next step's `AskUserQuestion`) OR the explicit completion of a phase. Do not end a turn in the middle of a phase.
 
 Concretely:
-- After `/brainstorming` returns → same turn: `flywheel_select` → read `_planning.md` → run Step 4.5 questions → Step 5 `AskUserQuestion`.
+- After Goal framing mode / `/brainstorming` / grill-with-docs returns approved → same turn: `flywheel_select` → read `_planning.md` → run Step 4.5 (or skip per §4.5a) → Step 5 `AskUserQuestion`.
 - After writing the brainstorm artifact in 4.5c → same turn: Step 5 `AskUserQuestion`.
 - After `flywheel_plan` returns → same turn: Step 5.55 alignment-check `AskUserQuestion` (or Step 5.6 if alignment already satisfied).
 - After `flywheel_approve_beads` returns → same turn: Step 6 launch menu.
@@ -725,11 +758,11 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-If the user selects "Other" and enters a custom goal, run the `/brainstorming` skill first to explore intent, constraints, and edge cases before committing to scope. After brainstorming completes and the goal is refined, use `AskUserQuestion` to confirm scope:
+If the user selects "Other" and enters a custom goal, run **Goal framing mode** first (Recommended: Grill with docs when the custom goal is ambiguous or architectural; Light or Skip when already concrete). After framing returns `approved` (or was skipped) and the goal is refined, use `AskUserQuestion` to confirm scope:
 
 ```
 AskUserQuestion(questions: [{
-  question: "Goal refined: '<refined goal from brainstorming>'. How should I scope this?",
+  question: "Goal refined: '<enriched goal summary>'. How should I scope this?",
   header: "Scope",
   options: [
     { label: "Full flywheel", description: "Deep scan, plan, implement with agents, review" },
@@ -740,7 +773,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- **"Full flywheel"** → proceed to Step 4 with the refined goal
+- **"Full flywheel"** → proceed to Step 4 with the refined/enriched goal
 - **"Plan only"** → proceed through Step 5, then stop after bead creation
 - **"Quick fix"** → invoke `/flywheel-fix` with the refined goal instead
 

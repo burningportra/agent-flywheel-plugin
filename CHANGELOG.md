@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [3.18.2] - 2026-07-16
+
+### Added
+
+- **`skills/grill-with-docs`** — flywheel-native goal framing skill: AskUserQuestion interview, `docs/brainstorms/` artifact, optional ADRs + glossary, `GRILL_STATUS` / `GRILL_ENRICHED_GOAL` handoff. Slash command: `/agent-flywheel:grill-with-docs`.
+- **Goal framing mode** in `skills/start/SKILL.md` — Light / Grill with docs / Full brainstorm / Skip, shared by Set a goal, Refine first, Ambiguous USER_INPUT, Step 2/3 custom goals.
+- **Phase 0.5 skip** when a grill brainstorm already has framing + floor + ceiling (`skills/start/_planning.md` §4.5a) to prevent double-interview.
+
 ## [3.18.1] - 2026-05-15
 
 Bug-fix release. A 4-pane cc:cod:gem 2:2:2 auto-swarm closed **23 beads in ~90 min** (6 original `reality-check-2026-05-15-followup` + 17 cross-wave follow-ups) with 3 review passes converging at zero new findings. The headline fixes harden `flywheel_compliance_audit` (P2 parser misalignment + missing-results silently dropped), tighten `PANE001` lint (override-marker false-negative + warn → error promotion), close the codex-config-compat dist-mirror gap, and de-double the NTM codex spawn model alias. Adds a mandatory operator-consent gate in the auto-swarm cron loop so future runs don't auto-drive past bead drainage.
