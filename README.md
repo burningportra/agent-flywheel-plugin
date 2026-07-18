@@ -207,6 +207,10 @@ After editing `mcp-server/src/`, rebuild with `npm run build --prefix mcp-server
 
 Prerequisites: [Claude Code](https://github.com/anthropics/claude-code) (latest) and Node.js ≥ 20. On native Windows, `ntm` is unavailable (tmux-only) — the installer surfaces a WSL2 recommendation for full parallel-swarm features; the auto-swarm path falls back to sequential `Agent()` dispatch otherwise.
 
+### OpenCode (derived / preview)
+
+agent-flywheel is a Claude Code plugin first — an **OpenCode port** is generated from the same repo sources by `scripts/sync-opencode.sh`. It's a derived artifact: the repo stays the source of truth, so you re-run the sync after repo updates instead of hand-editing the installed OpenCode files. From a full checkout, walk `scripts/sync-opencode.sh --check` → `--dry-run` → `--write` (or `install.sh --with-opencode`). See **[docs/opencode.md](docs/opencode.md)** for prerequisites, the ownership boundary, first run, and troubleshooting. Preview status: v1 ships the sync toolchain plus a Claude-ism stale-report; semantic tool-call translation lands in v2.
+
 ---
 
 ## Quick start

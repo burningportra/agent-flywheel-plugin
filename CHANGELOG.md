@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 > **Tag cadence (as of 2026-05-06).** Releases 3.11.5 through 3.11.9 ship without annotated git tags — entries below are correct, but `git tag -l 'v3.11.*'` returns only v3.11.0 through v3.11.4. v3.12.0 corresponds to commit `05071af`. Future releases should annotate with `git tag -a vX.Y.Z` to keep the tag inventory aligned with this changelog.
 
+## [Unreleased]
+
+The OpenCode port (derived / preview). agent-flywheel can now be rendered into an OpenCode config from the same repo sources that drive the Claude Code plugin, via a deterministic, fail-closed sync toolchain. The port is a **derived artifact** — the repo stays the source of truth, and the installed OpenCode files are never hand-edited. Additive and opt-in: nothing here changes existing Claude Code behavior.
+
+### Added
+
+- **OpenCode sync toolchain (`scripts/sync-opencode.sh`).** A thin shell wrapper `exec`s a Node helper (`scripts/opencode/{sync,transforms,validate,jsonc,apply,compatibility}.mjs`) that renders the manifest-owned skills, commands, plugin, and the single `mcp.flywheel` config node into a private staged tree, validates it (mechanical transforms + compatibility + hook parity + dependency closure), and — only if everything passes — applies it transactionally with per-file backups, a journal, an installed-hash ledger, and startup recovery for interrupted runs. Three modes: `--check` (default, read-only drift report), `--dry-run` (itemized write preview, proven immutable), `--write` (atomic apply + re-check). CI-consumable exit codes `0` / `1` / `2`. Config path resolves via `--config-dir` / `--config-file` → `OPENCODE_CONFIG_DIR` / `OPENCODE_CONFIG` → XDG. `opencode/manifest.json` is the authoritative ownership boundary; parent directories and unrelated skills / commands / config keys are never ownership targets.
+- **Manifest + dependency closure (`opencode/manifest.json`).** Hand-authored source-of-truth enumerating the managed skill dirs, command files, two command overrides (a native `start` pointer and a bundled-MCP `grill-with-docs` entry that closes the unmanaged-skill dependency hole), the plugin template, the MCP config key, and the Claude-hook-to-OpenCode-event coverage table. Discovery is dynamic and cross-checked every run — a new managed-pattern source without a manifest entry fails (`inventory_unclassified`); a removed source fails (`inventory_missing`).
+- **Claude-ism stale-report (v1).** The compatibility validator emits grouped, informational `[REPORT]` lines counting Claude-only semantic tokens (`AskUserQuestion`, `Agent(`, `Team*` / `SendMessage`, `Task*`, `~/.claude/...` paths, hook-setup prose), each with the exact `rg` command for the full set. Counts are discovered each run, never baked in as timeless facts. The report never fails the sync; an *unclassified* new Claude-only token fails closed as `[ERROR]`. Patch-based semantic translation of these call sites is deferred to v2.
+- **JSONC-preserving `mcp.flywheel` merge.** Only the `mcp.flywheel` node is edited, via a JSONC-preserving document editor that keeps comments, trailing commas, unrelated keys, and file permissions intact; it fails before writing if the editor is unavailable rather than destroying the file. Refuses to guess when both `opencode.json` and `opencode.jsonc` exist without `--config-file`.
+- **`install.sh --with-opencode` opt-in.** Configures the port via `scripts/sync-opencode.sh --write` at the end of install. Fails fast if the `opencode` binary is missing (no silent degrade); forwards `--skip-mcp-register` as `--skip-mcp`. Existing Claude-default install behavior is preserved exactly. No `curl | bash --with-opencode` (no durable clone strategy yet); `install.ps1` is not extended.
+- **Black-box test coverage.** `install/test/test-sync-opencode.bats` and `install/test/test-install-opencode.bats` exercise the sync and installer against a throwaway `$HOME` — first install, no-op rerun, drift, local-edit backups, lock contention, JSONC preservation, transactional-failure injection, and the shared Agent-Mail hook-guard corpus — never touching the runner's real `~/.config/opencode`.
+- **Docs + discovery surface.** `docs/opencode.md` (prerequisites, first sync, ownership boundary, first run, update flow, troubleshooting, current limitations), a README Install subsection labeled derived / preview, a `CONTRIBUTING.md` temp-home test note (`bats install/test/`), and an AGENTS.md repo-is-source-of-truth rule.
+
+### Compatibility
+
+- **Derived / preview and fully additive.** No changes to `mcp-server/src` behavior, no MCP tool renames, no changes to the Claude Code plugin. Installing or skipping the port has no effect on existing Claude Code usage.
+- **v1 platform scope.** Targets the repo's existing macOS / Linux Node + Bash environment. No native Windows / PowerShell parity and no watch-mode / daemon reapply — both are v2 directions. Semantic Claude-ism translation is report-only in v1.
+
 ## [3.18.2] - 2026-07-16
 
 ### Added

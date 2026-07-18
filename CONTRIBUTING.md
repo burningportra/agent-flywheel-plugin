@@ -68,6 +68,16 @@ npm test --prefix mcp-server
 
 If you added a new MCP tool or touched a runner in `mcp-server/src/tools/`, add a matching test under `mcp-server/src/__tests__/`. The test suite runs on every PR.
 
+### Changing OpenCode-managed sources
+
+The OpenCode port is generated from repo sources by `scripts/sync-opencode.sh` (see [`docs/opencode.md`](docs/opencode.md)). If you change any **managed source** — anything under `skills/`, `commands/`, `hooks/`, or `opencode/` — run the temp-home black-box suite before you push:
+
+```bash
+bats install/test/
+```
+
+`test-sync-opencode.bats` and `test-install-opencode.bats` exercise the sync and installer against a throwaway `$HOME`/config dir, so they never touch your real `~/.config/opencode`. They cover first install, no-op reruns, drift, local-edit backups, lock contention, JSONC preservation, and the `--with-opencode` installer path. CI runs them on every PR; running them locally catches ownership-boundary and transform regressions before review.
+
 ## Submitting a PR
 
 1. Branch from `main`.

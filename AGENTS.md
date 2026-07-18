@@ -46,6 +46,10 @@ Compiles TypeScript from `mcp-server/src/` to `mcp-server/dist/`.
 
 **`mcp-server/dist/` is committed** so the plugin works immediately after `/plugin install` with no Node build step on the user's machine. If you change anything in `mcp-server/src/`, run `npm run build` and commit the resulting `dist/` changes in the same PR. The `dist-drift` CI job fails any PR where `dist/` is out of sync with `src/`.
 
+## OpenCode port is a derived artifact
+
+The repository is the **source of truth for the Claude Code plugin**. The OpenCode port installed under `~/.config/opencode` is a **derived artifact** produced by `scripts/sync-opencode.sh` from the manifest-owned repo sources (`skills/flywheel-*/`, `skills/start/`, the managed `commands/*.md`, the `opencode/` templates and overrides, and `hooks/hooks.json`). Do **not** hand-edit the installed OpenCode targets — change the repo sources and re-run the sync. A hand-edited generated file is detected as `[LOCAL]` divergence, backed up, and overwritten on the next `--write`; it is never a second source of truth. The authoritative ownership boundary is `opencode/manifest.json`; the operator workflow (first sync, update flow, troubleshooting) is `docs/opencode.md`.
+
 ## Hard Constraints
 
 1. **No `console.log` in MCP server code.** The server uses stdin/stdout for JSON-RPC. Any stdout write corrupts the communication channel. Use `createLogger(ctx)` from `./logger.js` for all diagnostics — it writes structured JSON to stderr only.
