@@ -1,0 +1,446 @@
+{
+  "version": 1,
+  "kind": "opencode-port-manifest",
+  "generatedNote": "Hand-authored source-of-truth for bead claude-3hzk (T1). The sync CLI (T3) imports scripts/opencode/validate.mjs and reads this file. Discovery is DYNAMIC: skills[]/commands[] are the DECLARED inventory the sync cross-checks the live tree against — not a hardcoded count. A new managed-pattern skill/command dir must be added here or the cross-check fails (inventory_unclassified); a removed source fails (inventory_missing).",
+  "repoSourceOfTruth": true,
+  "mcp": {
+    "configKey": "flywheel",
+    "loadTool": "flywheel_get_skill",
+    "bundleAddressPrefix": "agent-flywheel:",
+    "note": "Managed skills are reachable at runtime through the flywheel MCP bundle, addressed as agent-flywheel:<name>. OpenCode surfaces the tool as flywheel_flywheel_get_skill; unprefixed flywheel_get_skill resolves by suffix (plan §MCP tool-prefix contract, alignment 2026-07-17)."
+  },
+  "ownership": {
+    "note": "The sync script owns EXACTLY the source/target pairs enumerated in skills[], commands[], commandOverrides[], and plugin. It renders into the owned subset of the OpenCode config and MUST NEVER treat a parent directory as an ownership target.",
+    "neverOwn": [
+      "skills",
+      "skills/",
+      "commands",
+      "commands/",
+      "opencode",
+      "opencode/",
+      "plugins",
+      "plugins/",
+      "skills/**",
+      "commands/**",
+      ".",
+      "/"
+    ]
+  },
+  "discovery": {
+    "skillDirPattern": "^(flywheel-.+|start)$",
+    "commandFilePattern": "^(flywheel-.+|start)\\.md$",
+    "skillsRoot": "skills",
+    "commandsRoot": "commands",
+    "note": "A skill dir is managed iff its name matches skillDirPattern AND it contains SKILL.md. A command file is managed iff its basename matches commandFilePattern. Non-flywheel skills (brainstorming, cass, grill-with-docs, …) match neither pattern and are intentionally OUTSIDE the ownership boundary (see nonGoals)."
+  },
+  "transformProfiles": {
+    "skill": {
+      "id": "skill",
+      "appliesTo": "skills/<name>/**",
+      "note": "Safe-lexical rewrites (T3): $CLAUDE_PLUGIN_ROOT -> repo root; /agent-flywheel:<x> -> /<x>; Skill(skill|skill_name: \"agent-flywheel:X\") -> skill(name: \"X\"). MCP-name preservation postcondition: never rewrite the agent-flywheel: inside a flywheel_get_skill name arg."
+    },
+    "command": {
+      "id": "command",
+      "appliesTo": "commands/<name>.md",
+      "note": "Same safe-lexical rewrites as skill, plus drop unsupported argument-hint frontmatter."
+    },
+    "plugin": {
+      "id": "plugin",
+      "appliesTo": "plugins/agent-flywheel.js",
+      "note": "Machine-path sentinels replaced via JSON.stringify(repoRoot). Template authored in T2."
+    },
+    "command-override": {
+      "id": "command-override",
+      "appliesTo": "opencode/commands/<name>.md",
+      "note": "Checked-in verbatim; copied as-is, not derived from a repo command."
+    }
+  },
+  "skills": [
+    {
+      "name": "flywheel-audit",
+      "source": "skills/flywheel-audit/",
+      "target": "skills/flywheel-audit/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-cleanup",
+      "source": "skills/flywheel-cleanup/",
+      "target": "skills/flywheel-cleanup/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-compound-refresh",
+      "source": "skills/flywheel-compound-refresh/",
+      "target": "skills/flywheel-compound-refresh/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-doctor",
+      "source": "skills/flywheel-doctor/",
+      "target": "skills/flywheel-doctor/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-drift-check",
+      "source": "skills/flywheel-drift-check/",
+      "target": "skills/flywheel-drift-check/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-duel",
+      "source": "skills/flywheel-duel/",
+      "target": "skills/flywheel-duel/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-fix",
+      "source": "skills/flywheel-fix/",
+      "target": "skills/flywheel-fix/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-healthcheck",
+      "source": "skills/flywheel-healthcheck/",
+      "target": "skills/flywheel-healthcheck/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-mine-patterns",
+      "source": "skills/flywheel-mine-patterns/",
+      "target": "skills/flywheel-mine-patterns/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-reality-check",
+      "source": "skills/flywheel-reality-check/",
+      "target": "skills/flywheel-reality-check/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-refine-skill",
+      "source": "skills/flywheel-refine-skill/",
+      "target": "skills/flywheel-refine-skill/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-refine-skills",
+      "source": "skills/flywheel-refine-skills/",
+      "target": "skills/flywheel-refine-skills/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-research",
+      "source": "skills/flywheel-research/",
+      "target": "skills/flywheel-research/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-rollback",
+      "source": "skills/flywheel-rollback/",
+      "target": "skills/flywheel-rollback/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-scan",
+      "source": "skills/flywheel-scan/",
+      "target": "skills/flywheel-scan/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-setup",
+      "source": "skills/flywheel-setup/",
+      "target": "skills/flywheel-setup/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-status",
+      "source": "skills/flywheel-status/",
+      "target": "skills/flywheel-status/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-stop",
+      "source": "skills/flywheel-stop/",
+      "target": "skills/flywheel-stop/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-swarm",
+      "source": "skills/flywheel-swarm/",
+      "target": "skills/flywheel-swarm/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-swarm-status",
+      "source": "skills/flywheel-swarm-status/",
+      "target": "skills/flywheel-swarm-status/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-swarm-stop",
+      "source": "skills/flywheel-swarm-stop/",
+      "target": "skills/flywheel-swarm-stop/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "flywheel-tool-feedback",
+      "source": "skills/flywheel-tool-feedback/",
+      "target": "skills/flywheel-tool-feedback/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
+      "name": "start",
+      "source": "skills/start/",
+      "target": "skills/start/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    }
+  ],
+  "commands": [
+    {
+      "name": "flywheel-audit",
+      "source": "commands/flywheel-audit.md",
+      "target": "commands/flywheel-audit.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-bead-viewer",
+      "source": "commands/flywheel-bead-viewer.md",
+      "target": "commands/flywheel-bead-viewer.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-cleanup",
+      "source": "commands/flywheel-cleanup.md",
+      "target": "commands/flywheel-cleanup.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-compound-refresh",
+      "source": "commands/flywheel-compound-refresh.md",
+      "target": "commands/flywheel-compound-refresh.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-doctor",
+      "source": "commands/flywheel-doctor.md",
+      "target": "commands/flywheel-doctor.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-drift-check",
+      "source": "commands/flywheel-drift-check.md",
+      "target": "commands/flywheel-drift-check.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-duel",
+      "source": "commands/flywheel-duel.md",
+      "target": "commands/flywheel-duel.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-fix",
+      "source": "commands/flywheel-fix.md",
+      "target": "commands/flywheel-fix.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-healthcheck",
+      "source": "commands/flywheel-healthcheck.md",
+      "target": "commands/flywheel-healthcheck.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-reality-check",
+      "source": "commands/flywheel-reality-check.md",
+      "target": "commands/flywheel-reality-check.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-refine-skill",
+      "source": "commands/flywheel-refine-skill.md",
+      "target": "commands/flywheel-refine-skill.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-refine-skills",
+      "source": "commands/flywheel-refine-skills.md",
+      "target": "commands/flywheel-refine-skills.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-research",
+      "source": "commands/flywheel-research.md",
+      "target": "commands/flywheel-research.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-rollback",
+      "source": "commands/flywheel-rollback.md",
+      "target": "commands/flywheel-rollback.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-scan",
+      "source": "commands/flywheel-scan.md",
+      "target": "commands/flywheel-scan.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-setup",
+      "source": "commands/flywheel-setup.md",
+      "target": "commands/flywheel-setup.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-status",
+      "source": "commands/flywheel-status.md",
+      "target": "commands/flywheel-status.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-stop",
+      "source": "commands/flywheel-stop.md",
+      "target": "commands/flywheel-stop.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-swarm",
+      "source": "commands/flywheel-swarm.md",
+      "target": "commands/flywheel-swarm.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-swarm-status",
+      "source": "commands/flywheel-swarm-status.md",
+      "target": "commands/flywheel-swarm-status.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-swarm-stop",
+      "source": "commands/flywheel-swarm-stop.md",
+      "target": "commands/flywheel-swarm-stop.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-tool-feedback",
+      "source": "commands/flywheel-tool-feedback.md",
+      "target": "commands/flywheel-tool-feedback.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "start",
+      "source": "commands/start.md",
+      "target": "commands/start.md",
+      "kind": "command",
+      "transformProfile": "command"
+    }
+  ],
+  "commandOverrides": [
+    {
+      "name": "grill-with-docs",
+      "source": "opencode/commands/grill-with-docs.md",
+      "target": "commands/grill-with-docs.md",
+      "kind": "command-override",
+      "transformProfile": "command-override",
+      "reason": "Closure fix. Repo commands/grill-with-docs.md delegates to a native skill(name: \"grill-with-docs\"), but grill-with-docs is NOT a managed skill dir — it only exists in a user's config if installed from an unrelated source. This override loads the bundled skill via MCP so /grill-with-docs works on any machine running the flywheel MCP server."
+    }
+  ],
+  "plugin": {
+    "name": "agent-flywheel",
+    "template": "opencode/plugins/agent-flywheel.js",
+    "source": "hooks/",
+    "target": "plugins/agent-flywheel.js",
+    "kind": "plugin",
+    "transformProfile": "plugin",
+    "note": "Template authored in T2; declared here so the ownership boundary is complete. T1 validation does not require the template file to exist yet."
+  },
+  "dependencyClassification": {
+    "grill-with-docs": {
+      "class": "mcp-bundle",
+      "accessVia": "mcp",
+      "resolvesVia": "flywheel_get_skill({ name: \"agent-flywheel:grill-with-docs\" })",
+      "reason": "Ships in the flywheel skills bundle (mcp-server/dist/skills.bundle.json) but is NOT a managed native skill dir. Resolves ONLY through the MCP bundle load; a native skill(name: \"grill-with-docs\") or /grill-with-docs slash delegation is a closure hole and MUST fail (acceptance #5)."
+    }
+  },
+  "externalAllowlist": {
+    "note": "Separately-installed skills the flywheel ecosystem depends on (documented in AGENTS.md) that a managed command MAY delegate to by namespaced slash/native. Classified external so closure holds if referenced via the namespaced form. NB: the current managed commands reference these only as bare-slash prose cross-references, which the closure extractor intentionally ignores (bare /word is ambiguous with filesystem paths).",
+    "entries": {
+      "ntm": {
+        "class": "external-allowlisted",
+        "reason": "NTM swarm orchestrator; mandatory per AGENTS.md, installed separately."
+      },
+      "vibing-with-ntm": {
+        "class": "external-allowlisted",
+        "reason": "NTM tending skill, installed separately."
+      },
+      "dueling-idea-wizards": {
+        "class": "external-allowlisted",
+        "reason": "High-stakes duel generator, installed separately."
+      },
+      "ubs-workflow": {
+        "class": "external-allowlisted",
+        "reason": "Ultimate Bug Scanner workflow, installed separately."
+      },
+      "beads-compliance-and-completion-verification": {
+        "class": "external-allowlisted",
+        "reason": "Compliance audit skill, installed separately."
+      },
+      "idea-wizard": {
+        "class": "external-allowlisted",
+        "reason": "Standard-track discovery generator, installed separately."
+      }
+    }
+  },
+  "retirements": [],
+  "nonGoals": [
+    "Reconciling or overwriting diverged non-flywheel skill dirs already in ~/.config/opencode/skills from other sources.",
+    "Owning skills/ or commands/ wholesale — only the enumerated pairs are owned.",
+    "Promoting grill-with-docs to a managed native skill (the MCP-bundle override keeps the ownership boundary tight)."
+  ]
+}
