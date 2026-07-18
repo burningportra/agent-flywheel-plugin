@@ -1,0 +1,11 @@
+{
+  // keep this comment — the JSONC merge must preserve it verbatim
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "system",
+  "mcp": {
+    "some-other-server": {
+      "type": "local",
+      "command": ["node", "/opt/other/server.js"],
+    },
+  },
+}

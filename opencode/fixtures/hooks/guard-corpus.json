@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "kind": "agent-mail-guard-corpus",
+  "note": "Shared allow/block/break-glass command corpus for BOTH Agent-Mail guards (bead claude-19xh, T7). run-corpus.mjs feeds every command through hooks/agent-mail-guard.js (the Claude hook, via CLAUDE_TOOL_INPUT) AND the inlined tool.execute.before port in opencode/plugins/agent-flywheel.js (via output.args.command), and asserts BOTH produce the case's expected decision. Behavior is what matters, not regex source strings — a whitespace change in either guard cannot cause false drift here, but a real divergence in the block/allow decision fails the runner. Decisions: block = the guard refuses the command (source hook exit 2 / plugin handler throws); allow = the guard lets it through (source hook exit 0 / plugin handler returns).",
+  "cases": [
+    {
+      "id": "mutating-repair",
+      "command": "am doctor repair --yes",
+      "expect": "block",
+      "note": "Canonical mutating am doctor subcommand."
+    },
+    {
+      "id": "mutating-archive-normalize",
+      "command": "am doctor archive-normalize --yes",
+      "expect": "block",
+      "note": "Second half of the canonical safe sequence — still mutating."
+    },
+    {
+      "id": "mutating-reconstruct",
+      "command": "am doctor reconstruct",
+      "expect": "block"
+    },
+    {
+      "id": "mutating-restore",
+      "command": "am doctor restore --from backup",
+      "expect": "block"
+    },
+    {
+      "id": "mutating-fix",
+      "command": "am doctor fix",
+      "expect": "block"
+    },
+    {
+      "id": "mutating-fix-orphan-refs",
+      "command": "am doctor fix-orphan-refs",
+      "expect": "block"
+    },
+    {
+      "id": "mutating-pack-archive",
+      "command": "am doctor pack-archive",
+      "expect": "block"
+    },
+    {
+      "id": "mutating-case-insensitive",
+      "command": "AM DOCTOR REPAIR --YES",
+      "expect": "block",
+      "note": "The mutating pattern is case-insensitive."
+    },
+    {
+      "id": "mutating-extra-whitespace",
+      "command": "am    doctor    repair",
+      "expect": "block",
+      "note": "\\s+ collapses arbitrary intra-command whitespace."
+    },
+    {
+      "id": "mutating-repair-in-pipeline",
+      "command": "sudo am doctor repair --yes && echo done",
+      "expect": "block",
+      "note": "A mutating subcommand embedded in a larger command line still blocks."
+    },
+    {
+      "id": "delete-mailbox-lock-rm",
+      "command": "rm ~/.mcp_agent_mail/.mailbox.activity.lock",
+      "expect": "block",
+      "note": "Deletion shape 1: .mailbox.activity.lock via rm."
+    },
+    {
+      "id": "delete-mailbox-lock-rm-force",
+      "command": "rm -f /tmp/mail/.mailbox.activity.lock",
+      "expect": "block"
+    },
+    {
+      "id": "delete-storage-lock-rm",
+      "command": "rm -rf ~/.mcp_agent_mail/storage.sqlite3.activity.lock",
+      "expect": "block",
+      "note": "Deletion shape 2: storage.sqlite3.activity.lock via rm."
+    },
+    {
+      "id": "delete-storage-lock-unlink",
+      "command": "unlink storage.sqlite3.activity.lock",
+      "expect": "block",
+      "note": "unlink is treated the same as rm."
+    },
+    {
+      "id": "delete-mailbox-lock-unlink",
+      "command": "unlink /var/mail/.mailbox.activity.lock",
+      "expect": "block"
+    },
+    {
+      "id": "break-glass-command-prefix",
+      "command": "FLYWHEEL_ALLOW_AM_DOCTOR=1 am doctor repair --yes",
+      "expect": "allow",
+      "note": "Explicit break-glass: the FLYWHEEL_ALLOW_AM_DOCTOR=1 inline prefix bypasses the guard even for a mutating subcommand."
+    },
+    {
+      "id": "break-glass-command-prefix-delete",
+      "command": "FLYWHEEL_ALLOW_AM_DOCTOR=1 rm ~/.mcp_agent_mail/.mailbox.activity.lock",
+      "expect": "allow",
+      "note": "Break-glass also releases a lock-deletion command."
+    },
+    {
+      "id": "break-glass-env-var",
+      "command": "am doctor repair --yes",
+      "expect": "allow",
+      "env": { "FLYWHEEL_ALLOW_AM_DOCTOR": "1" },
+      "note": "The env-var form of break-glass: FLYWHEEL_ALLOW_AM_DOCTOR=1 in the process environment (not the command) also bypasses both guards."
+    },
+    {
+      "id": "benign-am-doctor-bare",
+      "command": "am doctor",
+      "expect": "allow",
+      "note": "Read-only am doctor with no mutating subcommand."
+    },
+    {
+      "id": "benign-am-doctor-help",
+      "command": "am doctor --help",
+      "expect": "allow"
+    },
+    {
+      "id": "benign-am-doctor-list",
+      "command": "am doctor list",
+      "expect": "allow",
+      "note": "A non-mutating subcommand — not in the mutating set."
+    },
+    {
+      "id": "benign-am-doctor-check",
+      "command": "am doctor check",
+      "expect": "allow"
+    },
+    {
+      "id": "benign-am-doctor-prose",
+      "command": "echo \"run am doctor to inspect mailbox health\"",
+      "expect": "allow",
+      "note": "am doctor with a trailing word that is not a mutating subcommand."
+    },
+    {
+      "id": "benign-repair-word-in-commit",
+      "command": "git commit -m \"repair the archive-normalize helper\"",
+      "expect": "allow",
+      "note": "Contains 'repair' and 'archive-normalize' but no 'am doctor <sub>' sequence — must NOT block. This is the discriminating benign case the brief calls for."
+    },
+    {
+      "id": "benign-make-repair",
+      "command": "make repair",
+      "expect": "allow"
+    },
+    {
+      "id": "benign-pg-restore",
+      "command": "pg_restore -d mydb dump.sql",
+      "expect": "allow",
+      "note": "'restore' as a standalone tool, not am doctor restore."
+    },
+    {
+      "id": "benign-reconstruct-script",
+      "command": "python reconstruct.py --input data",
+      "expect": "allow"
+    },
+    {
+      "id": "benign-fix-orphan-script",
+      "command": "./scripts/fix-orphan-refs.sh",
+      "expect": "allow",
+      "note": "'fix-orphan-refs' as a script name — not preceded by 'am doctor'."
+    },
+    {
+      "id": "benign-word-boundary-spam",
+      "command": "echo \"spam doctor repair theory\"",
+      "expect": "allow",
+      "note": "No \\bam word boundary inside 'spam' — proves the guard anchors on the am word, not a bare substring."
+    },
+    {
+      "id": "benign-rm-unrelated-lock",
+      "command": "rm -f /tmp/build.lock",
+      "expect": "allow",
+      "note": "Deletes an unrelated .lock, not an Agent Mail activity lock."
+    },
+    {
+      "id": "benign-rm-node-modules",
+      "command": "rm -rf node_modules",
+      "expect": "allow",
+      "note": "rm present but neither activity-lock filename appears."
+    },
+    {
+      "id": "benign-rm-mailbox-md",
+      "command": "rm ~/notes/mailbox-activity-notes.md",
+      "expect": "allow",
+      "note": "Similar-looking path but not '.mailbox.activity.lock' (no leading dot / different suffix)."
+    },
+    {
+      "id": "empty-command",
+      "command": "",
+      "expect": "allow",
+      "note": "No command payload — both guards no-op to allow."
+    }
+  ]
+}
