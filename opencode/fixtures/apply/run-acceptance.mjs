@@ -12,8 +12,10 @@
  *     siblings byte-identical.
  *  3. forced failure after each commit step (journal|backup|rename|ledger) →
  *     prior tree restored, exit 1, journal + lock cleared.
- *  4. simulated hard-kill journal → next invocation recovers ([RECOVER]) and the
- *     tree matches pre-apply bytes.
+ *  4. simulated hard-kill journal → next invocation recovers ([RECOVER]): an
+ *     uncommitted journal rolls back to pre-apply bytes (4, 4b), while a
+ *     committed journal — a crash between the ledger write and removeJournal —
+ *     keeps the applied tree instead of rolling it back (4c integration, 4d unit).
  *  5. second --write after a clean apply reports zero owned-path writes.
  */
 
@@ -296,6 +298,109 @@ try {
     const result = await recoverState(stateDir, { output: out.stream });
     assert.equal(result.skipped, true, "a journal owned by a live pid is not recovered");
     assert.match(out.read(), /skipping recovery/, "the live-owner journal is reported, not clobbered");
+  }
+
+  // ── 4c. crash AFTER the ledger write → recovery KEEPS the applied tree ──────
+  {
+    const configDir = path.join(sandbox, "recover-committed-run");
+    const stateDir = stateDirFor(configDir);
+    // The first --write crashes right after the ledger write but before the
+    // journal is cleared, recording a dead owner pid (FW_SYNC_PID) so the next
+    // run treats the leftover journal as abandoned. This drives the real
+    // maybeCrash("ledger") path, not a hand-planted journal.
+    const dead = deadPid();
+    await assert.rejects(
+      () => invoke(["--write"], configDir, { FW_SYNC_CRASH_AFTER: "ledger", FW_SYNC_PID: String(dead) }),
+      (error) => error?.crash === true,
+      "an injected crash after the ledger write propagates without an in-process rollback",
+    );
+
+    // The apply reached the ledger, so the journal is committed and the tree is
+    // already in its final state (ledger written, files renamed into place).
+    const journal = JSON.parse(await readFile(path.join(stateDir, "journal.json"), "utf8"));
+    assert.equal(journal.committed, true, "the crashed journal is marked committed");
+    const managed = await firstManagedFile(configDir);
+    const appliedBytes = await readFile(managed.absTarget);
+    assert.ok(appliedBytes.length > 0, "the managed file was applied before the crash");
+
+    const recovered = await invoke(["--write"], configDir);
+    assert.equal(recovered.exitCode, 0, "recovery invocation succeeds");
+    assert.match(
+      recovered.stdout,
+      /^\[RECOVER\] already committed — keeping applied tree/m,
+      "a committed journal is recovered by keeping the applied tree",
+    );
+    assert.doesNotMatch(
+      recovered.stdout,
+      /^\[RECOVER\] restored /m,
+      "a committed apply is never rolled back/restored during recovery",
+    );
+    assert.ok(
+      (await readFile(managed.absTarget)).equals(appliedBytes),
+      "the applied bytes survive recovery unchanged (no rollback of a committed apply)",
+    );
+    assert.equal(
+      await fileExists(path.join(stateDir, "journal.json")),
+      false,
+      "the committed journal is cleared after recovery",
+    );
+  }
+
+  // ── 4d. recovery unit: a committed dead-owner journal keeps applied bytes ───
+  {
+    const configDir = path.join(sandbox, "recover-committed-unit");
+    const stateDir = stateDirFor(configDir);
+    const dead = deadPid();
+    const target = path.join(configDir, "commands", "committed-keep.md");
+    await mkdir(path.dirname(target), { recursive: true });
+    const appliedBytes = Buffer.from("APPLIED bytes — must be kept after a committed crash\n");
+    await writeFile(target, appliedBytes);
+    // A backup holds the OLD pre-apply bytes; a naive rollback would restore them
+    // over the applied tree. The committed marker must prevent that.
+    const backupPath = path.join(stateDir, "backups", "committed", "committed-keep.md");
+    await mkdir(path.dirname(backupPath), { recursive: true });
+    await writeFile(backupPath, "OLD pre-apply bytes — must NOT be restored\n");
+    const stagingDir = path.join(stateDir, `staging-${dead}`);
+    await mkdir(stagingDir, { recursive: true });
+    await writeFile(
+      path.join(stateDir, "journal.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        ownerPid: dead,
+        startedAt: "2026-07-18T00:00:00.000Z",
+        committed: true,
+        stagingDir,
+        ops: [
+          {
+            kind: "file",
+            target,
+            relTarget: "commands/committed-keep.md",
+            backup: backupPath,
+            isNew: false,
+          },
+        ],
+      }),
+    );
+
+    const out = capture();
+    const result = await recoverState(stateDir, { output: out.stream });
+    assert.equal(result.committed, true, "a committed journal is recognised as committed");
+    assert.equal(result.recovered, 0, "a committed journal restores nothing");
+    assert.match(
+      out.read(),
+      /^\[RECOVER\] already committed — keeping applied tree/m,
+      "the committed journal reports keep-applied, not a restore",
+    );
+    assert.ok(
+      (await readFile(target)).equals(appliedBytes),
+      "the applied bytes are kept (the old backup is NOT restored)",
+    );
+    assert.equal(
+      await fileExists(path.join(stateDir, "journal.json")),
+      false,
+      "the committed journal is cleared after recovery",
+    );
+    assert.equal(await fileExists(stagingDir), false, "the leftover staging dir is cleaned up");
   }
 
   // ── 5. idempotence: a second --write reports zero owned-path writes ────────

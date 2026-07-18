@@ -329,7 +329,10 @@ async function restoreOps(ops, { output, tag }) {
 /**
  * Startup recovery. An abandoned journal whose owner PID is dead is validated
  * and its ops restored before any new render/apply. A journal owned by a live
- * PID is left untouched (defensive: never clobber an active apply).
+ * PID is left untouched (defensive: never clobber an active apply). A journal
+ * flipped to `committed` is NOT rolled back: its transaction reached the ledger
+ * write, so the on-disk tree is already the intended result — recovery only
+ * clears the leftover journal + staging and keeps the applied bytes.
  */
 export async function recoverState(stateDir, { output }) {
   const journal = await readJournal(stateDir);
@@ -338,6 +341,19 @@ export async function recoverState(stateDir, { output }) {
   if (pidAlive(owner)) {
     output.write(`[WARN] journal owned by live pid ${owner}; skipping recovery\n`);
     return { recovered: 0, skipped: true };
+  }
+  if (journal.committed === true) {
+    // Crash between the ledger write and removeJournal: the apply is durable.
+    // Restoring backups here would revert a fully committed transaction, so
+    // instead just clean up the abandoned journal + staging and keep the tree.
+    output.write(
+      `[RECOVER] already committed — keeping applied tree (journal from pid ${owner ?? "unknown"})\n`,
+    );
+    if (typeof journal.stagingDir === "string") {
+      await rm(journal.stagingDir, { recursive: true, force: true }).catch(() => {});
+    }
+    await removeJournal(stateDir);
+    return { recovered: 0, committed: true };
   }
   output.write(
     `[RECOVER] abandoned journal from pid ${owner ?? "unknown"} (schema ${journal.schemaVersion}); ` +
@@ -370,10 +386,12 @@ function maybeCrash(step, env) {
  * Run the apply transaction over `ops` (drifting owned paths only).
  *
  * Sequence: stage on the destination FS → write journal → per-file backup →
- * apply (rename for file/tree, `writeMcp` for mcp) → write ledger LAST → clear
- * journal. A caught failure rolls back to the pre-journal tree and restores the
- * prior ledger, then rethrows (exit 1). An injected crash leaves the journal
- * and staging in place so the next invocation recovers.
+ * apply (rename for file/tree, `writeMcp` for mcp) → flip journal to committed →
+ * write ledger → clear journal. A caught failure rolls back to the pre-journal
+ * tree and restores the prior ledger, then rethrows (exit 1). An injected crash
+ * leaves the journal and staging in place so the next invocation recovers — and
+ * once the journal is committed, that recovery keeps the applied tree rather than
+ * rolling back a transaction that already reached the point of no return.
  *
  * `desiredLedger` is a full snapshot of every owned path's post-apply hash, so
  * a clean second run is a no-op and local edits are detectable thereafter.
@@ -435,6 +453,7 @@ export async function runTransaction({
     ownerPid,
     startedAt,
     stagingDir,
+    committed: false,
     ops: ops.map((op) => ({
       kind: op.kind,
       target: op.target,
@@ -470,6 +489,12 @@ export async function runTransaction({
     }
     maybeFail("rename", env);
     maybeCrash("rename", env);
+
+    // Point of no return: the ops are applied and the on-disk tree is already in
+    // its final desired state. Flip the journal to committed BEFORE the ledger
+    // write, so a crash anywhere between here and removeJournal is recovered by
+    // KEEPING the applied tree rather than rolling it back (see recoverState).
+    await writeJsonAtomic(journalPath(stateDir), { ...journal, committed: true });
 
     await writeJsonAtomic(ledgerPath(stateDir), {
       schemaVersion: LEDGER_SCHEMA_VERSION,
