@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderPreflightBanner (T4.1) > renders a combination (br + agent-mail + projects_base) in stable order 1`] = `
+"⚠ Pre-flight issues:
+   • br_binary — missing  → Try: install br
+   • agent_mail_liveness — no response  → Try: am serve-http &
+   • projects_base_misconfig — missing  → Try: ln -s ...
+
+Run /agent-flywheel:flywheel-setup to fix all at once, or continue with degraded features."
+`;
+
+exports[`renderPreflightBanner (T4.1) > renders a single-issue banner with tryThis surfaced 1`] = `
+"⚠ Pre-flight issues:
+   • bv_binary — not on PATH  → Try: brew install dicklesworthstone/tap/bv
+
+Run /agent-flywheel:flywheel-setup to fix all at once, or continue with degraded features."
+`;
+
+exports[`renderPreflightBanner (T4.1) > renders agent-mail-down with tryThis 1`] = `
+"⚠ Pre-flight issues:
+   • agent_mail_liveness — no response on :8765  → Try: am serve-http &
+
+Run /agent-flywheel:flywheel-setup to fix all at once, or continue with degraded features."
+`;
+
+exports[`renderPreflightBanner (T4.1) > renders projects_base_misconfig with ln -s tryThis 1`] = `
+"⚠ Pre-flight issues:
+   • projects_base_misconfig — symlink missing  → Try: ln -s "<cwd>" "<projects_base>/<basename>"
+
+Run /agent-flywheel:flywheel-setup to fix all at once, or continue with degraded features."
+`;
