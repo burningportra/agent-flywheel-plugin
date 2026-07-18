@@ -6,6 +6,7 @@
  */
 
 import { constants as fsConstants } from "node:fs";
+import { createHash } from "node:crypto";
 import {
   access,
   chmod,
@@ -35,6 +36,15 @@ import {
 } from "./validate.mjs";
 import { applyTransformProfile, deriveMcpEntry } from "./transforms.mjs";
 import { parseJsonc, setMcpFlywheelEntry } from "./jsonc.mjs";
+import {
+  acquireLock,
+  hashPath,
+  readLedger,
+  recoverState,
+  releaseLock,
+  runTransaction,
+  stateDirFor,
+} from "./apply.mjs";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_REPO_ROOT = path.resolve(MODULE_DIR, "..", "..");
@@ -909,6 +919,102 @@ async function writeMcpEntry(item, options = {}) {
   }
 }
 
+function sha256Hex(text) {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+/** Ledger key for an owned item: the config subtree for mcp, else the rel path. */
+function ledgerKeyOf(report) {
+  return report.kind === "mcp" ? `mcp:${report.configKey}` : normalizeTarget(report.target);
+}
+
+/** The rendered ("source") hash that will be recorded in the ledger post-apply. */
+async function sourceHashOf(report) {
+  if (report.kind === "mcp") return sha256Hex(canonicalJson(report.expectedEntry));
+  return hashPath(report.stagePath);
+}
+
+/** The live hash of the installed target (null when absent). */
+async function liveHashOf(report, configDir) {
+  if (report.kind === "mcp") {
+    const config = await readConfigForCompare(report.target);
+    const live = isObject(config.value.mcp) ? config.value.mcp[report.configKey] : undefined;
+    return live === undefined ? null : sha256Hex(canonicalJson(live));
+  }
+  const targetPath = report.targetPath ?? resolveContained(configDir, report.target, `${report.id} target`);
+  return hashPath(targetPath);
+}
+
+/**
+ * Build the transactional plan from compared reports plus a full desired-ledger
+ * snapshot. Drifting items become ops labelled `WRITE` (clean install/upgrade of
+ * a path we own per the ledger) or `LOCAL` (the live bytes diverge from what we
+ * installed, or predate the ledger — back up before overwrite, never silent).
+ */
+async function classifyAndPlan(reports, configDir) {
+  const stateDir = stateDirFor(configDir);
+  const ledger = await readLedger(stateDir);
+  const desiredLedger = {};
+  const ops = [];
+  for (const report of reports) {
+    const key = ledgerKeyOf(report);
+    const type = report.kind === "mcp" ? "mcp" : report.kind;
+    const sourceHash = await sourceHashOf(report);
+    desiredLedger[key] = { type, hash: sourceHash };
+    if (report.clean) continue;
+
+    const liveHash = await liveHashOf(report, configDir);
+    const ledgerHash = ledger.entries?.[key]?.hash;
+    const targetExists = liveHash !== null && liveHash !== undefined;
+    let label;
+    if (!targetExists) label = "WRITE";
+    else if (ledgerHash !== undefined && liveHash === ledgerHash) label = "WRITE";
+    else label = "LOCAL";
+
+    ops.push({
+      kind: report.kind,
+      target:
+        report.kind === "mcp"
+          ? report.target
+          : resolveContained(configDir, report.target, `${report.id} target`),
+      relTarget:
+        report.kind === "mcp" ? path.basename(report.target) : normalizeTarget(report.target),
+      stageSource: report.kind === "mcp" ? null : report.stagePath,
+      ledgerKey: key,
+      newHash: sourceHash,
+      type,
+      label,
+      displayTarget: displayItem(report),
+      writeMcp: report.kind === "mcp" ? () => writeMcpEntry(report) : null,
+    });
+  }
+  return { ops, desiredLedger };
+}
+
+/**
+ * Best-effort, bounded runtime verification of the installed MCP server. A hung
+ * or missing runtime classifies `runtime_unverified` and reports red on the
+ * runtime line, but NEVER rolls back an already-committed filesystem apply.
+ */
+function verifyRuntimeReal() {
+  const result = spawnSync("opencode", ["mcp", "list"], {
+    encoding: "utf8",
+    timeout: 15_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error) {
+    const reason =
+      result.error.code === "ETIMEDOUT"
+        ? "opencode mcp list timed out after 15s"
+        : `opencode runtime unavailable: ${result.error.message}`;
+    return { checked: true, ok: false, reason };
+  }
+  if (result.status !== 0) {
+    return { checked: true, ok: false, reason: `opencode mcp list exited ${String(result.status)}` };
+  }
+  return { checked: true, ok: true };
+}
+
 /** Apply a previously compared plan. Kept separate so T6 can wrap the journal. */
 export async function applyReports(reports, output = process.stdout) {
   for (const report of reports) {
@@ -946,8 +1052,20 @@ export async function run(options = {}) {
       `ownership=manifest-items-only mcp=${args.skipMcp ? "skip" : paths.configFile}\n`,
   );
   if (args.skipMcp) stdout.write("[SKIP] mcp.flywheel (--skip-mcp)\n");
+
+  const isWrite = args.mode === "write";
+  const stateDir = stateDirFor(paths.configDir);
+  const ownerPid = Number.parseInt(env.FW_SYNC_PID ?? "", 10) || process.pid;
+  const startedAt = new Date().toISOString();
+  let lock = null;
   const stageRoot = await mkdtemp(path.join(tmpdir(), "agent-flywheel-opencode-"));
   try {
+    if (isWrite) {
+      // Single-writer lock + startup recovery run BEFORE any render, so an
+      // abandoned transaction is repaired against the live tree first.
+      lock = await acquireLock(stateDir, { output: stdout, ownerPid, startedAt });
+      await recoverState(stateDir, { output: stdout });
+    }
     const rendered = await renderManagedTree({
       repoRoot,
       stageRoot,
@@ -978,7 +1096,9 @@ export async function run(options = {}) {
       return drift.length === 0 ? 0 : 1;
     }
 
-    await applyReports(reports, stdout);
+    const { ops, desiredLedger } = await classifyAndPlan(reports, paths.configDir);
+    await runTransaction({ stateDir, ops, desiredLedger, ownerPid, startedAt, output: stdout, env });
+
     const verification = await compareRenderedItems(rendered.items, paths.configDir);
     printReports(verification, stdout);
     const remaining = verification.filter((report) => !report.clean);
@@ -989,10 +1109,23 @@ export async function run(options = {}) {
           .join(", ")}`,
       );
     }
+
+    // Bounded, non-fatal runtime verification (production only; tests that inject
+    // debugProbe/runtimeProbe opt out to avoid spawning the real opencode CLI).
+    let runtime = { checked: false, ok: true };
+    if (typeof options.runtimeProbe === "function") runtime = options.runtimeProbe();
+    else if (!options.debugProbe && !args.skipMcp) runtime = verifyRuntimeReal();
+    if (runtime.checked && !runtime.ok) {
+      stdout.write(`[runtime] runtime_unverified: ${runtime.reason}\n`);
+    } else if (runtime.checked) {
+      stdout.write("[runtime] ok\n");
+    }
+
     stdout.write("[OK] OpenCode port is in sync.\n");
     return 0;
   } finally {
     await rm(stageRoot, { recursive: true, force: true });
+    if (lock) await releaseLock(lock);
   }
 }
 
@@ -1000,7 +1133,7 @@ async function main() {
   try {
     return await run();
   } catch (error) {
-    const exitCode = error instanceof SyncError ? error.exitCode : 1;
+    const exitCode = typeof error?.exitCode === "number" ? error.exitCode : 1;
     process.stderr.write(`[ERROR] ${error instanceof Error ? error.message : String(error)}\n`);
     return exitCode;
   }
