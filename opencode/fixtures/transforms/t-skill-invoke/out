@@ -1,0 +1,5 @@
+skill(name: "start")
+skill(name: "flywheel-doctor")
+skill(name: "flywheel-duel")
+skill(name: "flywheel-reality-check")
+Skill(skill: "external-skill")

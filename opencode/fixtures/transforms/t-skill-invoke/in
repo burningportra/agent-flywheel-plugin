@@ -1,0 +1,5 @@
+Skill(skill: "agent-flywheel:start")
+Skill(skill_name: "agent-flywheel:flywheel-doctor")
+Skill("agent-flywheel:flywheel-duel")
+Skill(skill: "agent-flywheel:flywheel-reality-check", args: "$ARGUMENTS")
+Skill(skill: "external-skill")

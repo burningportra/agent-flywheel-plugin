@@ -1,0 +1,2 @@
+const FLYWHEEL_ROOT = /*__FLYWHEEL_REPO_ROOT__*/""
+export const root = FLYWHEEL_ROOT

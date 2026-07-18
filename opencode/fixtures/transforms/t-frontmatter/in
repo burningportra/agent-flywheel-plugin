@@ -1,0 +1,8 @@
+---
+description: "Fixture"
+argument-hint: "[goal]"
+enabled: true
+---
+
+Body text keeps this literal example:
+argument-hint: "do not remove body text"

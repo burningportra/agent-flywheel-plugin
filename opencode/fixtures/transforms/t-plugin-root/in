@@ -1,0 +1,3 @@
+plain: $CLAUDE_PLUGIN_ROOT/mcp-server/dist/server.js
+braced: ${CLAUDE_PLUGIN_ROOT}/skills/start/SKILL.md
+quoted: "$CLAUDE_PLUGIN_ROOT/mcp-server/package.json"

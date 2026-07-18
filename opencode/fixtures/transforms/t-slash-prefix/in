@@ -1,0 +1,3 @@
+Run /agent-flywheel:start, then /agent-flywheel:flywheel-doctor.
+Keep flywheel_get_skill({ name: "agent-flywheel:start_planning" }) unchanged.
+Keep the bare bundle address agent-flywheel:start_review unchanged.

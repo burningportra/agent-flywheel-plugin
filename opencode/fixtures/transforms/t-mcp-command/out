@@ -1,0 +1,8 @@
+{
+  "type": "local",
+  "command": [
+    "node",
+    "/tmp/Flywheel Ω/root with spaces/mcp-server/dist/server.js"
+  ],
+  "enabled": true
+}
