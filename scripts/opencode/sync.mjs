@@ -15,6 +15,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rename,
   rm,
   stat,
@@ -25,8 +26,15 @@ import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { loadManifest, validateManifest } from "./validate.mjs";
+import {
+  formatCompatibilityReport,
+  loadCompatibilityPolicy,
+  loadManifest,
+  validateCompatibilityItems,
+  validateManifest,
+} from "./validate.mjs";
 import { applyTransformProfile, deriveMcpEntry } from "./transforms.mjs";
+import { parseJsonc, setMcpFlywheelEntry } from "./jsonc.mjs";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_REPO_ROOT = path.resolve(MODULE_DIR, "..", "..");
@@ -240,6 +248,10 @@ export async function resolveConfigPaths(options) {
     );
   }
 
+  // An explicitly named config file (flag or env) is a promise to merge into
+  // that exact document; a missing one is an error, not a create-from-scratch.
+  const explicitConfigFile = selectedConfigFile !== undefined;
+
   const jsonPath = path.join(configDir, "opencode.json");
   const jsoncPath = path.join(configDir, "opencode.jsonc");
   if (!selectedConfigFile) {
@@ -255,6 +267,7 @@ export async function resolveConfigPaths(options) {
   return {
     configDir,
     configFile: selectedConfigFile,
+    explicitConfigFile,
     selectionSource,
     warnings,
   };
@@ -409,7 +422,7 @@ async function renderSkillDirectory(sourceRoot, stageRoot, spec, repoRoot) {
 function formatFindings(findings) {
   return findings
     .map((finding) => {
-      const location = finding.command ?? finding.name ?? finding.from;
+      const location = finding.path ?? finding.command ?? finding.name ?? finding.from;
       return `${finding.code}${location ? ` (${location})` : ""}: ${finding.message}`;
     })
     .join("\n  ");
@@ -477,7 +490,7 @@ async function validateMcpCommandPaths(entry, repoRoot) {
 
 /** Build an exact staging tree and validate both source and rendered views. */
 export async function renderManagedTree(options) {
-  const { repoRoot, stageRoot, configFile, skipMcp } = options;
+  const { repoRoot, stageRoot, configFile, skipMcp, explicitConfigFile = false } = options;
   const manifestPath = path.join(repoRoot, "opencode", "manifest.json");
   const loaded = await loadManifest(manifestPath).catch((error) => {
     throw operationalError(String(error), { cause: error });
@@ -527,6 +540,16 @@ export async function renderManagedTree(options) {
   await writeFile(hooksValidationPath, await readFile(hooksSource));
   await validateOrThrow(stageRoot, manifest, "rendered stage");
 
+  const compatibilityPolicyPath = path.join(repoRoot, "opencode", "compatibility.json");
+  const compatibilityPolicy = await loadCompatibilityPolicy(compatibilityPolicyPath).catch((error) => {
+    throw operationalError(String(error), { cause: error });
+  });
+  const compatibility = await validateCompatibilityItems(items, compatibilityPolicy).catch((error) => {
+    throw operationalError(`rendered stage compatibility validator failed: ${String(error)}`, {
+      cause: error,
+    });
+  });
+
   let mcpItem;
   if (!skipMcp) {
     const pluginManifest = await loadJson(
@@ -539,6 +562,12 @@ export async function renderManagedTree(options) {
     if (typeof configKey !== "string" || configKey.length === 0) {
       throw operationalError("opencode manifest mcp.configKey is missing");
     }
+    // A user-named config file must already exist: the JSONC-preserving merge
+    // works on real bytes, and fabricating a document at an explicit path would
+    // be surprising. This throws during render, before any managed write.
+    if (explicitConfigFile && !(await exists(configFile))) {
+      throw prerequisiteError(`selected OpenCode config file is missing: ${configFile}`);
+    }
     mcpItem = {
       id: `mcp:${configKey}`,
       kind: "mcp",
@@ -546,11 +575,12 @@ export async function renderManagedTree(options) {
       displayTarget: `${configFile}#mcp.${configKey}`,
       configKey,
       expectedEntry,
+      requireExisting: Boolean(explicitConfigFile),
     };
     items.push(mcpItem);
   }
 
-  return { manifest, items, mcpItem };
+  return { manifest, items, mcpItem, compatibility };
 }
 
 async function directorySnapshot(root) {
@@ -600,30 +630,31 @@ function snapshotsEqual(expected, actual) {
   });
 }
 
-async function readConfigObject(configFile) {
-  if (configFile.endsWith(".jsonc")) {
-    throw prerequisiteError(
-      `JSONC-preserving MCP merge is not available yet for ${configFile}; use --skip-mcp or select opencode.json`,
-    );
-  }
+/**
+ * Read a config file for comparison only. JSONC-tolerant (comments + trailing
+ * commas) so drift detection works on `opencode.jsonc`. Error messages carry the
+ * file path and a position-only parse reason but never echo file contents, since
+ * provider secrets live in this document.
+ */
+async function readConfigForCompare(configFile) {
   let raw;
   try {
     raw = await readFile(configFile, "utf8");
   } catch (error) {
-    if (error?.code === "ENOENT") return { value: {}, exists: false, mode: 0o644 };
+    if (error?.code === "ENOENT") return { value: {}, exists: false };
     throw operationalError(`cannot read OpenCode config ${configFile}: ${String(error)}`, { cause: error });
   }
   let value;
   try {
-    value = JSON.parse(raw);
+    value = parseJsonc(raw, { path: configFile });
   } catch (error) {
-    throw operationalError(`OpenCode config is not valid JSON: ${configFile}: ${String(error)}`, {
-      cause: error,
-    });
+    throw operationalError(
+      `OpenCode config is not valid JSON/JSONC: ${error instanceof Error ? error.message : `parse error in ${configFile}`}`,
+      { cause: error },
+    );
   }
   if (!isObject(value)) throw operationalError(`OpenCode config root must be an object: ${configFile}`);
-  const fileStat = await stat(configFile);
-  return { value, exists: true, mode: fileStat.mode & 0o777 };
+  return { value, exists: true };
 }
 
 function canonicalJson(value) {
@@ -639,7 +670,7 @@ function canonicalJson(value) {
 
 async function compareItem(item, configDir) {
   if (item.kind === "mcp") {
-    const config = await readConfigObject(item.target);
+    const config = await readConfigForCompare(item.target);
     const mcp = config.value.mcp;
     if (mcp !== undefined && !isObject(mcp)) {
       throw operationalError(`OpenCode config mcp field must be an object: ${item.target}`);
@@ -756,23 +787,123 @@ async function atomicReplaceFromStage(stagePath, targetPath, kind) {
   }
 }
 
-async function writeMcpEntry(item) {
-  const config = await readConfigObject(item.target);
-  const currentMcp = config.value.mcp;
-  if (currentMcp !== undefined && !isObject(currentMcp)) {
-    throw operationalError(`OpenCode config mcp field must be an object: ${item.target}`);
-  }
-  const next = {
-    ...config.value,
-    mcp: { ...(currentMcp ?? {}), [item.configKey]: item.expectedEntry },
-  };
-  await mkdir(path.dirname(item.target), { recursive: true });
-  const holder = await mkdtemp(path.join(path.dirname(item.target), ".flywheel-config-"));
-  const stagedConfig = path.join(holder, "opencode.json");
+/**
+ * Guard against a config path that resolves outside its own config directory
+ * (e.g. a symlink pointing at /etc). Resolves realpaths and asserts containment;
+ * absent dir/file is fine (a fresh write lands directly under the config dir).
+ */
+async function assertRealpathContained(configDir, configFile) {
+  let realDir;
   try {
-    await writeFile(stagedConfig, `${JSON.stringify(next, null, 2)}\n`, { flag: "wx" });
-    await chmod(stagedConfig, config.mode);
-    await atomicReplaceFromStage(stagedConfig, item.target, "file");
+    realDir = await realpath(configDir);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  let realFile;
+  try {
+    realFile = await realpath(configFile);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  if (realFile !== realDir && !realFile.startsWith(`${realDir}${path.sep}`)) {
+    throw prerequisiteError(
+      `refusing to write ${configFile}: resolved path escapes config dir ${realDir}`,
+    );
+  }
+}
+
+/**
+ * Copy the original document bytes (+mode) into a 0700 backup directory before
+ * it is replaced, so a mid-write failure or a bad edit is recoverable. Only the
+ * file path and mode are recorded in metadata — never the contents beyond the
+ * verbatim byte copy the operator explicitly needs to restore from.
+ */
+async function backupOriginalConfig({ backupRoot, configFile, bytes, mode }) {
+  await mkdir(backupRoot, { recursive: true, mode: 0o700 });
+  await chmod(backupRoot, 0o700).catch(() => {});
+  const dir = await mkdtemp(path.join(backupRoot, "backup-"));
+  await chmod(dir, 0o700).catch(() => {});
+  const backupFile = path.join(dir, path.basename(configFile));
+  await writeFile(backupFile, bytes, { flag: "wx" });
+  await chmod(backupFile, mode);
+  await writeFile(
+    path.join(dir, "meta.json"),
+    `${JSON.stringify({ configFile, mode, savedAt: new Date().toISOString() }, null, 2)}\n`,
+    { flag: "wx" },
+  );
+  return backupFile;
+}
+
+/**
+ * Merge the derived MCP entry into the user's config as `mcp.<configKey>`,
+ * preserving every other byte of an existing document (comments, trailing
+ * commas, key order, unrelated keys, and secrets). An existing file is edited
+ * via the pinned JSONC editor; a missing *default* `opencode.json` is created
+ * from a minimal document. Never falls back to a whole-document rewrite.
+ */
+async function writeMcpEntry(item, options = {}) {
+  const configFile = item.target;
+  const configDir = path.dirname(configFile);
+  const backupRoot = options.backupRoot ?? path.join(configDir, ".flywheel-opencode-backups");
+
+  let originalBytes = null;
+  let mode = 0o644;
+  try {
+    originalBytes = await readFile(configFile);
+    const fileStat = await stat(configFile);
+    mode = fileStat.mode & 0o777;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw operationalError(`cannot read OpenCode config ${configFile}: ${String(error)}`, {
+        cause: error,
+      });
+    }
+  }
+
+  let nextText;
+  if (originalBytes === null) {
+    // Only reachable for the default opencode.json (explicit missing files are
+    // rejected during render). Nothing to preserve, so a minimal doc is safe.
+    if (item.requireExisting) {
+      throw prerequisiteError(`selected OpenCode config file is missing: ${configFile}`);
+    }
+    nextText = `${JSON.stringify({ mcp: { [item.configKey]: item.expectedEntry } }, null, 2)}\n`;
+  } else {
+    // Targeted JSONC edit: changes only the mcp.<configKey> subtree.
+    nextText = setMcpFlywheelEntry(originalBytes.toString("utf8"), item.configKey, item.expectedEntry, {
+      path: configFile,
+    });
+  }
+
+  // Verify the edited document parses and carries exactly the expected entry
+  // BEFORE anything is renamed into place. A failure here aborts without a write.
+  let verified;
+  try {
+    verified = parseJsonc(nextText, { path: configFile });
+  } catch (error) {
+    throw operationalError(
+      `refusing to write ${configFile}: edited document does not parse (${error instanceof Error ? error.message : "parse error"})`,
+      { cause: error },
+    );
+  }
+  if (canonicalJson(verified?.mcp?.[item.configKey]) !== canonicalJson(item.expectedEntry)) {
+    throw operationalError(`refusing to write ${configFile}: mcp.${item.configKey} did not update as expected`);
+  }
+
+  await assertRealpathContained(configDir, configFile);
+  if (originalBytes !== null) {
+    await backupOriginalConfig({ backupRoot, configFile, bytes: originalBytes, mode });
+  }
+
+  await mkdir(configDir, { recursive: true });
+  const holder = await mkdtemp(path.join(configDir, ".flywheel-config-"));
+  const stagedConfig = path.join(holder, path.basename(configFile));
+  try {
+    await writeFile(stagedConfig, nextText, { flag: "wx" });
+    await chmod(stagedConfig, mode);
+    await atomicReplaceFromStage(stagedConfig, configFile, "file");
   } finally {
     await rm(holder, { recursive: true, force: true }).catch(() => {});
   }
@@ -822,7 +953,15 @@ export async function run(options = {}) {
       stageRoot,
       configFile: paths.configFile,
       skipMcp: args.skipMcp,
+      explicitConfigFile: paths.explicitConfigFile,
     });
+    stdout.write(formatCompatibilityReport(rendered.compatibility));
+    if (!rendered.compatibility.ok) {
+      throw operationalError(
+        `rendered stage compatibility validator reported ${rendered.compatibility.findings.length} ` +
+          `finding(s):\n  ${formatFindings(rendered.compatibility.findings)}`,
+      );
+    }
     const reports = await compareRenderedItems(rendered.items, paths.configDir);
     printReports(reports, stdout);
     const drift = reports.filter((report) => !report.clean);

@@ -33,6 +33,18 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// T5 compatibility validation is deliberately separate from validateManifest:
+// callers run it once over manifest-owned rendered items, never over raw source
+// or validation-only staging helpers.
+export {
+  collectCompatibilityDocuments,
+  formatCompatibilityReport,
+  loadCompatibilityPolicy,
+  scanCompatibilityDocuments,
+  validateCompatibilityItems,
+  validateCompatibilityPolicy,
+} from "./compatibility.mjs";
+
 // ─── Discovery patterns (defaults; manifest.discovery overrides) ────────────
 
 /** A skill dir is managed iff its name matches this AND it contains SKILL.md. */

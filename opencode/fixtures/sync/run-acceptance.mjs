@@ -35,6 +35,13 @@ function capture() {
   };
 }
 
+function reportBlock(output) {
+  return output
+    .split("\n")
+    .filter((line) => line.startsWith("[REPORT]"))
+    .join("\n");
+}
+
 async function fileExists(filePath) {
   try {
     await access(filePath);
@@ -111,16 +118,20 @@ try {
   const checkBefore = await invoke(target, ["--check"]);
   assert.equal(checkBefore.exitCode, 1, "check reports drift on an unsynced target");
   assert.match(checkBefore.stdout, /^\[CHECK\]/m);
+  assert.match(checkBefore.stdout, /^\[REPORT\] Claude-ism stale report/m);
   assert.match(checkBefore.stdout, /^\[DRIFT\]/m);
   assert.equal(await treeHash(target), initialHash, "check leaves every target byte untouched");
+  const initialReport = reportBlock(checkBefore.stdout);
 
   const dryRunBefore = await invoke(target, ["--dry-run"]);
   assert.equal(dryRunBefore.exitCode, 1, "dry-run reports pending writes as drift");
+  assert.equal(reportBlock(dryRunBefore.stdout), initialReport, "check and dry-run reports are identical");
   assert.match(dryRunBefore.stdout, /^\[WRITE\].*\(dry-run\)$/m);
   assert.equal(await treeHash(target), initialHash, "dry-run leaves every target byte untouched");
 
   const write = await invoke(target, ["--write"]);
   assert.equal(write.exitCode, 0, "write applies and re-checks successfully");
+  assert.equal(reportBlock(write.stdout), initialReport, "write emits the same staged report");
   assert.match(write.stdout, /^\[OK\] OpenCode port is in sync\.$/m);
   assert.equal(
     await readFile(path.join(target, "skills", "personal", "SKILL.md"), "utf8"),
@@ -156,11 +167,13 @@ try {
   const installedHash = await treeHash(target);
   const cleanCheck = await invoke(target, ["--check"]);
   assert.equal(cleanCheck.exitCode, 0, "second render is clean");
+  assert.equal(reportBlock(cleanCheck.stdout), initialReport, "clean check keeps the report visible");
   assert.match(cleanCheck.stdout, /^\[OK\] OpenCode port is in sync\.$/m);
   assert.equal(await treeHash(target), installedHash, "clean check is byte-stable");
 
   const cleanDryRun = await invoke(target, ["--dry-run"]);
   assert.equal(cleanDryRun.exitCode, 0, "clean dry-run exits zero");
+  assert.equal(reportBlock(cleanDryRun.stdout), initialReport, "clean dry-run keeps the report visible");
   assert.doesNotMatch(cleanDryRun.stdout, /^\[WRITE\]/m);
   assert.equal(await treeHash(target), installedHash, "clean dry-run is byte-stable");
 

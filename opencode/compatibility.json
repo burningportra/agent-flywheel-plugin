@@ -1,0 +1,370 @@
+{
+  "version": 1,
+  "kind": "opencode-compatibility",
+  "note": "Reviewed v1 inventory for the manifest-owned staged OpenCode tree. REPORT entries are known semantic translation debt deferred to v2. WARN entries are exact path-and-count baselines, never blanket token allowances; added occurrences fail before target comparison or write.",
+  "scan": {
+    "roots": [
+      "commands",
+      "plugins",
+      "skills"
+    ],
+    "extensions": [
+      ".js",
+      ".md"
+    ],
+    "candidateCallPattern": "\\b(?<token>(?:[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9_]*)+|[A-Z]{3,}[a-z]{2,}[A-Za-z0-9_]*))\\s*\\(",
+    "reason": "Multiword and acronym-led PascalCase calls catch new Claude tool families and variants; the exact ERROR lexicon separately covers single-word Claude tools."
+  },
+  "reportGroups": [
+    {
+      "id": "ask-user-question",
+      "pattern": "\\bAskUserQuestion\\b",
+      "baseline": 197,
+      "reason": "Structured translation to OpenCode question payloads is deferred to v2.",
+      "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\bAskUserQuestion\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
+    },
+    {
+      "id": "agent-spawn",
+      "pattern": "\\bAgent\\(",
+      "baseline": 77,
+      "reason": "Claude Agent spawning requires an NTM-aware semantic overlay in v2.",
+      "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\bAgent\\(' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
+    },
+    {
+      "id": "team-comms",
+      "pattern": "\\b(?:TeamCreate|TeamDelete|SendMessage)\\b",
+      "baseline": 66,
+      "reason": "Claude team lifecycle and messaging require an NTM-aware semantic overlay in v2.",
+      "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\b(TeamCreate|TeamDelete|SendMessage)\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
+    },
+    {
+      "id": "task-lifecycle",
+      "pattern": "\\bTask(?:Stop|List|Create)?\\s*\\(|\\bTask(?:Stop|List)\\b",
+      "baseline": 35,
+      "reason": "Claude agent-task lifecycle calls and prose require an OpenCode workflow overlay in v2.",
+      "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\bTask(Stop|List|Create)?\\s*\\(|\\bTask(Stop|List)\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
+    },
+    {
+      "id": "claude-paths",
+      "pattern": "~/\\.claude/(?:teams|plugins/cache)",
+      "baseline": 10,
+      "reason": "Claude team and plugin-cache remediation paths need platform-specific OpenCode guidance in v2.",
+      "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '~/\\.claude/(teams|plugins/cache)' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
+    },
+    {
+      "id": "claude-hook-prose",
+      "pattern": "\\b(?:PreToolUse|SessionStart|SubagentStop)\\b\"?\\s*:|\\b(?:PreToolUse|SessionStart|SubagentStop)\\b(?:\\s*\\([^\\n)]*\\))?\\s*->|\\b(?:PreToolUse|SessionStart|SubagentStop)\\b[^\\n]{0,40}\\b(?:[Hh]ook|[Ee]ntry)\\b|\\b(?:[Hh]ook|[Ee]ntry)\\b[^\\n]{0,40}\\b(?:PreToolUse|SessionStart|SubagentStop)\\b",
+      "baseline": 9,
+      "reason": "Claude hook setup and the checked-in hook-map commentary remain visible until the v2 prose overlay.",
+      "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\b(PreToolUse|SessionStart|SubagentStop)\\b\"?\\s*:|\\b(PreToolUse|SessionStart|SubagentStop)\\b(\\s*\\([^\\n)]*\\))?\\s*->|\\b(PreToolUse|SessionStart|SubagentStop)\\b[^\\n]{0,40}\\b([Hh]ook|[Ee]ntry)\\b|\\b([Hh]ook|[Ee]ntry)\\b[^\\n]{0,40}\\b(PreToolUse|SessionStart|SubagentStop)\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
+    }
+  ],
+  "knownClaudeTokens": [
+    {
+      "token": "AskUserQuestion",
+      "classification": "REPORT",
+      "group": "ask-user-question",
+      "callPattern": "\\bAskUserQuestion\\s*\\(",
+      "reason": "Known Claude structured-prompt token counted by the v1 report."
+    },
+    {
+      "token": "Agent",
+      "classification": "REPORT",
+      "group": "agent-spawn",
+      "callPattern": "\\bAgent\\s*\\(",
+      "reason": "Known Claude subagent-spawn token counted by the v1 report."
+    },
+    {
+      "token": "TeamCreate",
+      "classification": "REPORT",
+      "group": "team-comms",
+      "callPattern": "\\bTeamCreate\\s*\\(",
+      "reason": "Known Claude team-lifecycle token counted by the v1 report."
+    },
+    {
+      "token": "TeamDelete",
+      "classification": "REPORT",
+      "group": "team-comms",
+      "callPattern": "\\bTeamDelete\\s*\\(",
+      "reason": "Known Claude team-lifecycle token counted by the v1 report."
+    },
+    {
+      "token": "SendMessage",
+      "classification": "REPORT",
+      "group": "team-comms",
+      "callPattern": "\\bSendMessage\\s*\\(",
+      "reason": "Known Claude team-messaging token counted by the v1 report."
+    },
+    {
+      "token": "Task",
+      "classification": "REPORT",
+      "group": "task-lifecycle",
+      "callPattern": "\\bTask\\s*\\(",
+      "reason": "Known Claude task-spawn token counted by the v1 report."
+    },
+    {
+      "token": "TaskStop",
+      "classification": "REPORT",
+      "group": "task-lifecycle",
+      "callPattern": "\\bTaskStop\\s*\\(",
+      "reason": "Known Claude task-stop token counted by the v1 report."
+    },
+    {
+      "token": "TaskList",
+      "classification": "REPORT",
+      "group": "task-lifecycle",
+      "callPattern": "\\bTaskList\\s*\\(",
+      "reason": "Known Claude task-list token counted by the v1 report."
+    },
+    {
+      "token": "TaskCreate",
+      "classification": "REPORT",
+      "group": "task-lifecycle",
+      "callPattern": "\\bTaskCreate\\s*\\(",
+      "reason": "Known Claude task-create token counted by the v1 report."
+    },
+    {
+      "token": "~/.claude/teams",
+      "classification": "REPORT",
+      "group": "claude-paths",
+      "reason": "Known Claude team-state path counted by the v1 report."
+    },
+    {
+      "token": "~/.claude/plugins/cache",
+      "classification": "REPORT",
+      "group": "claude-paths",
+      "reason": "Known Claude plugin-cache path counted by the v1 report."
+    },
+    {
+      "token": "PreToolUse",
+      "classification": "REPORT",
+      "group": "claude-hook-prose",
+      "callPattern": "\\bPreToolUse\\s*\\(",
+      "reason": "Known Claude hook event counted only in hook-setup context."
+    },
+    {
+      "token": "SessionStart",
+      "classification": "REPORT",
+      "group": "claude-hook-prose",
+      "callPattern": "\\bSessionStart\\s*\\(",
+      "reason": "Known Claude hook event counted only in hook-setup context."
+    },
+    {
+      "token": "SubagentStop",
+      "classification": "REPORT",
+      "group": "claude-hook-prose",
+      "callPattern": "\\bSubagentStop\\s*\\(",
+      "reason": "Known Claude hook event counted only in hook-setup context."
+    },
+    {
+      "token": "Bash",
+      "classification": "ERROR",
+      "pattern": "\\bBash\\(",
+      "reason": "A direct Claude Bash tool call has no OpenCode compatibility group; prose such as 'via Bash (...)' is intentionally not call syntax."
+    },
+    {
+      "token": "Read",
+      "classification": "ERROR",
+      "pattern": "\\bRead\\s*\\(",
+      "reason": "Claude Read tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "Edit",
+      "classification": "ERROR",
+      "pattern": "\\bEdit\\s*\\(",
+      "reason": "Claude Edit tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "Glob",
+      "classification": "ERROR",
+      "pattern": "\\bGlob\\s*\\(",
+      "reason": "Claude Glob tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "Grep",
+      "classification": "ERROR",
+      "pattern": "\\bGrep\\s*\\(",
+      "reason": "Claude Grep tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "WebFetch",
+      "classification": "ERROR",
+      "pattern": "\\bWebFetch\\s*\\(",
+      "reason": "Claude WebFetch tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "WebSearch",
+      "classification": "ERROR",
+      "pattern": "\\bWebSearch\\s*\\(",
+      "reason": "Claude WebSearch tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "NotebookEdit",
+      "classification": "ERROR",
+      "pattern": "\\bNotebookEdit\\s*\\(",
+      "reason": "Claude NotebookEdit tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "TodoWrite",
+      "classification": "ERROR",
+      "pattern": "\\bTodoWrite\\s*\\(",
+      "reason": "Claude TodoWrite tool calls must be translated or explicitly reviewed before entering the staged OpenCode tree."
+    },
+    {
+      "token": "EnterPlanMode",
+      "classification": "ERROR",
+      "pattern": "\\bEnterPlanMode\\s*\\(",
+      "reason": "Claude plan-mode control calls have no direct OpenCode equivalent and must not drift into the staged tree."
+    },
+    {
+      "token": "ExitPlanMode",
+      "classification": "ERROR",
+      "pattern": "\\bExitPlanMode\\s*\\(",
+      "reason": "Claude plan-mode control calls have no direct OpenCode equivalent and must not drift into the staged tree."
+    },
+    {
+      "token": "TaskOutput",
+      "classification": "ERROR",
+      "pattern": "\\bTaskOutput\\s*\\(",
+      "reason": "Claude background-task output calls are outside the v1 task report group and must be classified before use."
+    },
+    {
+      "token": "KillShell",
+      "classification": "ERROR",
+      "pattern": "\\bKillShell\\s*\\(",
+      "reason": "Claude background-shell lifecycle calls have no reviewed OpenCode equivalent."
+    },
+    {
+      "token": "PostToolUse",
+      "classification": "WARN",
+      "pattern": "\\bPostToolUse\\s*\\(",
+      "reason": "The staged plugin documents the authoritative Claude-to-OpenCode hook map; this one v1 event is outside the named hook report group.",
+      "allowedOccurrences": [
+        {
+          "path": "plugins/agent-flywheel.js",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "token": "PushNotification",
+      "classification": "WARN",
+      "pattern": "\\bPushNotification\\s*\\(",
+      "reason": "The existing tender teardown recommendation is semantic v2 debt and is retained at one reviewed call site.",
+      "allowedOccurrences": [
+        {
+          "path": "skills/start/_inflight_prompt.md",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "token": "ScheduleWakeup",
+      "classification": "WARN",
+      "pattern": "\\bScheduleWakeup\\s*\\(",
+      "reason": "The existing coordinator wake-loop prose is semantic v2 debt; exact paths and counts prevent this allowance from admitting added calls.",
+      "allowedOccurrences": [
+        {
+          "path": "commands/flywheel-swarm.md",
+          "count": 1
+        },
+        {
+          "path": "skills/flywheel-swarm/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "skills/start/_implement.md",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "token": "Skill",
+      "classification": "WARN",
+      "pattern": "\\bSkill\\s*\\(",
+      "reason": "Six unsupported Skill invocation shapes remain semantic v2 debt after the safe lexical transform handles supported forms.",
+      "allowedOccurrences": [
+        {
+          "path": "skills/flywheel-duel/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "skills/start/_deslop.md",
+          "count": 4
+        },
+        {
+          "path": "skills/start/_reality_check.md",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "token": "TaskUpdate",
+      "classification": "WARN",
+      "pattern": "\\bTaskUpdate\\s*\\(",
+      "reason": "TaskUpdate is outside the agreed task-lifecycle report regex and remains narrowly inventoried v2 debt.",
+      "allowedOccurrences": [
+        {
+          "path": "commands/flywheel-fix.md",
+          "count": 1
+        },
+        {
+          "path": "commands/flywheel-rollback.md",
+          "count": 1
+        },
+        {
+          "path": "commands/flywheel-swarm.md",
+          "count": 1
+        },
+        {
+          "path": "skills/flywheel-fix/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "skills/flywheel-rollback/SKILL.md",
+          "count": 1
+        },
+        {
+          "path": "skills/flywheel-swarm/SKILL.md",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "token": "ToolSearch",
+      "classification": "WARN",
+      "pattern": "\\bToolSearch\\s*\\(",
+      "reason": "The setup guidance retains two reviewed Claude capability-probe calls pending v2 translation.",
+      "allowedOccurrences": [
+        {
+          "path": "commands/flywheel-setup.md",
+          "count": 1
+        },
+        {
+          "path": "skills/flywheel-setup/SKILL.md",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "token": "Write",
+      "classification": "WARN",
+      "pattern": "\\bWrite\\s*\\(",
+      "reason": "One structured Claude Write example remains in wrap-up guidance as reviewed v2 debt.",
+      "allowedOccurrences": [
+        {
+          "path": "skills/start/_wrapup.md",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "carveouts": [
+    {
+      "id": "mcp-bundle-name",
+      "kind": "mcp-bundle-name-argument",
+      "prefix": "agent-flywheel:",
+      "reason": "This is the runtime MCP bundle address inside flywheel_get_skill name arguments, not Claude tool syntax; only the string value is masked."
+    }
+  ]
+}

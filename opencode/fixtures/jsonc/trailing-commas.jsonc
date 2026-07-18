@@ -1,0 +1,18 @@
+{
+  "theme": "system",
+  "keybinds": {
+    "leader": "ctrl+x",
+  },
+  "mcp": {
+    "flywheel": {
+      "type": "local",
+      "command": ["node", "/old/path.js"],
+      "enabled": false,
+    },
+    "pencil": {
+      "type": "local",
+      "command": ["pencil", "--app", "desktop"],
+      "enabled": true,
+    },
+  },
+}

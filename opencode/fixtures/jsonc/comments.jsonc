@@ -1,0 +1,26 @@
+{
+  // OpenCode configuration — hand-edited, merged by the flywheel sync.
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "opencode", // preferred theme, keep as-is
+  "provider": {
+    /* Secret material lives here and must survive the merge untouched. */
+    "anthropic": {
+      "options": {
+        "apiKey": "sk-ant-DO-NOT-TOUCH-me-please-0xC0FFEE",
+      },
+    },
+  },
+  "mcp": {
+    // context7 stays remote
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true,
+    },
+    "flywheel": {
+      "type": "local",
+      "command": ["node", "/old/stale/path/server.js"],
+      "enabled": false, // will be overwritten by the merge
+    },
+  },
+}
