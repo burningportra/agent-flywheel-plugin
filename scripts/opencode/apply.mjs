@@ -187,9 +187,27 @@ export async function acquireLock(stateDir, { output, ownerPid, startedAt }) {
   const lockDir = lockDirFor(stateDir);
   const metaPath = path.join(lockDir, "meta.json");
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    // The lock dir is only a container; the atomic claim is the O_EXCL create of
+    // meta.json below. Creating the dir is therefore idempotent and never the
+    // gate — a crash that left an empty lock dir behind is reclaimed by simply
+    // winning the meta write, so this never needs to distinguish "just made" from
+    // "already there".
+    await mkdir(lockDir, { recursive: true });
     try {
-      await mkdir(lockDir);
+      // O_EXCL (flag "wx"): exactly one racer creates meta.json, and it stamps
+      // the owner pid in the SAME syscall that creates the file. There is no
+      // window in which the lock is held but its owner is unknown, so a loser can
+      // always PID-check the holder — two concurrent acquirers can never both
+      // read a missing meta, both reclaim, and both win (the double-acquire bug).
+      await writeFile(metaPath, `${JSON.stringify({ pid: ownerPid, startedAt }, null, 2)}\n`, {
+        flag: "wx",
+        mode: 0o600,
+      });
+      return { lockDir, released: false };
     } catch (error) {
+      // A racer reclaimed the lock dir out from under us between mkdir and the
+      // create: just retry (re-make the dir and re-race the claim).
+      if (error?.code === "ENOENT") continue;
       if (error?.code !== "EEXIST") throw error;
       const meta = await readJson(metaPath).catch(() => null);
       const holder = meta?.pid;
@@ -199,14 +217,14 @@ export async function acquireLock(stateDir, { output, ownerPid, startedAt }) {
           2,
         );
       }
+      // Held by a dead owner (or an unknown/corrupt meta, or a stale self-owned
+      // lock): reclaim the whole lock dir and retry the claim.
       output.write(
         `[WARN] reclaiming stale sync lock (owner pid ${holder ?? "unknown"} is not alive)\n`,
       );
       await rm(lockDir, { recursive: true, force: true });
       continue;
     }
-    await writeJsonAtomic(metaPath, { pid: ownerPid, startedAt });
-    return { lockDir, released: false };
   }
   throw new ApplyError("could not acquire the OpenCode sync lock after reclaim attempts", 2);
 }
