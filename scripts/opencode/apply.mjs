@@ -38,6 +38,7 @@ import * as path from "node:path";
 export const STATE_DIR_NAME = ".flywheel-sync";
 export const LEDGER_SCHEMA_VERSION = 1;
 export const JOURNAL_SCHEMA_VERSION = 1;
+export const BACKUP_RETENTION_LIMIT = 10;
 
 /** Error carrying an explicit process exit code (2 = usage/lock, 1 = apply). */
 export class ApplyError extends Error {
@@ -174,6 +175,26 @@ function backupsDir(stateDir) {
 }
 function stagingDirFor(stateDir, ownerPid) {
   return path.join(stateDir, `staging-${ownerPid}`);
+}
+
+/** Keep transaction recovery storage bounded, removing oldest entries first. */
+async function pruneBackups(backupsRoot, limit = BACKUP_RETENTION_LIMIT) {
+  const entries = await readdir(backupsRoot, { withFileTypes: true }).catch((error) => {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  });
+  if (entries.length <= limit) return 0;
+
+  const byAge = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(backupsRoot, entry.name);
+      return { entryPath, name: entry.name, mtimeMs: (await lstat(entryPath)).mtimeMs };
+    }),
+  );
+  byAge.sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name));
+  const expired = byAge.slice(0, byAge.length - limit);
+  await Promise.all(expired.map(({ entryPath }) => rm(entryPath, { recursive: true, force: true })));
+  return expired.length;
 }
 
 // ─── lock ───────────────────────────────────────────────────────────────────
@@ -380,6 +401,9 @@ export async function runTransaction({
         entries: desiredLedger,
       });
     }
+    await pruneBackups(backupsDir(stateDir)).catch((error) => {
+      output.write(`[WARN] could not prune transaction backups: ${error.message}\n`);
+    });
     return { applied: 0, local: 0 };
   }
 
@@ -458,6 +482,9 @@ export async function runTransaction({
 
     await removeJournal(stateDir);
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    await pruneBackups(backupsRoot).catch((error) => {
+      output.write(`[WARN] could not prune transaction backups: ${error.message}\n`);
+    });
     return {
       applied: ops.length,
       local: ops.filter((op) => op.label === "LOCAL").length,

@@ -20,6 +20,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { run } from "../../../scripts/opencode/sync.mjs";
+import { stateDirFor } from "../../../scripts/opencode/apply.mjs";
 import { deriveMcpEntry } from "../../../scripts/opencode/transforms.mjs";
 import { parseJsonc, setMcpFlywheelEntry } from "../../../scripts/opencode/jsonc.mjs";
 
@@ -44,6 +45,15 @@ async function fileExists(filePath) {
   } catch {
     return false;
   }
+}
+
+async function findBackupFile(transactionDir, basename) {
+  const opDirs = await readdir(transactionDir);
+  for (const opDir of opDirs) {
+    const candidate = path.join(transactionDir, opDir, basename);
+    if (await fileExists(candidate)) return candidate;
+  }
+  assert.fail(`backup ${basename} not found under ${transactionDir}`);
 }
 
 async function invoke(argv, configDir) {
@@ -222,12 +232,19 @@ try {
     assert.deepEqual(parsed.provider, parseJsonc(otherText).provider, "E1 provider secret preserved");
     assert.equal((await stat(configFile)).mode & 0o777, 0o600, "E1 permissions preserved");
 
-    const backupRoot = path.join(target, ".flywheel-opencode-backups");
+    const backupRoot = path.join(stateDirFor(target), "backups");
     const backups = await readdir(backupRoot);
-    assert.equal(backups.length, 1, "E1 exactly one backup created");
-    const backupBytes = await readFile(path.join(backupRoot, backups[0], "opencode.json"));
+    assert.equal(backups.length, 1, "E1 exactly one transaction backup created");
+    const backupBytes = await readFile(
+      await findBackupFile(path.join(backupRoot, backups[0]), "opencode.json"),
+    );
     assert.ok(backupBytes.equals(original), "E1 backup holds the original bytes verbatim");
     assert.equal((await stat(path.join(backupRoot, backups[0]))).mode & 0o777, 0o700, "E1 backup dir is 0700");
+    assert.equal(
+      await fileExists(path.join(target, ".flywheel-opencode-backups")),
+      false,
+      "E1 no independent MCP backup tree is created",
+    );
   }
 
   // E2: .jsonc replace via explicit --config-file — comments + secret survive on disk.
@@ -250,9 +267,10 @@ try {
     assert.ok(!after.includes("/old/stale/path/server.js"), "E2 stale flywheel command replaced");
     assert.equal((await stat(configFile)).mode & 0o777, 0o640, "E2 permissions preserved");
 
-    const backups = await readdir(path.join(target, ".flywheel-opencode-backups"));
+    const backupRoot = path.join(stateDirFor(target), "backups");
+    const backups = await readdir(backupRoot);
     const backupBytes = await readFile(
-      path.join(target, ".flywheel-opencode-backups", backups[0], "opencode.jsonc"),
+      await findBackupFile(path.join(backupRoot, backups[0]), "opencode.jsonc"),
     );
     assert.ok(backupBytes.equals(original), "E2 backup holds original JSONC bytes verbatim");
   }
@@ -300,11 +318,32 @@ try {
     assert.match(result.stdout, /^\[SKIP\] mcp\.flywheel/m);
     assert.ok((await readFile(configFile)).equals(original), "E5 config bytes untouched under --skip-mcp");
     assert.equal((await stat(configFile)).mode & 0o777, 0o600, "E5 permissions untouched");
-    assert.equal(
-      await fileExists(path.join(target, ".flywheel-opencode-backups")),
-      false,
-      "E5 no backup created when the merge is skipped",
+    assert.deepEqual(
+      await readdir(path.join(stateDirFor(target), "backups")),
+      [],
+      "E5 no backup copy is created when the merge is skipped",
     );
+  }
+
+  // E6: successful writes retain only the ten newest transaction backups.
+  {
+    const target = path.join(sandbox, "retention");
+    await mkdir(target, { recursive: true });
+    const configFile = path.join(target, "opencode.json");
+    await writeFile(configFile, otherText);
+
+    for (let write = 0; write < 11; write += 1) {
+      if (write > 0) {
+        const config = parseJsonc(await readFile(configFile, "utf8"));
+        config.mcp.flywheel.command = ["node", `/tmp/mcp-drift-${write}.js`];
+        await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`);
+      }
+      const result = await invoke(["--write", "--config-dir", target], target);
+      assert.equal(result.exitCode, 0, `E6 write ${write + 1} succeeds`);
+    }
+
+    const backups = await readdir(path.join(stateDirFor(target), "backups"));
+    assert.equal(backups.length, 10, "E6 only the ten newest transaction backups remain");
   }
 } finally {
   await rm(sandbox, { recursive: true, force: true });

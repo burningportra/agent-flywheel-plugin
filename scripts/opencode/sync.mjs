@@ -825,38 +825,15 @@ async function assertRealpathContained(configDir, configFile) {
 }
 
 /**
- * Copy the original document bytes (+mode) into a 0700 backup directory before
- * it is replaced, so a mid-write failure or a bad edit is recoverable. Only the
- * file path and mode are recorded in metadata — never the contents beyond the
- * verbatim byte copy the operator explicitly needs to restore from.
- */
-async function backupOriginalConfig({ backupRoot, configFile, bytes, mode }) {
-  await mkdir(backupRoot, { recursive: true, mode: 0o700 });
-  await chmod(backupRoot, 0o700).catch(() => {});
-  const dir = await mkdtemp(path.join(backupRoot, "backup-"));
-  await chmod(dir, 0o700).catch(() => {});
-  const backupFile = path.join(dir, path.basename(configFile));
-  await writeFile(backupFile, bytes, { flag: "wx" });
-  await chmod(backupFile, mode);
-  await writeFile(
-    path.join(dir, "meta.json"),
-    `${JSON.stringify({ configFile, mode, savedAt: new Date().toISOString() }, null, 2)}\n`,
-    { flag: "wx" },
-  );
-  return backupFile;
-}
-
-/**
  * Merge the derived MCP entry into the user's config as `mcp.<configKey>`,
  * preserving every other byte of an existing document (comments, trailing
  * commas, key order, unrelated keys, and secrets). An existing file is edited
  * via the pinned JSONC editor; a missing *default* `opencode.json` is created
  * from a minimal document. Never falls back to a whole-document rewrite.
  */
-async function writeMcpEntry(item, options = {}) {
+async function writeMcpEntry(item) {
   const configFile = item.target;
   const configDir = path.dirname(configFile);
-  const backupRoot = options.backupRoot ?? path.join(configDir, ".flywheel-opencode-backups");
 
   let originalBytes = null;
   let mode = 0o644;
@@ -903,10 +880,6 @@ async function writeMcpEntry(item, options = {}) {
   }
 
   await assertRealpathContained(configDir, configFile);
-  if (originalBytes !== null) {
-    await backupOriginalConfig({ backupRoot, configFile, bytes: originalBytes, mode });
-  }
-
   await mkdir(configDir, { recursive: true });
   const holder = await mkdtemp(path.join(configDir, ".flywheel-config-"));
   const stagedConfig = path.join(holder, path.basename(configFile));
