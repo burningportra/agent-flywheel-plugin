@@ -49,6 +49,8 @@ export const FINDING_CODES = Object.freeze({
   OWNERSHIP_TOO_BROAD: "ownership_too_broad",
   MANIFEST_INVALID: "manifest_invalid",
   SOURCE_MISSING: "source_missing",
+  HOOK_UNCOVERED: "hook_uncovered",
+  HOOK_STALE: "hook_stale",
 });
 
 // ─── Manifest loading ───────────────────────────────────────────────────────
@@ -443,6 +445,92 @@ export function checkOwnershipBoundary(manifest) {
   return { ok: findings.length === 0, findings };
 }
 
+// ─── Check 4: hook coverage (plugin parity with hooks/hooks.json) ───────────
+
+/**
+ * Enumerate the hook identities declared in a Claude `hooks/hooks.json`. Each
+ * top-level hook key holds an array of matcher-groups; identity is
+ * `<claudeHook>:<matcher|*>` so a matcher-less group (SessionStart, Stop, …)
+ * and a matched one (PreToolUse[Bash]) are distinguished.
+ */
+export function hookIdentitiesFromHooksJson(hooksJson) {
+  const ids = [];
+  const hooks = hooksJson?.hooks ?? {};
+  for (const [claudeHook, groups] of Object.entries(hooks)) {
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      const matcher = group?.matcher ?? null;
+      ids.push({ claudeHook, matcher, id: `${claudeHook}:${matcher ?? "*"}` });
+    }
+  }
+  return ids;
+}
+
+/**
+ * Verify the manifest's hookCoverage table maps every entry in hooks.json to a
+ * plugin handler, and carries no stale entries. Fails when hooks.json gains a
+ * hook the manifest doesn't cover (`hook_uncovered`) or when the manifest
+ * declares a hook hooks.json no longer has (`hook_stale`) — so hook drift can
+ * never land silently.
+ *
+ * @param {object} manifest
+ * @param {object} hooksJson  parsed hooks/hooks.json
+ */
+export function checkHookCoverage(manifest, hooksJson) {
+  const findings = [];
+  const declared = manifest?.hookCoverage?.hooks;
+  if (!Array.isArray(declared)) {
+    findings.push({
+      code: FINDING_CODES.MANIFEST_INVALID,
+      message: "manifest.hookCoverage.hooks must be an array",
+    });
+    return { ok: false, findings };
+  }
+  const declaredIds = new Set(declared.map((h) => `${h.claudeHook}:${h?.matcher ?? "*"}`));
+  const actualIds = hookIdentitiesFromHooksJson(hooksJson);
+  const actualSet = new Set(actualIds.map((a) => a.id));
+
+  for (const a of actualIds) {
+    if (!declaredIds.has(a.id)) {
+      findings.push({
+        code: FINDING_CODES.HOOK_UNCOVERED,
+        hook: a.id,
+        message: `hooks.json declares "${a.id}" but the manifest hookCoverage table has no matching handler — add it`,
+      });
+    }
+  }
+  for (const id of declaredIds) {
+    if (!actualSet.has(id)) {
+      findings.push({
+        code: FINDING_CODES.HOOK_STALE,
+        hook: id,
+        message: `manifest hookCoverage declares "${id}" but hooks.json no longer contains it — remove the stale entry`,
+      });
+    }
+  }
+  findings.sort(findingSort);
+  return { ok: findings.length === 0, findings };
+}
+
+/** Read + parse hooks/hooks.json from the repo, then run checkHookCoverage. */
+async function checkHookCoverageFromDisk(repoRoot, manifest) {
+  const hooksPath = path.join(repoRoot, "hooks", "hooks.json");
+  let hooksJson;
+  try {
+    hooksJson = JSON.parse(await readFile(hooksPath, "utf8"));
+  } catch (err) {
+    return {
+      ok: false,
+      findings: [{
+        code: FINDING_CODES.SOURCE_MISSING,
+        source: "hooks/hooks.json",
+        message: `hooks.json not readable/parseable at ${hooksPath}: ${String(err)}`,
+      }],
+    };
+  }
+  return checkHookCoverage(manifest, hooksJson);
+}
+
 // ─── Managed-command loading ────────────────────────────────────────────────
 
 /**
@@ -502,12 +590,14 @@ export async function validateManifest(repoRoot, opts = {}) {
   const discovered = await discoverManaged(repoRoot, manifest);
   const inventory = checkInventory(manifest, discovered);
   const ownership = checkOwnershipBoundary(manifest);
+  const hookCoverage = await checkHookCoverageFromDisk(repoRoot, manifest);
   const loadedCommands = await loadManagedCommands(repoRoot, manifest);
   const closure = checkDelegationClosure(manifest, loadedCommands.commands);
 
   findings.push(
     ...inventory.findings,
     ...ownership.findings,
+    ...hookCoverage.findings,
     ...loadedCommands.findings,
     ...closure.findings,
   );
@@ -516,7 +606,7 @@ export async function validateManifest(repoRoot, opts = {}) {
   return {
     ok: findings.length === 0,
     findings,
-    checks: { inventory, ownership, closure, sourceLoad: loadedCommands },
+    checks: { inventory, ownership, hookCoverage, closure, sourceLoad: loadedCommands },
     discovered,
   };
 }
@@ -527,7 +617,7 @@ function findingSort(a, b) {
   return (
     String(a.code).localeCompare(String(b.code)) ||
     String(a.kind ?? a.command ?? a.from ?? "").localeCompare(String(b.kind ?? b.command ?? b.from ?? "")) ||
-    String(a.name ?? a.target ?? "").localeCompare(String(b.name ?? b.target ?? ""))
+    String(a.name ?? a.target ?? a.hook ?? "").localeCompare(String(b.name ?? b.target ?? b.hook ?? ""))
   );
 }
 
@@ -546,7 +636,7 @@ async function main(argv) {
   }
   const { ok, findings, discovered, checks } = result;
   process.stdout.write(
-    `[CHECK] repo=${repoRoot} skills=${discovered.skills.length} commands=${discovered.commands.length} delegations-resolved=${checks.closure.resolved.length}\n`,
+    `[CHECK] repo=${repoRoot} skills=${discovered.skills.length} commands=${discovered.commands.length} delegations-resolved=${checks.closure.resolved.length} hooks=${checks.hookCoverage.ok ? "ok" : "DRIFT"}\n`,
   );
   if (ok) {
     process.stdout.write("[OK] opencode manifest inventory + ownership + closure valid.\n");

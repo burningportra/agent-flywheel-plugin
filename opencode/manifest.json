@@ -383,6 +383,14 @@
   ],
   "commandOverrides": [
     {
+      "name": "start",
+      "source": "opencode/commands/start.md",
+      "target": "commands/start.md",
+      "kind": "command-override",
+      "transformProfile": "command-override",
+      "reason": "Intentional short native override. `start` is a managed command (listed in commands[] for discovery), but the OpenCode entry point is deliberately a 3-line native skill(name: \"start\") pointer, not the transformed Claude command essay. The sync installs THIS override for start rather than transforming commands/start.md."
+    },
+    {
       "name": "grill-with-docs",
       "source": "opencode/commands/grill-with-docs.md",
       "target": "commands/grill-with-docs.md",
@@ -398,7 +406,49 @@
     "target": "plugins/agent-flywheel.js",
     "kind": "plugin",
     "transformProfile": "plugin",
-    "note": "Template authored in T2; declared here so the ownership boundary is complete. T1 validation does not require the template file to exist yet."
+    "note": "Checked-in template (T2). FLYWHEEL_ROOT is a typed sentinel the T3 renderer replaces with JSON.stringify(repoRoot). Ports hooks/hooks.json — see hookCoverage for the authoritative map."
+  },
+  "hookCoverage": {
+    "note": "Every entry in hooks/hooks.json maps to a plugin handler here. checkHookCoverage() fails (hook_uncovered / hook_stale) when hooks.json gains or removes a hook without a matching manifest update. Identity = <claudeHook>:<matcher|*>.",
+    "source": "hooks/hooks.json",
+    "pluginTemplate": "opencode/plugins/agent-flywheel.js",
+    "hooks": [
+      {
+        "claudeHook": "SessionStart",
+        "matcher": null,
+        "opencodeEvent": "session.created",
+        "handler": "event",
+        "behavior": "version banner log, resume-warning toast, missing-CLI dep-check toast"
+      },
+      {
+        "claudeHook": "PreToolUse",
+        "matcher": "Bash",
+        "opencodeEvent": "tool.execute.before",
+        "handler": "tool.execute.before",
+        "behavior": "Agent Mail activity-lock guard (MUTATING_DOCTOR / DELETE_ACTIVITY_LOCK regexes; FLYWHEEL_ALLOW_AM_DOCTOR=1 break-glass)"
+      },
+      {
+        "claudeHook": "Stop",
+        "matcher": null,
+        "opencodeEvent": "session.idle",
+        "handler": "event",
+        "behavior": "release Agent Mail file reservations"
+      },
+      {
+        "claudeHook": "SubagentStop",
+        "matcher": null,
+        "opencodeEvent": "session.idle",
+        "handler": "event",
+        "behavior": "release Agent Mail file reservations (shares the session.idle handler)"
+      },
+      {
+        "claudeHook": "PostToolUse",
+        "matcher": "flywheel_approve_beads",
+        "opencodeEvent": "tool.execute.after",
+        "handler": "tool.execute.after",
+        "behavior": "bead-approval progress toast"
+      }
+    ]
   },
   "dependencyClassification": {
     "grill-with-docs": {
