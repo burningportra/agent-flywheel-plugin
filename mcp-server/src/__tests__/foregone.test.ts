@@ -8,7 +8,7 @@ describe('foregone', () => {
       planQuality: { overall: 90 },
       convergenceScore: 0.9,
       beadQualityPassRate: { passed: 10, total: 10 },
-      graphInsights: { Cycles: null, Orphans: [], Articulation: [] },
+      graphInsights: { Cycles: null, Orphans: [], Articulation: [], Bottlenecks: [], Slack: [] },
       planCoverage: { overall: 90 } as any,
     };
     const score = computeForegoneScore(inputs);
@@ -21,7 +21,7 @@ describe('foregone', () => {
       planQuality: { overall: 90 },
       convergenceScore: 0.9,
       beadQualityPassRate: { passed: 10, total: 10 },
-      graphInsights: { Cycles: null, Orphans: [], Articulation: [] },
+      graphInsights: { Cycles: null, Orphans: [], Articulation: [], Bottlenecks: [], Slack: [] },
       planCoverage: { overall: 30, gaps: [{ heading: 'G1' }] } as any,
     };
     const score = computeForegoneScore(inputs);
@@ -35,7 +35,7 @@ describe('foregone', () => {
       planQuality: { overall: 90 },
       convergenceScore: 0.9,
       beadQualityPassRate: { passed: 10, total: 10 },
-      graphInsights: { Cycles: [['a', 'b', 'a']], Orphans: [], Articulation: [] },
+      graphInsights: { Cycles: [['a', 'b', 'a']], Orphans: [], Articulation: [], Bottlenecks: [], Slack: [] },
       planCoverage: { overall: 90 } as any,
     };
     const score = computeForegoneScore(inputs);
