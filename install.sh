@@ -7,6 +7,7 @@ NONINTERACTIVE=0
 SKIP_LAUNCH=0
 SKIP_MCP_REGISTER=0
 SKIP_AGENT_MAIL=0
+WITH_OPENCODE=0
 SHOW_HELP=0
 
 usage() {
@@ -18,6 +19,7 @@ Flags:
   --skip-launch         Skip starting Claude Code at the end.
   --skip-mcp-register   Skip registering the MCP plugin.
   --skip-agent-mail     Skip starting / installing agent-mail.
+  --with-opencode       Also configure the OpenCode port via scripts/sync-opencode.sh --write.
   -h, --help            Show this help and exit.
 
 Log file: ~/.agent-flywheel/install.log
@@ -30,6 +32,7 @@ for arg in "$@"; do
     --skip-launch) SKIP_LAUNCH=1 ;;
     --skip-mcp-register) SKIP_MCP_REGISTER=1 ;;
     --skip-agent-mail) SKIP_AGENT_MAIL=1 ;;
+    --with-opencode) WITH_OPENCODE=1 ;;
     -h|--help) SHOW_HELP=1 ;;
     *) echo "Unknown flag: $arg" >&2; usage >&2; exit 1 ;;
   esac
@@ -41,6 +44,10 @@ if [ "$SHOW_HELP" = "1" ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The OpenCode sync lives alongside install.sh in a full checkout. Resolve it
+# relative to install.sh's own location so a downloaded copy fails cleanly
+# (rather than syncing some unrelated repo) when --with-opencode is requested.
+SYNC_OPENCODE="$SCRIPT_DIR/scripts/sync-opencode.sh"
 
 LOG_DIR="$HOME/.agent-flywheel"
 mkdir -p "$LOG_DIR"
@@ -55,7 +62,25 @@ source "$SCRIPT_DIR/install/lib/detect.sh"
 source "$SCRIPT_DIR/install/lib/install-tool.sh"
 
 log "install.sh started: $(date -u +%FT%TZ)"
-log "flags: noninteractive=$NONINTERACTIVE skip_launch=$SKIP_LAUNCH skip_mcp_register=$SKIP_MCP_REGISTER skip_agent_mail=$SKIP_AGENT_MAIL"
+log "flags: noninteractive=$NONINTERACTIVE skip_launch=$SKIP_LAUNCH skip_mcp_register=$SKIP_MCP_REGISTER skip_agent_mail=$SKIP_AGENT_MAIL with_opencode=$WITH_OPENCODE"
+
+# --with-opencode prerequisites: validate up front so we fail fast instead of
+# running a full install only to discover OpenCode can't be configured. A
+# missing sync script or opencode binary is a hard error — never silently
+# degrade, and never reach a handoff that claims the port is ready.
+if [ "$WITH_OPENCODE" -eq 1 ]; then
+  if [ ! -f "$SYNC_OPENCODE" ]; then
+    err "--with-opencode: sync script not found at $SYNC_OPENCODE"
+    err "Run install.sh from a full repo checkout (curl | bash cannot configure OpenCode yet)."
+    exit 1
+  fi
+  if ! command -v opencode >/dev/null 2>&1; then
+    err "--with-opencode requires the 'opencode' binary on PATH, but none was found."
+    err "Install OpenCode first (see docs/opencode.md), then re-run with --with-opencode."
+    exit 1
+  fi
+  log "OpenCode port requested (--with-opencode); prerequisites OK"
+fi
 
 # Step 1: OS detect — establish host platform + package manager for the rest
 # of the script. Mirrors install.ps1 Step 1.
@@ -128,6 +153,27 @@ cat <<'EOF'
   /agent-flywheel:flywheel-setup
 
 EOF
+
+# OpenCode port (opt-in via --with-opencode). Runs the sync exactly once, after
+# the base install has completed. Its exit code gates overall success — a sync
+# failure fails the install rather than leaving a half-configured port behind.
+if [ "$WITH_OPENCODE" -eq 1 ]; then
+  sync_args=(--write)
+  # --skip-mcp-register becomes meaningful on this path: forward it as
+  # --skip-mcp so the sync leaves the OpenCode config file + mcp.flywheel
+  # entry untouched.
+  if [ "$SKIP_MCP_REGISTER" -eq 1 ]; then
+    sync_args+=(--skip-mcp)
+  fi
+  log "Configuring OpenCode port: sync-opencode.sh ${sync_args[*]}"
+  if bash "$SYNC_OPENCODE" "${sync_args[@]}"; then
+    ok "OpenCode port configured — see docs/opencode.md"
+  else
+    sync_rc=$?
+    err "OpenCode sync failed (exit ${sync_rc}); see docs/opencode.md troubleshooting."
+    exit "${sync_rc}"
+  fi
+fi
 
 # Optional Claude Code launch. Implicitly skipped in --noninteractive mode
 # (CI must never drop into a TUI even if no --skip-launch was passed).
