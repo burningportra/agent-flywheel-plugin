@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Agent Mail PreToolUse guard blocks again.** Since 2026-05-02 the `PreToolUse[Bash]` guard ran behind `|| true` and then the warn-only `_run-hook.sh` wrapper, both of which turn its exit 2 into 0, so Claude Code never blocked `am doctor repair` or activity-lock deletions. The guard is now called with `node` directly. `hooks-guard-wiring.test.ts` runs the exact `hooks.json` command against the guard corpus.
+
+### Performance
+
+- **Bash tool calls no longer spawn a hook process.** The guard's three handlers carry `if` rules (`Bash(*doctor*)`, `Bash(*DOCTOR*)`, `Bash(*activity.lock*)`), so Claude Code 2.1.85+ only spawns the guard when a command could match. Every other Bash call drops about 61 ms p50 / 76 ms p99 of overhead to none. Older Claude Code ignores `if` and runs the guard on every Bash call, as before.
+- **`flywheel_doctor` is about 3× faster and deterministic.** `gemini --version` output is cached on disk, keyed on the binary's identity, and `rescues_last_30d` skips the cass history search (`cm context --history 0`) and shares `cm --version` with `cm_binary`. On the reference machine, warm sweep p99 went from 1063 to 386 ms and fresh-server first call p50 from 1001 to 355 ms. The intermittent `rescue count probe failed: Timed out after 2000ms` yellow row is gone. See `docs/speedup/hook-and-doctor/report.md`.
+
 ## [3.19.0] - 2026-10-14
 
 Adds the `/agent-flywheel:flywheel-speedup` track and ships the OpenCode port (derived / preview). agent-flywheel can now be rendered into an OpenCode config from the same repo sources that drive the Claude Code plugin, via a deterministic, fail-closed sync toolchain. The port is a **derived artifact** — the repo stays the source of truth, and the installed OpenCode files are never hand-edited. Additive and opt-in: nothing here changes existing Claude Code behavior.
