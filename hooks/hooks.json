@@ -16,7 +16,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh\" node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\""
+            "if": "Bash(*doctor*)",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*DOCTOR*)",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*activity.lock*)",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js\""
           }
         ]
       }
