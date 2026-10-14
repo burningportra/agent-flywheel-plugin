@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.19.1] - 2026-10-14
+
+Makes the Agent Mail guard block again, removes the per-Bash-call hook spawn, and cuts `flywheel_doctor` time by about two-thirds.
+
 ### Fixed
 
 - **The Agent Mail PreToolUse guard blocks again.** Since 2026-05-02 the `PreToolUse[Bash]` guard ran behind `|| true` and then the warn-only `_run-hook.sh` wrapper, both of which turn its exit 2 into 0, so Claude Code never blocked `am doctor repair` or activity-lock deletions. The guard is now called with `node` directly. `hooks-guard-wiring.test.ts` runs the exact `hooks.json` command against the guard corpus.
