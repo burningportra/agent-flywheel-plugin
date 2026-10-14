@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generated": "2026-07-16T13:21:06.017Z",
+  "generated": "2026-10-14T18:22:59.897Z",
   "skills": [
     "_template",
     "brainstorming",
@@ -26,6 +26,7 @@
     "flywheel-rollback",
     "flywheel-scan",
     "flywheel-setup",
+    "flywheel-speedup",
     "flywheel-status",
     "flywheel-stop",
     "flywheel-swarm",

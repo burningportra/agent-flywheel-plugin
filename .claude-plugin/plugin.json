@@ -1,7 +1,7 @@
 {
   "name": "agent-flywheel",
   "description": "Multi-agent coding flywheel — deep planning, parallel execution, guided review gates. The Agentic Coding Flywheel.",
-  "version": "3.18.2",
+  "version": "3.19.0",
   "author": {
     "name": "burningportra"
   },
@@ -12,7 +12,7 @@
     "agent-flywheel": {
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"
+        "${CLAUDE_PLUGIN_ROOT}/mcp-server/scripts/launch-server.mjs"
       ]
     }
   }

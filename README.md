@@ -260,6 +260,7 @@ Stuck? Run the diagnostic triage chain:
 | `/agent-flywheel:flywheel-doctor` | One-shot diagnostic of toolchain dependencies |
 | `/agent-flywheel:flywheel-duel` | State-aware adversarial duel — wraps `/dueling-idea-wizards` |
 | `/agent-flywheel:flywheel-reality-check` | Gap analysis: AGENTS.md / README / plan vs actual code |
+| `/agent-flywheel:flywheel-speedup` | Make something fast: profile, optimize in place or re-architect behind the same API, canary with auto-rollback |
 | `/agent-flywheel:memory` | Search or store CASS long-term memory |
 | `npm run bead-viewer` | Open the read-only bead-graph viewer (Cytoscape, `127.0.0.1`) |
 
@@ -327,8 +328,8 @@ Do not use `"type": "sse"` or `"type": "url"` for agent-mail — use `"http"`.
 ```
 claude --plugin-dir .
 │
-├── commands/*.md          ← Natural-language slash commands (24)
-├── skills/*/SKILL.md      ← 40 skills + 10 phase sub-files (start/_*.md)
+├── commands/*.md          ← Natural-language slash commands (26)
+├── skills/*/SKILL.md      ← 41 skills + 10 phase sub-files (start/_*.md)
 ├── hooks/hooks.json       ← SessionStart banner + tool checks
 │
 ├── .mcp.json

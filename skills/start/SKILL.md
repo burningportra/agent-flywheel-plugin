@@ -317,6 +317,7 @@ More entry points (type the label into "Other" or run the slash command directly
   • Research repo       — paste a GitHub URL → /flywheel-research
   • Audit               — /agent-flywheel:flywheel-audit
   • Setup               — /agent-flywheel:flywheel-setup
+  • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
 
 Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
@@ -361,6 +362,7 @@ More entry points (type the label into "Other" or run the slash command directly
   • Research repo       — paste a GitHub URL → /flywheel-research
   • Audit               — /agent-flywheel:flywheel-audit
   • Setup               — /agent-flywheel:flywheel-setup
+  • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
 
 Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
@@ -383,7 +385,7 @@ AskUserQuestion(questions: [{
 
 **If no beads and no session** (fresh start):
 
-> **Menu visibility rule (MANDATORY).** `AskUserQuestion` caps at 4 labeled options. Before calling it, print the **full menu** (all top-level + sub-options the routing table can reach in this state) as a visible markdown block so the user can see every entry point at load. Do NOT hide options behind an "Other" sub-menu — surface them. The 4 options inside `AskUserQuestion` are the most-common entry points; the extras (Simplify pass, Duel, Audit, Setup, Auto-swarm, Quick fix) are reachable via the printed block by typing the label into "Other" or by invoking the matching `/flywheel-*` slash command directly. Apply this same rule to the previous-session-exists and open-beads-exist menus above.
+> **Menu visibility rule (MANDATORY).** `AskUserQuestion` caps at 4 labeled options. Before calling it, print the **full menu** (all top-level + sub-options the routing table can reach in this state) as a visible markdown block so the user can see every entry point at load. Do NOT hide options behind an "Other" sub-menu — surface them. The 4 options inside `AskUserQuestion` are the most-common entry points; the extras (Simplify pass, Duel, Audit, Setup, Speed up, Auto-swarm, Quick fix) are reachable via the printed block by typing the label into "Other" or by invoking the matching `/flywheel-*` slash command directly. Apply this same rule to the previous-session-exists and open-beads-exist menus above.
 
 Print this block first (the `• Take the 5-min tour` row appears ONLY when `IS_FIRST_RUN === true` per Step 0b check 9):
 
@@ -406,6 +408,7 @@ More entry points (type the label into "Other" or run the slash command directly
   • Duel                — /agent-flywheel:flywheel-duel (adversarial 2-agent ideation)
   • Audit               — /agent-flywheel:flywheel-audit
   • Setup               — /agent-flywheel:flywheel-setup
+  • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
   • Quick fix           — /agent-flywheel:flywheel-fix
   • Auto-swarm          — in-flight resume; only meaningful with active beads
 
@@ -448,7 +451,7 @@ When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-
 |--------|--------|
 | **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → §3a model-config pre-spawn gate → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (cc:cod:gem 2:2:2 model-diversified default; substitution ladder gmi→cod→pi→cc when a model is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
 | **Take the 5-min tour** | Read `skills/start/_tutorial_bead.md` end-to-end and execute it verbatim — the 7 sections drive the operator through scan → plan → bead → implement → commit on a real trivial goal so they see the loop fire once. The skill returns to the Step 0d main menu on completion (or to the rollback gate handled by T5.4 on the wrap-up step). Only surface this route when `IS_FIRST_RUN === true` (Step 0b check 9). |
-| **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Research repo / Simplify pass / Duel / Audit / Setup / Quick fix / Auto-swarm`. Open-beads-exist: `Reality check / Duel / New goal / Simplify pass / Research repo / Audit / Setup`. Previous-session-exists: `Work on beads / New goal / Reality check / Duel / Simplify pass / Research repo / Audit / Setup`. **Special handling:** if the typed text starts with a path-like token (e.g. `docs/plans/`, ends in `.md`, or matches one of the surfaced `RECENT_PLAN_PATHS`), route as **Pick up existing plan** with the typed text as `<plan-path>`. Otherwise route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches AND it isn't path-shaped, treat the free-text as a custom goal and route to **Set a goal** with the typed text as `<goal>`. |
+| **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Research repo / Simplify pass / Duel / Audit / Setup / Speed up / Quick fix / Auto-swarm`. Open-beads-exist: `Reality check / Duel / New goal / Simplify pass / Research repo / Audit / Setup / Speed up`. Previous-session-exists: `Work on beads / New goal / Reality check / Duel / Simplify pass / Research repo / Audit / Setup / Speed up`. **Special handling:** if the typed text starts with a path-like token (e.g. `docs/plans/`, ends in `.md`, or matches one of the surfaced `RECENT_PLAN_PATHS`), route as **Pick up existing plan** with the typed text as `<plan-path>`. Otherwise route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches AND it isn't path-shaped, treat the free-text as a custom goal and route to **Set a goal** with the typed text as `<goal>`. |
 | **Simplify pass** (a.k.a. Deslop pass) | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the canonical skill `/simplify-and-refactor-code-isomorphically` is the engine of every mode, with `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm` orchestrating around it. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove isomorphism preservation. |
 | **Duel** | Invoke `/agent-flywheel:flywheel-duel` (state-aware routing — picks `mode=ideas` for fresh starts, `mode=architecture` when a goal is selected but no plan exists, `mode=reliability\|security` when reviewing risky open beads). Pre-flight (MANDATORY): run `which ntm` + `which claude codex gemini 2>/dev/null` (real binaries behind the `cc/cod/gmi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) — need ntm + ≥2 of {claude, codex, gemini}; on failure, emit a one-line warning and surface a sub-menu offering `Deep (idea-wizard) / Triangulated / Cancel`. After the duel completes, parse `DUELING_WIZARDS_REPORT.md`, stamp `state.planSource = "duel"` (or the discovery equivalent so `_beads.md` Provenance block fires), and continue into the standard goal-selection or plan-approval flow per current phase. Do NOT skip the alignment check at Step 5.55 — duels surface contested decisions the alignment check exists to surface. |
 | **Reality check** | Read `skills/start/_reality_check.md` end-to-end and surface its depth-selection `AskUserQuestion` (Reality check only / Reality check + beads / Full pipeline). Do NOT pick a depth unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching section verbatim; the slash-named skill (`/reality-check-for-project`) is load-bearing. Phase 1 (the docs+code+gap-report prompt) typically takes 15–20 minutes — do NOT short-circuit it with a docs-only summary. Bead creation is `br`-only per `/beads-workflow`. |
@@ -462,6 +465,7 @@ When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-
 | **Quick fix** | Invoke `/flywheel-fix` |
 | **Audit** | Invoke `/flywheel-audit` |
 | **Setup** | Invoke `/flywheel-setup` |
+| **Speed up** | Invoke `/agent-flywheel:flywheel-speedup` |
 
 #### Work on beads — sub-menu + bootstrap (MANDATORY)
 

@@ -1,4 +1,5 @@
 node_modules/
+mcp-server/.deps-install.lock/
 # mcp-server/dist/ is committed so the plugin works immediately after /plugin install
 # (see .github/workflows/ci.yml "dist-drift" job which prevents stale artifacts).
 .pi-flywheel/checkpoint.json.tmp

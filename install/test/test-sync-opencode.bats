@@ -123,7 +123,7 @@ count_lines() {
   # mcp.flywheel merged into a freshly created opencode.json
   [ -f "$OC/opencode.json" ]
   grep -q '"flywheel"' "$OC/opencode.json"
-  grep -q 'mcp-server/dist/server.js' "$OC/opencode.json"
+  grep -q 'mcp-server/scripts/launch-server.mjs' "$OC/opencode.json"
 
   # plugin sentinel rendered to the real repo abspath; the file parses
   run node --check "$OC/plugins/agent-flywheel.js"

@@ -169,6 +169,13 @@
       "transformProfile": "skill"
     },
     {
+      "name": "flywheel-speedup",
+      "source": "skills/flywheel-speedup/",
+      "target": "skills/flywheel-speedup/",
+      "kind": "skill-dir",
+      "transformProfile": "skill"
+    },
+    {
       "name": "flywheel-status",
       "source": "skills/flywheel-status/",
       "target": "skills/flywheel-status/",
@@ -328,6 +335,13 @@
       "name": "flywheel-setup",
       "source": "commands/flywheel-setup.md",
       "target": "commands/flywheel-setup.md",
+      "kind": "command",
+      "transformProfile": "command"
+    },
+    {
+      "name": "flywheel-speedup",
+      "source": "commands/flywheel-speedup.md",
+      "target": "commands/flywheel-speedup.md",
       "kind": "command",
       "transformProfile": "command"
     },
