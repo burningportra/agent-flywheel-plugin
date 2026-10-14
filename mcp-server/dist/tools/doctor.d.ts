@@ -34,6 +34,10 @@ export interface DoctorOptions {
      * the exec probe entirely — pass `null` to assert the "no version output"
      * branch, or a string to feed the parser directly. */
     geminiVersionOutput?: string | null;
+    /** Override the on-disk probe cache (`gemini --version` output keyed on the
+     * binary's identity). Defaults to
+     * `$XDG_CACHE_HOME/agent-flywheel/doctor-probes.json`; `null` disables it. */
+    probeCachePath?: string | null;
     /** Override path to the marketplace plugin manifest (tests). Defaults to
      * `<cwd>/.claude-plugin/plugin.json`. Pass `null` to treat as missing. */
     marketplaceManifestPath?: string | null;

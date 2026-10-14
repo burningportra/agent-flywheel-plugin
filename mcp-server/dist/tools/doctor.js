@@ -12,10 +12,12 @@
  * envelope is built by the I4 registration wrapper.
  */
 import { statSync, readdirSync, readFileSync, realpathSync, existsSync } from 'node:fs';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newestMtime } from './shared.js';
+import { writeAtomic } from '../atomic-write.js';
 import { makeExec } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
@@ -35,6 +37,9 @@ const PER_CHECK_TIMEOUT_MS = 2000;
 const TOTAL_SWEEP_BUDGET_MS = 10_000;
 /** Max concurrent child processes. */
 const MAX_CONCURRENCY = 6;
+/** Backstop TTL for cached probe output. The binary-identity key catches
+ * reinstalls; the TTL covers shims whose file doesn't change on upgrade. */
+const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Worktree dirs older than this and already merged to main are stale. */
 const STALE_WORKTREE_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 /**
@@ -126,6 +131,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
     const totalBudgetMs = options.totalBudgetMs ?? TOTAL_SWEEP_BUDGET_MS;
     const maxConcurrency = options.maxConcurrency ?? MAX_CONCURRENCY;
     const exec = options.exec ?? makeExec(cwd);
+    const probeCachePath = options.probeCachePath === undefined ? defaultProbeCachePath() : options.probeCachePath;
     const startMs = now();
     const timestamp = new Date(startMs).toISOString();
     // Pre-aborted: return minimal partial report without running anything.
@@ -165,13 +171,19 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         codex: { provider: 'codex', available: false, reason: errMsg(err) },
         gemini: { provider: 'gemini', available: false, reason: errMsg(err) },
     }));
+    // cm_binary and rescues_last_30d both need `cm --version` (~100 ms); run it
+    // once per sweep.
+    let cmVersionPromise;
+    const cmExec = (cmd, args, opts) => cmd === 'cm' && args.length === 1 && args[0] === '--version'
+        ? (cmVersionPromise ??= exec(cmd, args, opts))
+        : exec(cmd, args, opts);
     const checkFns = [
         () => checkMcpConnectivity(cwd, combined, now),
         () => checkAgentMailLiveness(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkBrBinary(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkBvBinary(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkNtmBinary(exec, cwd, combined, perCheckTimeoutMs, now),
-        () => checkCmBinary(exec, cwd, combined, perCheckTimeoutMs, now),
+        () => checkCmBinary(cmExec, cwd, combined, perCheckTimeoutMs, now),
         () => checkNodeVersion(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkGitStatus(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkDistDrift(cwd, combined, now),
@@ -184,8 +196,8 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         () => checkCodexConfigCompat(combined, now, options.codexConfigPath === undefined
             ? join(homedir(), '.codex', 'config.toml')
             : options.codexConfigPath),
-        () => checkGeminiModelCompat(exec, cwd, combined, perCheckTimeoutMs, now, swarmCapsPromise, options.geminiVersionOutput),
-        () => checkRescuesLast30d(exec, cwd, combined, perCheckTimeoutMs, now),
+        () => checkGeminiModelCompat(exec, cwd, combined, perCheckTimeoutMs, now, swarmCapsPromise, options.geminiVersionOutput, probeCachePath),
+        () => checkRescuesLast30d(cmExec, cwd, combined, perCheckTimeoutMs, now),
         () => checkVersionTriple(cwd, combined, now, {
             installedManifestPath: options.installedPluginManifestPath,
             marketplaceManifestPath: options.marketplaceManifestPath,
@@ -1167,7 +1179,7 @@ async function checkCodexConfigCompat(signal, now, configPath) {
  *
  * Tests inject `geminiVersionOutput` to skip the exec call entirely.
  */
-async function checkGeminiModelCompat(exec, cwd, signal, timeout, now, capsPromise, geminiVersionOutput) {
+async function checkGeminiModelCompat(exec, cwd, signal, timeout, now, capsPromise, geminiVersionOutput, probeCachePath) {
     const start = now();
     if (signal.aborted)
         return abortedCheck('gemini_model_compat');
@@ -1194,16 +1206,36 @@ async function checkGeminiModelCompat(exec, cwd, signal, timeout, now, capsPromi
                     durationMs: now() - start,
                 };
             }
-            const res = await exec('gemini', ['--version'], { timeout, cwd, signal });
-            if (res.code !== 0) {
-                return {
-                    name: 'gemini_model_compat',
-                    severity: 'green',
-                    message: `gemini --version exited ${res.code} — model not determinable (advisory)`,
-                    durationMs: now() - start,
-                };
+            // `gemini --version` boots a ~850 ms node bundle, and its output only
+            // changes when the binary does, so reuse it while the binary is unchanged.
+            const identity = probeCachePath && caps.gemini.path ? await binaryIdentity(caps.gemini.path) : null;
+            const entries = identity && probeCachePath ? await readProbeCache(probeCachePath) : {};
+            const hit = entries[GEMINI_VERSION_CACHE_KEY];
+            const age = hit ? now() - hit.cachedAt : -1;
+            if (identity && hit?.identity === identity && age >= 0 && age < PROBE_CACHE_TTL_MS) {
+                output = hit.output;
             }
-            output = `${res.stdout}\n${res.stderr}`;
+            else {
+                const res = await exec('gemini', ['--version'], { timeout, cwd, signal });
+                if (res.code !== 0) {
+                    return {
+                        name: 'gemini_model_compat',
+                        severity: 'green',
+                        message: `gemini --version exited ${res.code} — model not determinable (advisory)`,
+                        durationMs: now() - start,
+                    };
+                }
+                output = `${res.stdout}\n${res.stderr}`;
+                if (identity && probeCachePath) {
+                    const file = {
+                        version: 1,
+                        entries: { ...entries, [GEMINI_VERSION_CACHE_KEY]: { identity, output, cachedAt: now() } },
+                    };
+                    await writeAtomic(probeCachePath, JSON.stringify(file)).catch((err) => {
+                        log.debug('probe cache write failed', { path: probeCachePath, err: errMsg(err) });
+                    });
+                }
+            }
         }
         const model = parseGeminiModelFromOutput(output);
         if (model === null) {
@@ -1239,11 +1271,55 @@ async function checkGeminiModelCompat(exec, cwd, signal, timeout, now, capsPromi
         };
     }
 }
+const GEMINI_VERSION_CACHE_KEY = 'gemini --version';
+function defaultProbeCachePath() {
+    const base = process.env.XDG_CACHE_HOME || join(homedir(), '.cache');
+    return join(base, 'agent-flywheel', 'doctor-probes.json');
+}
+/** Identity of the file a PATH entry resolves to; a reinstall changes the
+ * inode and ctime even when npm preserves the tarball's mtime. */
+async function binaryIdentity(binPath) {
+    try {
+        const real = await realpath(binPath);
+        const st = await stat(real);
+        return `${real}:${st.ino}:${st.size}:${st.mtimeMs}:${st.ctimeMs}`;
+    }
+    catch {
+        return null;
+    }
+}
+async function readProbeCache(cachePath) {
+    try {
+        const parsed = JSON.parse(await readFile(cachePath, 'utf8'));
+        if (parsed.version !== 1 || typeof parsed.entries !== 'object' || parsed.entries === null)
+            return {};
+        const entries = {};
+        for (const [key, e] of Object.entries(parsed.entries)) {
+            if (typeof e?.identity === 'string' && typeof e.output === 'string' && typeof e.cachedAt === 'number') {
+                entries[key] = e;
+            }
+        }
+        return entries;
+    }
+    catch {
+        return {};
+    }
+}
 async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
     const start = now();
     if (signal.aborted)
         return abortedCheck('rescues_last_30d');
     try {
+        // `cm context` returns matching bullets as JSON; we count entries whose
+        // body carries the canonical `flywheel-rescue` prefix AND whose embedded
+        // `ts=` ISO timestamp falls within the last 30 days. Rescue events are
+        // stored as playbook bullets (flywheel_memory → `cm add`), so the cass
+        // history search (0.4–5 s, and the cause of intermittent 2 s timeouts)
+        // would only re-find the same events in session transcripts:
+        // `--history 0` skips it. Start it alongside the availability probe; its
+        // result is used only when cm turns out to be available.
+        const contextPromise = exec('cm', ['context', 'flywheel-rescue', '--json', '--history', '0'], { timeout, cwd, signal });
+        contextPromise.catch(() => { });
         // First confirm cm is available — synthesis is best-effort.
         const probe = await exec('cm', ['--version'], { timeout, cwd, signal });
         if (probe.code !== 0) {
@@ -1264,17 +1340,10 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
                 durationMs: now() - start,
             };
         }
-        // `cm context` returns matching bullets as JSON; we count entries whose
-        // body carries the canonical `flywheel-rescue` prefix AND whose embedded
-        // `ts=` ISO timestamp falls within the last 30 days.
-        const res = await exec('cm', ['context', 'flywheel-rescue', '--json'], {
-            timeout,
-            cwd,
-            signal,
-        });
+        const res = await contextPromise;
         if (res.code !== 0) {
             log.debug('rescues_last_30d cm context failed', {
-                command: 'cm context flywheel-rescue --json',
+                command: 'cm context flywheel-rescue --json --history 0',
                 exitCode: res.code,
                 stderr: res.stderr.trim(),
             });
@@ -1295,7 +1364,7 @@ async function checkRescuesLast30d(exec, cwd, signal, timeout, now) {
     }
     catch (err) {
         log.debug('rescues_last_30d probe threw', {
-            command: 'cm context flywheel-rescue --json',
+            command: 'cm context flywheel-rescue --json --history 0',
             error: errMsg(err),
         });
         const fallback = await localRescueCountFallback(cwd, now());

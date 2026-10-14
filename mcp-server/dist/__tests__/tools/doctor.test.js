@@ -1066,4 +1066,84 @@ describe('renderDoctorReport (clack/picocolors)', () => {
         }
     });
 });
+describe('gemini_model_compat probe cache', () => {
+    function geminiCacheHarness(cwd, versionCode) {
+        const bin = join(cwd, 'gemini');
+        writeFileSync(bin, '#!/bin/sh\n');
+        const probeCachePath = join(cwd, 'cache', 'doctor-probes.json');
+        const base = makeStubbedExec([
+            {
+                match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
+                respond: { result: { code: 0, stdout: `${bin}\n`, stderr: '' } },
+            },
+            ...allGreenStubs(),
+        ]);
+        let calls = 0;
+        const exec = async (cmd, args, opts) => {
+            if (cmd === 'gemini' && args[0] === '--version') {
+                calls++;
+                return { code: versionCode, stdout: 'gemini 2.0.0 (gemini-2.0-pro)', stderr: '' };
+            }
+            return base(cmd, args, opts);
+        };
+        const run = async () => {
+            const report = await runDoctorChecks(cwd, undefined, { exec, codexConfigPath: null, probeCachePath });
+            return report.checks.find((c) => c.name === 'gemini_model_compat');
+        };
+        return { bin, run, calls: () => calls };
+    }
+    it('reuses cached --version output until the binary changes', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const h = geminiCacheHarness(cwd, 0);
+            const first = await h.run();
+            const second = await h.run();
+            expect(h.calls()).toBe(1);
+            expect(second.severity).toBe('yellow');
+            expect(second.message).toBe(first.message);
+            writeFileSync(h.bin, '#!/bin/sh\n# upgraded\n');
+            await h.run();
+            expect(h.calls()).toBe(2);
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('does not cache a failed --version probe', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const h = geminiCacheHarness(cwd, 1);
+            await h.run();
+            const second = await h.run();
+            expect(h.calls()).toBe(2);
+            expect(second.message).toContain('exited 1');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
+describe('cm probes', () => {
+    it('runs cm --version once per sweep and skips the cass history search', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const base = makeStubbedExec(allGreenStubs());
+            const cmCalls = [];
+            const exec = async (cmd, args, opts) => {
+                if (cmd === 'cm')
+                    cmCalls.push([...args]);
+                return base(cmd, args, opts);
+            };
+            const report = await runDoctorChecks(cwd, undefined, { exec, codexConfigPath: null });
+            expect(cmCalls.filter((a) => a[0] === '--version')).toHaveLength(1);
+            const context = cmCalls.filter((a) => a[0] === 'context');
+            expect(context).toEqual([['context', 'flywheel-rescue', '--json', '--history', '0']]);
+            expect(report.checks.find((c) => c.name === 'cm_binary').severity).toBe('green');
+            expect(report.checks.find((c) => c.name === 'rescues_last_30d').message).toBe('0 codex rescues in last 30d');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
 //# sourceMappingURL=doctor.test.js.map

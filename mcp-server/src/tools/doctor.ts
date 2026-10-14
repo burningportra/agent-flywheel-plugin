@@ -13,10 +13,12 @@
  */
 
 import { statSync, readdirSync, readFileSync, realpathSync, existsSync, type Dirent } from 'node:fs';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newestMtime } from './shared.js';
+import { writeAtomic } from '../atomic-write.js';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
@@ -58,6 +60,9 @@ const PER_CHECK_TIMEOUT_MS = 2000;
 const TOTAL_SWEEP_BUDGET_MS = 10_000;
 /** Max concurrent child processes. */
 const MAX_CONCURRENCY = 6;
+/** Backstop TTL for cached probe output. The binary-identity key catches
+ * reinstalls; the TTL covers shims whose file doesn't change on upgrade. */
+const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Worktree dirs older than this and already merged to main are stale. */
 const STALE_WORKTREE_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -177,6 +182,10 @@ export interface DoctorOptions {
    * the exec probe entirely — pass `null` to assert the "no version output"
    * branch, or a string to feed the parser directly. */
   geminiVersionOutput?: string | null;
+  /** Override the on-disk probe cache (`gemini --version` output keyed on the
+   * binary's identity). Defaults to
+   * `$XDG_CACHE_HOME/agent-flywheel/doctor-probes.json`; `null` disables it. */
+  probeCachePath?: string | null;
   /** Override path to the marketplace plugin manifest (tests). Defaults to
    * `<cwd>/.claude-plugin/plugin.json`. Pass `null` to treat as missing. */
   marketplaceManifestPath?: string | null;
@@ -202,6 +211,8 @@ export async function runDoctorChecks(
   const totalBudgetMs = options.totalBudgetMs ?? TOTAL_SWEEP_BUDGET_MS;
   const maxConcurrency = options.maxConcurrency ?? MAX_CONCURRENCY;
   const exec = options.exec ?? makeExec(cwd);
+  const probeCachePath =
+    options.probeCachePath === undefined ? defaultProbeCachePath() : options.probeCachePath;
 
   const startMs = now();
   const timestamp = new Date(startMs).toISOString();
@@ -250,13 +261,21 @@ export async function runDoctorChecks(
     }),
   );
 
+  // cm_binary and rescues_last_30d both need `cm --version` (~100 ms); run it
+  // once per sweep.
+  let cmVersionPromise: ReturnType<ExecFn> | undefined;
+  const cmExec: ExecFn = (cmd, args, opts) =>
+    cmd === 'cm' && args.length === 1 && args[0] === '--version'
+      ? (cmVersionPromise ??= exec(cmd, args, opts))
+      : exec(cmd, args, opts);
+
   const checkFns: Array<() => Promise<DoctorCheck>> = [
     () => checkMcpConnectivity(cwd, combined, now),
     () => checkAgentMailLiveness(exec, cwd, combined, perCheckTimeoutMs, now),
     () => checkBrBinary(exec, cwd, combined, perCheckTimeoutMs, now),
     () => checkBvBinary(exec, cwd, combined, perCheckTimeoutMs, now),
     () => checkNtmBinary(exec, cwd, combined, perCheckTimeoutMs, now),
-    () => checkCmBinary(exec, cwd, combined, perCheckTimeoutMs, now),
+    () => checkCmBinary(cmExec, cwd, combined, perCheckTimeoutMs, now),
     () => checkNodeVersion(exec, cwd, combined, perCheckTimeoutMs, now),
     () => checkGitStatus(exec, cwd, combined, perCheckTimeoutMs, now),
     () => checkDistDrift(cwd, combined, now),
@@ -283,8 +302,9 @@ export async function runDoctorChecks(
         now,
         swarmCapsPromise,
         options.geminiVersionOutput,
+        probeCachePath,
       ),
-    () => checkRescuesLast30d(exec, cwd, combined, perCheckTimeoutMs, now),
+    () => checkRescuesLast30d(cmExec, cwd, combined, perCheckTimeoutMs, now),
     () =>
       checkVersionTriple(cwd, combined, now, {
         installedManifestPath: options.installedPluginManifestPath,
@@ -1393,6 +1413,7 @@ async function checkGeminiModelCompat(
   now: () => number,
   capsPromise: Promise<CapabilitiesMap>,
   geminiVersionOutput: string | null | undefined,
+  probeCachePath: string | null,
 ): Promise<DoctorCheck> {
   const start = now();
   if (signal.aborted) return abortedCheck('gemini_model_compat');
@@ -1418,16 +1439,36 @@ async function checkGeminiModelCompat(
           durationMs: now() - start,
         };
       }
-      const res = await exec('gemini', ['--version'], { timeout, cwd, signal });
-      if (res.code !== 0) {
-        return {
-          name: 'gemini_model_compat',
-          severity: 'green',
-          message: `gemini --version exited ${res.code} — model not determinable (advisory)`,
-          durationMs: now() - start,
-        };
+      // `gemini --version` boots a ~850 ms node bundle, and its output only
+      // changes when the binary does, so reuse it while the binary is unchanged.
+      const identity =
+        probeCachePath && caps.gemini.path ? await binaryIdentity(caps.gemini.path) : null;
+      const entries = identity && probeCachePath ? await readProbeCache(probeCachePath) : {};
+      const hit = entries[GEMINI_VERSION_CACHE_KEY];
+      const age = hit ? now() - hit.cachedAt : -1;
+      if (identity && hit?.identity === identity && age >= 0 && age < PROBE_CACHE_TTL_MS) {
+        output = hit.output;
+      } else {
+        const res = await exec('gemini', ['--version'], { timeout, cwd, signal });
+        if (res.code !== 0) {
+          return {
+            name: 'gemini_model_compat',
+            severity: 'green',
+            message: `gemini --version exited ${res.code} — model not determinable (advisory)`,
+            durationMs: now() - start,
+          };
+        }
+        output = `${res.stdout}\n${res.stderr}`;
+        if (identity && probeCachePath) {
+          const file: ProbeCacheFile = {
+            version: 1,
+            entries: { ...entries, [GEMINI_VERSION_CACHE_KEY]: { identity, output, cachedAt: now() } },
+          };
+          await writeAtomic(probeCachePath, JSON.stringify(file)).catch((err: unknown) => {
+            log.debug('probe cache write failed', { path: probeCachePath, err: errMsg(err) });
+          });
+        }
       }
-      output = `${res.stdout}\n${res.stderr}`;
     }
     const model = parseGeminiModelFromOutput(output);
     if (model === null) {
@@ -1463,6 +1504,52 @@ async function checkGeminiModelCompat(
   }
 }
 
+const GEMINI_VERSION_CACHE_KEY = 'gemini --version';
+
+interface ProbeCacheEntry {
+  identity: string;
+  output: string;
+  cachedAt: number;
+}
+
+interface ProbeCacheFile {
+  version: 1;
+  entries: Record<string, ProbeCacheEntry>;
+}
+
+function defaultProbeCachePath(): string {
+  const base = process.env.XDG_CACHE_HOME || join(homedir(), '.cache');
+  return join(base, 'agent-flywheel', 'doctor-probes.json');
+}
+
+/** Identity of the file a PATH entry resolves to; a reinstall changes the
+ * inode and ctime even when npm preserves the tarball's mtime. */
+async function binaryIdentity(binPath: string): Promise<string | null> {
+  try {
+    const real = await realpath(binPath);
+    const st = await stat(real);
+    return `${real}:${st.ino}:${st.size}:${st.mtimeMs}:${st.ctimeMs}`;
+  } catch {
+    return null;
+  }
+}
+
+async function readProbeCache(cachePath: string): Promise<Record<string, ProbeCacheEntry>> {
+  try {
+    const parsed = JSON.parse(await readFile(cachePath, 'utf8')) as Partial<ProbeCacheFile>;
+    if (parsed.version !== 1 || typeof parsed.entries !== 'object' || parsed.entries === null) return {};
+    const entries: Record<string, ProbeCacheEntry> = {};
+    for (const [key, e] of Object.entries(parsed.entries)) {
+      if (typeof e?.identity === 'string' && typeof e.output === 'string' && typeof e.cachedAt === 'number') {
+        entries[key] = e;
+      }
+    }
+    return entries;
+  } catch {
+    return {};
+  }
+}
+
 async function checkRescuesLast30d(
   exec: ExecFn,
   cwd: string,
@@ -1473,6 +1560,20 @@ async function checkRescuesLast30d(
   const start = now();
   if (signal.aborted) return abortedCheck('rescues_last_30d');
   try {
+    // `cm context` returns matching bullets as JSON; we count entries whose
+    // body carries the canonical `flywheel-rescue` prefix AND whose embedded
+    // `ts=` ISO timestamp falls within the last 30 days. Rescue events are
+    // stored as playbook bullets (flywheel_memory → `cm add`), so the cass
+    // history search (0.4–5 s, and the cause of intermittent 2 s timeouts)
+    // would only re-find the same events in session transcripts:
+    // `--history 0` skips it. Start it alongside the availability probe; its
+    // result is used only when cm turns out to be available.
+    const contextPromise = exec(
+      'cm',
+      ['context', 'flywheel-rescue', '--json', '--history', '0'],
+      { timeout, cwd, signal },
+    );
+    contextPromise.catch(() => {});
     // First confirm cm is available — synthesis is best-effort.
     const probe = await exec('cm', ['--version'], { timeout, cwd, signal });
     if (probe.code !== 0) {
@@ -1497,17 +1598,10 @@ async function checkRescuesLast30d(
         durationMs: now() - start,
       };
     }
-    // `cm context` returns matching bullets as JSON; we count entries whose
-    // body carries the canonical `flywheel-rescue` prefix AND whose embedded
-    // `ts=` ISO timestamp falls within the last 30 days.
-    const res = await exec('cm', ['context', 'flywheel-rescue', '--json'], {
-      timeout,
-      cwd,
-      signal,
-    });
+    const res = await contextPromise;
     if (res.code !== 0) {
       log.debug('rescues_last_30d cm context failed', {
-        command: 'cm context flywheel-rescue --json',
+        command: 'cm context flywheel-rescue --json --history 0',
         exitCode: res.code,
         stderr: res.stderr.trim(),
       });
@@ -1531,7 +1625,7 @@ async function checkRescuesLast30d(
     return rescueCountCheck(count, now() - start);
   } catch (err) {
     log.debug('rescues_last_30d probe threw', {
-      command: 'cm context flywheel-rescue --json',
+      command: 'cm context flywheel-rescue --json --history 0',
       error: errMsg(err),
     });
     const fallback = await localRescueCountFallback(cwd, now());
