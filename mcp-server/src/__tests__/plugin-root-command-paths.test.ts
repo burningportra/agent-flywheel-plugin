@@ -77,6 +77,9 @@ function markdownCommands(markdown: string): MarkdownCommand[] {
 function repoRelativePluginPath(command: MarkdownCommand): string | undefined {
   const normalized = command.text.replace(/^\$\s+/, "").trim();
   const beginsWithRunner = /^(?:sh|bash|node|tsx|npx|ls)\s+/.test(normalized);
+  const changesIntoPluginDirectory = /^cd\s+((?:\.\/)?(?:scripts|mcp-server))(?:\/|\s|$)/.exec(
+    normalized,
+  )?.[1];
   const directPath = /^(?:["'])?((?:\.\/)?(?:scripts|mcp-server)\/[^\s"'`|;]+)/.exec(
     normalized,
   )?.[1];
@@ -85,6 +88,7 @@ function repoRelativePluginPath(command: MarkdownCommand): string | undefined {
   )?.[1];
 
   if (beginsWithRunner) return embeddedPath;
+  if (changesIntoPluginDirectory) return changesIntoPluginDirectory;
   if (!directPath) return undefined;
   if (command.kind === "inline" && !/\s/.test(normalized)) {
     const standalone = command.sourceLine.trim() === `\`${command.text}\``;
@@ -147,6 +151,7 @@ describe("plugin-root command paths", () => {
       "\"scripts/build-mutex.sh\" rch test",
       "./scripts/missing.sh --check",
       "mcp-server/dist/server.js --version",
+      "cd mcp-server && npm run bead-viewer",
     ];
 
     for (const command of commands) {
