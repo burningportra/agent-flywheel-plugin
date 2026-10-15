@@ -265,10 +265,6 @@
       "reason": "The existing coordinator wake-loop prose is semantic v2 debt; exact paths and counts prevent this allowance from admitting added calls.",
       "allowedOccurrences": [
         {
-          "path": "commands/flywheel-swarm.md",
-          "count": 1
-        },
-        {
           "path": "skills/flywheel-swarm/SKILL.md",
           "count": 1
         },
@@ -305,18 +301,6 @@
       "reason": "TaskUpdate is outside the agreed task-lifecycle report regex and remains narrowly inventoried v2 debt.",
       "allowedOccurrences": [
         {
-          "path": "commands/flywheel-fix.md",
-          "count": 1
-        },
-        {
-          "path": "commands/flywheel-rollback.md",
-          "count": 1
-        },
-        {
-          "path": "commands/flywheel-swarm.md",
-          "count": 1
-        },
-        {
           "path": "skills/flywheel-fix/SKILL.md",
           "count": 1
         },
@@ -334,12 +318,8 @@
       "token": "ToolSearch",
       "classification": "WARN",
       "pattern": "\\bToolSearch\\s*\\(",
-      "reason": "The setup guidance retains two reviewed Claude capability-probe calls pending v2 translation.",
+      "reason": "The setup guidance retains one reviewed Claude capability-probe call pending v2 translation.",
       "allowedOccurrences": [
-        {
-          "path": "commands/flywheel-setup.md",
-          "count": 1
-        },
         {
           "path": "skills/flywheel-setup/SKILL.md",
           "count": 1
