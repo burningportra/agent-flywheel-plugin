@@ -3,7 +3,8 @@ import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import type { Scenario, ScriptedAnswer, TextRecord, ToolUseRecord } from "./types.js";
+import { pickAnswer } from "./pick.js";
+import type { Scenario, TextRecord, ToolUseRecord } from "./types.js";
 
 export type RunOutcome = {
   toolUses: ToolUseRecord[];
@@ -20,6 +21,35 @@ export type RunOutcome = {
   error?: string;
   timed_out: boolean;
   plugin_check: PluginCheck;
+  /**
+   * True when the first Skill(agent-flywheel:*) tool_result contains
+   * "already loaded above". That dedup message means the skill body never
+   * arrived and the model is on the recovery path — the scenario cannot be a
+   * valid baseline. See agent-flywheel-plugin-m66.1.5.
+   */
+  skill_stub_detected: boolean;
+  /**
+   * Scripted-answer events: unmatched targets (ruleTarget matched no offered
+   * label) and default-fallback picks (no rule by header; options[0] used).
+   * The caller surfaces unmatched entries as scenario violations so a harness
+   * miss cannot pass as a skill result.
+   */
+  pick_events: Array<
+    | {
+        kind: "unmatched";
+        turn: number;
+        ruleTarget: string;
+        header: string;
+        labels: string[];
+      }
+    | {
+        kind: "default";
+        turn: number;
+        header: string;
+        label: string;
+        labels: string[];
+      }
+  >;
 };
 
 export type PluginCheck =
@@ -33,22 +63,17 @@ export type PluginCheck =
     }
   | { kind: "no-init" };
 
-const pickAnswer = (
-  header: string,
-  question: string,
-  options: Array<Record<string, unknown>>,
-  scripted: ScriptedAnswer[],
-): string => {
-  const haystack = `${header}\n${question}`.toLowerCase();
-  const rule = scripted.find((s) => haystack.includes(s.headerContains.toLowerCase()));
-  const target = (rule?.option ?? options[0]?.["label"] ?? "").toString();
-  const match = options.find((o) =>
-    String(o["label"] ?? "")
-      .toLowerCase()
-      .includes(target.toLowerCase()),
-  );
-  return match ? String(match["label"]) : target;
-};
+/**
+ * Guard against the pointer-command dedup defect filed as
+ * `agent-flywheel-plugin-m66.1.5`. When `commands/start.md` and
+ * `skills/start/SKILL.md` both register as `agent-flywheel:start`, the harness
+ * answers the Skill() call with "Skill /agent-flywheel:start is already loaded
+ * above; instructions unchanged" and the SKILL.md body never arrives. The eval
+ * must not treat the resulting recovery-path run as a valid baseline.
+ */
+export const SKILL_STUB_MARKER = "already loaded above";
+
+// pickAnswer moved to ./pick.ts (header-first matching + unmatched failure).
 
 export async function runScenario(opts: {
   scenario: Scenario;
@@ -72,6 +97,9 @@ export async function runScenario(opts: {
   let timedOut = false;
   let errorMsg: string | undefined;
   let pluginCheck: PluginCheck = { kind: "no-init" };
+  let skillStubDetected = false;
+  let sawSkillToolUse = false;
+  const pickEvents: RunOutcome["pick_events"] = [];
   const usage = {
     input_tokens: 0,
     output_tokens: 0,
@@ -95,17 +123,46 @@ export async function runScenario(opts: {
     if (toolName === "AskUserQuestion") {
       const questions = (input["questions"] as Array<Record<string, unknown>>) || [];
       const answers: Record<string, string> = {};
+      const picks: Array<{ header: string; outcome: ReturnType<typeof pickAnswer> }> = [];
       for (const q of questions) {
         const header = String(q["header"] ?? "");
         const questionText = String(q["question"] ?? "");
         const options = (q["options"] as Array<Record<string, unknown>>) || [];
-        answers[questionText] = pickAnswer(header, questionText, options, scenario.scripted);
+        const outcome = pickAnswer(header, options, scenario.scripted);
+        picks.push({ header, outcome });
+
+        if (outcome.kind === "matched" || outcome.kind === "default") {
+          answers[questionText] = outcome.label;
+        } else {
+          // Unmatched scripted target — do NOT inject free text that would
+          // read as user consent. Pick options[0] as a terminal-safe default,
+          // record the violation, and let the scenario's assert() surface it.
+          const fallback = options[0] ? String(options[0]["label"] ?? "") : "";
+          answers[questionText] = fallback;
+          pickEvents.push({
+            kind: "unmatched",
+            turn: turnCounter + 1,
+            ruleTarget: outcome.ruleTarget,
+            header: outcome.header,
+            labels: outcome.labels,
+          });
+        }
+        if (outcome.kind === "default") {
+          pickEvents.push({
+            kind: "default",
+            turn: turnCounter + 1,
+            header: outcome.header,
+            label: outcome.label,
+            labels: outcome.labels,
+          });
+        }
       }
       jsonl.write(
         `${JSON.stringify({
           ts: new Date().toISOString(),
           event: "canUseTool.injectAnswers",
           answers,
+          picks,
         })}\n`,
       );
       return { behavior: "allow", updatedInput: { ...input, answers } };
@@ -173,13 +230,22 @@ export async function runScenario(opts: {
         for (const block of msg.message.content) {
           const b = block as unknown as Record<string, unknown>;
           if (b["type"] === "tool_use") {
+            const toolName = String(b["name"]);
+            const input = (b["input"] as Record<string, unknown>) ?? {};
             toolUses.push({
               ts: new Date().toISOString(),
               turn: turnCounter,
               tool_use_id: String(b["id"]),
-              tool_name: String(b["name"]),
-              input: (b["input"] as Record<string, unknown>) ?? {},
+              tool_name: toolName,
+              input,
             });
+            if (
+              toolName === "Skill" &&
+              typeof input["skill"] === "string" &&
+              input["skill"].startsWith("agent-flywheel:")
+            ) {
+              sawSkillToolUse = true;
+            }
           } else if (b["type"] === "text") {
             texts.push({
               ts: new Date().toISOString(),
@@ -196,6 +262,29 @@ export async function runScenario(opts: {
           usage.cache_creation_input_tokens += u["cache_creation_input_tokens"] ?? 0;
         }
         if (msg.message.stop_reason) stopReason = msg.message.stop_reason;
+      } else if (
+        msg.type === "user" &&
+        msg.message?.content &&
+        sawSkillToolUse &&
+        !skillStubDetected
+      ) {
+        // Inspect the Skill() tool_result for the pointer-command dedup
+        // marker. We only care about the FIRST Skill result; sawSkillToolUse
+        // flips back to false after a check so later Skill calls (e.g. for a
+        // different skill) don't re-trigger.
+        for (const block of msg.message.content) {
+          const b = block as unknown as Record<string, unknown>;
+          if (b["type"] === "tool_result") {
+            const content = b["content"];
+            const stringified = Array.isArray(content)
+              ? content.map((c) => JSON.stringify(c)).join("\n")
+              : JSON.stringify(content);
+            if (stringified.includes(SKILL_STUB_MARKER)) {
+              skillStubDetected = true;
+            }
+            sawSkillToolUse = false;
+          }
+        }
       } else if (msg.type === "result") {
         const r = msg as unknown as {
           subtype?: string;
@@ -224,5 +313,7 @@ export async function runScenario(opts: {
     error: errorMsg,
     timed_out: timedOut,
     plugin_check: pluginCheck,
+    skill_stub_detected: skillStubDetected,
+    pick_events: pickEvents,
   };
 }

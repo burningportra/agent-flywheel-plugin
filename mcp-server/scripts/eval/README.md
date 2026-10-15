@@ -102,6 +102,35 @@ reproduce. If Agent Mail is down when the eval runs, scenarios 2–4 degrade
 through the orchestrator's own fallback paths and the failures surface as
 explicit baseline violations.
 
+## Goal stability
+
+Each scenario's goal names a synthetic "add a new `flywheel_*` MCP tool"
+feature that **no D or E bead in `br list` is landing**. This keeps the goal
+meaning the same at 768345f, at HEAD, and at every future compression-pass
+sha — Sonnet can't short-circuit on an "already present" observation and the
+scripted-answer matcher sees the menus the skill prescribes rather than
+ad-hoc "Scope" questions. If you add a scenario or change a goal, pick a
+tool name that is not present in `mcp-server/src/tools/` and does not
+collide with any slug another agent might reserve on
+`docs/brainstorms/<slug>-<today>.md`.
+
+## Skill-tool stub note
+
+When `/agent-flywheel:start` expands to `commands/start.md`, that command's
+first `Skill(skill: "agent-flywheel:start")` call is deduped by the harness
+with `"Skill /agent-flywheel:start is already loaded above; instructions
+unchanged."` and the SKILL.md body never arrives (filed as
+`agent-flywheel-plugin-m66.1.5`). The scenario then rides on the model's
+recovery path (reading SKILL.md from disk, or calling
+`flywheel_get_skill`) instead of the real /start flow, which produces
+unstable, misleading baselines.
+
+The harness has a fail-fast guard for this: `scripts/eval/stream.ts` watches
+every `Skill(agent-flywheel:*)` tool_result for `"already loaded above"` and
+sets `skill_stub_detected: true` on the outcome. `run-eval.ts` surfaces that
+as a scenario violation naming m66.1.5 so the run cannot pass. Record new
+baselines only at a sha that already contains the m66.1.5 fix.
+
 ## CI
 
 Intentionally omitted. This eval spawns a model and spends real money per run

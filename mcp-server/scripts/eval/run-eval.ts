@@ -188,6 +188,19 @@ async function runOne(
       violations.push("no system init message received; plugin path unverified");
     }
   }
+  if (outcome.skill_stub_detected) {
+    violations.push(
+      "harness: Skill(agent-flywheel:*) tool_result contained \"already loaded above\" — pointer-command dedup kept the skill body from arriving (see agent-flywheel-plugin-m66.1.5). This run is on the recovery path, not /start; discard it.",
+    );
+  }
+  for (const ev of outcome.pick_events) {
+    if (ev.kind === "unmatched") {
+      violations.push(
+        `harness: scripted target "${ev.ruleTarget}" matched no option at header "${ev.header}" on turn ${ev.turn}; offered [${ev.labels.join(", ")}]`,
+      );
+    }
+    // "default" picks are logged in JSONL but not scenario-fatal.
+  }
   if (outcome.error) violations.push(`sdk error: ${outcome.error}`);
   if (outcome.timed_out) violations.push("eval timeout before completion");
 
