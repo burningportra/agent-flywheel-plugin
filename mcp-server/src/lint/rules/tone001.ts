@@ -119,7 +119,7 @@ function universalRuleRanges(doc: ParsedDocument): Array<{ start: number; end: n
   return ranges;
 }
 
-function proseFrom(doc: ParsedDocument): string {
+export function proseFrom(doc: ParsedDocument): string {
   const codeRanges = doc.fences
     .map((f) => ({
       start: f.span.start.offset ?? 0,

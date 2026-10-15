@@ -18,6 +18,7 @@
     "lint:skill": "node dist/scripts/lint-skill-dir.js --dir ../skills/start --baseline .lintskill-baseline.json",
     "lint:skill:json": "tsx scripts/lint-skill-dir.ts --dir ../skills/start --ci --format json",
     "lint:skill:update-baseline": "tsx scripts/lint-skill-dir.ts --dir ../skills/start --update-baseline --baseline .lintskill-baseline.json",
+    "lint:skill:update-tone-baseline": "tsx scripts/update-tone-baseline.ts",
     "lint:skill:update-manifest": "tsx scripts/lint-skill.ts --update-manifest",
     "eval:start": "tsx scripts/eval/run-eval.ts",
     "version-sync": "node scripts/version-sync.mjs",
