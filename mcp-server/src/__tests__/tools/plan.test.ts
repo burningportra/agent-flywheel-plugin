@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPlan } from '../../tools/plan.js';
@@ -324,36 +324,31 @@ describe('runPlan', () => {
       });
     });
 
-    it('returns deep_plan_all_failed when planContent contains the failure sentinel', async () => {
-      const { ctx } = makeCtx({}, tmpDir);
+    it.each([
+      [
+        'a quoted no-output message',
+        '# Plan\n\nThe incident report quoted `(No planner outputs provided.)` as historical context.',
+      ],
+      [
+        'a leading agent transcript message',
+        '(AGENT RETURNED EMPTY — copied from a historical transcript)\n\n# Plan\n\nImplement the cache.',
+      ],
+    ])('registers planContent containing %s', async (_label, planContent) => {
+      const { ctx, state } = makeCtx({}, tmpDir);
 
-      const result = await runPlan(ctx, { cwd: tmpDir, planContent: '(No planner outputs provided.)' });
+      const result = await runPlan(ctx, { cwd: tmpDir, planContent });
 
-      expect(result.isError).toBe(true);
+      expect(result.isError).toBeUndefined();
       expect(result.structuredContent).toMatchObject({
-        tool: 'flywheel_plan',
-        status: 'error',
-        data: {
-          kind: 'error',
-          error: {
-            code: 'deep_plan_all_failed',
-            hint: 'Retry with mode=standard as fallback.',
-          },
-        },
+        status: 'ok',
+        phase: 'awaiting_plan_approval',
+        data: { kind: 'plan_registered', source: 'inline_plan_content' },
       });
-    });
-
-    it('returns empty_plan when planContent is an agent failure sentinel', async () => {
-      const { ctx } = makeCtx({}, tmpDir);
-
-      const result = await runPlan(ctx, { cwd: tmpDir, planContent: '(AGENT RETURNED EMPTY — correctness planner)' });
-
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toMatchObject({
-        tool: 'flywheel_plan',
-        status: 'error',
-        data: { kind: 'error', error: { code: 'empty_plan' } },
-      });
+      expect(state.phase).toBe('awaiting_plan_approval');
+      const planDocument = state.planDocument;
+      expect(planDocument).toMatch(/docs\/plans\/.*-synthesized\.md$/);
+      if (!planDocument) throw new Error('expected runPlan to register a plan document');
+      expect(readFileSync(join(tmpDir, planDocument), 'utf8')).toBe(planContent);
     });
 
     it('restores planDocument when saveState returns false', async () => {
