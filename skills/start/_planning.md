@@ -418,76 +418,23 @@ Use `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition` to block u
    ntm --robot-snapshot --robot-format=toon      # note the returned `cursor`
    ```
 
-   **Tend — event-driven, not timer-driven.** Block on the attention feed until all 3 plans arrive in your inbox. It wakes on real state changes instead of burning cycles on fixed 60-90s polling:
-   ```bash
-   ntm --robot-wait "$SESSION" \
-       --wait-until=attention,action_required,mail_ack_required \
-       --timeout=90s
-   ```
+   **Tend.** Follow the `/vibing-with-ntm` orchestrator decision tree for nudge escalation, stuck-pane ladder, rate-limit probe, context-handoff and convergence termination. The flywheel-specific facts the loop needs on top of that:
 
-   **On each wake, read the live per-pane truth (run all 4 — inbox is mandatory, not optional):**
+   - Block the loop on `ntm --robot-wait "$SESSION" --wait-until=attention,action_required,mail_ack_required --timeout=90s`. On each wake, cross-reference `ntm --robot-is-working="$SESSION"` with your Agent Mail inbox (`fetch_inbox` + `mark_message_read`); the plan arrives as a `[plan] <perspective> delivered` subject whose body carries the disk path.
+   - Never use `ntm status` (output is stale), `ntm send` (hits the CASS-dedup prompt and silently aborts) or `ntm view` (not a flag). Use `--robot-is-working`, `--robot-tail`, `--robot-send`.
+   - Print one tick line only when state changes — pane status, inbox count, or plans-received count — so the user can see the orchestrator is alive without the scroll-spam of fixed-interval ticks.
+   - About 60 s after spawn, confirm each pane registered an Agent Mail identity (`list_window_identities` or `list_contacts`). A missing identity means the pane skipped `macro_start_session`; nudge it with `--robot-send` so the identity bootstraps.
+   - Session-name shape: pass the project as the positional arg and the purpose as `--label` (e.g. `ntm spawn "$NTM_PROJECT" --label deep-plan-<slug>`). A bare purpose as session name would resolve against `projects_base` and either fail or land in the wrong cwd.
 
-   1. `ntm --robot-is-working="$SESSION"` — `working | idle | rate_limited | error | context_low`
-   2. `ntm --robot-agent-health="$SESSION"` — OAuth, quota, context-window, account state
-   3. `ntm --robot-tail="$SESSION" --panes=<N> --lines=50` — sample the actual pane buffer for any pane flagged idle/error
-   4. **Inbox poll (MANDATORY — this is how you observe planner deliveries):**
-      ```
-      fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false, status: "unread", limit: 50)
-      ```
-      For each new message:
-      - `mark_message_read(message_id: <id>)` so the next poll only shows fresh traffic.
-      - If `subject` matches `[plan] <perspective> delivered`, fetch via `fetch_topic` to get the disk path, read the plan file with the Read tool, and tick that planner off the wave.
-      - If `subject` matches `[plan] <perspective> blocker`, capture the blocker text and decide: nudge for clarification, restart the pane, or skip and continue with N-1 plans.
-
-   **Tick log (MANDATORY — print this to the user every wake so they have proof of monitoring).** After running the 4 reads above, emit ONE compact line of plain text in the chat (NOT a tool result, actual user-facing output):
+   **If NTM is unavailable** (fallback): spawn each perspective as a background `Agent(...)` with `run_in_background: true`, save the returned task id, and have each one write to `docs/plans/<date>-<perspective>.md` and mail the path back. Force-stop any task that stops responding.
 
    ```
-   tick #<N> @ <HH:MM:SS> — panes: <W working / I idle / R rate-limited> · inbox: <K new> [cc delivered docs/plans/…-correctness.md, gmi started] · plans: <M of 3 received>
+   Agent(model: "opus",    name: "correctness-planner", team_name: "<team>", run_in_background: true, prompt: "...")
+   Agent(model: "sonnet",  name: "ergonomics-planner",  team_name: "<team>", run_in_background: true, prompt: "...")
+   Agent(subagent_type: "codex:codex-rescue", name: "robustness-planner", team_name: "<team>", run_in_background: true, prompt: "...")
    ```
 
-   Skip ticks where nothing changed (don't spam), but emit at least one line every 3 ticks so the user knows the orchestrator is alive. If the inbox count is `0 new` for 3 consecutive ticks AND no panes are `working`, suspect Agent Mail breakage — call `health_check` on the agent-mail server before continuing the loop.
-
-   If the event cursor expires, re-run `ntm --robot-snapshot` and continue.
-
-   **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
-   1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per planner pane. A missing identity means the agent skipped `macro_start_session`.
-   2. On any missing identity, nudge immediately (use `--robot-send` to dodge CASS dedup blocking):
-      ```bash
-      ntm --robot-send="$SESSION" --panes=<pane> --msg="Before anything else, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot collect your plan otherwise."
-      ```
-   3. If the agent has an identity but hasn't sent a message in >3 min, treat as idle and start the nudge escalation below.
-
-   **Nudge escalation per idle pane.** Cross-reference: this is the [orchestrator decision tree from `/vibing-with-ntm`](references/vibing-with-ntm/SKILL.md#orchestrator-decision-tree) — load that skill if you need full operator-card detail (OC-001 rate-limit probe, OC-003 stuck-pane ladder, OC-009 context handoff, OC-016 convergence termination).
-
-   "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 3 min. Treat `rate_limited` and `context_low` as separate paths, NOT idle:
-   - `rate_limited` → probe reality (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail="$SESSION" --panes=<pane> --lines=10`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`.
-   - `context_low` → restart the pane on a fresh account: `ntm --robot-restart-pane="$SESSION" --panes=<N>` with a re-dispatch prompt.
-
-   For a genuinely idle pane (use `--robot-send`, NOT `ntm send` — see CASS-dedup note above):
-   - Nudge 1: `ntm --robot-send="$SESSION" --panes=<pane> --msg="Your plan is needed — deliver the file path to <coordinator> via Agent Mail."`
-   - Nudge 2 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Still waiting on your <perspective> plan. Report status and any blockers."`
-   - Nudge 3 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Final nudge — deliver now or I proceed to synthesis without you."`
-   - After 3 nudges AND identical `--robot-tail` for ≥3 ticks, the pane is wedged. Climb the stuck-pane ladder: `--robot-smart-restart` → `--robot-smart-restart --hard-kill` → `--robot-restart-pane`. If the restart doesn't recover the planner within one more tick, mark it as failed and continue to synthesis with the plans you have (2 is usable; 1 is a degraded-warning case). Do NOT block the flywheel indefinitely on a stuck planner.
-
-   **Swarm-wide convergence stop.** If `ntm --robot-wait` returns no new attention events for 2 consecutive cycles AND no planners delivered AND `docs/plans/<date>-*.md` file sizes are unchanged across both cycles: the swarm is stuck on prose-without-output. Dispatch one OC-004 ship-or-surface nudge (see `/vibing-with-ntm` PROMPTS.md). If still no progress on the next cycle, hard-stop via `ntm swarm stop "$SESSION"` and proceed to synthesis with whatever plans landed.
-
-   ⚠ Do NOT use `ntm spawn deep-plan-<slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and a `deep-plan-<slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
-
-   **If NTM is unavailable** (fallback): Use the Agent tool with `team_name` set and `run_in_background: true` so they get task IDs (required for `TaskStop` if they become unresponsive):
-   - `Agent(model: "opus", name: "correctness-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
-   - `Agent(model: "sonnet", name: "ergonomics-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
-   - `Agent(subagent_type: "codex:codex-rescue", name: "robustness-planner", team_name: "<team>", run_in_background: true, prompt: "...")`
-
-   **Save the task ID returned by each Agent call** — you'll need them to force-stop unresponsive agents via `TaskStop(task_id: "<id>")`.
-
-   Each agent's prompt MUST include:
-   - Instructions to call `macro_start_session` first (same `human_key`, their model, their task)
-   - Their focused planning perspective (correctness / ergonomics / robustness)
-   - Full repo context (path, stack, goal, recent commits, known bugs)
-   - **CASS context**: Query `flywheel_memory` with `query: "architecture planning decisions <goal>"` and include the top learnings in the agent prompt as a "Prior Session Context" section. This prevents agents from repeating past mistakes or reinventing prior decisions.
-   - Instruction to **write their plan to disk**: `docs/plans/<date>-<perspective>.md` (use the Write tool — do NOT send large plan text through Agent Mail message body)
-   - Instruction to send YOU just the file path via `send_message` with subject `"[deep-plan] <perspective> plan"` once written
-   - Instruction to message their team lead when done
+   Each prompt tells the planner to call `macro_start_session` first, read the goal + repo context + relevant `flywheel_memory` entries, write `docs/plans/<date>-<perspective>.md` with the Write tool (not Agent Mail body), and `send_message` the path back under subject `[deep-plan] <perspective> plan`. If a task misses two consecutive nudges, call `TaskStop(task_id: "<id>")` and `retire_agent(project_key: cwd, agent_name: "<their-agent-mail-name>")` so the team lead can proceed with the plans that landed.
 
 4. **Monitor and nudge** — agents go idle between turns (this is normal). If a teammate has gone idle without delivering their plan:
    - Use `SendMessage(to: "<agent-name>", message: "Your plan is needed — please send it to <your-name> via Agent Mail and report back.")` to wake them.
