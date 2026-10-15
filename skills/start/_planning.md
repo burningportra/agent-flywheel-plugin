@@ -848,7 +848,7 @@ Outcome rubric drafted at <rubric-path> with <N> criteria. Source: auto.
 
 - `rubric_synth_invalid` → present a recovery `AskUserQuestion` with options `Re-edit / Regenerate from scratch / Abort` (use the verbatim §"Edit Parse Failure Recovery" copy below). The synthesizer's output didn't match `RubricSchemaV1`; the file was NOT written.
 - `parse_failure` / `cli_failure` → surface the hint and offer `Retry / Skip rubric / Abort` (one auto-retry happens inside the tool already).
-- any other code → fall back to `Skip rubric` and continue to `_beads.md` so the cycle isn't blocked, but record a CASS note via `flywheel_memory(operation: "store", content: "rubric synth failed with <code>; skipped this cycle")`.
+- any other code → call `flywheel_synthesize_rubric({ cwd, action: "skip", reason: "rubric synthesis failed with <code>" })`. Continue to `_beads.md` only when it returns `kind: "rubric_skipped"`; otherwise surface the persistence error and stay at this gate. Record the original failure via `flywheel_memory(operation: "store", content: "rubric synth failed with <code>; skipped this cycle")`.
 
 ### 5.6.5b — Rubric gate
 
@@ -873,7 +873,7 @@ Branch on the answer:
 - **Approve rubric** → set `state.outcomeRubricPath` (already written by the tool) and proceed to `_beads.md` Step 5.5. No tool call needed; the rubric is already on disk.
 - **Edit inline** → run §5.6.5c (edit-inline follow-up) below.
 - **Regenerate** → call `flywheel_synthesize_rubric` with `action: "regenerate"` and `force: true` (overrides the edited-source guard). Re-show the Rubric Gate above when the new draft lands. Loop with a hard cap: after 3 regenerations without an Approve, surface `Skip rubric / Edit inline / Abort` to break out.
-- **Skip rubric** → call `flywheel_synthesize_rubric` is NOT needed here; instead manually update state by re-calling any tool that has the side effect (`flywheel_observe` is idempotent and re-saves state). Practically: print the §"Skipped Notice" sentinel inline, set `state.outcomeGradingSkipped = true` via the existing `state.ts` write path (the orchestrator's saveState fires on the next tool call), and proceed to `_beads.md`. **Do NOT loop the rubric gate after Skip.**
+- **Skip rubric** → call `flywheel_synthesize_rubric({ cwd, action: "skip", planSlug: "<active-plan-slug>", reason: "operator skipped rubric at Step 5.6.5" })`. When it returns `kind: "rubric_skipped"`, print the §"Skipped Notice" sentinel and proceed to `_beads.md`. On an error, surface the persistence hint and stay at this gate. **Do NOT loop the rubric gate after a successful Skip.**
 
 ### 5.6.5c — Edit-inline follow-up
 

@@ -527,7 +527,7 @@ const PRIMARY_TOOLS = [
   {
     name: 'flywheel_synthesize_rubric',
     description:
-      'Synthesize / validate / edit / regenerate the cycle-level outcome rubric at .pi-flywheel/plans/<slug>/rubric.md. Called from skills/start/_planning.md Step 5.6 after the plan-ready gate fires. Discriminator on success: kind ∈ { rubric_synthesized, rubric_preserved (cache hit on edited/user source), rubric_edited (action=edit), rubric_validated (action=validate) }. Errors surface FlywheelErrorCode envelopes (rubric_synth_invalid, rubric_missing, invalid_input).',
+      'Synthesize / validate / edit / regenerate the cycle-level outcome rubric at .pi-flywheel/plans/<slug>/rubric.md, or persist a one-cycle grading skip. Called from skills/start/_planning.md Step 5.6 after the plan-ready gate fires. Discriminator on success: kind ∈ { rubric_synthesized, rubric_preserved (cache hit on edited/user source), rubric_edited (action=edit), rubric_validated (action=validate), rubric_skipped (action=skip) }. Errors surface FlywheelErrorCode envelopes (rubric_synth_invalid, rubric_missing, invalid_input, internal_error on skip persistence failure).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -543,10 +543,10 @@ const PRIMARY_TOOLS = [
         },
         action: {
           type: 'string',
-          enum: ['synthesize', 'validate', 'edit', 'regenerate'],
+          enum: ['synthesize', 'validate', 'edit', 'regenerate', 'skip'],
           default: 'synthesize',
           description:
-            'synthesize=spawn synthesizer (cache + edited-source guard); validate=parse current rubric.md; edit=apply editIntent; regenerate=force=true synth (overrides edited-source guard).',
+            'synthesize=spawn synthesizer (cache + edited-source guard); validate=parse current rubric.md; edit=apply editIntent; regenerate=force=true synth (overrides edited-source guard); skip=persist outcomeGradingSkipped for this cycle.',
         },
         editIntent: {
           type: 'object',
@@ -560,6 +560,10 @@ const PRIMARY_TOOLS = [
         force: {
           type: 'boolean',
           description: 'Bypass the planContentSha cache and the edited-source guard. Equivalent to action=regenerate.',
+        },
+        reason: {
+          type: 'string',
+          description: 'Optional non-empty reason returned with action=skip. The persisted state remains a cycle-wide boolean.',
         },
       },
       required: ['cwd'],

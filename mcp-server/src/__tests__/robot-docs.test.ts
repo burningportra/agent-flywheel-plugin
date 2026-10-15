@@ -62,6 +62,8 @@ describe('flywheel_robot_docs — section coverage', () => {
     expect(md).toContain('/flywheel-swarm-stop --yes');
     expect(md).toContain('/flywheel-refine-skills --yes');
     expect(md).toContain('--dry-run');
+    expect(md).toContain("'skip'");
+    expect(md).toContain('persists the current cycle');
   });
 
   it('capabilities_pointer cross-references flywheel_capabilities', () => {

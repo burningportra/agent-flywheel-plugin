@@ -1,13 +1,14 @@
 /**
  * `flywheel_synthesize_rubric` MCP tool wrapper (T7 / claude-orchestrator-3g9).
  *
- * Calls `synthesizeRubric()` from `outcome-grading.ts` and packages the
- * result into the `version: 1` MCP envelope. Discriminator `kind`:
+ * Routes rubric actions through `synthesizeRubric()` and handles the
+ * cycle-level skip state locally. Discriminator `kind`:
  *
  *   - `rubric_synthesized` — fresh synth (auto, regenerate, or initial run)
  *   - `rubric_preserved`   — existing edited/user rubric was kept (cache hit)
  *   - `rubric_edited`      — operator edit applied via `action: 'edit'`
  *   - `rubric_validated`   — `action: 'validate'` returned the current rubric
+ *   - `rubric_skipped`     — operator disabled outcome grading for this cycle
  *
  * Errors flow through `makeFlywheelErrorResult` so the SKILL.md
  * orchestrator branches on `data.error.code` (FlywheelErrorCode).
@@ -25,7 +26,7 @@ export const SynthesizeRubricInputSchema = z.object({
   planSlug: z.string().min(1).optional(),
   planPath: z.string().min(1).optional(),
   action: z
-    .enum(['synthesize', 'validate', 'edit', 'regenerate'])
+    .enum(['synthesize', 'validate', 'edit', 'regenerate', 'skip'])
     .optional()
     .default('synthesize'),
   editIntent: z
@@ -35,30 +36,89 @@ export const SynthesizeRubricInputSchema = z.object({
     })
     .optional(),
   force: z.boolean().optional(),
+  reason: z.string().trim().min(1).optional(),
 });
 
 export type SynthesizeRubricInput = z.infer<typeof SynthesizeRubricInputSchema>;
 
 type SynthesizeKind = 'rubric_synthesized' | 'rubric_preserved' | 'rubric_edited' | 'rubric_validated';
+type RubricAction = Exclude<SynthesizeRubricInput['action'], 'skip'>;
+
+type SynthesizeData =
+  | {
+      kind: SynthesizeKind;
+      rubricPath: string;
+      rubric: Rubric;
+      source: Rubric['source'] | 'cached';
+    }
+  | {
+      kind: 'rubric_skipped';
+      planSlug?: string;
+      reason: string;
+    };
 
 interface SynthesizeStructured {
   tool: 'flywheel_synthesize_rubric';
   version: 1;
   status: 'ok';
-  data: {
-    kind: SynthesizeKind;
-    rubricPath: string;
-    rubric: Rubric;
-    source: Rubric['source'] | 'cached';
-  };
+  data: SynthesizeData;
   nextStep?: ReturnType<typeof makeNextToolStep>;
 }
 
-function classifyKind(action: SynthesizeRubricInput['action'], result: { source: Rubric['source'] | 'cached' }): SynthesizeKind {
+function classifyKind(action: RubricAction, result: { source: Rubric['source'] | 'cached' }): SynthesizeKind {
   if (action === 'validate') return 'rubric_validated';
   if (action === 'edit') return 'rubric_edited';
   if (result.source === 'cached') return 'rubric_preserved';
   return 'rubric_synthesized';
+}
+
+const DEFAULT_SKIP_REASON = 'operator-skipped-at-plan-approve';
+
+async function skipRubric(
+  ctx: ToolContext,
+  args: SynthesizeRubricInput,
+): Promise<McpToolResult> {
+  const nextState = {
+    ...ctx.state,
+    outcomeGradingSkipped: true,
+  };
+  try {
+    const saved = await ctx.saveState(nextState);
+    if (saved === false) {
+      throw new Error('saveState returned false');
+    }
+  } catch (err: unknown) {
+    throw new FlywheelError({
+      code: 'internal_error',
+      message: 'Could not persist the outcome-grading skip decision.',
+      hint:
+        "Fix checkpoint write permissions or free disk space, then retry flywheel_synthesize_rubric with action='skip'.",
+      cause: errMsg(err),
+      retryable: true,
+    });
+  }
+
+  ctx.state.outcomeGradingSkipped = true;
+  const reason = args.reason ?? DEFAULT_SKIP_REASON;
+  const data: SynthesizeData = {
+    kind: 'rubric_skipped',
+    reason,
+    ...(args.planSlug ? { planSlug: args.planSlug } : {}),
+  };
+  const structured: SynthesizeStructured = {
+    tool: 'flywheel_synthesize_rubric',
+    version: 1,
+    status: 'ok',
+    data,
+    nextStep: makeNextToolStep(
+      'none',
+      'Outcome grading skip persisted for this cycle; continue to bead creation.',
+    ),
+  };
+  return makeToolResult(
+    `Outcome grading skipped for this cycle. Reason: ${reason}.`,
+    structured,
+  );
 }
 
 export async function runSynthesizeRubric(
@@ -73,7 +133,7 @@ export async function runSynthesizeRubric(
     return makeFlywheelErrorResult('flywheel_synthesize_rubric' as never, ctx.state.phase, {
       code: 'invalid_input',
       message: `flywheel_synthesize_rubric: ${issues}`,
-      hint: 'Pass { cwd, action?, planSlug?, planPath?, editIntent?, force? } per the tool inputSchema.',
+      hint: 'Pass { cwd, action?, planSlug?, planPath?, editIntent?, force?, reason? } per the tool inputSchema.',
     });
   }
   const args = parsedInput.data;
@@ -84,15 +144,18 @@ export async function runSynthesizeRubric(
       hint: 'Pass editIntent: { kind, text } when action=edit; otherwise use synthesize / regenerate / validate.',
     });
   }
-  const callArgs: SynthesizeRubricArgs = {
-    cwd: args.cwd,
-    planSlug: args.planSlug,
-    planPath: args.planPath,
-    action: args.action,
-    editIntent: args.editIntent,
-    force: args.force,
-  };
   try {
+    if (args.action === 'skip') {
+      return await skipRubric(ctx, args);
+    }
+    const callArgs: SynthesizeRubricArgs = {
+      cwd: args.cwd,
+      planSlug: args.planSlug,
+      planPath: args.planPath,
+      action: args.action,
+      editIntent: args.editIntent,
+      force: args.force,
+    };
     const result = await synthesizeRubric(ctx, callArgs);
     const kind = classifyKind(args.action, result);
     const text = kind === 'rubric_validated'

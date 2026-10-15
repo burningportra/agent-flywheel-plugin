@@ -144,6 +144,25 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
     expect(summary.optional).toEqual(expect.arrayContaining(['crashed', 'findingCount']));
   });
 
+  it('advertises the rubric skip action and optional reason', () => {
+    const rubricTool = TOOLS.find(
+      (tool) => tool.name === 'flywheel_synthesize_rubric',
+    );
+    if (!rubricTool) {
+      throw new Error('flywheel_synthesize_rubric must be registered');
+    }
+
+    const summary = summarizeTool(rubricTool);
+    expect(summary.enums.action).toEqual([
+      'synthesize',
+      'validate',
+      'edit',
+      'regenerate',
+      'skip',
+    ]);
+    expect(summary.optional).toContain('reason');
+  });
+
   it('dispatches every advertised tool to a registered runner', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'flywheel-registration-'));
     const exec = vi.fn(async () => ({ code: 1, stdout: '', stderr: 'fixture failure' }));
