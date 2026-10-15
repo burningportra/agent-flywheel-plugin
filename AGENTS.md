@@ -99,7 +99,7 @@ Current-tool index (HEAD = v3.20.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_review`** — 5 fresh-eyes reviewers per risky bead, or duel for p0 / security beads. Headless coordinators finish with `action: "report"`, `findingCount`, and `crashed`; clean reports return exit code 0, findings return `review_headless_findings` with `details.exitCode: 1`, and reviewer crashes use exit code 2.
 - **`flywheel_select({ goal })`** — set selected goal and transition to planning phase.
 - **`flywheel_verify_beads`** — verify closed beads have valid completion evidence; reads `.pi-flywheel/completion/<id>.json`.
-- **`flywheel_synthesize_rubric({ action })`** — v3.13.0; synthesize / validate / edit / regenerate the cycle-level outcome rubric at `.pi-flywheel/plans/<slug>/rubric.md`. Called from `_planning.md` Step 5.6.5 after the operator picks Create beads.
+- **`flywheel_synthesize_rubric({ action })`** — v3.13.0; synthesize, validate, edit, or regenerate the cycle-level outcome rubric at `.pi-flywheel/plans/<slug>/rubric.md`. `action: 'skip'` persists the one-cycle grading skip. Called from `_planning.md` Step 5.6.5 after the operator picks Create beads.
 - **`flywheel_grade_outcome`** — v3.13.0; spawn a decorrelated grader (codex primary, fresh-CC fallback), parse the verdict against `GraderVerdictSchemaV1`, persist to `.pi-flywheel/plans/<slug>/grading/iteration-<N>.json`. Called from `_wrapup.md` Step 9.5.0 before commit review.
 - **`flywheel_approve_beads({ action: 'remediate' })`** — v3.13.0 action; create exactly one bead from a failing-criterion verdict using the §"Remediation Bead Template" body. Called once per failing criterion when the operator picks Iterate at the wrap-up verdict gate.
 
@@ -144,7 +144,7 @@ The 2026-05-06 APR-Pro adoption (`05071af`, `docs/research/research-apr-pro-land
 
 The 2026-05-08 outcome-grading cycle (`docs/superpowers/specs/2026-05-08-outcome-grading-design.md`, plan `docs/plans/2026-05-08-outcome-grading-synthesized.md`) ports the Anthropic Managed Agents API's "rubric + decorrelated grader + iteration loop" pattern locally — concepts only; no MA API substrate adopted.
 
-- **`flywheel_synthesize_rubric({ cwd, action?, planSlug?, planPath?, editIntent?, force? })`** — author / validate / edit / regenerate the cycle-level outcome rubric. Writes `.pi-flywheel/plans/<slug>/rubric.md` and a sidecar `.rubric.lock` (planContentSha cache). `action` ∈ `synthesize | validate | edit | regenerate`. Edits are deterministic for `tighten | add | remove`; LLM-mediated for `custom`. Operator-edited rubrics (`source: 'edited' || 'user'`) are never overwritten without `force=true` (R6 mitigation). Discriminated success kinds: `rubric_synthesized | rubric_preserved | rubric_edited | rubric_validated`.
+- **`flywheel_synthesize_rubric({ cwd, action?, planSlug?, planPath?, editIntent?, force?, reason? })`** — author, validate, edit, regenerate, or skip the cycle-level outcome rubric. Rubric actions write `.pi-flywheel/plans/<slug>/rubric.md` and a sidecar `.rubric.lock` (planContentSha cache). `action` accepts `synthesize | validate | edit | regenerate | skip`. The `skip` action persists `state.outcomeGradingSkipped = true` before returning `rubric_skipped`. It does not require a plan or rubric file. The tool applies `tighten | add | remove` edits deterministically and sends `custom` edits to the LLM. Operator-edited rubrics (`source: 'edited' || 'user'`) are never overwritten without `force=true` (R6 mitigation). Discriminated success kinds: `rubric_synthesized | rubric_preserved | rubric_edited | rubric_validated | rubric_skipped`.
 - **`flywheel_grade_outcome({ cwd, planSlug?, force? })`** — spawn a decorrelated grader (codex primary via `codex exec --json --model "${FW_GRADER_MODEL ?? 'gpt-5.5'}"`; fresh-CC fallback via `claude --print` when codex is unavailable). 4-tier `cycleStartSha` recovery ladder protects against missing baselines (state → checkpoint.gitHead → `git log --before=<ts>` → `HEAD~50`); never falls back to `HEAD`. Iteration-cap coercion is server-side: `needs_revision` at `iteration ≥ state.maxOutcomeIterations` is force-coerced to `max_iterations_reached` before the response leaves the tool. ENOSPC / EROFS graceful degrade — verdict returned in-memory with `persistence: 'failed'`. Discriminated success kinds: `grader_verdict | grading_skipped | grading_capped | grading_persistence_failed`.
 - **`flywheel_approve_beads({ action: 'remediate', remediation })`** — new action that creates exactly one bead from a failing-criterion verdict using the verbatim §"Remediation Bead Template" body. Increments `state.iterationRound`. T11 (`_wrapup.md` Step 9.5.0 Iterate branch) calls this once per criterion where `verdict.perCriterion[i].status !== 'met'`.
 - **`outcome_rubric_validity` doctor check.** Read-only probe of the active plan's `rubric.md`. Severity: green when no rubric / valid rubric (≥3 criteria), yellow when file missing / parse failure, red when criteria array is empty. Hints are verbatim §"Doctor Hints"; remediation routes through the operator-driven Step 5.6.5 rubric gate (auto-rewrite would silently overwrite operator edits).
@@ -162,7 +162,8 @@ _planning.md 5.6.5 ─► flywheel_synthesize_rubric              (T10)
                        ├─ Approve  → continue to bead creation
                        ├─ Edit     → action='edit' loop
                        ├─ Regenerate → action='regenerate' force=true
-                       └─ Skip rubric → state.outcomeGradingSkipped=true
+                       └─ Skip rubric → action='skip'
+                                          persists state.outcomeGradingSkipped=true
                                           (one-cycle; cleared by next select)
 
 (... bead waves close ...)
@@ -223,7 +224,7 @@ State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 ### Decided policy (v3.13.0)
 
 - **`cycleStartSha` capture point.** `flywheel_select` writes `state.cycleStartSha` at goal-set time (OQ-A resolution). On detached HEAD / no-commits / git-missing, the field stays undefined and the grader's 4-tier ladder fires.
-- **Skip-rubric stickiness.** One cycle per skip (OQ-B resolution). The next `flywheel_select` clears `state.outcomeGradingSkipped` so the operator gets a fresh prompt at every Step 5.6.5. CASS records consecutive skips as a learning so a recurring skip pattern surfaces in `flywheel_doctor` over time.
+- **Skip-rubric stickiness.** One cycle per skip (OQ-B resolution). `flywheel_synthesize_rubric(action: 'skip')` saves `state.outcomeGradingSkipped = true` before it returns. The next `flywheel_select` clears the flag so the operator gets a fresh prompt at every Step 5.6.5.
 
 ## MCP tools added in v3.20.0
 
