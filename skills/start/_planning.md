@@ -349,15 +349,14 @@ After all rounds converge:
 2. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-planning-workflow.md"`.
 3. Jump to Step 5.55 (Plan alignment check).
 
-NTM spawn pattern for each review round. Rounds are sequential — each round reads the plan revised by the prior round — but within a round the mixed `cc:cod:gmi` 1:1:1 cross-check runs in parallel. Each pane writes to its own per-pane revision file so concurrent writes don't clobber each other; the coordinator reconciles the three revisions into the canonical plan file before dispatching round N+1. The review-round guidance comes from the `/planning-workflow` skill, not an unversioned filesystem file. A spawn with `--label plan-review-round-<N>` creates the session `${NTM_PROJECT}--plan-review-round-<N>`; `--robot-send` and `--robot-wait` both target that session, and panes are addressed by index (`--panes=1`, `--panes=2`, `--panes=3`). Do not try to pass a name instead of an index — ntm 1.36.1 only accepts `--panes`, `--type`, and `--all`.
+NTM spawn pattern for each review round. Rounds are sequential — each round reads the plan revised by the prior round — but within a round the mixed `cc:cod:gmi` 1:1:1 cross-check runs in parallel. Each pane writes to its own per-pane revision file so concurrent writes don't clobber each other; the coordinator reconciles the three revisions into the canonical plan file before dispatching round N+1. The review-round guidance comes from the `/planning-workflow` skill, not an unversioned filesystem file. A spawn with `--label plan-review-round-<N>` creates the session `${NTM_PROJECT}--plan-review-round-<N>`; `--robot-send` and `--robot-wait` both target that session. Address panes by provider type (`--type=cc` / `--type=cod` / `--type=gmi`) rather than by index: a `--no-user` spawn with `tmux pane-base-index` 0 numbers its panes 0, 1, 2, so an index loop starting at 1 skips the cc pane entirely and misaligns the per-type output filenames. `--type` is index-agnostic.
 
 ```
 SESSION="${NTM_PROJECT}--plan-review-round-<N>"
 ntm spawn "$NTM_PROJECT" --label plan-review-round-<N> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
-# Then --robot-send the per-pane prompt to each of the three panes by index:
-for PANE in 1 2 3; do
-  PERSPECTIVE=$(case $PANE in 1) echo cc;; 2) echo cod;; 3) echo gmi;; esac)
-  ntm --robot-send="$SESSION" --panes="$PANE" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at docs/plans/<date>-<goal-slug>-planning-workflow.md. Write YOUR revised plan to docs/plans/<date>-<goal-slug>-planning-workflow-round-<N>-${PERSPECTIVE}.md — do not touch the canonical plan file; the coordinator will reconcile the three per-pane revisions before dispatching round N+1."
+# Address panes by provider type (index-agnostic — the --no-user spawn starts at pane 0):
+for TYPE in cc cod gmi; do
+  ntm --robot-send="$SESSION" --type="$TYPE" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at docs/plans/<date>-<goal-slug>-planning-workflow.md. Write YOUR revised plan to docs/plans/<date>-<goal-slug>-planning-workflow-round-<N>-${TYPE}.md — do not touch the canonical plan file; the coordinator will reconcile the three per-type revisions before dispatching round N+1."
 done
 ```
 

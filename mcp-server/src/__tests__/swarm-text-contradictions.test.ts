@@ -98,17 +98,33 @@ describe('swarm doc contradictions (AGENTS.md NTM pane priority)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('_planning.md review-round recipe spawns 1:1:1, uses --panes= indexing, and gives each pane its own per-pane revision file', () => {
+  it('_planning.md review-round recipe spawns 1:1:1, addresses panes by --type=, and gives each pane its own per-pane revision file', () => {
     const planningPath = resolve(skillsDir, 'start', '_planning.md');
     const text = readFileSync(planningPath, 'utf8');
-    // Locate the review-round recipe section.
     const idx = text.indexOf('plan-review-round-');
     expect(idx).toBeGreaterThan(-1);
-    // Grab a reasonable window around it.
     const window = text.slice(idx, idx + 2000);
     expect(window).toMatch(/--cc=1\s+--cod=1\s+--gmi=1/);
-    expect(window).toMatch(/--panes=/);
+    // Address panes by provider type (index-agnostic — a --no-user spawn with
+    // pane-base-index 0 numbers panes 0..N-1, so an index loop starting at 1
+    // skips the cc pane). --type= is correct; --panes=1,2,3 is wrong here.
+    expect(window).toMatch(/--type=cc/);
+    expect(window).toMatch(/--type=cod/);
+    expect(window).toMatch(/--type=gmi/);
     expect(window).not.toMatch(/--pane-name/);
+    // Guard the specific regression WindyBasin flagged: the --panes=1,2,3 loop.
+    expect(window).not.toMatch(/for\s+PANE\s+in\s+1\s+2\s+3/);
+    expect(window).not.toMatch(/--panes="?\$?PANE/);
     expect(window).toMatch(/-round-<N>-/); // per-pane revision filenames
+  });
+
+  it('_planning.md review-round recipe does not claim ntm only accepts a short flag list (it has more flags)', () => {
+    const planningPath = resolve(skillsDir, 'start', '_planning.md');
+    const text = readFileSync(planningPath, 'utf8');
+    const idx = text.indexOf('plan-review-round-');
+    const window = text.slice(idx, idx + 2000);
+    // Earlier drafts claimed `ntm 1.36.1 only accepts \`--panes\`, \`--type\`, and \`--all\``.
+    // That understates the real flag surface; the recipe should state what it uses, not what ntm accepts.
+    expect(window).not.toMatch(/ntm[^.]*only accepts/i);
   });
 });
