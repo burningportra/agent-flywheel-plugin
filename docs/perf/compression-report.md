@@ -80,23 +80,28 @@ Quality Gate now point at AGENTS.md.
 
 ## 4. Behavior eval
 
-Baseline is `docs/perf/eval-start-baseline.json` at sha `77ee233` (recorded in
-M3, commit `303a985`). The eval was rerun at HEAD `667428b` with
-`--no-write-baseline`, so the baseline file is unchanged. All four scenarios
-pass:
+Baseline is `docs/perf/eval-start-baseline.json` at sha `77ee233` (recorded
+in M3, commit `303a985`, 20 pass/20 harness unit tests + 4 scenario rows).
+The eval was rerun at HEAD `667428b` with `--no-write-baseline`, so the
+baseline file is unchanged. Rows come from
+`/tmp/claude-501/e10-s1s2.log` (s1 + s2) and task-run `b1sbu7pyw` (s3 + s4);
+"turns" and "tools" are the runner-level counts the SDK's result row would
+not surface on its own. All four scenarios pass:
 
-| Scenario                              | Baseline @ 77ee233 | HEAD @ 667428b     |
-|---------------------------------------|--------------------|--------------------|
-| `s1-step0d-and-step5`                 | pass, 46 turns, $0.54 | pass, 22 turns, $0.50 |
-| `s2-standard-no-early-br-create`      | pass, 40 turns, $0.46 | pass, 23 turns, $0.48 |
-| `s3-ambitious-writes-charter-first`   | pass, 48 turns, $0.51 | pass, 28 turns, $0.56 |
-| `s4-rubric-gate-before-bead-creation` | pass, 73 turns, $0.79 | pass, 42 turns, $0.82 |
+| Scenario                              | Baseline @ 77ee233           | HEAD @ 667428b              | Δ turns |
+|---------------------------------------|------------------------------|-----------------------------|--------:|
+| `s1-step0d-and-step5`                 | pass, 46 turns, 25 tools, $0.5391 | pass, 41 turns, 23 tools, $0.4838 | −5 |
+| `s2-standard-no-early-br-create`      | pass, 40 turns, 24 tools, $0.4621 | pass, 37 turns, 21 tools, $0.4903 | −3 |
+| `s3-ambitious-writes-charter-first`   | pass, 48 turns, 23 tools, $0.5093 | pass, 49 turns, 27 tools, $0.5648 | +1 |
+| `s4-rubric-gate-before-bead-creation` | pass, 73 turns, 43 tools, $0.7892 | pass, 75 turns, 41 tools, $0.8166 | +2 |
 
-Tokens per scenario at HEAD (Sonnet 5.5, `claude-sonnet-5-5` /
-`agent-sdk@0.3.300` / `cli@2.1.301`): output 10,234 / 9,992 / 12,984 / 18,062;
-cache_read 1.2M / 1.2M / 1.5M / 3.0M. The three invariant guards from M3
-(worktree plugin check, `skill_stub_detected`, `pick_events.unmatched`) all
-reported clean.
+s1 and s2 ran fewer turns at HEAD than at the baseline sha; s3 and s4 ran
+slightly more (one additional menu round in s3's ambition pass, and the
+rubric-gate branch in s4). The three invariant guards from M3 (worktree
+plugin check, `skill_stub_detected`, `pick_events.unmatched`) reported
+clean on every scenario. Logs survive under `/tmp/claude-501/e10-s1s2.log`
+and the per-scenario JSONL artifacts under
+`mcp-server/scripts/eval/artifacts/`.
 
 **Carry-over coverage** called out in the bead comments is explicitly green:
 
@@ -114,7 +119,8 @@ reported clean.
 `_implement.md`, `_review.md`, `_wrapup.md`, `_deslop.md`,
 `_inflight_prompt.md`, or `_reality_check.md`. Those files' prose cuts are
 covered by lint (`npm run lint:skill -- --ci`), the full vitest suite, and
-reviewer eyes, not by this eval.
+reviewer eyes, not by this eval. The gap is filed as P3 bead
+**`agent-flywheel-plugin-4p7`** (not dispatched; waits for the user).
 
 ## 5. Bugs fixed, with regression tests
 
@@ -123,22 +129,22 @@ equivalent on-disk guard. Row = bead → fix commit → test file:name.
 
 | Bead | Fix | Regression test |
 |------|-----|-----------------|
-| `fpf` cross-program bead claim | `3afc6d3` (repro) + `94ae858` + `72c3c94` | `mcp-server/src/__tests__/tools/approve.test.ts:389`, `advance-wave.test.ts:430`, `review.test.ts:294` (per the bead's close note); `b36674a` aligns hotspot fixtures |
-| `m66.3.2` B2 — calibrate had no per-template data | `e64150e` | `mcp-server/src/__tests__/tools/calibrate-templates.test.ts` |
-| `m66.3.3` B3 — duel provenance never reached bead prompts | `545bfa0` | `mcp-server/src/__tests__/tools/beads.test.ts` (duel-provenance cases) |
-| `m66.3.4` B4 — CASS memory didn't reach approve prompts | (fix in `feedback.ts`) | `mcp-server/src/__tests__/feedback.test.ts` |
-| `m66.3.5` B5 — model table drift + unreachable Gemini planner | `5dcb2a8` + `de3cb32` | `mcp-server/src/__tests__/model-detection.test.ts` |
-| `m66.3.6` B6 — "Skip rubric" couldn't be saved | `39b80b7` + `650045c` | `mcp-server/src/__tests__/doctor-outcome-rubric-validity.test.ts` + `tools/rubric-skip.test.ts` |
+| `fpf` cross-program bead claim | `3afc6d3` (repro) + `94ae858` + `72c3c94` + `b36674a` (hotspot fixtures) | `mcp-server/src/__tests__/tools/approve.test.ts:389`, `advance-wave.test.ts:430`, `review.test.ts:294` (per the bead's close note) |
+| `m66.3.2` B2 — calibrate had no per-template data | `e64150e` | `mcp-server/src/__tests__/tools/calibrate.test.ts`, `bead-prompt.test.ts` |
+| `m66.3.3` B3 — duel provenance never reached bead prompts | `545bfa0` | `mcp-server/src/__tests__/duel-provenance.test.ts`, `bead-prompt.test.ts` |
+| `m66.3.4` B4 — CASS memory didn't reach approve prompts | `7eb9920` | `mcp-server/src/__tests__/feedback.test.ts`, `memory.test.ts` |
+| `m66.3.5` B5 — model table drift + unreachable Gemini planner | `5dcb2a8` + `de3cb32` | `mcp-server/src/__tests__/model-detection.test.ts`, `model-routing.test.ts` |
+| `m66.3.6` B6 — "Skip rubric" couldn't be saved | `39b80b7` + `650045c` | `mcp-server/src/__tests__/synthesize-rubric.test.ts` |
 | `m66.3.7` B7 — Codex rescue packet exposed as MCP tool | `1f9df0f` | `mcp-server/src/__tests__/tools/rescue.test.ts` |
-| `m66.3.8` B8 — preflight banner + first-run flag from server | `55c8d7b` | `mcp-server/src/__tests__/doctor-outcome-rubric-validity.test.ts` + preflight banner test |
+| `m66.3.8` B8 — preflight banner + first-run flag from server | `55c8d7b` | `mcp-server/src/__tests__/preflight-yellow.test.ts`, `tools/doctor-preflight.test.ts`, `tools/doctor.register.test.ts` |
 | `m66.3.9` B9 — headless review mode exit signal | `f6cbb91` + `f184fc1` + `e3e10f4` | `mcp-server/src/__tests__/tools/review.test.ts` (headless exit cases) |
-| `m66.3.10` B10 — guided review gates 3–5 not skipped | (fix in `review.ts`) | `mcp-server/src/__tests__/tools/review.test.ts` (gate ordering) |
-| `m66.3.11` fix — batch reviewer prompt in text + dispatch | `398f5ed` + `e47a53f` | `mcp-server/src/__tests__/review-batch.test.ts` |
-| `m66.3.12` fix — NTM pane addressing + plan-file write races | `53f678a` + `960be7e` | lint:skill coverage (addressed `--pane=` broadcast risk) |
-| `m66.3.14` B14 — wave-2+ implementer prompt attestation ask | (fix in `advance-wave.ts`) | `mcp-server/src/__tests__/adapters/completion-attestation-prompt.test.ts` + `tools/advance-wave.test.ts` |
+| `m66.3.10` B10 — guided review gates 3–5 not skipped | `a56414d` | `mcp-server/src/__tests__/tools/review.test.ts` |
+| `m66.3.11` fix — batch reviewer prompt in text + dispatch | `398f5ed` + `e47a53f` | `mcp-server/src/__tests__/tools/review.test.ts`, `gates.test.ts` |
+| `m66.3.12` fix — NTM pane addressing + plan-file write races + swarm doc drift | `53f678a` + `960be7e` + `b7eb9db` | `mcp-server/src/__tests__/swarm-text-contradictions.test.ts` |
+| `m66.3.14` B14 — wave-2+ implementer prompt attestation ask | `6de4558` | `mcp-server/src/__tests__/adapters/completion-attestation-prompt.test.ts` |
 | `m66.3.15` B15 — `goalSlug` returned by `flywheel_select` | `49f12ac` + `3c29ed2` | `mcp-server/src/__tests__/tools/select.test.ts` |
-| `m66.3.16` B16 — dead `orch_*` aliases + unlisted `flywheel_emit_codex` | `aec0cbd` | `mcp-server/src/__tests__/server-tool-aliases.test.ts` |
-| `m66.1.5` pointer-command dedup trap | `612de81` | `mcp-server/src/__tests__/skills/pointer-command-guard.test.ts` |
+| `m66.3.16` B16 — dead `orch_*` aliases + unlisted `flywheel_emit_codex` | `aec0cbd` | `mcp-server/src/__tests__/capabilities.test.ts` (+ snapshot) |
+| `m66.1.5` pointer-command dedup trap | `612de81` | `mcp-server/src/__tests__/pointer-command-guard.test.ts` |
 | `m66.1.3` M3 eval harness defects (3 rounds) | `7cea059` + `598c149` + `303a985` | `mcp-server/scripts/eval/argv.test.ts` (13) + `pick.test.ts` (7) + three live invariant guards (plugin path, skill-stub, unmatched target) |
 | `m66.1.4` M4 argv parser hardening | `7cea059` | included in `argv.test.ts` |
 | `1d6` TONE updater missing | `e1e85c9` | `mcp-server/scripts/update-tone-baseline.test.ts` (11) |
@@ -239,13 +245,11 @@ that list was preserved. Verified by lint + test survival:
 - The TONE001 ceiling dropped from the pre-E2 baseline to post-E2 counts.
   `_planning.md` 34 → 0, `_implement.md` 22 → 0, `_review.md` 10 → 0 are the
   biggest. See `mcp-server/.lintskill-tone-baseline.json`.
-- Four pre-existing vitest failures observed during E1 and TONE close
-  (`plugin-root-command-paths.test.ts`, `tools/approve.test.ts`,
-  `chaos/missing-gemini.test.ts` green-row, `tender-daemon.test.ts` 1-in-3
-  flake) are tracked outside this program and are not regressions of the
-  compression pass.
+- `tender-daemon.test.ts` has a known ~1-in-3 flake per AGENTS.md; the full
+  isolated vitest gate at `ce40623` (equivalent to `667428b` for
+  `mcp-server/`) reports 2,676 passed, 2 skipped, 0 failed.
 - Dist is rebuilt by the coordinator after each wave; the last clean rebuild
-  in this program was `695d229` on `ea1b42f`.
+  in this program is **`ce40623`** (from clean `b36674a`).
 
 ## 11. Next decision for the user — not part of this bead
 
