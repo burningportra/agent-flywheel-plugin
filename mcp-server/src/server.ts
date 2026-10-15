@@ -43,7 +43,7 @@ const log = createLogger('server');
 
 type ToolRunner = (ctx: ToolContext, args: any) => Promise<McpToolResult>;
 
-type ToolRunnerMap = Partial<Record<FlywheelToolName, ToolRunner>>;
+type ToolRunnerMap = Record<string, ToolRunner>;
 
 interface ToolValidationError {
   message: string;
@@ -400,6 +400,26 @@ const PRIMARY_TOOLS = [
     },
   },
   {
+    name: 'flywheel_emit_codex',
+    description:
+      'Emit the Claude Code plugin skills as a Codex-native bundle under a target directory inside cwd. Writes AGENTS.md plus .codex/skills/<name>.md without modifying the source skills.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+        targetDir: {
+          type: 'string',
+          description: 'Destination directory inside cwd, relative or absolute',
+        },
+        pluginRoot: {
+          type: 'string',
+          description: 'Optional plugin source root. Must be inside cwd or match CLAUDE_PLUGIN_ROOT.',
+        },
+      },
+      required: ['cwd', 'targetDir'],
+    },
+  },
+  {
     name: 'flywheel_get_skill',
     description: 'Return a skill\'s frontmatter + body in one round-trip. Backed by a deterministic build-time bundle with 4-layer drift defense (manifest integrity check, per-entry stale warn, FW_SKILL_BUNDLE=off bypass, transparent disk fallback). Pass name as `<plugin>:<skill-name>` (e.g. `agent-flywheel:start`, `agent-flywheel:start_planning`). Returns `{ name, frontmatter, body, source: "bundle"|"disk", staleWarn? }`.',
     inputSchema: {
@@ -602,7 +622,7 @@ const DEPRECATED_ALIAS_TOOLS = PRIMARY_TOOLS.map((tool) => {
 
 export const TOOLS = [...PRIMARY_TOOLS, ...DEPRECATED_ALIAS_TOOLS];
 
-const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
+const PRIMARY_RUNNERS: Record<string, ToolRunner> = {
   flywheel_profile: runProfile as ToolRunner,
   flywheel_discover: runDiscover as ToolRunner,
   flywheel_select: runSelect as ToolRunner,
@@ -614,49 +634,15 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
   flywheel_advance_wave: runAdvanceWave as ToolRunner,
   flywheel_memory: runMemory as ToolRunner,
   flywheel_doctor: runDoctor as ToolRunner,
+  flywheel_emit_codex: runEmitCodex as ToolRunner,
   flywheel_get_skill: runGetSkill as ToolRunner,
   flywheel_observe: runObserve as ToolRunner,
-  // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
-  orch_profile: runProfile as ToolRunner,
-  orch_discover: runDiscover as ToolRunner,
-  orch_select: runSelect as ToolRunner,
-  orch_plan: runPlan as ToolRunner,
-  orch_approve_beads: runApprove as ToolRunner,
-  orch_review: runReview as ToolRunner,
-  orch_verify_beads: runVerifyBeads as ToolRunner,
-  orch_compliance_audit: runComplianceAudit as ToolRunner,
-  orch_advance_wave: runAdvanceWave as ToolRunner,
-  orch_memory: runMemory as ToolRunner,
-  orch_get_skill: runGetSkill as ToolRunner,
-  orch_observe: runObserve as ToolRunner,
-};
-
-/**
- * Extension runners — tools added by beads that don't (or can't) widen
- * `FlywheelToolName` in types.ts. Keyed by raw string so the registration
- * doesn't require touching the shared union.
- *
- * bead `agent-flywheel-plugin-zbx` — `flywheel_emit_codex`.
- * bead `claude-orchestrator-2tl` (T8) — `flywheel_remediate` + `orch_remediate` alias.
- * bead `agent-flywheel-plugin-m66.3.7` (B7) — `flywheel_rescue` + `orch_rescue` alias.
- */
-const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
-  flywheel_emit_codex: runEmitCodex as ToolRunner,
   flywheel_rescue: runRescue as ToolRunner,
-  orch_rescue: runRescue as ToolRunner,
   flywheel_remediate: async (ctx, args) => {
     const parsed = RemediateInputSchema.parse(args);
     return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal) as Promise<McpToolResult>;
   },
-  orch_remediate: async (ctx, args) => {
-    const parsed = RemediateInputSchema.parse(args);
-    return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal) as Promise<McpToolResult>;
-  },
   flywheel_calibrate: async (ctx, args) => {
-    const parsed = CalibrateInputSchema.parse({ ...args, cwd: ctx.cwd });
-    return runCalibrate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal) as unknown as Promise<McpToolResult>;
-  },
-  orch_calibrate: async (ctx, args) => {
     const parsed = CalibrateInputSchema.parse({ ...args, cwd: ctx.cwd });
     return runCalibrate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal) as unknown as Promise<McpToolResult>;
   },
@@ -671,10 +657,24 @@ const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
   flywheel_grade_outcome: async (ctx, args) => runGradeOutcome(ctx, args) as Promise<McpToolResult>,
   // R-001 (agent-ergonomics audit pass 2) — capabilities surface.
   flywheel_capabilities: runCapabilitiesWith(TOOLS),
-  orch_capabilities: runCapabilitiesWith(TOOLS),
   // R-002 (agent-ergonomics audit pass 2) — paste-ready agent handbook.
   flywheel_robot_docs: runRobotDocs as ToolRunner,
-  orch_robot_docs: runRobotDocs as ToolRunner,
+};
+
+function buildDeprecatedAliasRunners(
+  primaryRunners: Readonly<Record<string, ToolRunner>>,
+): Record<string, ToolRunner> {
+  return Object.fromEntries(
+    Object.entries(primaryRunners).map(([name, runner]) => [
+      name.replace(/^flywheel_/, 'orch_'),
+      runner,
+    ]),
+  );
+}
+
+const REGISTERED_RUNNERS: Record<string, ToolRunner> = {
+  ...PRIMARY_RUNNERS,
+  ...buildDeprecatedAliasRunners(PRIMARY_RUNNERS),
 };
 
 function isKnownToolName(name: string): name is FlywheelToolName {
@@ -862,15 +862,10 @@ export function _resetOrchDeprecationLedger(): void {
 }
 
 export function createCallToolHandler(dependencies: CallToolHandlerDependencies) {
-  const runners: Record<FlywheelToolName, ToolRunner> = {
-    ...DEFAULT_RUNNERS,
+  const runners: Record<string, ToolRunner> = {
+    ...REGISTERED_RUNNERS,
     ...dependencies.runners,
   };
-  // Extension tools (bead `agent-flywheel-plugin-zbx`): merged via a wider
-  // string-keyed map so we can dispatch tools whose names aren't part of the
-  // `FlywheelToolName` union. Runtime safety is still enforced by
-  // `isKnownToolName`, which checks the TOOLS array.
-  const extensionRunners: Record<string, ToolRunner> = { ...EXTENSION_RUNNERS };
 
   return async (request: { params: { name: string; arguments?: Record<string, unknown> } }): Promise<McpToolResult> => {
     const { name, arguments: args } = request.params;
@@ -917,7 +912,7 @@ export function createCallToolHandler(dependencies: CallToolHandlerDependencies)
     };
 
     try {
-      const runner = runners[name] ?? extensionRunners[name as string];
+      const runner = runners[name];
       if (!runner) {
         return {
           content: [{ type: 'text', text: `No runner registered for tool: ${name}` }],

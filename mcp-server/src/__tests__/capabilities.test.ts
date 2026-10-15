@@ -8,7 +8,11 @@
  * intentional review gates, not noise.
  */
 
-import { describe, it, expect } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { describe, it, expect, vi } from 'vitest';
 import {
   CAPABILITIES_CONTRACT_VERSION,
   buildCapabilitiesPayload,
@@ -16,7 +20,8 @@ import {
   FLYWHEEL_ENV_VARS,
   EXIT_CODE_CONTRACT,
 } from '../tools/capabilities.js';
-import { TOOLS } from '../server.js';
+import { createCallToolHandler, TOOLS } from '../server.js';
+import { createInitialState } from '../types.js';
 import { FLYWHEEL_ERROR_CODES, DEFAULT_HINTS, DEFAULT_RETRYABLE } from '../errors.js';
 import { DOCTOR_CHECK_NAMES } from '../tools/doctor.js';
 
@@ -118,6 +123,49 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
     expect(names).toContain('flywheel_doctor');
     expect(names).toContain('orch_doctor');
     expect(names).toContain('flywheel_capabilities');
+  });
+
+  it('lists flywheel_emit_codex and its generated deprecated alias with the public schema', () => {
+    const primary = payload.data.mcp_tools.find((tool) => tool.name === 'flywheel_emit_codex');
+    const alias = payload.data.mcp_tools.find((tool) => tool.name === 'orch_emit_codex');
+
+    expect(primary?.required).toEqual(['cwd', 'targetDir']);
+    expect(primary?.optional).toEqual(['pluginRoot']);
+    expect(alias?.deprecated).toBe(true);
+    expect(alias?.deprecation_replacement).toBe('flywheel_emit_codex');
+  });
+
+  it('dispatches every advertised tool to a registered runner', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'flywheel-registration-'));
+    const exec = vi.fn(async () => ({ code: 1, stdout: '', stderr: 'fixture failure' }));
+    const handler = createCallToolHandler({
+      makeExec: vi.fn(() => exec),
+      loadState: vi.fn(() => createInitialState()),
+      saveState: vi.fn(),
+      clearState: vi.fn(),
+    });
+
+    try {
+      for (const tool of TOOLS) {
+        const summary = summarizeTool(tool);
+        const args: Record<string, unknown> = {};
+        for (const field of summary.required) {
+          const enumValues = summary.enums[field];
+          if (field === 'cwd') args[field] = cwd;
+          else if (enumValues?.[0]) args[field] = enumValues[0];
+          else if (field === 'ideas' || field.endsWith('Ids')) args[field] = [];
+          else if (field === 'targetDir') args[field] = '.';
+          else args[field] = 'fixture';
+        }
+
+        const result = await handler({ params: { name: tool.name, arguments: args } });
+        expect(result?.content?.[0]?.text, tool.name).not.toBe(
+          `No runner registered for tool: ${tool.name}`,
+        );
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 
   it('every tool entry has required[] and optional[] arrays (possibly empty)', () => {

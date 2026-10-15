@@ -87,6 +87,7 @@ Current-tool index (HEAD = v3.20.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_convergence({ planSlug })`** — read-only `ConvergenceState` from `.pi-flywheel/plans/<slug>/convergence.json` (multi-signal score + B6 oscillation flag). v3.12.0+. See "MCP tools added in v3.12.0" for B6 semantics.
 - **`flywheel_discover`** — surface ranked improvement ideas after a profile pass.
 - **`flywheel_doctor`** — health sweep, currently 23 checks (incl. v3.12.0 `convergence_state_validity`, v3.13.0 `outcome_rubric_validity`, v3.18.0 `gemini_model_compat`, `orphan_tender_daemons`, `npm_marketplace_version_drift`, `projects_base_misconfig`). Read-only.
+- **`flywheel_emit_codex({ targetDir, pluginRoot? })`** — emit `AGENTS.md` and `.codex/skills/*.md` under a destination inside `cwd`; Claude Code remains the source of truth.
 - **`flywheel_get_skill({ name })`** — bundled skill body in one round-trip. Preferred over `Read` for skill lookups.
 - **`flywheel_memory({ operation, query?, content? })`** — CASS memory; operations: `search | store | draft_postmortem | draft_solution_doc | refresh_learnings`. The `refresh_learnings` op classifies `docs/solutions/` entries Keep/Update/Consolidate/Replace/Delete.
 - **`flywheel_observe`** — single-call session-state snapshot; surfaces hints from missing completion attestations.
@@ -225,9 +226,10 @@ State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 
 ## MCP tools added in v3.20.0
 
+- **`flywheel_emit_codex({ cwd, targetDir, pluginRoot? })`** — the existing Codex emitter is now listed in `tools/list` with the same path-safety contract as `tools/emit-codex.ts`. `cwd` and `targetDir` are required. `pluginRoot` is optional and must stay inside `cwd` or match `CLAUDE_PLUGIN_ROOT`.
 - **`flywheel_rescue({ cwd, phase, beadId?, errorEnvelope?, notes? })`** — turns the existing `codex-handoff.ts` contract into a callable MCP tool. `phase` accepts `plan`, `impl`, or `review`. The tool reuses an active plan document or writes a phase artifact under `.pi-flywheel/rescue/`, builds a `RescuePacket`, renders a Codex prompt with the existing adapter, and stores the canonical `flywheel-rescue` memory line through `flywheel_memory`.
 - **Result contract.** Success returns `data.packet`, `data.codexPrompt`, and `data.memoryLine`. `codexPrompt` includes the two trailing newlines required by the Codex input buffer. Invalid phases return `invalid_input`; artifact, Git, and CASS failures reuse existing structured error codes.
-- **Deprecated alias.** `orch_rescue` has the same input and runner during the v4.0 deprecation window. New callers use `flywheel_rescue`.
+- **Generated aliases.** Every canonical runner now generates its `orch_*` alias from the same registry. `orch_rescue`, `orch_emit_codex`, `orch_doctor`, `orch_convergence`, `orch_synthesize_rubric`, and `orch_grade_outcome` therefore use the canonical runner during the v4.0 deprecation window.
 
 ## NTM is mandatory for all spawned work
 
