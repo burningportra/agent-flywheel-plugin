@@ -8,17 +8,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Compression and correctness pass (program `agent-flywheel-plugin-m66`): the measured prompt surface shrank by **211,146 chars / 52,788 tokens (46.5%)**, every confirmed bug was fixed with a regression test, and every unwired promise was either implemented or deleted. The four `/start` behavior-eval scenarios all pass at HEAD. See `docs/perf/compression-report.md` for the full before/after tables and bead list.
+
 ### Added
 
 - **Ambitious planning.** The Step 5 plan menu asks a second question, **Ambition**: *As scoped* (today's behavior) or *Ambitious*. Ambitious runs an ambition pass based on Felix Rieseberg's "How to be more ambitious: A tutorial for humans with models". The pass climbs the goal ladder to the outcome behind the task (altitude), answers what a top professional would add, sets a numeric stretch target with an outside judge (depth), and borrows concrete methods from 3–5 other fields, including an adversarial one (range). It also names a floor that ships first. The user picks the rung and the stretch target, and the pass writes `docs/brainstorms/<slug>-<date>-ambition.md`. `flywheel_plan` takes a new `ambition: "scoped" | "ambitious"` argument that works with every mode. When it is `"ambitious"`, the tool injects the charter and eight ambitious-plan requirements into the standard prompt, every deep planner and the duel pre-seed, and returns `missing_prerequisite` when the charter is missing.
+- **`flywheel_rescue` MCP tool (B7).** Exposes the Codex rescue packet as a server-side tool so skills call it once instead of pasting three TypeScript blocks (`_implement.md`, `_planning.md`, `_review.md`).
+- **"Skip rubric" action persisted on the checkpoint (B6).** `flywheel_approve_beads(action: "remediate")` and `flywheel_synthesize_rubric(action: "skip")` save the operator's intent one cycle at a time; the Rubric header now has a real exit, not just a label.
+- **Preflight banner + first-run flag returned from the server (B8).** `flywheel_doctor` and `flywheel_observe` surface the preflight banner directly in their response; `_implement.md` consumes it instead of rebuilding its own banner.
+- **`flywheel_select` returns `goalSlug` (B15).** `_planning.md` reads it instead of re-deriving the slug from the goal string.
+- **Server-owned bead-creation audit (D7).** `flywheel_approve_beads(action: "start")` now carries the full implementer-lane prompts for every ready bead in its structured payload. `skills/flywheel-swarm/SKILL.md`, `commands/flywheel-swarm.md`, and `_implement.md`'s marching-orders template dispatch those bytes unchanged (D8). Pre-Completion Quality Gate and `CompletionReportSchemaV1` example live in AGENTS.md as the single source; the server builder (`mcp-server/src/adapters/completion-attestation-prompt.ts`) injects a per-bead JSON example into every prompt.
+- **Headless review mode exit signal (B9).** `flywheel_review --mode=headless` emits a machine-readable verdict; the three review callers consume it.
+- **TONE001 ratchet (M66.6.1) + `npm run lint:skill:update-tone-baseline` (TONE bead).** `.lintskill-tone-baseline.json` locks shouty-token counts per start-skill file; the new script regenerates the ceiling and refuses to raise it without `--allow-raise --reason "<text>"`. `docs/skill-style.md` names the register the ratchet enforces.
+- **M3 /start behavior eval + baseline.** `mcp-server/scripts/eval/run-eval.ts` drives four scenarios through the Agent SDK against a disposable `git worktree` built from a named sha. Three invariant guards fail the run on worktree-plugin mismatch, the pointer-command dedup trap (`m66.1.5`), and scripted-answer label drift. Baseline at `77ee233` lives in `docs/perf/eval-start-baseline.json`.
+- **M1 prompt-budget meter + CI guard (M1, C5).** `npm run prompt-budget` writes `docs/perf/prompt-budget.json`; `prompt-budget --check` fails PRs that raise the budget by more than the configured threshold. CI job at `.github/workflows/ci.yml` enforces it going forward (never run yet — nothing has pushed).
 
 ### Changed
 
-- **The Step 5 plan menu fits AskUserQuestion's 4-option limit.** It had five options, so the call couldn't render as written. *Triangulated plan* moved to the Step 5.6 refinement menu as **Triangulate**, where it now works for every plan mode.
+- **Prompt surface rewritten for frontier models (E1–E8).** `skills/start/*.md` prose is calmer and shorter: `SKILL.md` −34.6%, `_planning.md` −51.8%, `_implement.md` −71.7%, `_review.md` −50.7%, `_wrapup.md` −50.4%, `_beads.md` −57.1%, `_inflight_prompt.md` −26.4%, `_deslop.md` −24.1%, `_reality_check.md` −11.1%, `flywheel-swarm/SKILL.md` −42.4%. Load-bearing text (Universal Rule 1, test-pinned strings, OpenCode compatibility counts, security guards, the single "Use ultrathink.") is preserved verbatim per the root epic's keep-list.
+- **MCP response text halves cut (A6, C-beads).** `mcp.plan.deep.ambitious.text` −97.6%, `mcp.plan.deep.scoped.text` −95.4%, `mcp.review.hit-me.text` −94.9%, `mcp.approve.start.text` −59.9%, `mcp.approve.advanced-blunder-hunt.text` −63.4%. `mcp.approve.start.structured` grew by 611% on purpose: it now carries D8's per-bead implementer prompts for the three dispatchers to forward unchanged.
+- **Command/skill shadowing resolved for all 25 pairs (m66.1.5 + vce).** `commands/start.md`, `flywheel-reality-check.md`, `flywheel-speedup.md`, and `grill-with-docs.md` were fixed in `m66.1.5` (`612de81`); `vce.1` + `vce.2` handled the remaining 21 pairs. Each shadowing command is now a thin pointer whose first action is `flywheel_get_skill({ name: "agent-flywheel:<name>" })`, and `pointer-command-guard.test.ts` pins the contract.
+- **Step 5 plan menu fits AskUserQuestion's 4-option limit.** It had five options, so the call couldn't render as written. *Triangulated plan* moved to the Step 5.6 refinement menu as **Triangulate**, where it now works for every plan mode.
+- **NTM pane priority is one rule (D1).** `skills/start/SKILL.md`, `_implement.md`, and `_planning.md` all delegate to the `projects_base_misconfig` doctor row + `flywheel_remediate`; the three parallel bash gates are gone, and `name-collision` is a distinct yellow state.
+- **Deep-plan prompt builders share a planner-brief file (C1, C2).** Each planner receives the same context payload instead of re-deriving it inline.
 
 ### Fixed
 
+- **Pointer-command dedup trap (m66.1.5).** `/agent-flywheel:start` and three sibling slash commands were deduped as "Skill already loaded above" and never delivered `SKILL.md`. The four pointer commands now fetch via `flywheel_get_skill`. Regression: `pointer-command-guard.test.ts`.
+- **Cross-program bead claim (`fpf`).** `flywheel_approve_beads(action: "start")` could claim ready beads from a different goal's program. Scoped and guarded by `approve.test.ts:389`, `advance-wave.test.ts:430`, `review.test.ts:294`.
+- **Guided review gates 3–5 no longer skipped (B10).**
+- **`flywheel_calibrate` sees per-template data (B2).** `br create` emits template id; the aggregator groups actual-vs-estimated by template instead of `__untemplated__`.
+- **Duel provenance reaches bead prompts (B3).** The server's bead-creation prompt renders the `## Provenance` block for duel-sourced beads instead of silently dropping it.
+- **CASS memory reaches approve prompts (B4).** `feedback.ts` resolves `cm context` from the plugin root; the approve prompt no longer runs with an empty context.
+- **Current planner routing (B5).** `model-detection.ts` is the single current-id table; the Gemini planner bootstrap uses the `am` CLI.
+- **Tool registration (B16).** Every `flywheel_*` tool has a matching `orch_*` alias registered through one helper; `flywheel_emit_codex` is now listed.
 - **Brainstorm lookup no longer reads another goal's file.** `flywheel_plan` matched `docs/brainstorms/<slug>-*.md` by prefix, so goal `foo` could pick up `foo-bar-<date>.md`. It now matches `<slug>-<YYYY-MM-DD>.md` exactly.
+
+### Removed
+
+- **`mcp-server/src/prompts.ts` (A6).** The five live exports moved to their callers; the file was unreachable after that and is deleted. The reachability report (`npm run dead-code`) is clean at HEAD.
+- **Unused `_planning.md` readiness chain (A3).** The orphaned chain is gone; the Pre-flight gate is the only readiness path.
+- **Dead `swarm` helpers (A4) and dead `shared` exports (A5).**
+
+### Compatibility
+
+- **`.github/workflows/ci.yml` adds `prompt-budget` and `check:skills-bundle` jobs.** The budget job fails PRs that raise the budget by more than the threshold recorded in `docs/perf/prompt-budget.json`.
+- **TONE001 is a new lint rule with its own baseline file.** PRs that raise a file's shouty-token count above `.lintskill-tone-baseline.json` fail. Regenerate with `npm run lint:skill:update-tone-baseline`.
+- **AGENTS.md is the single source for the Pre-Completion Quality Gate and the `CompletionReportSchemaV1` worked example.** Three implementer skills (`flywheel-swarm/SKILL.md`, `commands/flywheel-swarm.md`, `_implement.md`) now point there instead of duplicating.
 
 ## [3.19.1] - 2026-10-14
 
