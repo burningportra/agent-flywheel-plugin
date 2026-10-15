@@ -5,13 +5,13 @@ description: Targeted scan of specific paths or concerns without a full flywheel
 
 Targeted repository scan. $ARGUMENTS (optional: path or focus area)
 
-1. Ask the user what to focus on (if not specified in $ARGUMENTS):
+1. Use $ARGUMENTS as the focus when present. Otherwise, ask the user for:
    - Specific path(s) to analyze
    - Focus area: architecture, performance, security, testing, dependencies
 
-2. Use Agent(Explore) with the specified focus to perform a targeted scan.
+2. Call `flywheel_profile({ cwd, goal: "<focus>" })`.
 
-3. Call `flywheel_profile` via the agent-flywheel MCP server with `cwd` and optional `goal` = the focus area.
+3. Use one read-only Explore agent to inspect the specified focus.
 
 4. Display the scan results:
    - Key findings for the specified area
