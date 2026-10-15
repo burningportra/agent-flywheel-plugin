@@ -152,44 +152,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**On "Hand off to Codex"** — build a `RescuePacket` (defined in `mcp-server/src/codex-handoff.ts`) and dispatch:
-
-```ts
-// 1. Construct the packet from the failing envelope.
-import { buildRescuePacket, renderRescuePromptForCodex, formatRescueEventForMemory }
-  from '../mcp-server/dist/codex-handoff.js';
-
-const packet = buildRescuePacket({
-  phase: 'plan',
-  goal: state.selectedGoal,
-  artifact_path: 'docs/plans/<latest-plan-file>.md',
-  error_code: lastError.code,             // from the prior FlywheelToolError
-  hint: lastError.hint ?? '',             // VERBATIM from bead 478 hint contract
-  recent_tool_calls: state.recentToolCalls.slice(-10),
-  proposed_next_step: 'Re-plan the failing section with explicit acceptance criteria; if blocked, surface a single clarifying question back to the coordinator.',
-});
-
-// 2. Render via the codex-prompt adapter (consumer-only — do NOT modify it).
-const adapted = renderRescuePromptForCodex(packet, {
-  coordinatorName: '<your-agent-mail-name>',
-  projectKey: process.env.NTM_PROJECT,
-  rescueAgentName: '<adjective+noun from agent-names pool>',
-});
-
-// 3. Invoke /codex:rescue with the rendered prompt body.
-//    The /codex:rescue skill handles model selection / resume vs. fresh.
-//    Pass `--wait` (foreground) so the rescue result blocks Step 5 progression.
-```
-
-Remember to send Codex two trailing newlines (`AdaptedPrompt.trailingNewlines === 2`) — this is the same input-buffer quirk documented in `_implement.md` Step 7.
-
-**Persist the rescue event to CASS** so `flywheel_doctor`'s `rescues_last_30d` synthesis row picks it up:
-
-```
-flywheel_memory(operation: "store", content: formatRescueEventForMemory(packet))
-```
-
-The `RESCUE_EVENT_PREFIX` constant (`flywheel-rescue`) is the canonical doctor lookup prefix — do NOT roll your own message format.
+**On "Hand off to Codex"** — call `flywheel_rescue({ cwd, phase: 'plan', beadId, errorEnvelope })` and pass its `codexPrompt` field to the codex-rescue skill (`/codex:rescue --wait` so the rescue blocks Step 5). Store the returned `memoryLine` via `flywheel_memory(operation: "store", content: memoryLine)` so `flywheel_doctor`'s `rescues_last_30d` synthesis row sees it. `errorEnvelope` is the `structuredContent.data.error` object from the last failing `flywheel_plan` call; the server assembles the packet (goal, latest plan artifact, recent tool calls, Codex-tuned prompt rendering).
 
 **On Codex completion:**
 
