@@ -226,12 +226,14 @@ Call `flywheel_memory` with `operation: "draft_postmortem"` and `cwd`. The tool 
 ```ts
 const res = await flywheel_memory({ cwd, operation: "draft_postmortem" });
 const draftMarkdown = res.structuredContent?.data?.draft?.markdown;
+const warnings = res.structuredContent?.data?.draft?.warnings ?? [];
 ```
 
-**Post-mortem error codes.**
-- `postmortem_empty_session` → still returns a terse draft; proceed with the AskUserQuestion below, note that the session had no shippable commits. **Common cause (verified 2026-05-08)**: this cycle SHIPPED a state-capture feature at a session-boundary point (e.g. `cycleStartSha` capture in `flywheel_select`), but the capture wasn't yet implemented when this cycle's `flywheel_select` was called — so the auto-postmortem can't see this cycle's commits. Hand-write the post-mortem from `git log --since="<session-start-time>" --oneline` instead. The next cycle will work correctly.
-- `postmortem_checkpoint_stale` → `sessionStartSha` no longer resolves in `git log`. Surface the reconstruction warning from `error.hint` inline and let the user decide whether to keep the (partial) draft.
-- any other code → skip Step 10.0, proceed to Step 10.
+**Post-mortem degraded cases.** These are successful drafts, not error envelopes. Branch on `warnings`:
+- `warnings.includes("postmortem_empty_session")` → proceed with the AskUserQuestion below and note that the session had no shippable commits. **Common cause (verified 2026-05-08)**: this cycle SHIPPED a state-capture feature at a session-boundary point (e.g. `cycleStartSha` capture in `flywheel_select`), but the capture wasn't yet implemented when this cycle's `flywheel_select` was called — so the auto-postmortem can't see this cycle's commits. Hand-write the post-mortem from `git log --since="<session-start-time>" --oneline` instead. The next cycle will work correctly.
+- `warnings.includes("postmortem_checkpoint_stale")` → `sessionStartSha` no longer resolves in `git log`. Surface the warning and the partial `draftMarkdown` so the user can decide whether to keep it.
+
+If the tool returns an actual error envelope, apply Universal Rule 4. Skip Step 10.0 for codes without a local recovery and proceed to Step 10.
 
 Present to the user:
 
