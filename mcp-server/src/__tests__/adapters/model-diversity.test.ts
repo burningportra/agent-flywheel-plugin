@@ -90,6 +90,36 @@ describe('detectCliCapabilities', () => {
 // ─── Split logic ───────────────────────────────────────────────────────────
 
 describe('splitBeadsByProvider', () => {
+  it('six-bead wave with all CLIs present assigns 2/2/2', () => {
+    const plan = splitBeadsByProvider(
+      ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'],
+      caps(),
+    );
+
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2'] },
+      { provider: 'codex', beadIds: ['b3', 'b4'] },
+      { provider: 'gemini', beadIds: ['b5', 'b6'] },
+    ]);
+    expect(plan.ratio).toBe('2:2:2');
+  });
+
+  it('missing Gemini reassigns its canonical share to Codex', () => {
+    const plan = splitBeadsByProvider(
+      ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'],
+      caps({ gemini: false }),
+    );
+
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2'] },
+      { provider: 'codex', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+    ]);
+    expect(plan.warnings).toEqual([
+      'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to codex',
+    ]);
+    expect(plan.ratio).toBe('2:4:0');
+  });
+
   it('3-bead wave with all CLIs present → 1 Claude + 1 Codex + 1 Gemini', () => {
     const plan = splitBeadsByProvider(['b1', 'b2', 'b3'], caps());
     expect(plan.lanes).toHaveLength(3);

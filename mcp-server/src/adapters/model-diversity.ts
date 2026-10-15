@@ -52,8 +52,8 @@ export interface DispatchPlan {
   /** True when one or more preferred CLIs were missing and we fell back. */
   readonly degraded: boolean;
   /**
-   * The achievable Claude:Codex:Gemini ratio given capabilities.
-   * All-available → "1:1:1". If only claude+gemini → "1:0:1", etc.
+   * Assigned Claude:Codex:Gemini bead counts.
+   * Six beads with all providers → "2:2:2".
    */
   readonly ratio: string;
 }
@@ -128,8 +128,7 @@ export async function detectCliCapabilities(
  *   - Gemini gets the third (providing the second-perspective lane even
  *     when remainder = 0).
  *
- * The same order also drives fallback: when a provider is missing we
- * re-route its beads to the next-preferred provider in this list.
+ * Missing-provider transfers use the explicit fallback table below.
  */
 const REMAINDER_PRIORITY: readonly ModelProvider[] = Object.freeze([
   'claude',
@@ -137,10 +136,15 @@ const REMAINDER_PRIORITY: readonly ModelProvider[] = Object.freeze([
   'gemini',
 ]);
 
+const FALLBACK_PRIORITY = {
+  claude: ['codex', 'gemini'],
+  codex: ['claude', 'gemini'],
+  gemini: ['codex', 'claude'],
+} as const satisfies Record<ModelProvider, readonly ModelProvider[]>;
+
 /**
- * Split N beads across available providers with the floor(N/3) + priority
- * remainder rule. Missing CLIs are dropped from the lane set and their
- * would-be share is redistributed by priority.
+ * Split N beads into canonical Claude/Codex/Gemini shares, then transfer a
+ * missing provider's complete share through the supported fallback order.
  *
  * Contract:
  *   - sum(lane.beadIds.length) == beadIds.length
@@ -171,46 +175,52 @@ export function splitBeadsByProvider(
 
   const missing = REMAINDER_PRIORITY.filter((p) => !caps[p].available);
   const degraded = missing.length > 0;
-  for (const p of missing) {
-    warnings.push(
-      `${p} CLI not available${caps[p].reason ? ` (${caps[p].reason})` : ''}; falling back to [${availableProviders.join(', ')}]`,
-    );
+  const n = beadIds.length;
+  const preferredCounts = new Map<ModelProvider, number>();
+  const baseline = Math.floor(n / REMAINDER_PRIORITY.length);
+  for (const provider of REMAINDER_PRIORITY) {
+    preferredCounts.set(provider, baseline);
   }
 
-  const n = beadIds.length;
-  const k = availableProviders.length;
-
-  // Start with a floor(n/k) baseline per available provider; if k < 3 this
-  // naturally redistributes the missing share.
-  const counts = new Map<ModelProvider, number>();
-  const baseline = Math.floor(n / k);
-  for (const p of availableProviders) counts.set(p, baseline);
-
-  // Hand out the remainder by priority order over available providers.
-  let remainder = n - baseline * k;
+  let remainder = n - baseline * REMAINDER_PRIORITY.length;
   for (const p of REMAINDER_PRIORITY) {
     if (remainder === 0) break;
-    if (!caps[p].available) continue;
-    counts.set(p, (counts.get(p) ?? 0) + 1);
+    preferredCounts.set(p, (preferredCounts.get(p) ?? 0) + 1);
     remainder--;
   }
 
-  // Slice the bead list in order; claude first, then codex, then gemini.
-  const lanes: DispatchLane[] = [];
+  const assigned = new Map<ModelProvider, string[]>(
+    REMAINDER_PRIORITY.map((provider) => [provider, []]),
+  );
   let cursor = 0;
-  for (const p of REMAINDER_PRIORITY) {
-    if (!caps[p].available) continue;
-    const take = counts.get(p) ?? 0;
-    if (take === 0) continue;
-    lanes.push({
-      provider: p,
-      beadIds: beadIds.slice(cursor, cursor + take),
-    });
-    cursor += take;
+  for (const preferred of REMAINDER_PRIORITY) {
+    const count = preferredCounts.get(preferred) ?? 0;
+    const ids = beadIds.slice(cursor, cursor + count);
+    cursor += count;
+    if (ids.length === 0) continue;
+
+    const fallback = FALLBACK_PRIORITY[preferred].find(
+      (provider) => caps[provider].available,
+    );
+    const provider = caps[preferred].available ? preferred : fallback;
+    if (!provider) continue;
+    assigned.get(provider)?.push(...ids);
+
+    if (provider !== preferred) {
+      warnings.push(
+        `${preferred} CLI not available${caps[preferred].reason ? ` (${caps[preferred].reason})` : ''}; reassigned ${ids.length} bead(s) to ${provider}`,
+      );
+    }
   }
 
-  const ratio = REMAINDER_PRIORITY.map((p) =>
-    caps[p].available ? String(counts.get(p) ?? 0) : '0',
+  const lanes: DispatchLane[] = [];
+  for (const provider of REMAINDER_PRIORITY) {
+    const ids = assigned.get(provider) ?? [];
+    if (ids.length > 0) lanes.push({ provider, beadIds: ids });
+  }
+
+  const ratio = REMAINDER_PRIORITY.map(
+    (provider) => String(assigned.get(provider)?.length ?? 0),
   ).join(':');
 
   return { lanes, warnings, degraded, ratio };

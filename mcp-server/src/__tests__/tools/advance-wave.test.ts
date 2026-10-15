@@ -85,13 +85,14 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
 function makeCtx(
   stateOverrides: Partial<FlywheelState> = {},
   execCalls: ExecCall[] = [],
+  capabilityCalls: ExecCall[] = availableCliCalls(),
 ) {
   const state = makeState({
     phase: 'implementing',
     beadResults: {},
     ...stateOverrides,
   });
-  const exec = createMockExec(execCalls);
+  const exec = createMockExec([...capabilityCalls, ...execCalls]);
   const ctx = {
     exec,
     cwd: '/fake/project',
@@ -100,6 +101,28 @@ function makeCtx(
     clearState: () => {},
   };
   return { ctx, state };
+}
+
+function availableCliCalls(gemini = true): ExecCall[] {
+  return [
+    {
+      cmd: 'which',
+      args: ['claude'],
+      result: { code: 0, stdout: '/bin/claude\n', stderr: '' },
+    },
+    {
+      cmd: 'which',
+      args: ['codex'],
+      result: { code: 0, stdout: '/bin/codex\n', stderr: '' },
+    },
+    {
+      cmd: 'which',
+      args: ['gemini'],
+      result: gemini
+        ? { code: 0, stdout: '/bin/gemini\n', stderr: '' }
+        : { code: 1, stdout: '', stderr: 'gemini not found' },
+    },
+  ];
 }
 
 function brShowClosed(id: string): ExecCall {
@@ -198,7 +221,7 @@ describe('runAdvanceWave', () => {
     expect(result.content[0].text).toContain('Queue drained');
   });
 
-  it('dispatches next wave with round-robin lane assignment', async () => {
+  it('dispatches the next wave with server-built provider prompts', async () => {
     const nextBeads = [
       makeBead({ id: 'next-1', title: 'First' }),
       makeBead({ id: 'next-2', title: 'Second' }),
@@ -214,15 +237,23 @@ describe('runAdvanceWave', () => {
     expect(result.isError).toBeUndefined();
     const data = (result.structuredContent as any).data;
     expect(data.waveComplete).toBe(true);
-    expect(data.nextWave).not.toBeNull();
     expect(data.nextWave.beadIds).toEqual(['next-1', 'next-2', 'next-3']);
-
-    const lanes = data.nextWave.prompts.map((p: any) => p.lane);
-    expect(lanes).toEqual(['cc', 'cod', 'gem']);
-
-    for (const p of data.nextWave.prompts) {
-      expect(p.prompt).toBeTruthy();
-      expect(typeof p.prompt).toBe('string');
+    expect(data.nextWave.lanes).toEqual([
+      { lane: 'cc', beadIds: ['next-1'] },
+      { lane: 'cod', beadIds: ['next-2'] },
+      { lane: 'gmi', beadIds: ['next-3'] },
+    ]);
+    expect(data.nextWave.prompts.map((prompt: { beadId: string; lane: string }) => ({
+      beadId: prompt.beadId,
+      lane: prompt.lane,
+    }))).toEqual([
+      { beadId: 'next-1', lane: 'cc' },
+      { beadId: 'next-2', lane: 'cod' },
+      { beadId: 'next-3', lane: 'gmi' },
+    ]);
+    for (const prompt of data.nextWave.prompts) {
+      expect(prompt.prompt).toContain('## PRE-COMPLETION QUALITY GATE');
+      expect(prompt.prompt).toContain(`.pi-flywheel/completion/${prompt.beadId}.json`);
     }
   });
 
@@ -297,7 +328,7 @@ describe('runAdvanceWave', () => {
     expect(prompt).toContain('project');
   });
 
-  it('wraps lane assignment for more beads than lanes', async () => {
+  it('keeps canonical lane shares for more beads than lanes', async () => {
     const nextBeads = [
       makeBead({ id: 'w-1' }),
       makeBead({ id: 'w-2' }),
@@ -313,8 +344,35 @@ describe('runAdvanceWave', () => {
     const result = await runAdvanceWave(ctx, { cwd: '/fake/project', closedBeadIds: ['prev-1'], maxNextWave: 5 });
 
     const data = (result.structuredContent as any).data;
-    const lanes = data.nextWave.prompts.map((p: any) => p.lane);
-    expect(lanes).toEqual(['cc', 'cod', 'gem', 'cc', 'cod']);
+    const lanes = data.nextWave.prompts.map((prompt: { lane: string }) => prompt.lane);
+    expect(lanes).toEqual(['cc', 'cc', 'cod', 'cod', 'gmi']);
+  });
+
+  it('reassigns a missing Gemini share to Codex', async () => {
+    const nextBeads = Array.from({ length: 6 }, (_, index) => makeBead({
+      id: `fallback-${index + 1}`,
+      title: `Fallback ${index + 1}`,
+    }));
+    const { ctx } = makeCtx(
+      {},
+      [brShowClosed('prev-1'), brReadyCall(nextBeads)],
+      availableCliCalls(false),
+    );
+
+    const result = await runAdvanceWave(ctx, {
+      cwd: '/fake/project',
+      closedBeadIds: ['prev-1'],
+      maxNextWave: 6,
+    });
+
+    const data = (result.structuredContent as any).data;
+    expect(data.nextWave.lanes).toEqual([
+      { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
+      {
+        lane: 'cod',
+        beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
+      },
+    ]);
   });
 });
 
@@ -344,7 +402,7 @@ describe('runAdvanceWave — attestation gate', () => {
 
   function makeCtxAt(tmpCwd: string, execCalls: ExecCall[] = []) {
     const state = makeState({ phase: 'implementing', beadResults: {} });
-    const exec = createMockExec(execCalls);
+    const exec = createMockExec([...availableCliCalls(), ...execCalls]);
     return {
       exec,
       cwd: tmpCwd,
