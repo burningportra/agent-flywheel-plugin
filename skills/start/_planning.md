@@ -210,7 +210,7 @@ Before presenting the choice, briefly frame the Three Reasoning Spaces to help t
 >
 > Deep planning front-loads effort where corrections are cheapest.
 
-Use `AskUserQuestion`:
+Ask both questions in one call. The `questions` array below carries two entries: **Plan mode** first with 4 options, then **Ambition** with 2 options. Each option label names only its own dimension — folding Ambition into a Plan-mode label (e.g. a 4-option Plan mode where the labels read "Deep plan, ambitious" / "Standard plan" / "Duel plan" / "Deep plan, standard ambition") drops the Ambition selection the ambitious path later reads from `state`.
 
 ```
 AskUserQuestion(questions: [
@@ -236,6 +236,8 @@ AskUserQuestion(questions: [
   }
 ])
 ```
+
+If the response comes back without an `Ambition` header, or with cross-producted Plan-mode labels, re-emit the call in the shape above — one `questions` array, two entries, option labels scoped to one dimension each.
 
 A second opinion from other models on the finished plan (formerly "Triangulated plan") is the **Triangulate** option in the Step 5.6 refinement menu, and it works for every plan mode.
 
