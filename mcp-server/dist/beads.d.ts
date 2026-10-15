@@ -33,7 +33,27 @@ export interface PlanToBeadAudit {
     uncoveredSections: PlanAuditSection[];
     weakMappings: PlanAuditSection[];
 }
+export type BeadDuplicateReason = "near-duplicate-title" | "shared-files-similar-intent";
+export interface BeadDuplicateCandidate {
+    beadIds: [string, string];
+    canonicalBeadId: string;
+    duplicateBeadId: string;
+    reasons: BeadDuplicateReason[];
+    sharedFiles: string[];
+}
+export interface BeadCreationAudit {
+    planCoverage: (PlanToBeadAudit & {
+        totalSections: number;
+        coveredSections: number;
+    }) | null;
+    duplicateCandidates: BeadDuplicateCandidate[];
+}
 export declare function auditPlanToBeads(plan: string, beads: Bead[]): PlanToBeadAudit;
+/**
+ * Audits a newly-created bead set once, so every caller uses the same
+ * coverage and duplicate heuristics instead of reimplementing them in prose.
+ */
+export declare function auditBeadCreation(plan: string | undefined, beads: Bead[]): BeadCreationAudit;
 /**
  * Detects whether the `bv` CLI is available. Result is cached.
  */

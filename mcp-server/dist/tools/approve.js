@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
+import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult } from './shared.js';
+import { getRefinementModel } from '../model-detection.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
-import { makeFlywheelErrorResult } from '../errors.js';
+import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
@@ -10,6 +11,7 @@ import { computeHotspotMatrix } from '../plan-simulation.js';
 import { createLogger } from '../logger.js';
 import { normalizeText } from '../utils/text-normalize.js';
 import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
+import { auditBeadCreation } from '../beads.js';
 const log = createLogger('approve');
 function planGitDiffReviewPrompt(planText) {
     return `Carefully review this entire plan for me and come up with your best revisions in terms of better architecture, new features, changed features, etc. to make it better, more robust/reliable, more performant, more compelling/useful, etc. For each proposed change, give me your detailed analysis and rationale/justification for why it would make the project better along with the git-diff style change versus the original plan shown below:
@@ -100,11 +102,31 @@ function getSizeAssessment(lineCount) {
         return 'short';
     return 'detailed';
 }
-function getBeadApprovalData(state, beads, score, matrix) {
+function readPlanForCreationAudit(cwd, planPath) {
+    if (!planPath)
+        return undefined;
+    const absolutePlanPath = planPath.startsWith('/') ? planPath : join(cwd, planPath);
+    if (!existsSync(absolutePlanPath))
+        return undefined;
+    try {
+        return normalizeText(readFileSync(absolutePlanPath, 'utf8'));
+    }
+    catch (error) {
+        log.warn('Unable to read plan for bead creation audit', {
+            planPath,
+            error: errMsg(error),
+        });
+        return undefined;
+    }
+}
+function getBeadApprovalData(ctx, beads, score, matrix) {
+    const { cwd, state } = ctx;
+    const plan = readPlanForCreationAudit(cwd, state.planDocument);
     return {
         activeBeadIds: [...(state.activeBeadIds ?? [])],
         convergence: getConvergenceData(state, score),
         quality: getQualityData(beads),
+        creationAudit: auditBeadCreation(plan, beads),
         ...(matrix ? { matrix } : {}),
     };
 }
@@ -371,7 +393,7 @@ async function handlePlanApproval(ctx, args) {
         state.phase = 'planning';
         state.planRefinementRound = planRound + 1;
         saveState(state);
-        const refinementModel = pickRefinementModel(planRound);
+        const refinementModel = getRefinementModel(planRound);
         return makeApproveResult(`**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`flywheel_approve_beads\` again.\n\nAlternatively, use \`action: "git-diff-review"\` for a git-diff style review cycle that proposes targeted changes with rationale.\n\n${sizeGate}`, state.phase, 'plan', {
             kind: 'plan_refinement_requested',
             action: 'polish',
@@ -443,7 +465,7 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
             readyCount: 0,
             currentBeadId: undefined,
             readyBeads: [],
-            ...getBeadApprovalData(state, beads, convergenceScore, matrix),
+            ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
             readiness: {
                 blocked: true,
                 message: 'No ready beads found after approval.',
@@ -531,7 +553,7 @@ ${beadList}`, state.phase, 'beads', {
                     launchInstruction: 'implement',
                     agentName: undefined,
                 }],
-            ...getBeadApprovalData(state, beads, convergenceScore, matrix),
+            ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
         }, makeNextToolStep('call_tool', 'Implement the ready bead, then call flywheel_review with its summary.', {
             tool: 'flywheel_review',
             argsSchemaHint: { beadId: 'string', action: 'looks-good | hit-me | skip' },
@@ -604,20 +626,20 @@ ${beadList}`, state.phase, 'beads', {
             launchInstruction: 'spawn-agent',
             agentName: `bead-${bead.id}`,
         })),
-        ...getBeadApprovalData(state, beads, convergenceScore, matrix),
+        ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
     }, nextStep);
 }
 function handlePolish(ctx, beads, round, fresh, matrix) {
     const { cwd, state, saveState } = ctx;
     state.phase = 'refining_beads';
     saveState(state);
-    const model = pickRefinementModel(round);
+    const model = getRefinementModel(round);
     const compactList = beads.map(b => `• ${b.id}: ${b.title}`).join('\n');
     const sharedData = {
         kind: 'bead_refinement_requested',
         action: 'polish',
         refinementMode: fresh ? 'fresh-agent' : 'same-agent',
-        ...getBeadApprovalData(state, beads, state.polishConvergenceScore, matrix),
+        ...getBeadApprovalData(ctx, beads, state.polishConvergenceScore, matrix),
         advancedActions: [...ADVANCED_ACTIONS],
     };
     if (fresh) {
@@ -717,7 +739,7 @@ Current beads:\n${compactList}`,
     if (advancedAction === 'cross-model') {
         state.phase = 'refining_beads';
         saveState(state);
-        const altModel = pickRefinementModel(round + 1);
+        const altModel = getRefinementModel(round + 1);
         return {
             content: [{
                     type: 'text',
@@ -752,7 +774,7 @@ Current beads:\n${compactList}`, state.phase, 'beads', {
             kind: 'bead_refinement_requested',
             action: 'advanced',
             refinementMode: 'graph-fix',
-            ...getBeadApprovalData(state, beads, state.polishConvergenceScore, matrix),
+            ...getBeadApprovalData(ctx, beads, state.polishConvergenceScore, matrix),
             advancedActions: [...ADVANCED_ACTIONS],
         }, makeNextToolStep('run_cli', 'Diagnose and repair bead dependencies with br dep commands, then return to flywheel_approve_beads.'));
     }

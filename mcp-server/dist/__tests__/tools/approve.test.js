@@ -167,6 +167,7 @@ describe('runApprove', () => {
                     score: expect.any(Number),
                     summary: expect.stringContaining('Bead quality'),
                 },
+                creationAudit: { planCoverage: null, duplicateCandidates: [] },
                 matrix: expect.objectContaining({
                     version: 1,
                     recommendation: expect.stringMatching(/^(swarm|coordinator-serial)$/),
@@ -176,6 +177,54 @@ describe('runApprove', () => {
         });
     });
     // ── action=start ─────────────────────────────────────────────
+    it('returns the server-computed plan coverage and dedup audit', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'approve-creation-audit-'));
+        const beads = [
+            makeBead({
+                id: 'cache-1',
+                title: 'Add request cache',
+                description: 'Implement request caching, invalidation, and eviction behavior.',
+            }),
+            makeBead({
+                id: 'cache-2',
+                title: 'Implement request cache',
+                description: 'Implement request caching.',
+            }),
+            makeBead({
+                id: 'metrics-1',
+                title: 'Record cache metrics',
+                description: 'Record cache hit and miss metrics.',
+            }),
+        ];
+        try {
+            writeFileSync(join(cwd, 'plan.md'), '# Request cache\nImplement request caching and invalidation.\n\n# Metrics\nRecord cache hit and miss metrics.');
+            const { ctx } = makeCtx({ planDocument: 'plan.md' }, [{
+                    cmd: 'br',
+                    args: ['list', '--json'],
+                    result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
+                }], cwd);
+            const result = await runApprove(ctx, { cwd, action: 'polish' });
+            const structured = result.structuredContent;
+            expect(structured.data.creationAudit).toEqual({
+                planCoverage: expect.objectContaining({
+                    totalSections: 2,
+                    coveredSections: 2,
+                    uncoveredSections: [],
+                    weakMappings: [],
+                }),
+                duplicateCandidates: [{
+                        beadIds: ['cache-1', 'cache-2'],
+                        canonicalBeadId: 'cache-1',
+                        duplicateBeadId: 'cache-2',
+                        reasons: ['near-duplicate-title'],
+                        sharedFiles: [],
+                    }],
+            });
+        }
+        finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
     it('transitions to implementing on start', async () => {
         const bead = makeBead();
         const { ctx, state } = makeCtx({}, makeExecCalls([bead]));
@@ -212,6 +261,7 @@ describe('runApprove', () => {
                     score: expect.any(Number),
                     summary: expect.stringContaining('Bead quality'),
                 },
+                creationAudit: { planCoverage: null, duplicateCandidates: [] },
                 matrix: expect.objectContaining({
                     version: 1,
                     recommendation: expect.stringMatching(/^(swarm|coordinator-serial)$/),
@@ -275,6 +325,7 @@ describe('runApprove', () => {
                     score: expect.any(Number),
                     summary: expect.stringContaining('Bead quality'),
                 },
+                creationAudit: { planCoverage: null, duplicateCandidates: [] },
                 matrix: expect.objectContaining({
                     version: 1,
                     recommendation: 'swarm',
@@ -441,6 +492,7 @@ Current beads:
                     score: expect.any(Number),
                     summary: expect.stringContaining('Bead quality'),
                 },
+                creationAudit: { planCoverage: null, duplicateCandidates: [] },
                 matrix: expect.objectContaining({
                     version: 1,
                     recommendation: expect.stringMatching(/^(swarm|coordinator-serial)$/),
@@ -561,7 +613,7 @@ Current beads:
                     lineCount: 2,
                     sizeAssessment: 'too_short',
                     planRefinementRound: 1,
-                    refinementModel: 'claude-opus-4-7',
+                    refinementModel: 'opus',
                 },
             });
         });

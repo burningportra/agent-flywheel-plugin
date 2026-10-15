@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { remediateProjectsBase, projectsBaseMisconfigHandler, } from '../tools/remediations/projects_base_misconfig.js';
-import { REMEDIATION_REGISTRY } from '../tools/remediate.js';
+import { REMEDIATION_REGISTRY, runRemediate } from '../tools/remediate.js';
 function makeTmp() {
     const tmp = mkdtempSync(join(tmpdir(), 't61-'));
     return { tmp, cleanup: () => rmSync(tmp, { recursive: true, force: true }) };
@@ -24,8 +24,9 @@ describe('remediateProjectsBase (T6.1) — pure helper', () => {
         try {
             const ntmBase = join(tmp, 'ntm-base');
             const cwd = join(tmp, 'proj');
+            mkdirSync(cwd);
             const result = await remediateProjectsBase({ cwd, ntmBase, mode: 'dry-run' });
-            expect(result.command).toBe(`ln -s "${cwd}" "${ntmBase}/proj"`);
+            expect(result.command).toBe(`ln -s "${realpathSync(cwd)}" "${ntmBase}/proj"`);
             expect(result.executed).toBe(false);
             expect(existsSync(result.target)).toBe(false);
         }
@@ -36,8 +37,10 @@ describe('remediateProjectsBase (T6.1) — pure helper', () => {
     it('skip mode returns the ln command but does not create the symlink', async () => {
         const { tmp, cleanup } = makeTmp();
         try {
+            const cwd = join(tmp, 'proj');
+            mkdirSync(cwd);
             const result = await remediateProjectsBase({
-                cwd: join(tmp, 'proj'),
+                cwd,
                 ntmBase: join(tmp, 'ntm-base'),
                 mode: 'skip',
             });
@@ -100,6 +103,7 @@ describe('projectsBaseMisconfigHandler (T6.1) — doctor integration', () => {
         try {
             const ntmBase = join(tmp, 'ntm-base');
             const cwd = join(tmp, 'my-proj');
+            mkdirSync(cwd);
             const ctx = {
                 cwd,
                 exec: mockExec(ntmBase),
@@ -130,6 +134,41 @@ describe('projectsBaseMisconfigHandler (T6.1) — doctor integration', () => {
             const result = await projectsBaseMisconfigHandler.execute(ctx);
             expect(result.stepsRun).toBe(1);
             expect(await projectsBaseMisconfigHandler.verifyProbe(ctx)).toBe(true);
+        }
+        finally {
+            cleanup();
+        }
+    });
+    it('public remediation refuses a symlink owned by another repository', async () => {
+        const { tmp, cleanup } = makeTmp();
+        try {
+            const ntmBase = join(tmp, 'ntm-base');
+            const cwd = join(tmp, 'my-proj');
+            const other = join(tmp, 'other-proj');
+            const target = join(ntmBase, 'my-proj');
+            mkdirSync(ntmBase);
+            mkdirSync(cwd);
+            mkdirSync(other);
+            symlinkSync(other, target);
+            const result = await runRemediate({
+                cwd,
+                checkName: 'projects_base_misconfig',
+                mode: 'execute',
+                autoConfirm: true,
+            }, mockExec(ntmBase), new AbortController().signal);
+            expect(result).toMatchObject({
+                isError: true,
+                structuredContent: {
+                    data: {
+                        error: {
+                            code: 'remediation_failed',
+                            details: { stage: 'execute' },
+                        },
+                    },
+                },
+            });
+            expect(existsSync(target)).toBe(true);
+            expect(realpathSync(target)).toBe(realpathSync(other));
         }
         finally {
             cleanup();

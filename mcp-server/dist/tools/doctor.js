@@ -29,6 +29,7 @@ import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
 import { GEMINI_MODEL_ALLOWLIST, isGeminiModelAllowed, parseGeminiModelFromOutput, } from '../model-detection.js';
 import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
+import { classifyNtmProjectTarget, ntmProjectName, parseNtmProjectsBase, } from '../ntm-project.js';
 const log = createLogger('doctor');
 // ─── Constants ────────────────────────────────────────────────────────────
 /** Per-check exec timeout (ms). */
@@ -143,6 +144,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             criticalFails: 0,
             partial: true,
             checks: [],
+            ntm: unavailableNtmReadiness(cwd, 'incomplete'),
             elapsedMs: 0,
             timestamp,
         };
@@ -177,6 +179,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
     const cmExec = (cmd, args, opts) => cmd === 'cm' && args.length === 1 && args[0] === '--version'
         ? (cmVersionPromise ??= exec(cmd, args, opts))
         : exec(cmd, args, opts);
+    let projectsBaseReadiness;
     const checkFns = [
         () => checkMcpConnectivity(cwd, combined, now),
         () => checkAgentMailLiveness(exec, cwd, combined, perCheckTimeoutMs, now),
@@ -205,7 +208,11 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         () => checkOrphanTenderDaemons(exec, cwd, combined, perCheckTimeoutMs, now),
         () => checkConvergenceStateValidity(cwd, combined, now),
         () => checkOutcomeRubricValidity(cwd, combined, now),
-        () => checkProjectsBase(exec, cwd, combined, perCheckTimeoutMs, now),
+        async () => {
+            const result = await checkProjectsBase(exec, cwd, combined, perCheckTimeoutMs, now);
+            projectsBaseReadiness = result.ntm;
+            return result.check;
+        },
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -258,6 +265,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
     const budgetExceeded = combined.aborted && !externallyAborted && elapsedMs >= totalBudgetMs;
     const partial = externallyAborted || budgetExceeded;
     const criticalFails = countCriticalFails(checks);
+    const ntm = deriveNtmReadiness(cwd, partial, checks, projectsBaseReadiness);
     return {
         version: 1,
         cwd,
@@ -265,6 +273,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         criticalFails,
         partial,
         checks,
+        ntm,
         elapsedMs,
         timestamp,
     };
@@ -305,6 +314,26 @@ export function computeOverallSeverity(checks) {
     if (checks.some((c) => c.severity === 'yellow'))
         return 'yellow';
     return 'green';
+}
+function unavailableNtmReadiness(cwd, reason) {
+    return {
+        NTM_AVAILABLE: false,
+        NTM_PROJECT: ntmProjectName(cwd),
+        reason,
+    };
+}
+function deriveNtmReadiness(cwd, partial, checks, projectsBaseReadiness) {
+    if (partial)
+        return unavailableNtmReadiness(cwd, 'incomplete');
+    const ntmBinary = checks.find((check) => check.name === 'ntm_binary');
+    const projectsBase = checks.find((check) => check.name === 'projects_base_misconfig');
+    if (!ntmBinary || !projectsBase || !projectsBaseReadiness) {
+        return unavailableNtmReadiness(cwd, 'incomplete');
+    }
+    if (ntmBinary.severity !== 'green') {
+        return unavailableNtmReadiness(cwd, 'binary_unavailable');
+    }
+    return projectsBaseReadiness;
 }
 // ─── Concurrency primitive ────────────────────────────────────────────────
 class Semaphore {
@@ -467,50 +496,103 @@ async function checkNtmBinary(exec, cwd, signal, timeout, now) {
  */
 async function checkProjectsBase(exec, cwd, signal, timeout, now) {
     const start = now();
+    const project = ntmProjectName(cwd);
     try {
         const ntmConfig = await exec('ntm', ['config', 'show'], { cwd, timeout, signal });
         if (ntmConfig.code !== 0) {
             return {
-                name: 'projects_base_misconfig',
-                severity: 'green',
-                message: 'ntm not installed or config unreadable — projects_base check is non-applicable.',
-                durationMs: now() - start,
+                check: {
+                    name: 'projects_base_misconfig',
+                    severity: 'yellow',
+                    message: 'ntm config show failed — projects_base readiness is unavailable.',
+                    hint: 'Run /agent-flywheel:flywheel-setup to configure ntm projects_base.',
+                    durationMs: now() - start,
+                },
+                ntm: unavailableNtmReadiness(cwd, 'config_unavailable'),
             };
         }
-        const match = ntmConfig.stdout.match(/projects_base\s*[=:]\s*"?([^"\n]+)"?/);
-        const ntmBase = match?.[1]?.trim() ?? null;
+        const ntmBase = parseNtmProjectsBase(ntmConfig.stdout);
         if (ntmBase === null) {
             return {
-                name: 'projects_base_misconfig',
-                severity: 'green',
-                message: 'ntm config did not surface a projects_base — check is non-applicable.',
-                durationMs: now() - start,
+                check: {
+                    name: 'projects_base_misconfig',
+                    severity: 'yellow',
+                    message: 'ntm config did not return projects_base — NTM cannot resolve this project.',
+                    hint: 'Run /agent-flywheel:flywheel-setup to configure ntm projects_base.',
+                    durationMs: now() - start,
+                },
+                ntm: unavailableNtmReadiness(cwd, 'config_unavailable'),
             };
         }
-        const expected = `${ntmBase.replace(/\/+$/, '')}/${cwd.split('/').pop() ?? ''}`;
-        const { existsSync } = await import('node:fs');
-        if (existsSync(expected)) {
+        const target = await classifyNtmProjectTarget(cwd, ntmBase);
+        if (target.kind === 'matching') {
             return {
-                name: 'projects_base_misconfig',
-                severity: 'green',
-                message: `${expected} is reachable under projects_base.`,
-                durationMs: now() - start,
+                check: {
+                    name: 'projects_base_misconfig',
+                    severity: 'green',
+                    message: `${target.target} resolves to ${target.root}.`,
+                    durationMs: now() - start,
+                },
+                ntm: {
+                    NTM_AVAILABLE: true,
+                    NTM_PROJECT: target.project,
+                    reason: 'ready',
+                    target: target.target,
+                    resolvedTarget: target.resolvedTarget,
+                },
+            };
+        }
+        if (target.kind === 'collision') {
+            const resolved = target.resolvedTarget ?? target.reason;
+            return {
+                check: {
+                    name: 'projects_base_misconfig',
+                    severity: 'yellow',
+                    message: `NTM project name collision at ${target.target}: resolves to ${resolved}; expected ${target.root}.`,
+                    hint: 'Resolve the collision manually or use the single-agent fallback. Automated remediation will not overwrite it.',
+                    durationMs: now() - start,
+                },
+                ntm: {
+                    NTM_AVAILABLE: false,
+                    NTM_PROJECT: target.project,
+                    reason: 'collision',
+                    target: target.target,
+                    ...(target.resolvedTarget
+                        ? { resolvedTarget: target.resolvedTarget }
+                        : {}),
+                },
             };
         }
         return {
-            name: 'projects_base_misconfig',
-            severity: 'yellow',
-            message: `ntm projects_base=${ntmBase} does not contain ${expected}; ntm spawn will land in the wrong tree.`,
-            hint: `Symlink it with \`ln -s "${cwd}" "${expected}"\` or call flywheel_remediate({ checkName: 'projects_base_misconfig', mode: 'execute' }).`,
-            durationMs: now() - start,
+            check: {
+                name: 'projects_base_misconfig',
+                severity: 'yellow',
+                message: `ntm projects_base=${ntmBase} does not contain ${target.target}; ntm spawn will land in the wrong tree.`,
+                hint: `Call flywheel_remediate({ checkName: 'projects_base_misconfig', mode: 'execute', autoConfirm: true }).`,
+                durationMs: now() - start,
+            },
+            ntm: {
+                NTM_AVAILABLE: false,
+                NTM_PROJECT: target.project,
+                reason: 'missing',
+                target: target.target,
+            },
         };
     }
     catch (err) {
         return {
-            name: 'projects_base_misconfig',
-            severity: 'green',
-            message: `projects_base probe inconclusive: ${err instanceof Error ? err.message : String(err)}`,
-            durationMs: now() - start,
+            check: {
+                name: 'projects_base_misconfig',
+                severity: 'yellow',
+                message: `projects_base probe failed: ${err instanceof Error ? err.message : String(err)}`,
+                hint: 'Inspect ntm config and the projects_base target, then rerun flywheel_doctor.',
+                durationMs: now() - start,
+            },
+            ntm: {
+                NTM_AVAILABLE: false,
+                NTM_PROJECT: project,
+                reason: 'probe_error',
+            },
         };
     }
 }

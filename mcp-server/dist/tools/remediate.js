@@ -18,6 +18,7 @@ export const RemediateInputSchema = z.object({
     autoConfirm: z.boolean().optional().default(false),
     mode: z.enum(['dry_run', 'execute']).optional().default('dry_run'),
 });
+export const REMEDIATION_CHECK_NAMES = DOCTOR_CHECK_NAMES;
 /**
  * Per-check registry. `null` means "no automated remediation"; T7 will
  * populate the 5 actual handlers (cli_not_available, dist_drift,

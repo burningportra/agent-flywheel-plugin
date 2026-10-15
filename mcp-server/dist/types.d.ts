@@ -706,6 +706,27 @@ export declare const DoctorCheckSchema: z.ZodObject<{
     durationMs: z.ZodOptional<z.ZodNumber>;
 }, z.core.$strip>;
 export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
+export declare const NtmReadinessSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
+    NTM_AVAILABLE: z.ZodLiteral<true>;
+    NTM_PROJECT: z.ZodString;
+    reason: z.ZodLiteral<"ready">;
+    target: z.ZodString;
+    resolvedTarget: z.ZodString;
+}, z.core.$strip>, z.ZodObject<{
+    NTM_AVAILABLE: z.ZodLiteral<false>;
+    NTM_PROJECT: z.ZodString;
+    reason: z.ZodEnum<{
+        missing: "missing";
+        collision: "collision";
+        binary_unavailable: "binary_unavailable";
+        config_unavailable: "config_unavailable";
+        probe_error: "probe_error";
+        incomplete: "incomplete";
+    }>;
+    target: z.ZodOptional<z.ZodString>;
+    resolvedTarget: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>], "NTM_AVAILABLE">;
+export type NtmReadiness = z.infer<typeof NtmReadinessSchema>;
 export declare const DoctorReportSchema: z.ZodObject<{
     version: z.ZodLiteral<1>;
     cwd: z.ZodString;
@@ -727,6 +748,26 @@ export declare const DoctorReportSchema: z.ZodObject<{
         hint: z.ZodOptional<z.ZodString>;
         durationMs: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strip>>;
+    ntm: z.ZodOptional<z.ZodDiscriminatedUnion<[z.ZodObject<{
+        NTM_AVAILABLE: z.ZodLiteral<true>;
+        NTM_PROJECT: z.ZodString;
+        reason: z.ZodLiteral<"ready">;
+        target: z.ZodString;
+        resolvedTarget: z.ZodString;
+    }, z.core.$strip>, z.ZodObject<{
+        NTM_AVAILABLE: z.ZodLiteral<false>;
+        NTM_PROJECT: z.ZodString;
+        reason: z.ZodEnum<{
+            missing: "missing";
+            collision: "collision";
+            binary_unavailable: "binary_unavailable";
+            config_unavailable: "config_unavailable";
+            probe_error: "probe_error";
+            incomplete: "incomplete";
+        }>;
+        target: z.ZodOptional<z.ZodString>;
+        resolvedTarget: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>], "NTM_AVAILABLE">>;
     elapsedMs: z.ZodNumber;
     timestamp: z.ZodString;
 }, z.core.$strip>;

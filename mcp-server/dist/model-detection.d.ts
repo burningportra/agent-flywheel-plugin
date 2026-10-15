@@ -1,10 +1,35 @@
 /**
  * Model detection and selection for agent-flywheel planning.
  *
- * In the MCP context, we don't have access to a model registry like the pi
- * extension context provides. Instead, we use hardcoded fallback model lists
- * and rely on the caller to pass detected models if available.
+ * Agent-facing roles use stable model aliases. Provider model IDs remain here
+ * only for capability reporting and CLI compatibility checks.
  */
+import type { ExecFn } from './exec.js';
+export declare const AGENT_MODEL_ALIASES: {
+    readonly opus: "opus";
+    readonly sonnet: "sonnet";
+    readonly haiku: "haiku";
+    readonly fable: "fable";
+};
+export type AgentModelAlias = (typeof AGENT_MODEL_ALIASES)[keyof typeof AGENT_MODEL_ALIASES];
+export declare const CURRENT_MODEL_IDS: {
+    readonly opus: "anthropic/claude-opus-5-5";
+    readonly sonnet: "anthropic/claude-sonnet-5-5";
+    readonly haiku: "anthropic/claude-haiku-5-5";
+    readonly fable: "anthropic/claude-fable-5-1";
+};
+export declare const CURRENT_GEMINI_MODEL_ID = "gemini-3.1-flash-preview";
+export declare const DEEP_PLAN_MODELS: {
+    readonly correctness: "opus";
+    readonly ergonomics: "sonnet";
+    readonly synthesis: "opus";
+};
+export declare const REFINEMENT_MODELS: readonly AgentModelAlias[];
+export declare const GEMINI_PLANNER_DISPATCH: Readonly<{
+    runner: "ntm-gmi";
+    provider: "gemini";
+    paneType: "gmi";
+}>;
 export interface ModelProvider {
     name: string;
     prefix: string;
@@ -28,29 +53,29 @@ export interface DetectedModels {
     /** Best available model for synthesis */
     synthesisModel: string;
     /** Models for refinement rotation */
-    refinementModels: string[];
+    refinementModels: AgentModelAlias[];
     /** Optional 4th planning perspective using Google/Gemini model; null if unavailable */
     freshPerspectiveModel: string | null;
 }
 /** Models used by the swarm launcher. */
 export declare const SWARM_MODELS: {
-    readonly opus: "anthropic/claude-opus-4-7";
+    readonly opus: "anthropic/claude-opus-5-5";
     readonly codex: "codex";
-    readonly haiku: "anthropic/claude-haiku-4-5";
+    readonly haiku: "anthropic/claude-haiku-5-5";
 };
 /** Models used by cost-aware model routing tiers. */
 export declare const MODEL_ROUTING_TIERS: {
     readonly simple: {
-        readonly implementation: "anthropic/claude-haiku-4-5";
-        readonly review: "anthropic/claude-sonnet-4-6";
+        readonly implementation: "anthropic/claude-haiku-5-5";
+        readonly review: "anthropic/claude-sonnet-5-5";
     };
     readonly medium: {
-        readonly implementation: "anthropic/claude-opus-4-7";
-        readonly review: "anthropic/claude-sonnet-4-6";
+        readonly implementation: "anthropic/claude-opus-5-5";
+        readonly review: "anthropic/claude-sonnet-5-5";
     };
     readonly complex: {
-        readonly implementation: "anthropic/claude-opus-4-7";
-        readonly review: "anthropic/claude-opus-4-7";
+        readonly implementation: "anthropic/claude-opus-5-5";
+        readonly review: "anthropic/claude-opus-5-5";
     };
 };
 /**
@@ -58,21 +83,22 @@ export declare const MODEL_ROUTING_TIERS: {
  * In MCP context, the caller can pass available model IDs from the runtime.
  */
 export declare function detectAvailableModels(availableModelIds?: string[]): DetectedModels;
-/**
- * Get deep planning models based on detected availability.
- * Falls back to hardcoded defaults if detection fails.
- */
-export declare function getDeepPlanModels(availableModelIds?: string[]): {
-    correctness: string;
-    robustness: string;
-    ergonomics: string;
-    synthesis: string;
-    freshPerspective: string | null;
-};
-/**
- * Get refinement model for a given round, using detected models.
- */
-export declare function getRefinementModel(round: number, availableModelIds?: string[]): string;
+export interface DeepPlanModelSelection {
+    correctness: AgentModelAlias;
+    ergonomics: AgentModelAlias;
+    synthesis: AgentModelAlias;
+    freshPerspective: typeof GEMINI_PLANNER_DISPATCH | null;
+}
+export declare function getDeepPlanModels(capabilities?: {
+    geminiAvailable?: boolean;
+}): DeepPlanModelSelection;
+export declare function getRefinementModel(round: number): AgentModelAlias;
+/** Mirrors the doctor's gemini_cli check; NTM reports later auth/model failures. */
+export declare function isGeminiPlannerCliAvailable(exec: ExecFn, options: {
+    cwd: string;
+    signal?: AbortSignal;
+    timeout?: number;
+}): Promise<boolean>;
 /**
  * Format detected models for display.
  */

@@ -38,6 +38,29 @@ export const DoctorCheckSchema = z.object({
     hint: z.string().optional(),
     durationMs: z.number().int().nonnegative().optional(),
 });
+export const NtmReadinessSchema = z.discriminatedUnion('NTM_AVAILABLE', [
+    z.object({
+        NTM_AVAILABLE: z.literal(true),
+        NTM_PROJECT: z.string().min(1),
+        reason: z.literal('ready'),
+        target: z.string(),
+        resolvedTarget: z.string(),
+    }),
+    z.object({
+        NTM_AVAILABLE: z.literal(false),
+        NTM_PROJECT: z.string().min(1),
+        reason: z.enum([
+            'binary_unavailable',
+            'config_unavailable',
+            'missing',
+            'collision',
+            'probe_error',
+            'incomplete',
+        ]),
+        target: z.string().optional(),
+        resolvedTarget: z.string().optional(),
+    }),
+]);
 export const DoctorReportSchema = z.object({
     version: z.literal(1),
     cwd: z.string(),
@@ -50,6 +73,7 @@ export const DoctorReportSchema = z.object({
     criticalFails: z.number().int().nonnegative().default(0),
     partial: z.boolean().default(false),
     checks: z.array(DoctorCheckSchema),
+    ntm: NtmReadinessSchema.optional(),
     elapsedMs: z.number().int().nonnegative(),
     timestamp: z.string(),
 });

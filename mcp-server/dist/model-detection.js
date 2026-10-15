@@ -1,29 +1,58 @@
 /**
  * Model detection and selection for agent-flywheel planning.
  *
- * In the MCP context, we don't have access to a model registry like the pi
- * extension context provides. Instead, we use hardcoded fallback model lists
- * and rely on the caller to pass detected models if available.
+ * Agent-facing roles use stable model aliases. Provider model IDs remain here
+ * only for capability reporting and CLI compatibility checks.
  */
+import { detectCliCapabilities } from './adapters/model-diversity.js';
+export const AGENT_MODEL_ALIASES = {
+    opus: 'opus',
+    sonnet: 'sonnet',
+    haiku: 'haiku',
+    fable: 'fable',
+};
+export const CURRENT_MODEL_IDS = {
+    opus: 'anthropic/claude-opus-5-5',
+    sonnet: 'anthropic/claude-sonnet-5-5',
+    haiku: 'anthropic/claude-haiku-5-5',
+    fable: 'anthropic/claude-fable-5-1',
+};
+export const CURRENT_GEMINI_MODEL_ID = 'gemini-3.1-flash-preview';
+export const DEEP_PLAN_MODELS = {
+    correctness: AGENT_MODEL_ALIASES.opus,
+    ergonomics: AGENT_MODEL_ALIASES.sonnet,
+    synthesis: AGENT_MODEL_ALIASES.opus,
+};
+export const REFINEMENT_MODELS = Object.freeze([
+    AGENT_MODEL_ALIASES.opus,
+    AGENT_MODEL_ALIASES.sonnet,
+    AGENT_MODEL_ALIASES.fable,
+    AGENT_MODEL_ALIASES.sonnet,
+]);
+export const GEMINI_PLANNER_DISPATCH = Object.freeze({
+    runner: 'ntm-gmi',
+    provider: 'gemini',
+    paneType: 'gmi',
+});
 /** Models used by the swarm launcher. */
 export const SWARM_MODELS = {
-    opus: "anthropic/claude-opus-4-7",
+    opus: CURRENT_MODEL_IDS.opus,
     codex: "codex",
-    haiku: "anthropic/claude-haiku-4-5",
+    haiku: CURRENT_MODEL_IDS.haiku,
 };
 /** Models used by cost-aware model routing tiers. */
 export const MODEL_ROUTING_TIERS = {
     simple: {
-        implementation: "anthropic/claude-haiku-4-5",
-        review: "anthropic/claude-sonnet-4-6",
+        implementation: CURRENT_MODEL_IDS.haiku,
+        review: CURRENT_MODEL_IDS.sonnet,
     },
     medium: {
-        implementation: "anthropic/claude-opus-4-7",
-        review: "anthropic/claude-sonnet-4-6",
+        implementation: CURRENT_MODEL_IDS.opus,
+        review: CURRENT_MODEL_IDS.sonnet,
     },
     complex: {
-        implementation: "anthropic/claude-opus-4-7",
-        review: "anthropic/claude-opus-4-7",
+        implementation: CURRENT_MODEL_IDS.opus,
+        review: CURRENT_MODEL_IDS.opus,
     },
 };
 /**
@@ -32,11 +61,10 @@ export const MODEL_ROUTING_TIERS = {
  */
 const PROVIDER_BEST_MODELS = {
     anthropic: [
-        "claude-opus-4-7",
-        "claude-opus-4-5",
-        "claude-opus-4-1",
-        "claude-sonnet-4-6",
-        "claude-sonnet-4-5",
+        CURRENT_MODEL_IDS.opus.slice('anthropic/'.length),
+        CURRENT_MODEL_IDS.fable.slice('anthropic/'.length),
+        CURRENT_MODEL_IDS.sonnet.slice('anthropic/'.length),
+        CURRENT_MODEL_IDS.haiku.slice('anthropic/'.length),
     ],
     "openai-codex": [
         "gpt-5.4",
@@ -54,45 +82,17 @@ const PROVIDER_BEST_MODELS = {
     opencode: [
         "gpt-5.4",
         "gpt-5.3-codex",
-        "claude-opus-4-7",
-        "claude-sonnet-4-6",
+        CURRENT_MODEL_IDS.opus.slice('anthropic/'.length),
+        CURRENT_MODEL_IDS.sonnet.slice('anthropic/'.length),
     ],
     openrouter: [
-        "anthropic/claude-opus-4-7",
-        "anthropic/claude-sonnet-4-6",
+        CURRENT_MODEL_IDS.opus,
+        CURRENT_MODEL_IDS.sonnet,
     ],
+    google: [CURRENT_GEMINI_MODEL_ID],
+    "google-antigravity": [CURRENT_GEMINI_MODEL_ID],
     groq: [], // Groq models are typically smaller/faster, not for planning
 };
-/**
- * Build a rotation of models from different providers for refinement rounds.
- * Using different providers helps avoid anchoring bias.
- */
-function buildRefinementRotation(providerMap) {
-    const rotation = [];
-    // Prefer Anthropic for reasoning
-    const anthropicBest = selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS);
-    if (anthropicBest)
-        rotation.push(anthropicBest);
-    // Add OpenAI/Codex for different perspective
-    const openaiBest = selectBestModel(providerMap, ["openai-codex", "opencode", "openai"], PROVIDER_BEST_MODELS);
-    if (openaiBest && openaiBest !== rotation[0])
-        rotation.push(openaiBest);
-    // Add a third Anthropic model for third perspective (replaces Google in MCP context)
-    const thirdModel = "anthropic/claude-sonnet-4-6";
-    if (!rotation.includes(thirdModel))
-        rotation.push(thirdModel);
-    // Fallback if we don't have enough diversity
-    if (rotation.length === 0) {
-        rotation.push("anthropic/claude-opus-4-7");
-    }
-    if (rotation.length === 1) {
-        rotation.push("codex");
-    }
-    if (rotation.length === 2) {
-        rotation.push("anthropic/claude-sonnet-4-6");
-    }
-    return rotation;
-}
 /**
  * Select the best available model from a list of preferred providers.
  */
@@ -148,23 +148,19 @@ export function detectAvailableModels(availableModelIds) {
     // Select best models for each planning role
     const correctnessModel = selectBestModel(providerMap, ["openai-codex", "opencode", "openai"], PROVIDER_BEST_MODELS)
         ?? selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
-        ?? "anthropic/claude-opus-4-7";
+        ?? CURRENT_MODEL_IDS.opus;
     const robustnessModel = selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
-        ?? "anthropic/claude-opus-4-7";
+        ?? CURRENT_MODEL_IDS.opus;
     // Ergonomics prefers openai-codex (Codex 5.4) for a different architectural lens
     const ergonomicsModel = selectBestModel(providerMap, ["openai-codex", "opencode"], PROVIDER_BEST_MODELS)
         ?? selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
-        ?? "anthropic/claude-sonnet-4-6";
+        ?? CURRENT_MODEL_IDS.sonnet;
     const synthesisModel = selectBestModel(providerMap, ["openai-codex", "opencode", "openai"], PROVIDER_BEST_MODELS)
         ?? selectBestModel(providerMap, ["anthropic"], PROVIDER_BEST_MODELS)
-        ?? "anthropic/claude-opus-4-7";
+        ?? CURRENT_MODEL_IDS.opus;
     // Fresh perspective uses Google/Gemini when available; null otherwise (4th optional planner)
-    const googleBestModel = selectBestModel(providerMap, ["google-antigravity", "google"], PROVIDER_BEST_MODELS);
-    const freshPerspectiveModel = googleBestModel
-        ? `${providerMap.has("google-antigravity") ? "google-antigravity" : "google"}/${googleBestModel}`
-        : null;
-    // Build refinement rotation from available providers
-    const refinementModels = buildRefinementRotation(providerMap);
+    const freshPerspectiveModel = selectBestModel(providerMap, ["google-antigravity", "google"], PROVIDER_BEST_MODELS);
+    const refinementModels = [...REFINEMENT_MODELS];
     return {
         providers,
         hasAnthropic,
@@ -181,50 +177,25 @@ export function detectAvailableModels(availableModelIds) {
         freshPerspectiveModel,
     };
 }
-/**
- * Get deep planning models based on detected availability.
- * Falls back to hardcoded defaults if detection fails.
- */
-export function getDeepPlanModels(availableModelIds) {
-    try {
-        const detected = detectAvailableModels(availableModelIds);
-        return {
-            correctness: detected.correctnessModel,
-            robustness: detected.robustnessModel,
-            ergonomics: detected.ergonomicsModel,
-            synthesis: detected.synthesisModel,
-            freshPerspective: detected.freshPerspectiveModel,
-        };
-    }
-    catch {
-        // Fallback to hardcoded defaults
-        return {
-            correctness: "anthropic/claude-opus-4-7",
-            robustness: "anthropic/claude-opus-4-7",
-            ergonomics: "anthropic/claude-sonnet-4-6",
-            synthesis: "anthropic/claude-opus-4-7",
-            freshPerspective: null,
-        };
-    }
+export function getDeepPlanModels(capabilities = {}) {
+    return {
+        ...DEEP_PLAN_MODELS,
+        freshPerspective: capabilities.geminiAvailable ? GEMINI_PLANNER_DISPATCH : null,
+    };
 }
-/**
- * Get refinement model for a given round, using detected models.
- */
-export function getRefinementModel(round, availableModelIds) {
-    try {
-        const detected = detectAvailableModels(availableModelIds);
-        const models = detected.refinementModels;
-        return models[round % models.length] ?? "anthropic/claude-opus-4-7";
-    }
-    catch {
-        // Fallback to hardcoded rotation
-        const fallbacks = [
-            "anthropic/claude-opus-4-7",
-            "anthropic/claude-sonnet-4-6",
-            "anthropic/claude-opus-4-7",
-        ];
-        return fallbacks[round % fallbacks.length];
-    }
+export function getRefinementModel(round) {
+    const index = ((round % REFINEMENT_MODELS.length) + REFINEMENT_MODELS.length)
+        % REFINEMENT_MODELS.length;
+    return REFINEMENT_MODELS[index] ?? AGENT_MODEL_ALIASES.opus;
+}
+/** Mirrors the doctor's gemini_cli check; NTM reports later auth/model failures. */
+export async function isGeminiPlannerCliAvailable(exec, options) {
+    const capabilities = await detectCliCapabilities(exec, {
+        timeout: options.timeout ?? 1500,
+        cwd: options.cwd,
+        signal: options.signal,
+    });
+    return capabilities.gemini.available;
 }
 /**
  * Format detected models for display.
@@ -270,7 +241,7 @@ export function formatDetectedModels(detected) {
 // pre-flight gate (bead claude-orchestrator-2wcd) can skip `--gmi` lanes
 // before they ever reach `ntm spawn`.
 export const GEMINI_MODEL_ALLOWLIST = Object.freeze([
-    "gemini-3.1-flash-preview",
+    CURRENT_GEMINI_MODEL_ID,
 ]);
 export function isGeminiModelAllowed(model) {
     return GEMINI_MODEL_ALLOWLIST.includes(model.trim().toLowerCase());

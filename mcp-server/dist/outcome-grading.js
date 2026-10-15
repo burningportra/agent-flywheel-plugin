@@ -117,7 +117,7 @@ export const RubricSchemaV1 = z.object({
     planSlug: z.string().min(1),
     /** The selected goal — copied verbatim from `state.selectedGoal` at synth time. */
     goal: z.string().min(1),
-    /** Synthesizer engine identifier (e.g. `claude-opus-4-7`, `codex-gpt-5.5`). Optional for v3.11.x checkpoints that lack the field. */
+    /** Synthesizer engine identifier (e.g. `claude-opus-5-5`, `codex-gpt-5.5`). Optional for v3.11.x checkpoints that lack the field. */
     engine: z.string().optional(),
     /** 3..15 criteria — bounds enforced at parse time. */
     criteria: z.array(RubricCriterionSchemaV1).min(3).max(15),

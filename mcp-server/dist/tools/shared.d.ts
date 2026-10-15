@@ -9,7 +9,6 @@ export declare function makeToolError(tool: FlywheelToolName, phase: FlywheelPha
  * Returns a 0-1 score where 1 = fully converged (no more changes).
  */
 export declare function computeConvergenceScore(polishChanges: number[], outputSizes?: number[]): number;
-export declare function pickRefinementModel(round: number): string;
 /**
  * Walk a directory and return the newest mtime (ms) across matching files.
  * Skips node_modules and dot-directories. Returns null if nothing matched.

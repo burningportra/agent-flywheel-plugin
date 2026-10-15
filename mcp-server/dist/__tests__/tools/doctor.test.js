@@ -65,6 +65,10 @@ function allGreenStubs() {
         { match: (cmd, args) => cmd === 'br' && args[0] === '--version', respond: ok('br 0.1.0') },
         { match: (cmd, args) => cmd === 'bv' && args[0] === '--version', respond: ok('bv 0.1.0') },
         { match: (cmd, args) => cmd === 'ntm' && args[0] === '--version', respond: ok('ntm 0.1.0') },
+        {
+            match: (cmd, args) => cmd === 'ntm' && args[0] === 'config',
+            respond: ok(`projects_base = "${tmpdir()}"\n`),
+        },
         { match: (cmd, args) => cmd === 'cm' && args[0] === '--version', respond: ok('cm 0.1.0') },
         // `rescues_last_30d` synthesis row queries `cm context flywheel-rescue --json`.
         // Empty array → 0 rescues → green.
@@ -662,7 +666,7 @@ describe('isCodexIncompatibleModel', () => {
     it('passes app-server-compatible models through', () => {
         expect(isCodexIncompatibleModel('o3')).toBe(false);
         expect(isCodexIncompatibleModel('gpt-4o')).toBe(false);
-        expect(isCodexIncompatibleModel('claude-sonnet-4-6')).toBe(false);
+        expect(isCodexIncompatibleModel('claude-sonnet-5-5')).toBe(false);
     });
 });
 describe('codex_config_compat (integrated)', () => {

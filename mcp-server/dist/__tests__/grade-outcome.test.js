@@ -11,9 +11,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runGradeOutcome } from '../tools/grade-outcome.js';
+import { renderGradeOutcomeText, runGradeOutcome } from '../tools/grade-outcome.js';
 import { DEFAULT_HINTS, DEFAULT_RETRYABLE } from '../errors.js';
-import { _resetGraderMutex, defaultGraderDriver, } from '../outcome-grading.js';
+import { _resetGraderMutex, defaultGraderDriver, GraderVerdictSchemaV1, } from '../outcome-grading.js';
 const SAMPLE_RUBRIC = `---
 version: 1
 source: auto
@@ -163,6 +163,47 @@ describe('flywheel_grade_outcome tool wrapper', () => {
         // exec-based body is exercised via gradeOutcome unit tests in T14
         // with mocked drivers; here we just confirm the export shape.
         expect(typeof defaultGraderDriver).toBe('function');
+    });
+    it('renders the complete failed-verdict text', () => {
+        const verdict = GraderVerdictSchemaV1.parse(JSON.parse(makeVerdictJson({
+            status: 'failed',
+            iteration: 2,
+            perCriterion: [
+                { criterionId: 'c1', status: 'unmet', evidence: 'missing', gaps: ['missing | evidence'] },
+                { criterionId: 'c2', status: 'partial', evidence: 'partial', gaps: ['partial gap'] },
+                { criterionId: 'c3', status: 'met', evidence: 'shipped', gaps: [] },
+            ],
+            explanation: 'The cycle missed its outcome.',
+            modelUsed: 'claude',
+            durationMs: 42,
+            details: { fallbackReason: 'codex_unavailable', diffTruncated: true },
+        })));
+        expect(renderGradeOutcomeText(verdict, 'tool-grade-slug', 3)).toBe(`Outcome grade: failed @ iter 2/3 (1 unmet, 1 partial)
+Grader: claude in 42ms
+Verdict file: .pi-flywheel/plans/tool-grade-slug/grading/iteration-2.json
+
+| Criterion | Status | Gap |
+|---|---|---|
+| c1 | unmet | missing \\| evidence |
+| c2 | partial | partial gap |
+
+Grader notice: Codex unavailable; used a fresh Claude grader instead.
+
+Grader notice: cycle diff exceeded 30K chars; grader saw 15K start + 15K end + file list. Verdict confidence may be reduced.
+
+Explanation: The cycle missed its outcome.`);
+    });
+    it('renders persistence failure without claiming the verdict was saved', () => {
+        const verdict = GraderVerdictSchemaV1.parse(JSON.parse(makeVerdictJson({
+            persistence: 'failed',
+        })));
+        expect(renderGradeOutcomeText(verdict, 'tool-grade-slug', 3)).toBe(`Outcome grade: satisfied @ iter 1/3 (0 unmet, 0 partial)
+Grader: codex in 0ms
+Warning: Outcome grade computed but could not be persisted to disk.
+Reason: storage is full, quota-limited, or read-only.
+Verdict shown inline; not saved to .pi-flywheel/plans/tool-grade-slug/grading/iteration-1.json.
+
+All criteria met — no failing rows.`);
     });
 });
 //# sourceMappingURL=grade-outcome.test.js.map

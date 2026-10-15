@@ -19,6 +19,8 @@ export type RemediateProjectsBaseInput = {
 export type RemediateProjectsBaseResult = {
     command: string;
     executed: boolean;
+    changed: boolean;
+    source: string;
     target: string;
 };
 /**

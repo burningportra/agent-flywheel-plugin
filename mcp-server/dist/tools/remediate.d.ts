@@ -36,6 +36,7 @@ export declare const RemediateInputSchema: z.ZodObject<{
     }>>>;
 }, z.core.$strip>;
 export type RemediateInput = z.infer<typeof RemediateInputSchema>;
+export declare const REMEDIATION_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "swarm_model_ratio", "codex_config_compat", "gemini_model_compat", "rescues_last_30d", "npm_marketplace_version_drift", "orphan_tender_daemons", "convergence_state_validity", "outcome_rubric_validity", "projects_base_misconfig"];
 export interface RemediationPlan {
     description: string;
     steps: string[];

@@ -1,12 +1,14 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeOkToolResult, slugifyGoal } from './shared.js';
-import { getDeepPlanModels } from '../model-detection.js';
+import { getDeepPlanModels, isGeminiPlannerCliAvailable, } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { assertSafeRelativePath, resolveRealpathWithinRoot, } from '../utils/path-safety.js';
 import { normalizeText } from '../utils/text-normalize.js';
 import { markdownFenceFor } from '../utils/markdown-fence.js';
+import { writeAtomic } from '../atomic-write.js';
+import { acquireBeadMutex, makeConcurrentWriteError, releaseBeadMutex } from '../mutex.js';
 const CODEX_SUBAGENT_TYPE = 'codex:codex-rescue';
 /**
  * Filename shape after `<goal-slug>-` for each planning artifact the
@@ -136,7 +138,7 @@ function errorResult(phase, code, message, details, hint) {
  * requirements, into whichever generator the mode picks. planFile/planContent registration ignores it.
  */
 export async function runPlan(ctx, args) {
-    const { state, saveState, cwd } = ctx;
+    const { state, saveState, cwd, exec, signal } = ctx;
     if (!state.selectedGoal) {
         return errorResult('planning', 'missing_prerequisite', 'Error: No goal selected. Call flywheel_select first.', undefined, 'Call flywheel_select with the chosen goal before flywheel_plan.');
     }
@@ -379,7 +381,7 @@ After the duel completes and you call \`flywheel_plan\` again with \`planFile\`,
             memorySection = `\n## Prior Session Context\n${mem}\n`;
     }
     catch { /* CASS unavailable — proceed without */ }
-    const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
+    const plannerBrief = `You are a planning agent for an agentic coding workflow.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
@@ -396,55 +398,101 @@ Write a comprehensive implementation plan from your designated perspective. The 
 - Risk & mitigation
 - Target: 500-2000 lines of detailed content
 
-Focus deeply on your assigned perspective lens.
-
-Use ultrathink.`;
-    const dynamicModels = getDeepPlanModels();
+Focus deeply on your assigned perspective lens.`;
+    const briefCandidate = join('.pi-flywheel', 'plans', planSlug, 'planner-brief.md');
+    const safeBrief = assertSafeRelativePath(briefCandidate, { root: cwd });
+    if (!safeBrief.ok) {
+        return errorResult('planning', 'invalid_input', `Error: planner brief path rejected (${safeBrief.reason}): ${safeBrief.message}`, { briefDocument: briefCandidate, reason: safeBrief.reason }, 'Use a selected goal that produces a filesystem-safe plan slug.');
+    }
+    const briefDocument = safeBrief.value;
+    const briefMutexKey = `planner-brief:${cwd}:${planSlug}`;
+    if (!acquireBeadMutex(briefMutexKey)) {
+        return makeConcurrentWriteError('flywheel_plan', 'planning', briefMutexKey);
+    }
+    try {
+        const briefDirectories = [
+            '.pi-flywheel',
+            join('.pi-flywheel', 'plans'),
+            join('.pi-flywheel', 'plans', planSlug),
+        ];
+        for (const relativeDirectory of briefDirectories) {
+            const absoluteDirectory = join(cwd, relativeDirectory);
+            if (!existsSync(absoluteDirectory))
+                mkdirSync(absoluteDirectory, { recursive: true });
+            const stat = lstatSync(absoluteDirectory);
+            const resolved = resolveRealpathWithinRoot(relativeDirectory, {
+                root: cwd,
+                label: 'planner brief directory',
+                rootLabel: 'cwd',
+            });
+            if (stat.isSymbolicLink() || !stat.isDirectory() || !resolved.ok) {
+                return errorResult('planning', 'invalid_input', `Error: planner brief directory rejected: ${relativeDirectory}`, { briefDocument, relativeDirectory }, 'Remove symlinks or non-directory entries from .pi-flywheel/plans and retry.');
+            }
+        }
+        for (const relativeTarget of [briefDocument, `${briefDocument}.tmp`]) {
+            const absoluteTarget = join(cwd, relativeTarget);
+            try {
+                const stat = lstatSync(absoluteTarget);
+                const resolved = resolveRealpathWithinRoot(relativeTarget, {
+                    root: cwd,
+                    label: 'planner brief target',
+                    rootLabel: 'cwd',
+                });
+                if (stat.isSymbolicLink() || !stat.isFile() || !resolved.ok) {
+                    return errorResult('planning', 'invalid_input', `Error: planner brief target rejected: ${relativeTarget}`, { briefDocument, relativeTarget }, 'Remove symlinks or non-file entries at the planner brief target and retry.');
+                }
+            }
+            catch (err) {
+                const missing = typeof err === 'object' && err !== null && 'code' in err && err.code === 'ENOENT';
+                if (!missing)
+                    throw err;
+            }
+        }
+        await writeAtomic(join(cwd, briefDocument), `${plannerBrief.trimEnd()}\n`);
+    }
+    finally {
+        releaseBeadMutex(briefMutexKey);
+    }
+    const geminiAvailable = await isGeminiPlannerCliAvailable(exec, { cwd, signal });
+    const dynamicModels = getDeepPlanModels({ geminiAvailable });
+    const plannerTask = (lens) => `Read \`${briefDocument}\` first. The path is relative to the project checkout. Use ultrathink. Your lens: ${lens}`;
     const planAgents = [
         {
+            runner: 'agent-model',
             model: dynamicModels.correctness,
             perspective: 'correctness',
-            task: `${basePrompt}
-
-## Your perspective: CORRECTNESS
-Focus on: type safety, edge cases, error handling, validation, data integrity, invariants.
-Ask: What can go wrong? What are the failure modes? Are the interfaces correct?`,
+            task: plannerTask('CORRECTNESS — Focus on type safety, edge cases, error handling, validation, data integrity, and invariants. ' +
+                'Ask what can go wrong, which failure modes matter, and whether the interfaces are correct.'),
         },
         {
+            runner: 'agent-subagent',
             subagent_type: CODEX_SUBAGENT_TYPE,
             perspective: 'robustness',
-            task: `${basePrompt}
-
-## Your perspective: ROBUSTNESS
-Focus on: performance, scalability, retry logic, timeouts, graceful degradation, observability.
-Ask: What happens under load? What are the operational concerns? How does it fail gracefully?`,
+            task: plannerTask('ROBUSTNESS — Focus on performance, scalability, retry logic, timeouts, graceful degradation, and observability. ' +
+                'Ask what happens under load, which operational concerns matter, and how the system fails gracefully.'),
         },
         {
+            runner: 'agent-model',
             model: dynamicModels.ergonomics,
             perspective: 'ergonomics',
-            task: `${basePrompt}
-
-## Your perspective: ERGONOMICS
-Focus on: API design, developer experience, naming, documentation, discoverability, simplicity.
-Ask: Is it easy to use correctly? Hard to misuse? Does it follow existing patterns in the codebase?`,
+            task: plannerTask('ERGONOMICS — Focus on API design, developer experience, naming, documentation, discoverability, and simplicity. ' +
+                'Ask whether it is easy to use correctly, hard to misuse, and consistent with existing codebase patterns.'),
         },
     ];
-    // Add optional 4th Gemini planner when Google model is available
+    // Add the optional fourth planner when the Gemini CLI is installed for NTM routing.
     if (dynamicModels.freshPerspective) {
         planAgents.push({
-            model: dynamicModels.freshPerspective,
+            ...dynamicModels.freshPerspective,
             perspective: 'fresh-perspective',
-            task: `${basePrompt}
-
-## Your perspective: FRESH PERSPECTIVE
-You are a fresh pair of eyes who has not seen the other plans.
-Challenge shared assumptions. Propose the simplest alternative that satisfies the goal.
-Flag anything under-specified, contradictory, or likely to cause confusion during implementation.
-Question every architectural choice: is there a simpler way? A more standard approach? A hidden dependency?`,
+            task: plannerTask('FRESH PERSPECTIVE — Challenge shared assumptions, propose the simplest alternative that satisfies the goal, ' +
+                'flag under-specified or contradictory work, and question every architectural choice for simpler standard approaches or hidden dependencies.'),
         });
     }
     const synthesisAmbition = inputs.ambition === 'ambitious'
         ? '\n\nAmbition mode: the synthesized plan keeps the charter\'s target rung, stretch target, and floor-first phase order. Where plans disagree on how far to climb, keep the more ambitious path that still has an outside judge and a fallback. Do not average ambition down.'
+        : '';
+    const geminiDispatch = dynamicModels.freshPerspective
+        ? ` The fresh-perspective entry uses runner="ntm-gmi": start or reuse an NTM Gemini pane and send its task with \`ntm --robot-send="$SESSION" --panes=<gmi-pane> --type=gmi --msg="<task>"\`. Gemini panes have no MCP tools, so bootstrap with \`am macros start-session --project "${cwd}" --program gemini-cli --model "<gemini-model>" --task "fresh-perspective planning"\` and return the artifact path with \`am mail send --project "${cwd}" --from "<agent-name>" --to "<coordinator>" --subject "[plan] fresh-perspective delivered" --body "<path>"\`. Do not pass it to Agent as a model. If that optional pane reports an authentication or model error, continue with the three Agent-routed plans and report the missing perspective.`
         : '';
     const payload = {
         kind: 'deep_plan_spawn',
@@ -454,8 +502,10 @@ Question every architectural choice: is there a simpler way? A more standard app
         brainstormDocument: inputs.brainstorm?.path,
         ambition: inputs.ambition,
         ambitionDocument,
+        briefDocument,
         planAgents,
-        instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+        synthesisModel: dynamicModels.synthesis,
+        instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true and bootstrap Agent Mail with macro_start_session.${geminiDispatch} Every planner writes to docs/plans/<date>-<perspective>.md. Agent-routed planners send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
         synthesisPrompt: `Use ultrathink.
 
 ## Best-of-All-Worlds Synthesis
@@ -482,7 +532,9 @@ The synthesis must be BETTER than any individual plan, not a lowest-common-denom
         constraints: state.constraints,
         ambition: payload.ambition,
         ambitionDocument: payload.ambitionDocument,
+        briefDocument: payload.briefDocument,
         planAgents,
+        synthesisModel: payload.synthesisModel,
         instructions: payload.instructions,
         synthesisPrompt: payload.synthesisPrompt,
     }, null, 2), 'planning', payload);

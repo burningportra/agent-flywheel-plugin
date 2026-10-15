@@ -14,6 +14,7 @@
  * `makeFlywheelErrorResult` with the matching FlywheelErrorCode.
  */
 import { z } from 'zod';
+import { type GraderVerdict } from '../outcome-grading.js';
 import type { McpToolResult, ToolContext } from '../types.js';
 export declare const GradeOutcomeInputSchema: z.ZodObject<{
     cwd: z.ZodString;
@@ -21,5 +22,6 @@ export declare const GradeOutcomeInputSchema: z.ZodObject<{
     force: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>;
 export type GradeOutcomeInput = z.infer<typeof GradeOutcomeInputSchema>;
+export declare function renderGradeOutcomeText(verdict: GraderVerdict, planSlug: string, maxIterations: number): string;
 export declare function runGradeOutcome(ctx: ToolContext, rawArgs: unknown): Promise<McpToolResult>;
 //# sourceMappingURL=grade-outcome.d.ts.map

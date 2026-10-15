@@ -28,7 +28,13 @@
         "gemini_cli",
         "swarm_model_ratio",
         "codex_config_compat",
-        "rescues_last_30d"
+        "gemini_model_compat",
+        "rescues_last_30d",
+        "npm_marketplace_version_drift",
+        "orphan_tender_daemons",
+        "convergence_state_validity",
+        "outcome_rubric_validity",
+        "projects_base_misconfig"
       ],
       "description": "The doctor check name to remediate"
     },
