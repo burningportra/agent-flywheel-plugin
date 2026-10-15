@@ -60,49 +60,21 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
        ## Acceptance criteria
        <criteria>
 
-       ## Pre-Completion Quality Gate (MANDATORY — do not skip)
-       Before sending the completion message you MUST run, in this order, and fix what
-       you find before reporting done:
-         1. Invoke the \`/ubs-workflow\` skill scoped to your changed files
-            (changed-files mode, not full-repo). Triage every finding: fix, file as a
-            new bead with rationale, or explicitly justify ignoring it in your
-            completion message. Do not silently drop UBS findings.
-         2. Run the repo's verify commands per AGENTS.md (build/test/typecheck/lint
-            for the surfaces you touched). If AGENTS.md offloads heavy verification
-            to a helper (e.g. \`rch\`), use that — do not skip.
-         3. Self-review with fresh eyes: re-read your own diff for regressions,
-            unsafe assumptions, missing tests, and edge cases. Fix before completing.
-         4. Write \`.pi-flywheel/completion/<bead-id>.json\` matching
-            \`CompletionReportSchemaV1\` in \`mcp-server/src/completion-report.ts\`.
-            This attestation is the ledger entry that \`flywheel_verify_beads\` reads
-            and \`flywheel_advance_wave\` gates on (warn-only by default; hard-block
-            when \`FW_ATTESTATION_REQUIRED=1\`). Worked example:
+       ## Pre-Completion Quality Gate
+       Follow AGENTS.md § \"Pre-Completion Quality Gate\" and § \"Completion Evidence
+       Attestation\" verbatim — those sections are the single source for the four
+       mandatory steps (UBS → verify → self-review → write
+       \`.pi-flywheel/completion/<bead-id>.json\`) and for the \`CompletionReportSchemaV1\`
+       shape your attestation must match.
 
-            \`\`\`json
-            {
-              \"version\": 1,
-              \"beadId\": \"<bead-id>\",
-              \"agentName\": \"<your-agent-name>\",
-              \"paneName\": \"<your-pane-name-or-omit>\",
-              \"status\": \"closed\",
-              \"changedFiles\": [\"path/relative/to/repo.ts\"],
-              \"commits\": [\"<short-sha>\"],
-              \"ubs\": { \"ran\": true, \"summary\": \"clean\", \"findingsFixed\": 0, \"deferredBeadIds\": [] },
-              \"verify\": [{ \"command\": \"npm test\", \"exitCode\": 0, \"summary\": \"all green\" }],
-              \"selfReview\": { \"ran\": true, \"summary\": \"no regressions\" },
-              \"beadClosedVerified\": true,
-              \"reservationsReleased\": true,
-              \"createdAt\": \"<ISO-8601 timestamp>\"
-            }
-            \`\`\`
-
-            Docs-only diffs: set \`ubs.ran=false\` and a non-empty \`ubs.skippedReason\`.
-            Status \`closed\` requires \`beadClosedVerified=true\`. Schema rejects
-            absolute paths or \`..\`-traversal in \`changedFiles\`. The schema is
-            \`version: 1\` and additive forever — never remove keys.
-
-       Completion messages without evidence of these four steps will be bounced
-       back by the coordinator's review gate.
+       The per-bead implementer prompt that \`flywheel_advance_wave\` returned in
+       \`nextWave.prompts[]\` already carries the gate text and a filled-in JSON
+       example for your bead (built by
+       \`mcp-server/src/adapters/completion-attestation-prompt.ts\`); send that prompt
+       to the implementer unchanged and do not duplicate the gate below it. If you
+       are not dispatching through \`flywheel_advance_wave\` (e.g. wave 1 from an
+       \`flywheel_approve_beads(action: \"start\")\` launch), copy the gate text from
+       AGENTS.md once per spawn — do not re-invent it inline.
 
        ## On completion
        Send a completion message to <your-coordinator-name> via send_message that
