@@ -284,7 +284,7 @@ AskUserQuestion(questions: [
 
 **Standard plan**: Call `flywheel_plan` with `cwd` and `mode: "standard"`. `flywheel_plan` auto-detects the most-recent `docs/brainstorms/<goal-slug>-*.md` (written by Phase 0.5) and threads its synthesized framing into the planner prompt; no extra argument is required. After it returns, **STOP and jump to Step 5.55 (Plan alignment check)** — that step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
-**Structured error branching (mandatory).** When `flywheel_plan` returns `status: "error"`, branch on `result.structuredContent?.data?.error?.code` (a `FlywheelErrorCode`) instead of matching message text:
+**Plan error codes.** Follow SKILL.md Universal Rule 4. For `flywheel_plan` recovery:
 
 ```ts
 const code = planResult.structuredContent?.data?.error?.code;
@@ -727,7 +727,7 @@ Otherwise (kind = `rubric_synthesized`), print the verbatim Rubric Preview line:
 Outcome rubric drafted at <rubric-path> with <N> criteria. Source: auto.
 ```
 
-**Structured error branching (mandatory).** Route on `result.structuredContent?.data?.error?.code`:
+**Rubric error codes.** Follow SKILL.md Universal Rule 4. For rubric synthesis recovery:
 
 - `rubric_synth_invalid` → present a recovery `AskUserQuestion` with options `Re-edit / Regenerate from scratch / Abort` (use the verbatim §"Edit Parse Failure Recovery" copy below). The synthesizer's output didn't match `RubricSchemaV1`; the file was NOT written.
 - `parse_failure` / `cli_failure` → surface the hint and offer `Retry / Skip rubric / Abort` (one auto-retry happens inside the tool already).
