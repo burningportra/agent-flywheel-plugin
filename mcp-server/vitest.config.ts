@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     // Tests that run the real doctor would otherwise write its probe cache to ~/.cache.
     env: { XDG_CACHE_HOME: join(tmpdir(), 'agent-flywheel-vitest-cache') },
     coverage: {

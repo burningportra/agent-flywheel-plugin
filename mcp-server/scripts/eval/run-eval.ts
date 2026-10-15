@@ -1,11 +1,12 @@
 #!/usr/bin/env tsx
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, symlinkSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseArgv } from "./argv.js";
 import { SCENARIOS } from "./scenarios.js";
 import { runScenario } from "./stream.js";
 import type { BaselineReport, Scenario, ScenarioResult } from "./types.js";
@@ -21,9 +22,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..", "..", "..");
 const BASELINE_PATH = join(REPO_ROOT, "docs", "perf", "eval-start-baseline.json");
 const ARTIFACTS_DIR = join(REPO_ROOT, "mcp-server", "scripts", "eval", "artifacts");
+const MAIN_NODE_MODULES = join(REPO_ROOT, "mcp-server", "node_modules");
 
 const sh = (cmd: string, args: string[], cwd?: string): string =>
   execFileSync(cmd, args, { cwd, encoding: "utf8" }).trim();
+
+const shLog = (cmd: string, args: string[], cwd?: string): void => {
+  execFileSync(cmd, args, { cwd, stdio: ["ignore", "inherit", "inherit"] });
+};
 
 const slugifyGoal = (goal: string): string =>
   goal
@@ -65,7 +71,6 @@ for the floor.
 `;
 
 const sdkVersion = (): string => {
-  // SDK does not expose ./package.json via its exports map; read the file directly.
   const path = join(
     REPO_ROOT,
     "mcp-server",
@@ -90,33 +95,27 @@ const claudeCliVersion = (): string => {
   }
 };
 
-const argv = process.argv.slice(2);
-const onlyIds = new Set<string>();
-let listOnly = false;
-let dryRun = false;
-let writeBaseline = true;
-let baselineSha: string | undefined;
-let keepWorktrees = false;
-for (let i = 0; i < argv.length; i += 1) {
-  const a = argv[i];
-  if (a === "--only") {
-    const next = argv[i + 1] ?? "";
-    for (const id of next.split(",")) if (id) onlyIds.add(id.trim());
-    i += 1;
-  } else if (a === "--sha") {
-    baselineSha = argv[i + 1];
-    i += 1;
-  } else if (a === "--list") listOnly = true;
-  else if (a === "--dry-run") dryRun = true;
-  else if (a === "--no-write-baseline") writeBaseline = false;
-  else if (a === "--keep-worktrees") keepWorktrees = true;
-}
-
 async function setupWorktree(scenarioId: string, sha: string): Promise<string> {
   await mkdir(SCRATCH_ROOT, { recursive: true });
   const dir = await mkdtemp(join(SCRATCH_ROOT, `${scenarioId}-`));
-  // Fresh worktree pinned at the named sha. -f tolerates nested gitdirs.
   sh("git", ["worktree", "add", "-f", "--detach", dir, sha], REPO_ROOT);
+
+  // Share node_modules via symlink so `npm run build` can resolve
+  // dependencies in the worktree without re-installing.
+  const worktreeNm = join(dir, "mcp-server", "node_modules");
+  if (!existsSync(worktreeNm) && existsSync(MAIN_NODE_MODULES)) {
+    symlinkSync(MAIN_NODE_MODULES, worktreeNm);
+  }
+
+  // Build the worktree's dist/ and skills.bundle.json so the plugin's
+  // MCP server reflects the sha under test, not whatever `dist/` the
+  // committed worktree carries.
+  console.log("  building worktree (npm run build)...");
+  try {
+    shLog("npm", ["run", "build"], join(dir, "mcp-server"));
+  } catch (err) {
+    throw new Error(`worktree build failed: ${String(err)}`);
+  }
   return dir;
 }
 
@@ -129,7 +128,6 @@ async function removeWorktree(dir: string): Promise<void> {
 }
 
 async function writeBrainstorm(cwd: string, goal: string): Promise<string> {
-  // Strip the leading slash-command prefix if present.
   const cleaned = goal.replace(/^\/agent-flywheel:start\s+/, "");
   const slug = slugifyGoal(cleaned);
   const path = join(cwd, "docs", "brainstorms", `${slug}-${todayDate()}.md`);
@@ -138,7 +136,11 @@ async function writeBrainstorm(cwd: string, goal: string): Promise<string> {
   return path;
 }
 
-async function runOne(scenario: Scenario, baseSha: string): Promise<ScenarioResult> {
+async function runOne(
+  scenario: Scenario,
+  baseSha: string,
+  keepWorktrees: boolean,
+): Promise<ScenarioResult> {
   const started = Date.now();
   let cwd = "";
   let brainstormPath = "";
@@ -177,6 +179,15 @@ async function runOne(scenario: Scenario, baseSha: string): Promise<ScenarioResu
     toolUses: outcome.toolUses,
     texts: outcome.texts,
   });
+  if (outcome.plugin_check.kind !== "ok") {
+    if (outcome.plugin_check.kind === "fail") {
+      violations.push(
+        `agent-flywheel plugin check failed — loaded from ${outcome.plugin_check.actual ?? "(none)"} instead of worktree ${outcome.plugin_check.expected}`,
+      );
+    } else {
+      violations.push("no system init message received; plugin path unverified");
+    }
+  }
   if (outcome.error) violations.push(`sdk error: ${outcome.error}`);
   if (outcome.timed_out) violations.push("eval timeout before completion");
 
@@ -200,12 +211,24 @@ async function runOne(scenario: Scenario, baseSha: string): Promise<ScenarioResu
 }
 
 async function main(): Promise<number> {
+  const parsed = parseArgv(process.argv.slice(2));
+  if (parsed.kind === "help") {
+    console.log(parsed.text);
+    return 0;
+  }
+  if (parsed.kind === "error") {
+    console.error(parsed.message);
+    return parsed.exitCode;
+  }
+
+  const { onlyIds, sha: shaArg, listOnly, dryRun, writeBaseline, keepWorktrees } = parsed;
+
   if (listOnly) {
     for (const s of SCENARIOS) console.log(`${s.id}\t${s.description}`);
     return 0;
   }
 
-  const sha = baselineSha ?? sh("git", ["rev-parse", "HEAD"], REPO_ROOT);
+  const sha = shaArg ?? sh("git", ["rev-parse", "HEAD"], REPO_ROOT);
   const selected = SCENARIOS.filter((s) => onlyIds.size === 0 || onlyIds.has(s.id));
   if (selected.length === 0) {
     console.error(`No scenarios matched --only=${[...onlyIds].join(",")}`);
@@ -223,7 +246,7 @@ async function main(): Promise<number> {
   const results: ScenarioResult[] = [];
   for (const scenario of selected) {
     console.log(`\n→ ${scenario.id} :: ${scenario.description}`);
-    const result = await runOne(scenario, sha);
+    const result = await runOne(scenario, sha, keepWorktrees);
     results.push(result);
     const marker = result.status === "pass" ? "✓" : "✗";
     console.log(
@@ -237,7 +260,7 @@ async function main(): Promise<number> {
   const report: BaselineReport = {
     version: 1,
     git_sha: sha,
-    git_dirty: false, // scenarios run in fresh worktrees pinned at `sha`
+    git_dirty: false,
     recorded_at: new Date().toISOString(),
     model: DEFAULT_MODEL,
     claude_cli_version: `agent-sdk@${sdkVersion()} / cli@${claudeCliVersion()}`,
@@ -248,6 +271,8 @@ async function main(): Promise<number> {
     await mkdir(join(REPO_ROOT, "docs", "perf"), { recursive: true });
     await writeFile(BASELINE_PATH, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     console.log(`\nBaseline written to ${BASELINE_PATH}`);
+  } else {
+    console.log(`\nBaseline NOT written (pass --write-baseline to overwrite).`);
   }
 
   return results.some((r) => r.status === "fail") ? 1 : 0;

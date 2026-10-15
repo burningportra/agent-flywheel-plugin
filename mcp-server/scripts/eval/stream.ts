@@ -19,7 +19,19 @@ export type RunOutcome = {
   cost_usd?: number;
   error?: string;
   timed_out: boolean;
+  plugin_check: PluginCheck;
 };
+
+export type PluginCheck =
+  | { kind: "ok"; worktree: string; pluginPath: string }
+  | {
+      kind: "fail";
+      worktree: string;
+      expected: string;
+      actual: string | null;
+      plugins: Array<{ name: string; path?: string }>;
+    }
+  | { kind: "no-init" };
 
 const pickAnswer = (
   header: string,
@@ -59,6 +71,7 @@ export async function runScenario(opts: {
   let totalTurns = 0;
   let timedOut = false;
   let errorMsg: string | undefined;
+  let pluginCheck: PluginCheck = { kind: "no-init" };
   const usage = {
     input_tokens: 0,
     output_tokens: 0,
@@ -100,6 +113,11 @@ export async function runScenario(opts: {
     return { behavior: "allow" };
   };
 
+  // Load the plugin from the worktree only. `settingSources: []` means no
+  // user/project settings are read, which prevents the installed
+  // ~/.claude/plugins/cache/agent-flywheel copy from leaking into the
+  // session. The worktree's own `.claude-plugin/plugin.json` is picked up
+  // via the explicit `plugins` entry below.
   const iterator = query({
     prompt: scenario.goal,
     options: {
@@ -109,15 +127,48 @@ export async function runScenario(opts: {
       permissionMode: "default",
       canUseTool,
       abortController,
-      settingSources: ["user", "project"],
+      settingSources: [],
       additionalDirectories: [cwd],
+      plugins: [{ type: "local", path: cwd }],
     },
   });
 
   try {
     for await (const msg of iterator) {
       jsonl.write(`${JSON.stringify({ ts: new Date().toISOString(), msg })}\n`);
-      if (msg.type === "assistant" && msg.message?.content) {
+      if (msg.type === "system" && msg.subtype === "init") {
+        const sys = msg as unknown as {
+          plugins?: Array<{ name: string; path?: string }>;
+        };
+        const plugins = sys.plugins ?? [];
+        const flywheel = plugins.find((p) => p.name === "agent-flywheel");
+        if (!flywheel) {
+          pluginCheck = {
+            kind: "fail",
+            worktree: cwd,
+            expected: cwd,
+            actual: null,
+            plugins,
+          };
+          errorMsg = `agent-flywheel plugin not loaded in session init; aborting`;
+          abortController.abort();
+          continue;
+        }
+        if (flywheel.path !== cwd) {
+          pluginCheck = {
+            kind: "fail",
+            worktree: cwd,
+            expected: cwd,
+            actual: flywheel.path ?? null,
+            plugins,
+          };
+          errorMsg =
+            `agent-flywheel plugin loaded from ${flywheel.path} instead of worktree ${cwd}; aborting`;
+          abortController.abort();
+          continue;
+        }
+        pluginCheck = { kind: "ok", worktree: cwd, pluginPath: flywheel.path };
+      } else if (msg.type === "assistant" && msg.message?.content) {
         turnCounter += 1;
         for (const block of msg.message.content) {
           const b = block as unknown as Record<string, unknown>;
@@ -157,7 +208,7 @@ export async function runScenario(opts: {
       }
     }
   } catch (err) {
-    errorMsg = String(err);
+    if (!errorMsg) errorMsg = String(err);
   }
   clearTimeout(deadline);
   jsonl.end();
@@ -172,5 +223,6 @@ export async function runScenario(opts: {
     cost_usd: costUsd,
     error: errorMsg,
     timed_out: timedOut,
+    plugin_check: pluginCheck,
   };
 }
