@@ -881,7 +881,8 @@ describe('runReview', () => {
       expect(prompt).not.toContain('list_window_identities');
       expect(prompt).not.toContain('ntm --robot-send');
       expect(prompt.match(/Use ultrathink\./g)).toHaveLength(1);
-      expect([text, prompt].filter((channel) => channel.includes(prompt))).toHaveLength(1);
+      expect(text).toContain(`## Reviewer prompt\n\n${prompt}`);
+      expect(text.split(prompt)).toHaveLength(2);
 
       expect(text).toContain('ntm --robot-send');
       expect(text).toContain('not `ntm send`');

@@ -572,10 +572,12 @@ async function handleBatchReview(
       `The tender daemon is already stopped. Do not restart it.\n` +
       `Do not tear down responsive panes. Use \`list_window_identities\` and \`ntm --robot-tail\` to identify them.\n` +
       `One responsive pane reviews one bead. Partition the changed files by bead before dispatch.\n` +
-      `Use \`ntm --robot-send\`, not \`ntm send\`, to send \`structuredContent.data.prompt\` to each implementor pane.\n` +
+      `Use \`ntm --robot-send\`, not \`ntm send\`, to send the reviewer prompt below to each implementor pane.\n` +
+      `The same prompt is available in \`structuredContent.data.prompt\` for programmatic consumers.\n` +
       `If an implementor pane is unavailable, use \`Agent(subagent_type="general-purpose")\` with the reviewer prompt as its task.\n\n` +
       `When the reviewer writes \`${verdictPath}\`, call \`flywheel_review\` with ` +
-      `\`action="batch_review"\` and \`shaRange="${shaRange}"\` again to read and branch.`;
+      `\`action="batch_review"\` and \`shaRange="${shaRange}"\` again to read and branch.\n\n` +
+      `## Reviewer prompt\n\n${prompt}`;
 
     return okResult(state.phase, text, {
       kind: 'batch_review_dispatch',
