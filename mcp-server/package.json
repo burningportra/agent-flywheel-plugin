@@ -10,6 +10,7 @@
     "check:skills-bundle": "node dist/scripts/check-skills-bundle.js",
     "verify:error-meta": "node scripts/verify-error-meta.mjs",
     "bead-viewer": "node dist/scripts/bead-viewer.js",
+    "dead-code": "node scripts/reachability.mjs",
     "dev": "tsc --watch",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
