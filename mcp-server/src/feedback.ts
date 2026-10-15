@@ -11,6 +11,7 @@ import { join } from "path";
 import { parseFeedbackFile } from "./parsers.js";
 import { createLogger } from "./logger.js";
 import { errMsg } from "./errors.js";
+import { readMemory } from "./memory.js";
 import { assertSafeSegment } from "./utils/path-safety.js";
 import { normalizeText } from "./utils/text-normalize.js";
 
@@ -177,8 +178,6 @@ export function formatFeedbackStats(stats: FeedbackStats): string {
 /** Prepend CASS context to a prompt if available. */
 export function withCassContext(prompt: string, cwd: string, taskDescription?: string): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { readMemory } = require('./memory.js');
     const memory = readMemory(cwd, taskDescription);
     if (!memory) return prompt;
 

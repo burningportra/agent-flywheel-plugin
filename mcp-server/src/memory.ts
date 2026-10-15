@@ -79,7 +79,7 @@ export function resetCassDetection(): void {
 function runCm(args: string[], cwd?: string): string | null {
   try {
     const result = execFileSync("cm", args, {
-      timeout: 10000,
+      timeout: 2_000,
       stdio: "pipe",
       cwd,
       encoding: "utf8",
