@@ -1,19 +1,11 @@
 import type { McpToolResult, ToolContext, AdvanceWaveArgs } from '../types.js';
 import type { VerifyBeadsOutcome } from './verify-beads.js';
-import { type BeadComplexity } from '../model-routing.js';
-declare const LANES: readonly ["cc", "cod", "gem"];
-type Lane = typeof LANES[number];
+import { type ImplementerDispatch } from '../adapters/implementer-dispatch.js';
 export interface AdvanceWaveOutcome {
     verification: VerifyBeadsOutcome;
-    nextWave: {
+    nextWave: ({
         beadIds: string[];
-        prompts: Array<{
-            beadId: string;
-            lane: Lane;
-            prompt: string;
-        }>;
-        complexity: Record<string, BeadComplexity>;
-    } | null;
+    } & ImplementerDispatch) | null;
     waveComplete: boolean;
     /**
      * Stage 1 attestation rollout flag. `true` when one or more closed beads
@@ -57,5 +49,4 @@ export interface AdvanceWaveOutcome {
     };
 }
 export declare function runAdvanceWave(ctx: ToolContext, args: AdvanceWaveArgs): Promise<McpToolResult>;
-export {};
 //# sourceMappingURL=advance-wave.d.ts.map

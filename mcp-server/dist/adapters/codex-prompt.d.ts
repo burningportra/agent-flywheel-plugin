@@ -47,16 +47,16 @@ export interface BeadDispatchContext {
     readonly agentName: string;
     /** Coordinator's Agent Mail name for send_message targeting. */
     readonly coordinatorName: string;
-    /** `basename $PWD` / session project key. */
+    /** Absolute repository root used as the Agent Mail human_key. */
     readonly projectKey: string;
 }
 /**
  * Output shape — kept stable across adapters so the spawner can
- * pipeline {claude, codex, gemini} prompts identically.
+ * pipeline {claude, codex, gemini, pi} prompts identically.
  */
 export interface AdaptedPrompt {
     /** The provider this prompt is tuned for. */
-    readonly provider: 'claude' | 'codex' | 'gemini';
+    readonly provider: 'claude' | 'codex' | 'gemini' | 'pi';
     /** The prompt body to send via `ntm send` / Agent(). */
     readonly prompt: string;
     /**

@@ -1,15 +1,10 @@
 import { runVerifyBeads } from './verify-beads.js';
 import { readyBeads } from '../beads.js';
 import { recommendComposition } from '../swarm.js';
-import { classifyBeadComplexity } from '../model-routing.js';
-import { allocateAgentNames } from '../adapters/agent-names.js';
-import { adaptPromptForClaude } from '../adapters/claude-prompt.js';
-import { adaptPromptForCodex } from '../adapters/codex-prompt.js';
-import { adaptPromptForGemini } from '../adapters/gemini-prompt.js';
+import { buildImplementerDispatch, } from '../adapters/implementer-dispatch.js';
 import { makeOkToolResult, makeToolError } from './shared.js';
 import { classifyExecError } from '../errors.js';
 import { createLogger } from '../logger.js';
-import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readCheckpoint } from '../checkpoint.js';
@@ -19,12 +14,6 @@ import { countCommitsSinceLastBatchReview, shouldTriggerBatchReview } from '../c
 const log = createLogger('advance-wave');
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 5_000;
-const LANES = ['cc', 'cod', 'gem'];
-const LANE_ADAPTERS = {
-    cc: adaptPromptForClaude,
-    cod: adaptPromptForCodex,
-    gem: adaptPromptForGemini,
-};
 function isAttestationRequired() {
     // Treat any non-empty value besides "0"/"false" as enabled. Empty / unset
     // means warn-only (Stage 1 default — duel-agreed: PI2 reveal-phase
@@ -90,25 +79,6 @@ async function computeConvergenceRecommendation(cwd) {
 }
 function okResult(phase, text, data) {
     return makeOkToolResult('flywheel_advance_wave', phase, text, data);
-}
-function beadToDispatchContext(bead, complexity, agentName, coordinatorName, projectKey) {
-    const descLines = bead.description.split('\n');
-    const acceptance = descLines
-        .filter((l) => /^\s*[-*]\s/.test(l))
-        .map((l) => l.replace(/^\s*[-*]\s*/, '').trim())
-        .filter(Boolean);
-    return {
-        beadId: bead.id,
-        title: bead.title,
-        description: bead.description,
-        acceptance: acceptance.length > 0 ? acceptance : ['Complete the bead as described.'],
-        complexity,
-        relevantFiles: [],
-        priorArtBeads: [],
-        agentName,
-        coordinatorName,
-        projectKey,
-    };
 }
 export async function runAdvanceWave(ctx, args) {
     const { exec, cwd, state, signal } = ctx;
@@ -248,29 +218,24 @@ export async function runAdvanceWave(ctx, args) {
     const composition = recommendComposition(ready.length);
     const maxWave = args.maxNextWave ?? composition.total;
     const waveCandidates = ready.slice(0, maxWave);
-    // Step 4: classify complexity + allocate names
-    const complexityMap = {};
-    for (const bead of waveCandidates) {
-        complexityMap[bead.id] = classifyBeadComplexity(bead).complexity;
-    }
-    const projectKey = path.basename(cwd);
-    const coordinatorName = 'Coordinator';
-    const agentNames = allocateAgentNames(waveCandidates.length, projectKey);
-    // Step 5: render per-lane prompts round-robin
-    const prompts = [];
-    for (let i = 0; i < waveCandidates.length; i++) {
-        const bead = waveCandidates[i];
-        const lane = LANES[i % LANES.length];
-        const dispatchCtx = beadToDispatchContext(bead, complexityMap[bead.id], agentNames[i], coordinatorName, projectKey);
-        const adapted = LANE_ADAPTERS[lane](dispatchCtx);
-        prompts.push({ beadId: bead.id, lane, prompt: adapted.prompt });
+    const dispatch = await buildImplementerDispatch({
+        exec,
+        cwd,
+        signal,
+        beads: waveCandidates,
+        coordinatorName: args.coordinatorName ?? 'Coordinator',
+    });
+    if (dispatch.prompts.length !== waveCandidates.length) {
+        return makeToolError('flywheel_advance_wave', state.phase, 'cli_not_available', 'No implementation CLI is available for the next wave.', {
+            details: { warnings: dispatch.warnings },
+            hint: 'Install at least one of claude, codex, gemini, or pi, then retry flywheel_advance_wave.',
+        });
     }
     const outcome = {
         verification,
         nextWave: {
             beadIds: waveCandidates.map((b) => b.id),
-            prompts,
-            complexity: complexityMap,
+            ...dispatch,
         },
         waveComplete: true,
         needsEvidence,
@@ -296,8 +261,10 @@ export async function runAdvanceWave(ctx, args) {
     else if (convergenceRec.score !== null) {
         lines.push(`Convergence: score=${convergenceRec.score.toFixed(2)} (${convergenceRec.status}) — below auto-approve threshold; operator picks normally.`);
     }
-    lines.push(`Next wave: ${waveCandidates.length} bead(s) dispatched across ${LANES.length} lanes.`);
-    lines.push(...waveCandidates.map((b, i) => `  - ${b.id} → ${LANES[i % LANES.length]} (${complexityMap[b.id]})`));
+    if (dispatch.warnings.length > 0)
+        lines.push(...dispatch.warnings.map((warning) => `Warning: ${warning}`));
+    lines.push(`Next wave: ${waveCandidates.length} bead(s) dispatched across ${dispatch.lanes.length} lane(s).`);
+    lines.push(...dispatch.prompts.map((prompt) => (`  - ${prompt.beadId} → ${prompt.lane} (${dispatch.complexity[prompt.beadId]})`)));
     return okResult(state.phase, lines.join('\n'), outcome);
 }
 //# sourceMappingURL=advance-wave.js.map

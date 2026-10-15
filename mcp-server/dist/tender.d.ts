@@ -48,6 +48,15 @@ export interface TenderDaemonState {
     knownMessageIds: number[];
     paneStates: Record<string, string>;
     robotState: string | null;
+    /** Consecutive empty-wave ticks observed. Reset to 0 the moment any
+     * open/ready/in_progress bead reappears. Only incremented when a snapshot
+     * carries `beadCounts` with all three fields === 0. */
+    emptyTickCount?: number;
+}
+export interface BeadCounts {
+    open: number;
+    ready: number;
+    inProgress: number;
 }
 export interface TenderDaemonPollSnapshot {
     session: string;
@@ -55,6 +64,11 @@ export interface TenderDaemonPollSnapshot {
     messages: TenderDaemonMessage[];
     paneStates: Record<string, string>;
     robotState: string | null;
+    /** Optional bead counts. When present and all three are 0, the daemon
+     * treats the tick as an "empty wave" and emits `queue_drained` with an
+     * incrementing tick count. Snapshots that omit this field leave the
+     * counter untouched (older callers stay backward-compatible). */
+    beadCounts?: BeadCounts;
 }
 export type TenderDaemonEvent = {
     kind: "tick";
@@ -64,6 +78,14 @@ export type TenderDaemonEvent = {
     newMessages: number;
     paneCount: number;
     robotState: string | null;
+} | {
+    kind: "queue_drained";
+    ts: string;
+    pollTs: number;
+    session: string;
+    /** 1-indexed count of consecutive empty-wave ticks, including this one. */
+    emptyTickCount: number;
+    beadCounts: BeadCounts;
 } | {
     kind: "message_received";
     ts: string;

@@ -9,4 +9,5 @@
 import type { AdaptedPrompt, BeadDispatchContext } from './codex-prompt.js';
 export type { AdaptedPrompt, BeadDispatchContext };
 export declare function adaptPromptForClaude(bead: BeadDispatchContext): AdaptedPrompt;
+export declare function adaptPromptForPi(bead: BeadDispatchContext): AdaptedPrompt;
 //# sourceMappingURL=claude-prompt.d.ts.map

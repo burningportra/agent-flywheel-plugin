@@ -190,6 +190,33 @@ export function runTenderDaemonOnce(prevState, snapshot) {
             });
         }
     }
+    // Empty-wave counter — only ticks when the snapshot carries bead counts and
+    // all three are 0. Any non-zero resets the counter so a reappearing bead
+    // never leaves stale drain state behind. Backward-compatible with callers
+    // that don't provide `beadCounts` (the counter sits at its previous value
+    // and no `queue_drained` event fires).
+    const prevEmptyTicks = Number.isFinite(prevState.emptyTickCount ?? NaN)
+        ? Math.max(0, prevState.emptyTickCount ?? 0)
+        : 0;
+    let nextEmptyTicks = prevEmptyTicks;
+    if (snapshot.beadCounts) {
+        const { open, ready, inProgress } = snapshot.beadCounts;
+        const drained = open === 0 && ready === 0 && inProgress === 0;
+        if (drained) {
+            nextEmptyTicks = prevEmptyTicks + 1;
+            events.push({
+                kind: "queue_drained",
+                ts,
+                pollTs,
+                session: snapshot.session,
+                emptyTickCount: nextEmptyTicks,
+                beadCounts: { open, ready, inProgress },
+            });
+        }
+        else {
+            nextEmptyTicks = 0;
+        }
+    }
     return {
         events,
         nextState: {
@@ -198,6 +225,7 @@ export function runTenderDaemonOnce(prevState, snapshot) {
             knownMessageIds: [...knownMessageIds],
             paneStates: nextPaneStates,
             robotState: nextRobotState,
+            emptyTickCount: nextEmptyTicks,
         },
     };
 }

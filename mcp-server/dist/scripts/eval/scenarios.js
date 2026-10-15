@@ -1,3 +1,26 @@
+// ---------------------------------------------------------------------------
+// Goal-stability notes (M3 reopen, 2026-10-15)
+//
+// Earlier scenarios used goals that overlapped with the compression program's
+// own beads (e.g. "consolidate the three NTM readiness bash gates" was D1's
+// own work). At any sha after D1 landed, Sonnet observed the repo state and
+// asked an ad-hoc "Scope" question instead of running the plan flow, which
+// then interacts badly with the harness's scripted-answer matcher.
+//
+// Every goal below names a SYNTHETIC redesign anchored on a `flywheel_*` MCP
+// tool name that is deliberately unused in `mcp-server/src/tools/` and in
+// `br list` (no D or E bead will land these). The MCP tool names change per
+// scenario so per-worktree Agent Mail reservations and docs/brainstorms
+// slugs don't collide when the eval runs in parallel.
+//
+// The goals are deliberately MULTI-COMPONENT (schema + tests + migration +
+// docs + telemetry). An initial pass with narrow single-feature goals
+// ("add a new MCP tool `flywheel_echo`...") caused Sonnet to short-circuit
+// the orchestrator entirely at 768345f — the goal looked trivial enough
+// that the model skipped planning and implemented directly. Keeping the
+// goals cross-cutting forces the Plan-mode / Ambition / rubric gates the
+// scenarios assert on.
+// ---------------------------------------------------------------------------
 const asksByHeader = (facts, headerSubstring) => {
     const needle = headerSubstring.toLowerCase();
     return facts.toolUses.filter((t) => t.tool_name === "AskUserQuestion" &&
@@ -13,52 +36,48 @@ const brCreateBeforeTurn = (facts, anchorTurn) => facts.toolUses.filter((t) => t
     typeof t.input["command"] === "string" &&
     /\bbr\s+create\b/.test(t.input["command"]));
 const findFlywheelTool = (facts, nameSuffix) => facts.toolUses.find((t) => t.tool_name === nameSuffix || t.tool_name.endsWith(`__${nameSuffix}`));
-// Each scenario uses a UNIQUE goal so its slug (via slugifyGoal in
-// mcp-server/src/tools/shared.ts) doesn't collide with other scenarios'
-// Agent Mail reservations on docs/brainstorms/<slug>-<date>.md.
-// Each scenario's fixture pre-writes that brainstorm so Phase 0.5 skips
-// and the orchestrator jumps straight to Step 5 Plan-mode + Ambition.
+const COMMON_SCRIPTED = [
+    { headerContains: "plan review", option: "Stop here" },
+    { headerContains: "plan gate", option: "Stop here" },
+    { headerContains: "plan ready", option: "Stop here" },
+    { headerContains: "framing", option: "Light framing" },
+    { headerContains: "pre-flight", option: "Continue" },
+    { headerContains: "setup fixes", option: "Continue" },
+    { headerContains: "goal input", option: "Yes, full flywheel" },
+    { headerContains: "goal", option: "Yes, full flywheel" },
+];
 export const SCENARIOS = [
     {
         id: "s1-step0d-and-step5",
         description: "After the Phase 0.5 brainstorm skip, Step 5 fires a Plan-mode (4 options) + Ambition (2 options) AskUserQuestion.",
-        goal: "/agent-flywheel:start redesign flywheel_doctor to emit a versioned structured JSON envelope per check with timing, cross-check correlation IDs, backward-compatible shim for every current consumer, migration tests for all 23 checks, AGENTS.md quick-reference updates with versioned examples, and a deprecation plan for the current text output",
+        goal: "/agent-flywheel:start design the `flywheel_echo` observability subsystem — add a new MCP tool that returns a prefixed message plus structured telemetry per call, a shared Zod schema registry used by every existing tool handler, a conformance test suite covering every schema, AGENTS.md documentation of the registry pattern, a migration guide for third-party plugin authors, and a dashboard view exposing per-tool telemetry trends",
         scripted: [
             { headerContains: "plan mode", option: "Standard plan" },
             { headerContains: "ambition", option: "As scoped" },
-            { headerContains: "plan review", option: "Stop here" },
-            { headerContains: "plan gate", option: "Stop here" },
-            { headerContains: "plan ready", option: "Stop here" },
-            { headerContains: "scope", option: "Scope is right" },
-            { headerContains: "approach", option: "Agree" },
-            { headerContains: "framing", option: "Light framing" },
-            { headerContains: "pre-flight", option: "Continue" },
-            { headerContains: "setup fixes", option: "Continue" },
-            { headerContains: "goal input", option: "Yes, full flywheel" },
-            { headerContains: "goal", option: "Yes, full flywheel" },
+            ...COMMON_SCRIPTED,
         ],
         assert: (facts) => {
             const violations = [];
             const planAsks = asksByHeader(facts, "plan mode");
             if (planAsks.length === 0) {
-                violations.push("Step 5 Plan-mode AskUserQuestion not observed. The _planning.md skill guarantees this question fires after Phase 0.5 (brainstorm) is complete; investigate skill drift.");
+                violations.push("Step 5 Plan-mode AskUserQuestion not observed; investigate skill drift.");
             }
             else {
                 const q = questionWithHeader(planAsks[0], "plan mode");
                 const opts = q?.["options"] || [];
                 if (opts.length !== 4) {
-                    violations.push(`Step 5 Plan-mode question has ${opts.length} options, expected 4 (Standard / Deep / Duel / Direct to beads).`);
+                    violations.push(`Step 5 Plan-mode question has ${opts.length} options, expected 4.`);
                 }
             }
             const ambAsks = asksByHeader(facts, "ambition");
             if (ambAsks.length === 0) {
-                violations.push("Step 5 Ambition AskUserQuestion not observed. _planning.md calls for Plan mode + Ambition as a two-question Step 5 ask.");
+                violations.push("Step 5 Ambition AskUserQuestion not observed.");
             }
             else {
                 const q = questionWithHeader(ambAsks[0], "ambition");
                 const opts = q?.["options"] || [];
                 if (opts.length !== 2) {
-                    violations.push(`Step 5 Ambition question has ${opts.length} options, expected 2 (As scoped / Ambitious).`);
+                    violations.push(`Step 5 Ambition question has ${opts.length} options, expected 2.`);
                 }
             }
             return violations;
@@ -68,22 +87,11 @@ export const SCENARIOS = [
     {
         id: "s2-standard-no-early-br-create",
         description: "Standard plan path reaches the plan-ready/plan-gate menu and runs no `br create` before the user picks Create beads.",
-        goal: "/agent-flywheel:start build a cross-cutting cache layer for flywheel_profile with TTL + git-write-hook invalidation, benchmark harness against the current baseline, documented staleness window per profile field, new MCP tool exposing cache metrics, migration guide for existing callers, and regression tests across the full doctor sweep",
+        goal: "/agent-flywheel:start build the `flywheel_ping` caching subsystem — a new MCP tool returning cache-stats, a TTL-driven cache layer wrapping every read-heavy tool handler, a benchmark harness proving a measurable latency improvement, documentation of per-field staleness windows in AGENTS.md, a migration guide for callers that depended on uncached reads, telemetry hooks, and regression tests across the full doctor sweep",
         scripted: [
             { headerContains: "plan mode", option: "Standard plan" },
             { headerContains: "ambition", option: "As scoped" },
-            // At whichever label the orchestrator renders the plan-gate as
-            // (Plan ready / Plan gate / Plan review), pick a non-Create-beads
-            // option so the "no br create before Create beads" invariant can
-            // be tested.
-            { headerContains: "plan review", option: "Stop here" },
-            { headerContains: "plan gate", option: "Stop here" },
-            { headerContains: "plan ready", option: "Stop here" },
-            { headerContains: "framing", option: "Light framing" },
-            { headerContains: "pre-flight", option: "Continue" },
-            { headerContains: "setup fixes", option: "Continue" },
-            { headerContains: "goal input", option: "Yes, full flywheel" },
-            { headerContains: "goal", option: "Yes, full flywheel" },
+            ...COMMON_SCRIPTED,
         ],
         assert: (facts) => {
             const violations = [];
@@ -98,7 +106,7 @@ export const SCENARIOS = [
                     .join(", ")})`);
             }
             if (!planGate) {
-                violations.push("Plan-gate / plan-ready AskUserQuestion not observed (standard path did not reach the gate within turn budget).");
+                violations.push("Plan-gate / plan-ready AskUserQuestion not observed within turn budget.");
             }
             return violations;
         },
@@ -107,18 +115,11 @@ export const SCENARIOS = [
     {
         id: "s3-ambitious-writes-charter-first",
         description: "Ambitious path writes docs/brainstorms/<slug>-<date>-ambition.md before calling flywheel_plan with ambition='ambitious'.",
-        goal: "/agent-flywheel:start redesign the compliance-audit pipeline so every closed bead has a validated attestation with retry on transient failures, deferred remediation beads, telemetry hooks, a migration guide for existing beads, dashboarding for the compliance score across waves, and documentation of the full lifecycle in AGENTS.md",
+        goal: "/agent-flywheel:start redesign the compliance signal pipeline around a new `flywheel_lint_imports` MCP tool — a shared pattern-match engine, per-source-file config, structured violation output, a vitest conformance suite covering every pattern, telemetry hooks on each scan, a migration guide for the current scanner's consumers, dashboards for pattern-hit frequency, and AGENTS.md documentation of the rule-set contract",
         scripted: [
             { headerContains: "plan mode", option: "Standard plan" },
             { headerContains: "ambition", option: "Ambitious" },
-            { headerContains: "plan review", option: "Stop here" },
-            { headerContains: "plan gate", option: "Stop here" },
-            { headerContains: "plan ready", option: "Stop here" },
-            { headerContains: "framing", option: "Light framing" },
-            { headerContains: "pre-flight", option: "Continue" },
-            { headerContains: "setup fixes", option: "Continue" },
-            { headerContains: "goal input", option: "Yes, full flywheel" },
-            { headerContains: "goal", option: "Yes, full flywheel" },
+            ...COMMON_SCRIPTED,
         ],
         assert: (facts) => {
             const violations = [];
@@ -147,7 +148,7 @@ export const SCENARIOS = [
     {
         id: "s4-rubric-gate-before-bead-creation",
         description: "Choosing Create beads triggers the Step 5.6.5 rubric gate (flywheel_synthesize_rubric) before any bead creation.",
-        goal: "/agent-flywheel:start consolidate the three NTM readiness bash gates across skills/start into one doctor remediation with ownership story, state machine documentation, migration path for existing checkpoints, UX for the recovery flow, telemetry on each state transition, and a comprehensive regression test suite covering every transition",
+        goal: "/agent-flywheel:start architect the `flywheel_hash_bead` fingerprinting subsystem — a new MCP tool returning a stable sha256 fingerprint of a bead, a shared hashing module reused by compliance-audit and verify-beads, telemetry on fingerprint computations, a migration guide for existing audit tooling, a conformance test suite proving determinism across inputs, documentation of the fingerprint schema in AGENTS.md, and a dashboard view exposing fingerprint-change frequency",
         scripted: [
             { headerContains: "plan mode", option: "Standard plan" },
             { headerContains: "ambition", option: "As scoped" },

@@ -172,6 +172,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         claude: { provider: 'claude', available: false, reason: errMsg(err) },
         codex: { provider: 'codex', available: false, reason: errMsg(err) },
         gemini: { provider: 'gemini', available: false, reason: errMsg(err) },
+        pi: { provider: 'pi', available: false, reason: errMsg(err) },
     }));
     // cm_binary and rescues_last_30d both need `cm --version` (~100 ms); run it
     // once per sweep.
@@ -1084,8 +1085,8 @@ async function checkSwarmModelCli(checkName, provider, capsPromise, signal, now)
  * 15. Synthesised swarm model ratio. Reports the Claude:Codex:Gemini
  * ratio achievable in this environment. Severity:
  *   - green when all three CLIs are present (1:1:1).
- *   - yellow when at least one is present but not all three.
- *   - red when none are present (no swarm dispatch possible).
+ *   - yellow when at least one primary CLI or the Pi fallback is present.
+ *   - red when no primary CLI or Pi fallback is present.
  */
 async function checkSwarmModelRatio(capsPromise, signal, now) {
     const start = now();
@@ -1094,8 +1095,8 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
     try {
         const caps = await capsPromise;
         const description = describeCapabilities(caps);
-        const availableCount = ['claude', 'codex', 'gemini'].reduce((acc, p) => acc + (caps[p].available ? 1 : 0), 0);
-        if (availableCount === 3) {
+        const primaryAvailableCount = ['claude', 'codex', 'gemini'].reduce((acc, p) => acc + (caps[p].available ? 1 : 0), 0);
+        if (primaryAvailableCount === 3) {
             return {
                 name: 'swarm_model_ratio',
                 severity: 'green',
@@ -1103,7 +1104,7 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
                 durationMs: now() - start,
             };
         }
-        if (availableCount === 0) {
+        if (primaryAvailableCount === 0 && !caps.pi.available) {
             return {
                 name: 'swarm_model_ratio',
                 severity: 'red',

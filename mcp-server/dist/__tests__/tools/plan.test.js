@@ -8,6 +8,7 @@ import { createMockExec, makeState } from '../helpers/mocks.js';
 // the prompt depend on this machine and blocks for seconds per call.
 vi.mock('../../memory.js', () => ({ readMemory: () => '' }));
 // ─── Helpers ──────────────────────────────────────────────────
+const PLAN_LENGTH_GUIDANCE = 'Make the plan as long as the goal needs, and specific enough that every bead is unambiguous.';
 const defaultCwd = mkdtempSync(join(tmpdir(), 'plan-default-'));
 afterAll(() => {
     rmSync(defaultCwd, { recursive: true, force: true });
@@ -24,6 +25,14 @@ function makeCtx(stateOverrides = {}, cwd = defaultCwd) {
         clearState: () => { },
     };
     return { ctx, state, saved };
+}
+function parseJson(text) {
+    try {
+        return JSON.parse(text);
+    }
+    catch (error) {
+        throw new Error('expected flywheel_plan text content to be valid JSON', { cause: error });
+    }
 }
 // ─── Tests ────────────────────────────────────────────────────
 describe('runPlan', () => {
@@ -53,6 +62,8 @@ describe('runPlan', () => {
         expect(text).toContain('Add caching layer');
         expect(text).toContain('Plan Document Requirements');
         expect(text).toContain('flywheel_approve_beads');
+        expect(text).toContain(PLAN_LENGTH_GUIDANCE);
+        expect(text).not.toMatch(/\d+-\d+ lines/);
     });
     it('sets phase to planning in standard mode', async () => {
         const { ctx, state } = makeCtx();
@@ -319,6 +330,38 @@ describe('runPlan', () => {
         const structured = result.structuredContent;
         expect(structured.data.planAgents).toHaveLength(3);
     });
+    it('keeps the complete deep contract in structured data and derives a compact text receipt', async () => {
+        const { ctx } = makeCtx();
+        const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
+        const structured = result.structuredContent;
+        const data = structured.data;
+        expect(Object.keys(data).sort()).toEqual([
+            'ambition',
+            'ambitionDocument',
+            'brainstormDocument',
+            'briefDocument',
+            'constraints',
+            'goal',
+            'instructions',
+            'kind',
+            'mode',
+            'planAgents',
+            'synthesisModel',
+            'synthesisPrompt',
+        ]);
+        const receipt = parseJson(result.content[0].text);
+        expect(receipt).toEqual({
+            action: 'spawn-plan-agents',
+            mode: data.mode,
+            ambition: data.ambition,
+            plannerCount: data.planAgents.length,
+            briefDocument: data.briefDocument,
+            next: 'Follow structuredContent.data.instructions, then call flywheel_plan with planFile.',
+        });
+        expect(result.content[0].text).not.toContain(data.planAgents[0].task);
+        expect(result.content[0].text).not.toContain(data.instructions);
+        expect(result.content[0].text).not.toContain(data.synthesisPrompt);
+    });
     it('includes correctness, robustness, and ergonomics perspectives in deep mode', async () => {
         const { ctx } = makeCtx();
         const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
@@ -341,6 +384,8 @@ describe('runPlan', () => {
             const brief = readFileSync(join(cwd, structured.data.briefDocument), 'utf8');
             expect(brief).toContain('**Goal:** Add caching layer');
             expect(brief).toContain('## Plan requirements');
+            expect(brief).toContain(PLAN_LENGTH_GUIDANCE);
+            expect(brief).not.toMatch(/\d+-\d+ lines/);
             expect(brief).not.toContain('Your perspective:');
             expect(brief).not.toContain('Use ultrathink.');
             for (const agent of structured.data.planAgents) {
@@ -499,11 +544,12 @@ describe('runPlan', () => {
             expect(agent.task.match(/Use ultrathink\./g)).toHaveLength(1);
         }
     });
-    it('synthesisPrompt contains "Use ultrathink." in deep mode', async () => {
+    it('synthesisPrompt contains one effort directive and no shouted emphasis in deep mode', async () => {
         const { ctx } = makeCtx();
         const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
         const structured = result.structuredContent;
-        expect(structured.data.synthesisPrompt).toContain('Use ultrathink.');
+        expect(structured.data.synthesisPrompt.match(/Use ultrathink\./g)).toHaveLength(1);
+        expect(structured.data.synthesisPrompt).not.toMatch(/\b(?:EACH|BEFORE|BETTER)\b/);
     });
     // ── Phase 0.5 brainstorm artifact handoff ────────────────────
     // _planning.md §4.5 writes docs/brainstorms/<goal-slug>-<date>.md.
@@ -778,9 +824,14 @@ describe('runPlan', () => {
             expect(data.synthesisPrompt).toContain('Do not average ambition down.');
             expect(data.ambition).toBe('ambitious');
             expect(data.ambitionDocument).toBe(CHARTER_PATH);
-            const json = JSON.parse(result.content[0].text);
-            expect(json.ambition).toBe('ambitious');
-            expect(json.ambitionDocument).toBe(CHARTER_PATH);
+            expect(parseJson(result.content[0].text)).toEqual({
+                action: 'spawn-plan-agents',
+                mode: 'deep',
+                ambition: data.ambition,
+                plannerCount: data.planAgents.length,
+                briefDocument: data.briefDocument,
+                next: 'Follow structuredContent.data.instructions, then call flywheel_plan with planFile.',
+            });
         });
         it('duel ambitious tells the orchestrator to pre-seed both agents with the charter', async () => {
             writeArtifact(CHARTER_PATH, '# Charter');

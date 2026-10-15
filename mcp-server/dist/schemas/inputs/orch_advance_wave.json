@@ -20,6 +20,10 @@
     "maxNextWave": {
       "type": "number",
       "description": "Max beads in the next wave (defaults to composition tier from swarm.ts)"
+    },
+    "coordinatorName": {
+      "type": "string",
+      "description": "Agent Mail identity that receives next-wave implementer start/done messages."
     }
   },
   "required": [

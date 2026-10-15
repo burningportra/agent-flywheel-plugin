@@ -41,6 +41,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -177,6 +178,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -235,6 +237,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -310,6 +313,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -361,6 +365,10 @@ export declare const TOOLS: ({
                 enum: string[];
                 description: string;
                 default?: undefined;
+            };
+            coordinatorName: {
+                type: string;
+                description: string;
             };
             advancedAction: {
                 type: string;
@@ -505,6 +513,7 @@ export declare const TOOLS: ({
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -564,6 +573,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -643,6 +653,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -694,6 +705,10 @@ export declare const TOOLS: ({
                 };
             };
             maxNextWave: {
+                type: string;
+                description: string;
+            };
+            coordinatorName: {
                 type: string;
                 description: string;
             };
@@ -781,6 +796,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -863,6 +879,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -914,6 +931,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -977,6 +995,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1035,6 +1054,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1096,6 +1116,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1165,6 +1186,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1222,6 +1244,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1311,6 +1334,7 @@ export declare const TOOLS: ({
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1369,6 +1393,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1429,6 +1454,7 @@ export declare const TOOLS: ({
             planContent?: undefined;
             source?: undefined;
             action?: undefined;
+            coordinatorName?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;

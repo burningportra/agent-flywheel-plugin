@@ -10,6 +10,7 @@ import { markdownFenceFor } from '../utils/markdown-fence.js';
 import { writeAtomic } from '../atomic-write.js';
 import { acquireBeadMutex, makeConcurrentWriteError, releaseBeadMutex } from '../mutex.js';
 const CODEX_SUBAGENT_TYPE = 'codex:codex-rescue';
+const PLAN_LENGTH_GUIDANCE = 'Make the plan as long as the goal needs, and specific enough that every bead is unambiguous.';
 /**
  * Filename shape after `<goal-slug>-` for each planning artifact the
  * orchestrator writes to `docs/brainstorms/`. Anchoring on the date keeps goal
@@ -303,7 +304,7 @@ ${ambitionRequirement}1. **Executive Summary** — What will be built and why
 6. **Acceptance Criteria** — Clear definition of done per phase
 7. **Risk & Mitigation** — Known unknowns and fallback strategies
 
-Target: 500-3000 lines. Be specific — vague plans produce vague beads.
+${PLAN_LENGTH_GUIDANCE}
 
 ### After generating the plan
 1. Save it to \`${planPath}\` using the Write tool or bash
@@ -396,7 +397,7 @@ Write a comprehensive implementation plan from your designated perspective. The 
 - Testing strategy
 - Acceptance criteria
 - Risk & mitigation
-- Target: 500-2000 lines of detailed content
+- ${PLAN_LENGTH_GUIDANCE}
 
 Focus deeply on your assigned perspective lens.`;
     const briefCandidate = join('.pi-flywheel', 'plans', planSlug, 'planner-brief.md');
@@ -510,9 +511,7 @@ Focus deeply on your assigned perspective lens.`;
 
 ## Best-of-All-Worlds Synthesis
 
-Use ultrathink.
-
-Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
+Read all ${planAgents.length} competing plans. Before proposing any changes, for each plan:
 
 1. **Honestly acknowledge** what that plan does better than the others — name the specific strengths, not generic praise.
 2. **Identify the unique insight** each plan contributes that the others miss.
@@ -524,19 +523,16 @@ Then synthesize:
 5. **Provide git-diff style changes** showing what was merged vs what was cut.
 6. **Flag unresolved tensions** — where plans fundamentally disagree and a judgment call was made.
 
-The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.${synthesisAmbition}`,
+The synthesis must be better than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.${synthesisAmbition}`,
     };
-    return okResult(JSON.stringify({
+    const compatibilityReceipt = {
         action: 'spawn-plan-agents',
-        goal,
-        constraints: state.constraints,
+        mode: payload.mode,
         ambition: payload.ambition,
-        ambitionDocument: payload.ambitionDocument,
+        plannerCount: payload.planAgents.length,
         briefDocument: payload.briefDocument,
-        planAgents,
-        synthesisModel: payload.synthesisModel,
-        instructions: payload.instructions,
-        synthesisPrompt: payload.synthesisPrompt,
-    }, null, 2), 'planning', payload);
+        next: 'Follow structuredContent.data.instructions, then call flywheel_plan with planFile.',
+    };
+    return okResult(JSON.stringify(compatibilityReceipt, null, 2), 'planning', payload);
 }
 //# sourceMappingURL=plan.js.map

@@ -1,19 +1,20 @@
 /**
- * Swarm-agent model diversity — Claude : Codex : Gemini at 1:1:1 via NTM.
+ * Swarm-agent model diversity — Claude : Codex : Gemini at 1:1:1 via NTM,
+ * with Pi as the first non-primary fallback.
  *
  * Responsibilities:
- *   1. Detect CLI availability (`which claude codex gemini`).
+ *   1. Detect CLI availability (`which claude codex gemini pi`).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so
  *      the coordinator can report degraded-mode to the user.
- *   4. Provide per-bead prompt adaptation via the three adapters.
+ *   4. Provide per-bead prompt adaptation for every dispatch provider.
  *
  * The public surface is the primary consumer contract for downstream
  * bead `1qn` (codex-rescue handoff). Treat it as stable.
  */
 import { errMsg } from '../errors.js';
-import { adaptPromptForClaude } from './claude-prompt.js';
+import { adaptPromptForClaude, adaptPromptForPi } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
 import { adaptPromptForGemini } from './gemini-prompt.js';
 // ─── CLI detection ────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ const PROVIDER_BINARIES = {
     claude: 'claude',
     codex: 'codex',
     gemini: 'gemini',
+    pi: 'pi',
 };
 /**
  * Probe `which <bin>` for each provider. A zero exit code and a non-empty
@@ -59,104 +61,97 @@ export async function detectCliCapabilities(exec, opts = {}) {
             };
         }
     };
-    const [claude, codex, gemini] = await Promise.all([
+    const [claude, codex, gemini, pi] = await Promise.all([
         probe('claude'),
         probe('codex'),
         probe('gemini'),
+        probe('pi'),
     ]);
-    return { claude, codex, gemini };
+    return { claude, codex, gemini, pi };
 }
 // ─── Ratio math + split ───────────────────────────────────────────────────
-/**
- * Priority order for remainder assignment when N % 3 != 0.
- *
- * Rationale:
- *   - Claude gets the first extra (it's the most reliable across bead
- *     shapes, so we'd rather bias toward it when we can't split evenly).
- *   - Codex gets the second extra (the user explicitly asked for codex
- *     parity and it handles TypeScript-heavy beads well).
- *   - Gemini gets the third (providing the second-perspective lane even
- *     when remainder = 0).
- *
- * The same order also drives fallback: when a provider is missing we
- * re-route its beads to the next-preferred provider in this list.
- */
-const REMAINDER_PRIORITY = Object.freeze([
+const PRIMARY_PROVIDERS = ['claude', 'codex', 'gemini'];
+const ROUTING_PROVIDERS = Object.freeze([
     'claude',
     'codex',
     'gemini',
+    'pi',
 ]);
+const FALLBACK_PRIORITY = {
+    claude: ['codex', 'gemini', 'pi'],
+    codex: ['gemini', 'pi', 'claude'],
+    gemini: ['codex', 'pi', 'claude'],
+};
 /**
- * Split N beads across available providers with the floor(N/3) + priority
- * remainder rule. Missing CLIs are dropped from the lane set and their
- * would-be share is redistributed by priority.
+ * Split N beads into canonical Claude/Codex/Gemini shares, then transfer a
+ * missing provider's complete share through the supported fallback order.
  *
  * Contract:
  *   - sum(lane.beadIds.length) == beadIds.length
  *   - lanes contain only providers with `available === true`
- *   - lane order is claude, codex, gemini (stable; skipped entries omit)
+ *   - lane order is claude, codex, gemini, pi (stable; skipped entries omit)
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
  */
 export function splitBeadsByProvider(beadIds, caps) {
     const warnings = [];
-    const availableProviders = REMAINDER_PRIORITY.filter((p) => caps[p].available);
+    const availableProviders = ROUTING_PROVIDERS.filter((p) => caps[p].available);
     if (availableProviders.length === 0) {
         return {
             lanes: [],
             warnings: [
-                'no implementation CLI available (claude, codex, gemini all missing)',
+                'no implementation CLI available (claude, codex, gemini, pi all missing)',
             ],
             degraded: true,
             ratio: '0:0:0',
         };
     }
-    const missing = REMAINDER_PRIORITY.filter((p) => !caps[p].available);
+    const missing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available);
     const degraded = missing.length > 0;
-    for (const p of missing) {
-        warnings.push(`${p} CLI not available${caps[p].reason ? ` (${caps[p].reason})` : ''}; falling back to [${availableProviders.join(', ')}]`);
-    }
     const n = beadIds.length;
-    const k = availableProviders.length;
-    // Start with a floor(n/k) baseline per available provider; if k < 3 this
-    // naturally redistributes the missing share.
-    const counts = new Map();
-    const baseline = Math.floor(n / k);
-    for (const p of availableProviders)
-        counts.set(p, baseline);
-    // Hand out the remainder by priority order over available providers.
-    let remainder = n - baseline * k;
-    for (const p of REMAINDER_PRIORITY) {
+    const preferredCounts = new Map();
+    const baseline = Math.floor(n / PRIMARY_PROVIDERS.length);
+    for (const provider of PRIMARY_PROVIDERS) {
+        preferredCounts.set(provider, baseline);
+    }
+    let remainder = n - baseline * PRIMARY_PROVIDERS.length;
+    for (const p of PRIMARY_PROVIDERS) {
         if (remainder === 0)
             break;
-        if (!caps[p].available)
-            continue;
-        counts.set(p, (counts.get(p) ?? 0) + 1);
+        preferredCounts.set(p, (preferredCounts.get(p) ?? 0) + 1);
         remainder--;
     }
-    // Slice the bead list in order; claude first, then codex, then gemini.
-    const lanes = [];
+    const assigned = new Map(ROUTING_PROVIDERS.map((provider) => [provider, []]));
     let cursor = 0;
-    for (const p of REMAINDER_PRIORITY) {
-        if (!caps[p].available)
+    for (const preferred of PRIMARY_PROVIDERS) {
+        const count = preferredCounts.get(preferred) ?? 0;
+        const ids = beadIds.slice(cursor, cursor + count);
+        cursor += count;
+        if (ids.length === 0)
             continue;
-        const take = counts.get(p) ?? 0;
-        if (take === 0)
+        const fallback = FALLBACK_PRIORITY[preferred].find((provider) => caps[provider].available);
+        const provider = caps[preferred].available ? preferred : fallback;
+        if (!provider)
             continue;
-        lanes.push({
-            provider: p,
-            beadIds: beadIds.slice(cursor, cursor + take),
-        });
-        cursor += take;
+        assigned.get(provider)?.push(...ids);
+        if (provider !== preferred) {
+            warnings.push(`${preferred} CLI not available${caps[preferred].reason ? ` (${caps[preferred].reason})` : ''}; reassigned ${ids.length} bead(s) to ${provider}`);
+        }
     }
-    const ratio = REMAINDER_PRIORITY.map((p) => caps[p].available ? String(counts.get(p) ?? 0) : '0').join(':');
+    const lanes = [];
+    for (const provider of ROUTING_PROVIDERS) {
+        const ids = assigned.get(provider) ?? [];
+        if (ids.length > 0)
+            lanes.push({ provider, beadIds: ids });
+    }
+    const ratio = PRIMARY_PROVIDERS.map((provider) => String(assigned.get(provider)?.length ?? 0)).join(':');
     return { lanes, warnings, degraded, ratio };
 }
 // ─── Prompt adaptation facade ─────────────────────────────────────────────
 /**
  * Pick the right adapter for a provider. Centralised so the dispatch
  * loop can `adaptPromptFor(lane.provider, ctx)` without importing all
- * three modules.
+ * provider modules.
  */
 export function adaptPromptFor(provider, ctx) {
     switch (provider) {
@@ -166,6 +161,8 @@ export function adaptPromptFor(provider, ctx) {
             return adaptPromptForCodex(ctx);
         case 'gemini':
             return adaptPromptForGemini(ctx);
+        case 'pi':
+            return adaptPromptForPi(ctx);
     }
 }
 /**
@@ -174,14 +171,16 @@ export function adaptPromptFor(provider, ctx) {
  *   Missing codex → "claude+gemini available; codex missing; ratio 1:0:1 achievable"
  */
 export function describeCapabilities(caps) {
-    const avail = REMAINDER_PRIORITY.filter((p) => caps[p].available);
-    const miss = REMAINDER_PRIORITY.filter((p) => !caps[p].available);
-    const ratio = REMAINDER_PRIORITY.map((p) => caps[p].available ? '1' : '0').join(':');
+    const avail = PRIMARY_PROVIDERS.filter((p) => caps[p].available);
+    const miss = PRIMARY_PROVIDERS.filter((p) => !caps[p].available);
+    const ratio = PRIMARY_PROVIDERS.map((p) => caps[p].available ? '1' : '0').join(':');
     const parts = [];
     parts.push(avail.length > 0 ? `${avail.join('+')} available` : 'no CLIs available');
     if (miss.length > 0)
         parts.push(`${miss.join('+')} missing`);
     parts.push(`ratio ${ratio} achievable`);
+    if (caps.pi.available)
+        parts.push('pi fallback available');
     return parts.join('; ');
 }
 //# sourceMappingURL=model-diversity.js.map

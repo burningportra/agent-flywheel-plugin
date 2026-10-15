@@ -271,6 +271,9 @@ const FIXTURE_BEADS = [
 ];
 function fixtureExec() {
     return async (command, args) => {
+        if (command === "which") {
+            return { code: 0, stdout: `/fixture/bin/${args[0]}\n`, stderr: "" };
+        }
         if (command === "br" && args[0] === "list") {
             return { code: 0, stdout: JSON.stringify(FIXTURE_BEADS), stderr: "" };
         }
