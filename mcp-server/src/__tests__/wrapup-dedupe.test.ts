@@ -35,7 +35,9 @@ describe("wrap-up single-source procedures", () => {
   it("calls the team-drain script before TeamDelete instead of embedding jq", () => {
     const cycleReset = section("#### Cycle-reset checklist", '> **"Done for now" also triggers team-drain.**');
 
-    expect(cycleReset).toContain("mcp-server/scripts/team-drain.sh <team-name>...");
+    expect(cycleReset).toContain(
+      'sh "$CLAUDE_PLUGIN_ROOT/mcp-server/scripts/team-drain.sh" <team-name>...',
+    );
     expect(cycleReset).toContain("confirm that nothing owns it");
     expect(cycleReset).toContain("TeamDelete");
     expect(cycleReset).not.toContain("jq '.members");
