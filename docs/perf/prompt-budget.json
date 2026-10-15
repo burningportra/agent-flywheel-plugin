@@ -1,0 +1,343 @@
+{
+  "version": 1,
+  "gitHead": "37c7888bb7275d139d06a8eda6648e2b1e586b57",
+  "sourceMode": "committed-head",
+  "tokenEstimate": "ceil(chars / 4)",
+  "thresholdPercent": 10,
+  "entries": [
+    {
+      "id": "adapter.claude.implementer",
+      "group": "adapter",
+      "source": "adapters/claude-prompt.ts",
+      "chars": 3526,
+      "estimatedTokens": 882
+    },
+    {
+      "id": "adapter.codex.implementer",
+      "group": "adapter",
+      "source": "adapters/codex-prompt.ts",
+      "chars": 3875,
+      "estimatedTokens": 969
+    },
+    {
+      "id": "adapter.gemini.implementer",
+      "group": "adapter",
+      "source": "adapters/gemini-prompt.ts",
+      "chars": 3892,
+      "estimatedTokens": 973
+    },
+    {
+      "id": "command:commands/flywheel-audit.md",
+      "group": "command",
+      "source": "commands/flywheel-audit.md",
+      "chars": 3916,
+      "estimatedTokens": 979
+    },
+    {
+      "id": "command:commands/flywheel-doctor.md",
+      "group": "command",
+      "source": "commands/flywheel-doctor.md",
+      "chars": 2668,
+      "estimatedTokens": 667
+    },
+    {
+      "id": "command:commands/flywheel-duel.md",
+      "group": "command",
+      "source": "commands/flywheel-duel.md",
+      "chars": 3681,
+      "estimatedTokens": 921
+    },
+    {
+      "id": "command:commands/flywheel-fix.md",
+      "group": "command",
+      "source": "commands/flywheel-fix.md",
+      "chars": 2291,
+      "estimatedTokens": 573
+    },
+    {
+      "id": "command:commands/flywheel-reality-check.md",
+      "group": "command",
+      "source": "commands/flywheel-reality-check.md",
+      "chars": 4580,
+      "estimatedTokens": 1145
+    },
+    {
+      "id": "command:commands/flywheel-setup.md",
+      "group": "command",
+      "source": "commands/flywheel-setup.md",
+      "chars": 11773,
+      "estimatedTokens": 2944
+    },
+    {
+      "id": "command:commands/flywheel-speedup.md",
+      "group": "command",
+      "source": "commands/flywheel-speedup.md",
+      "chars": 1078,
+      "estimatedTokens": 270
+    },
+    {
+      "id": "command:commands/flywheel-swarm-status.md",
+      "group": "command",
+      "source": "commands/flywheel-swarm-status.md",
+      "chars": 2158,
+      "estimatedTokens": 540
+    },
+    {
+      "id": "command:commands/flywheel-swarm.md",
+      "group": "command",
+      "source": "commands/flywheel-swarm.md",
+      "chars": 11223,
+      "estimatedTokens": 2806
+    },
+    {
+      "id": "command:commands/start.md",
+      "group": "command",
+      "source": "commands/start.md",
+      "chars": 3152,
+      "estimatedTokens": 788
+    },
+    {
+      "id": "gate.fresh-eyes",
+      "group": "gate",
+      "source": "gates.ts#buildFreshEyesPrompt",
+      "chars": 3210,
+      "estimatedTokens": 803
+    },
+    {
+      "id": "mcp.approve.advanced-blunder-hunt.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_approve_beads",
+      "chars": 0,
+      "estimatedTokens": 0
+    },
+    {
+      "id": "mcp.approve.start.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_approve_beads",
+      "chars": 1309,
+      "estimatedTokens": 328
+    },
+    {
+      "id": "mcp.plan.deep.ambitious.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_plan",
+      "chars": 11621,
+      "estimatedTokens": 2906
+    },
+    {
+      "id": "mcp.plan.deep.scoped.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_plan",
+      "chars": 6048,
+      "estimatedTokens": 1512
+    },
+    {
+      "id": "mcp.plan.duel.ambitious.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_plan",
+      "chars": 615,
+      "estimatedTokens": 154
+    },
+    {
+      "id": "mcp.plan.duel.scoped.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_plan",
+      "chars": 528,
+      "estimatedTokens": 132
+    },
+    {
+      "id": "mcp.plan.standard.ambitious.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_plan",
+      "chars": 436,
+      "estimatedTokens": 109
+    },
+    {
+      "id": "mcp.plan.standard.scoped.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_plan",
+      "chars": 349,
+      "estimatedTokens": 88
+    },
+    {
+      "id": "mcp.review.hit-me.structured",
+      "group": "mcp-structured",
+      "source": "flywheel_review",
+      "chars": 3280,
+      "estimatedTokens": 820
+    },
+    {
+      "id": "mcp.approve.advanced-blunder-hunt.text",
+      "group": "mcp-text",
+      "source": "flywheel_approve_beads",
+      "chars": 1211,
+      "estimatedTokens": 303
+    },
+    {
+      "id": "mcp.approve.start.text",
+      "group": "mcp-text",
+      "source": "flywheel_approve_beads",
+      "chars": 1762,
+      "estimatedTokens": 441
+    },
+    {
+      "id": "mcp.plan.deep.ambitious.text",
+      "group": "mcp-text",
+      "source": "flywheel_plan",
+      "chars": 11603,
+      "estimatedTokens": 2901
+    },
+    {
+      "id": "mcp.plan.deep.scoped.text",
+      "group": "mcp-text",
+      "source": "flywheel_plan",
+      "chars": 6026,
+      "estimatedTokens": 1507
+    },
+    {
+      "id": "mcp.plan.duel.ambitious.text",
+      "group": "mcp-text",
+      "source": "flywheel_plan",
+      "chars": 3043,
+      "estimatedTokens": 761
+    },
+    {
+      "id": "mcp.plan.duel.scoped.text",
+      "group": "mcp-text",
+      "source": "flywheel_plan",
+      "chars": 2722,
+      "estimatedTokens": 681
+    },
+    {
+      "id": "mcp.plan.standard.ambitious.text",
+      "group": "mcp-text",
+      "source": "flywheel_plan",
+      "chars": 3342,
+      "estimatedTokens": 836
+    },
+    {
+      "id": "mcp.plan.standard.scoped.text",
+      "group": "mcp-text",
+      "source": "flywheel_plan",
+      "chars": 1523,
+      "estimatedTokens": 381
+    },
+    {
+      "id": "mcp.review.hit-me.text",
+      "group": "mcp-text",
+      "source": "flywheel_review",
+      "chars": 3381,
+      "estimatedTokens": 846
+    },
+    {
+      "id": "skill:skills/flywheel-swarm/SKILL.md",
+      "group": "skill",
+      "source": "skills/flywheel-swarm/SKILL.md",
+      "chars": 11481,
+      "estimatedTokens": 2871
+    },
+    {
+      "id": "skill:skills/start/_beads.md",
+      "group": "skill",
+      "source": "skills/start/_beads.md",
+      "chars": 16303,
+      "estimatedTokens": 4076
+    },
+    {
+      "id": "skill:skills/start/_deslop.md",
+      "group": "skill",
+      "source": "skills/start/_deslop.md",
+      "chars": 17523,
+      "estimatedTokens": 4381
+    },
+    {
+      "id": "skill:skills/start/_implement.md",
+      "group": "skill",
+      "source": "skills/start/_implement.md",
+      "chars": 62105,
+      "estimatedTokens": 15527
+    },
+    {
+      "id": "skill:skills/start/_inflight_prompt.md",
+      "group": "skill",
+      "source": "skills/start/_inflight_prompt.md",
+      "chars": 19097,
+      "estimatedTokens": 4775
+    },
+    {
+      "id": "skill:skills/start/_planning.md",
+      "group": "skill",
+      "source": "skills/start/_planning.md",
+      "chars": 66327,
+      "estimatedTokens": 16582
+    },
+    {
+      "id": "skill:skills/start/_reality_check.md",
+      "group": "skill",
+      "source": "skills/start/_reality_check.md",
+      "chars": 15568,
+      "estimatedTokens": 3892
+    },
+    {
+      "id": "skill:skills/start/_review.md",
+      "group": "skill",
+      "source": "skills/start/_review.md",
+      "chars": 33113,
+      "estimatedTokens": 8279
+    },
+    {
+      "id": "skill:skills/start/_wrapup.md",
+      "group": "skill",
+      "source": "skills/start/_wrapup.md",
+      "chars": 27402,
+      "estimatedTokens": 6851
+    },
+    {
+      "id": "skill:skills/start/SKILL.md",
+      "group": "skill",
+      "source": "skills/start/SKILL.md",
+      "chars": 65378,
+      "estimatedTokens": 16345
+    }
+  ],
+  "totals": {
+    "all": {
+      "chars": 454119,
+      "estimatedTokens": 113530
+    },
+    "startCycle": {
+      "chars": 380817,
+      "estimatedTokens": 95205
+    },
+    "hotPath": {
+      "chars": 73302,
+      "estimatedTokens": 18326
+    },
+    "byGroup": {
+      "skill": {
+        "chars": 334297,
+        "estimatedTokens": 83575
+      },
+      "command": {
+        "chars": 46520,
+        "estimatedTokens": 11630
+      },
+      "mcp-text": {
+        "chars": 34613,
+        "estimatedTokens": 8654
+      },
+      "mcp-structured": {
+        "chars": 24186,
+        "estimatedTokens": 6047
+      },
+      "adapter": {
+        "chars": 11293,
+        "estimatedTokens": 2824
+      },
+      "gate": {
+        "chars": 3210,
+        "estimatedTokens": 803
+      }
+    }
+  }
+}
