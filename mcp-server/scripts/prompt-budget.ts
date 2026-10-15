@@ -458,6 +458,13 @@ function assertToolResult(label: string, result: ToolResultLike): string {
   return text;
 }
 
+function resultKind(result: ToolResultLike): unknown {
+  if (!result.structuredContent || typeof result.structuredContent !== "object") return undefined;
+  const data = (result.structuredContent as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return undefined;
+  return (data as { kind?: unknown }).kind;
+}
+
 function addToolResult(
   entries: BudgetEntry[],
   id: string,
@@ -504,7 +511,11 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
   const RealDate = Date;
   class FixedDate extends Date {
     constructor(value?: string | number | Date) {
-      super(value === undefined ? FIXTURE_TIMESTAMP : value instanceof Date ? value.valueOf() : value);
+      let normalized: string | number;
+      if (value === undefined) normalized = FIXTURE_TIMESTAMP;
+      else if (value instanceof Date) normalized = value.valueOf();
+      else normalized = value;
+      super(normalized);
     }
 
     static override now(): number {
@@ -536,12 +547,11 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
           mode,
           ambition,
         });
-        const expectedKind = mode === "standard"
-          ? "plan_prompt"
-          : mode === "deep"
-            ? "deep_plan_spawn"
-            : "duel_plan_spawn";
-        const kind = (result.structuredContent as { data?: { kind?: unknown } } | undefined)?.data?.kind;
+        let expectedKind: string;
+        if (mode === "standard") expectedKind = "plan_prompt";
+        else if (mode === "deep") expectedKind = "deep_plan_spawn";
+        else expectedKind = "duel_plan_spawn";
+        const kind = resultKind(result);
         if (kind !== expectedKind) {
           throw new Error(`plan ${mode}/${ambition} returned kind ${String(kind)}`);
         }
@@ -560,7 +570,7 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
       beadId: FIXTURE_BEADS[0].id,
       action: "hit-me",
     });
-    if ((review.structuredContent as { data?: { kind?: unknown } } | undefined)?.data?.kind !== "review_tasks") {
+    if (resultKind(review) !== "review_tasks") {
       throw new Error("review hit-me did not return review_tasks");
     }
     addToolResult(entries, "mcp.review.hit-me", "flywheel_review", review, fixtureCwd);
@@ -569,10 +579,7 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
       fixtureContext(fixtureCwd, "awaiting_bead_approval"),
       { cwd: fixtureCwd, action: "start" },
     );
-    if (
-      (approveStart.structuredContent as { data?: { kind?: unknown } } | undefined)?.data?.kind
-      !== "beads_approved"
-    ) {
+    if (resultKind(approveStart) !== "beads_approved") {
       throw new Error("approve start did not return beads_approved");
     }
     addToolResult(
