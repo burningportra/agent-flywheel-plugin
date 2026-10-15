@@ -1,13 +1,12 @@
 import type { Scenario, ScenarioFacts, ToolUseRecord } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// Goal-stability notes (M3 reopen, 2026-10-15)
+// Goal-stability notes (M3 reopen round 3, 2026-10-15)
 //
 // Earlier scenarios used goals that overlapped with the compression program's
 // own beads (e.g. "consolidate the three NTM readiness bash gates" was D1's
 // own work). At any sha after D1 landed, Sonnet observed the repo state and
-// asked an ad-hoc "Scope" question instead of running the plan flow, which
-// then interacts badly with the harness's scripted-answer matcher.
+// asked an ad-hoc "Scope" question instead of running the plan flow.
 //
 // Every goal below names a SYNTHETIC redesign anchored on a `flywheel_*` MCP
 // tool name that is deliberately unused in `mcp-server/src/tools/` and in
@@ -16,12 +15,17 @@ import type { Scenario, ScenarioFacts, ToolUseRecord } from "./types.js";
 // slugs don't collide when the eval runs in parallel.
 //
 // The goals are deliberately MULTI-COMPONENT (schema + tests + migration +
-// docs + telemetry). An initial pass with narrow single-feature goals
-// ("add a new MCP tool `flywheel_echo`...") caused Sonnet to short-circuit
-// the orchestrator entirely at 768345f — the goal looked trivial enough
-// that the model skipped planning and implemented directly. Keeping the
-// goals cross-cutting forces the Plan-mode / Ambition / rubric gates the
-// scenarios assert on.
+// docs + telemetry). The flywheel is meant to plan these, not treat them
+// as five-minute edits.
+//
+// Scripted-label contract (M3 reopen round 3): every label referenced below
+// must appear verbatim as an option in the matching AskUserQuestion header
+// in the current skills tree. The harness's `pick.ts` matches rules against
+// the question `header` only, substring-matches `option` against offered
+// labels, and fails the scenario on an unmatched target rather than
+// injecting free text. If an upstream skill rewords an option, that label
+// move surfaces as a `harness: scripted target "..." matched no option ...`
+// violation and the scenario here must be updated — don't paper over it.
 // ---------------------------------------------------------------------------
 
 const asksByHeader = (
@@ -67,15 +71,34 @@ const findFlywheelTool = (
     (t) => t.tool_name === nameSuffix || t.tool_name.endsWith(`__${nameSuffix}`),
   );
 
+// Shared steering: picks that drive the model past Pre-flight and the
+// framing stage to Step 5 without triggering a long grill-with-docs
+// interview. The Phase 0.5 Qs (Smallest / 10x / Adjacents) are also
+// scripted in case the orchestrator runs the light pressure-test despite
+// the pre-written brainstorm fixture.
 const COMMON_SCRIPTED = [
-  { headerContains: "plan review", option: "Stop here" },
-  { headerContains: "plan gate", option: "Stop here" },
-  { headerContains: "plan ready", option: "Stop here" },
-  { headerContains: "framing", option: "Light framing" },
-  { headerContains: "pre-flight", option: "Continue" },
-  { headerContains: "setup fixes", option: "Continue" },
-  { headerContains: "goal input", option: "Yes, full flywheel" },
-  { headerContains: "goal", option: "Yes, full flywheel" },
+  // Pre-flight / setup
+  { headerContains: "pre-flight", option: "Continue with degraded" },
+  { headerContains: "setup fixes", option: "Continue with degraded" },
+  // Framing: skip so Phase 0.5 skip conditions apply via the brainstorm.
+  { headerContains: "framing", option: "Skip framing" },
+  // Phase 0.5 three-question pressure-test (fires only if skip didn't apply).
+  { headerContains: "smallest", option: "Happy-path MVP" },
+  { headerContains: "floor", option: "Happy-path MVP" },
+  { headerContains: "10x", option: "Breadth expansion" },
+  { headerContains: "ceiling", option: "Breadth expansion" },
+  { headerContains: "adjacents", option: "Nothing adjacent" },
+  // Grill-with-docs branch (fires if the operator picked Grill with docs).
+  { headerContains: "decompose", option: "Keep as one cycle" },
+  { headerContains: "problem", option: "Missing capability" },
+  { headerContains: "non-goals", option: "No new dependencies" },
+  { headerContains: "success", option: "Tests / CI gate" },
+  { headerContains: "constraints", option: "Compatibility" },
+  { headerContains: "kill criteria", option: "None — framing is solid" },
+  { headerContains: "kill signal", option: "Record as kill criterion, proceed" },
+  { headerContains: "approve", option: "Approve" },
+  // Mid-plan steering (the model generates these per-plan — options vary).
+  // No rule means pick.ts falls back to options[0] and logs a `default` event.
 ];
 
 export const SCENARIOS: Scenario[] = [
@@ -88,6 +111,8 @@ export const SCENARIOS: Scenario[] = [
     scripted: [
       { headerContains: "plan mode", option: "Standard plan" },
       { headerContains: "ambition", option: "As scoped" },
+      { headerContains: "plan ready", option: "Create beads" },
+      { headerContains: "rubric", option: "Abort" },
       ...COMMON_SCRIPTED,
     ],
     assert: (facts) => {
@@ -120,7 +145,7 @@ export const SCENARIOS: Scenario[] = [
       }
       return violations;
     },
-    maxTurns: 30,
+    maxTurns: 40,
   },
   {
     id: "s2-standard-no-early-br-create",
@@ -131,31 +156,36 @@ export const SCENARIOS: Scenario[] = [
     scripted: [
       { headerContains: "plan mode", option: "Standard plan" },
       { headerContains: "ambition", option: "As scoped" },
+      // Pick Review plan at the first Plan-ready ask — the assertion is
+      // "no br create BEFORE the Plan-ready ask fires", so any pick works;
+      // Review plan avoids triggering the whole bead-create pipeline on
+      // every run and keeps per-scenario cost down.
+      { headerContains: "plan ready", option: "Review plan" },
+      { headerContains: "post-review", option: "Looks good" },
+      { headerContains: "refine mode", option: "Abort" },
+      { headerContains: "rubric", option: "Abort" },
       ...COMMON_SCRIPTED,
     ],
     assert: (facts) => {
       const violations: string[] = [];
-      const planGate =
-        asksByHeader(facts, "plan review")[0] ??
-        asksByHeader(facts, "plan gate")[0] ??
-        asksByHeader(facts, "plan ready")[0];
+      const planGate = asksByHeader(facts, "plan ready")[0];
       const anchorTurn = planGate?.turn ?? Number.POSITIVE_INFINITY;
       const early = brCreateBeforeTurn(facts, anchorTurn);
       if (early.length > 0) {
         violations.push(
-          `${early.length} \`br create\` call(s) fired before plan-gate menu (turns ${early
+          `${early.length} \`br create\` call(s) fired before Plan-ready menu (turns ${early
             .map((t) => t.turn)
             .join(", ")})`,
         );
       }
       if (!planGate) {
         violations.push(
-          "Plan-gate / plan-ready AskUserQuestion not observed within turn budget.",
+          "Plan-ready AskUserQuestion not observed within turn budget.",
         );
       }
       return violations;
     },
-    maxTurns: 60,
+    maxTurns: 70,
   },
   {
     id: "s3-ambitious-writes-charter-first",
@@ -166,6 +196,11 @@ export const SCENARIOS: Scenario[] = [
     scripted: [
       { headerContains: "plan mode", option: "Standard plan" },
       { headerContains: "ambition", option: "Ambitious" },
+      // Ambition-pass follow-up questions.
+      { headerContains: "rung", option: "Standing outcome" },
+      { headerContains: "stretch", option: "Full stretch" },
+      { headerContains: "plan ready", option: "Create beads" },
+      { headerContains: "rubric", option: "Abort" },
       ...COMMON_SCRIPTED,
     ],
     assert: (facts) => {
@@ -197,7 +232,7 @@ export const SCENARIOS: Scenario[] = [
       }
       return violations;
     },
-    maxTurns: 70,
+    maxTurns: 80,
   },
   {
     id: "s4-rubric-gate-before-bead-creation",
@@ -208,15 +243,14 @@ export const SCENARIOS: Scenario[] = [
     scripted: [
       { headerContains: "plan mode", option: "Standard plan" },
       { headerContains: "ambition", option: "As scoped" },
-      { headerContains: "plan review", option: "Create beads" },
-      { headerContains: "plan gate", option: "Create beads" },
       { headerContains: "plan ready", option: "Create beads" },
-      { headerContains: "rubric", option: "Approve" },
-      { headerContains: "framing", option: "Light framing" },
-      { headerContains: "pre-flight", option: "Continue" },
-      { headerContains: "setup fixes", option: "Continue" },
-      { headerContains: "goal input", option: "Yes, full flywheel" },
-      { headerContains: "goal", option: "Yes, full flywheel" },
+      // Rubric gate: picking Skip rubric is the recommended terminator.
+      // The assertion only checks that flywheel_synthesize_rubric fired,
+      // which happens immediately before this ask.
+      { headerContains: "rubric", option: "Skip rubric" },
+      { headerContains: "beads", option: "Reject" },
+      { headerContains: "launch", option: "Back to plan" },
+      ...COMMON_SCRIPTED,
     ],
     assert: (facts) => {
       const violations: string[] = [];
@@ -235,7 +269,7 @@ export const SCENARIOS: Scenario[] = [
       }
       return violations;
     },
-    maxTurns: 90,
+    maxTurns: 100,
   },
 ];
 

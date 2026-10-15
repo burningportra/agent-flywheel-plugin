@@ -1,84 +1,82 @@
 {
   "version": 1,
-  "git_sha": "109bf16d72b92c851f6839d5ad5300080a70cd2f",
+  "git_sha": "77ee233",
   "git_dirty": false,
-  "recorded_at": "2026-10-15T18:13:14.307Z",
+  "recorded_at": "2026-10-15T21:30:36.251Z",
   "model": "claude-sonnet-5-5",
-  "claude_cli_version": "agent-sdk@0.3.300 / cli@2.1.300 (Claude Code)",
+  "claude_cli_version": "agent-sdk@0.3.300 / cli@2.1.301 (Claude Code)",
   "scenarios": [
     {
       "id": "s1-step0d-and-step5",
       "description": "After the Phase 0.5 brainstorm skip, Step 5 fires a Plan-mode (4 options) + Ambition (2 options) AskUserQuestion.",
       "status": "pass",
       "violations": [],
-      "turns": 60,
+      "turns": 46,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 120,
-        "output_tokens": 1899,
-        "cache_read_input_tokens": 3826986,
-        "cache_creation_input_tokens": 197555
+        "input_tokens": 92,
+        "output_tokens": 1848,
+        "cache_read_input_tokens": 2377732,
+        "cache_creation_input_tokens": 146250
       },
-      "cost_usd": 0.6317834999999999,
-      "tool_use_count": 30,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s1-step0d-and-step5-2026-10-15T18-05-51-896Z.jsonl",
-      "duration_ms": 116232
+      "cost_usd": 0.5391477,
+      "tool_use_count": 25,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s1-step0d-and-step5-2026-10-15T21-22-10-240Z.jsonl",
+      "duration_ms": 112367
     },
     {
       "id": "s2-standard-no-early-br-create",
       "description": "Standard plan path reaches the plan-ready/plan-gate menu and runs no `br create` before the user picks Create beads.",
       "status": "pass",
       "violations": [],
-      "turns": 44,
+      "turns": 40,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 88,
-        "output_tokens": 2522,
-        "cache_read_input_tokens": 2574958,
-        "cache_creation_input_tokens": 160203
+        "input_tokens": 80,
+        "output_tokens": 1864,
+        "cache_read_input_tokens": 2272469,
+        "cache_creation_input_tokens": 176656
       },
-      "cost_usd": 0.5519362,
-      "tool_use_count": 26,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s2-standard-no-early-br-create-2026-10-15T18-07-49-158Z.jsonl",
-      "duration_ms": 115298
+      "cost_usd": 0.4621,
+      "tool_use_count": 24,
+      "artifact_path": "mcp-server/scripts/eval/artifacts/s2-standard-no-early-br-create-2026-10-15T21-31-14-088Z.jsonl",
+      "duration_ms": 103000
     },
     {
       "id": "s3-ambitious-writes-charter-first",
       "description": "Ambitious path writes docs/brainstorms/<slug>-<date>-ambition.md before calling flywheel_plan with ambition='ambitious'.",
       "status": "pass",
       "violations": [],
-      "turns": 75,
+      "turns": 48,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 150,
-        "output_tokens": 1703,
-        "cache_read_input_tokens": 4119686,
-        "cache_creation_input_tokens": 170636
+        "input_tokens": 96,
+        "output_tokens": 2648,
+        "cache_read_input_tokens": 2678656,
+        "cache_creation_input_tokens": 141942
       },
-      "cost_usd": 0.6153953000000001,
-      "tool_use_count": 33,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s3-ambitious-writes-charter-first-2026-10-15T18-09-44-722Z.jsonl",
-      "duration_ms": 160563
+      "cost_usd": 0.5093124,
+      "tool_use_count": 23,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s3-ambitious-writes-charter-first-2026-10-15T21-25-42-585Z.jsonl",
+      "duration_ms": 124362
     },
     {
       "id": "s4-rubric-gate-before-bead-creation",
       "description": "Choosing Create beads triggers the Step 5.6.5 rubric gate (flywheel_synthesize_rubric) before any bead creation.",
-      "status": "fail",
-      "violations": [
-        "flywheel_synthesize_rubric not observed after picking Create beads."
-      ],
-      "turns": 22,
+      "status": "pass",
+      "violations": [],
+      "turns": 73,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 44,
-        "output_tokens": 980,
-        "cache_read_input_tokens": 758654,
-        "cache_creation_input_tokens": 54513
+        "input_tokens": 146,
+        "output_tokens": 2592,
+        "cache_read_input_tokens": 4792329,
+        "cache_creation_input_tokens": 168551
       },
-      "cost_usd": 0.2255066,
-      "tool_use_count": 11,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s4-rubric-gate-before-bead-creation-2026-10-15T18-12-25-466Z.jsonl",
-      "duration_ms": 55028
+      "cost_usd": 0.7891503999999999,
+      "tool_use_count": 43,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s4-rubric-gate-before-bead-creation-2026-10-15T21-27-48-530Z.jsonl",
+      "duration_ms": 175646
     }
   ]
 }
