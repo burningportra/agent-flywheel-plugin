@@ -91,6 +91,10 @@ export function allGreenStubs(): ExecStub[] {
     { match: (cmd, args) => cmd === 'br' && args[0] === '--version', respond: ok('br 0.1.0') },
     { match: (cmd, args) => cmd === 'bv' && args[0] === '--version', respond: ok('bv 0.1.0') },
     { match: (cmd, args) => cmd === 'ntm' && args[0] === '--version', respond: ok('ntm 0.1.0') },
+    {
+      match: (cmd, args) => cmd === 'ntm' && args[0] === 'config',
+      respond: ok(`projects_base = "${tmpdir()}"\n`),
+    },
     { match: (cmd, args) => cmd === 'cm' && args[0] === '--version', respond: ok('cm 0.1.0') },
     // `rescues_last_30d` synthesis row → `cm context flywheel-rescue --json`.
     {
