@@ -270,6 +270,15 @@ Route the choice immediately: **Inspect first** → show `git worktree list --po
 
 **Plan detection (run before building the menu).** Glob `docs/plans/*.md` sorted by mtime descending; capture the top 3 as `RECENT_PLAN_PATHS` (relative paths). If none exist, set `RECENT_PLAN_PATHS = []`. This list is surfaced inline in the printed block whenever "Pick up existing plan" is shown so operators can copy-paste a path directly.
 
+Build `RECENT_PLANS_BLOCK` once from that list:
+
+```text
+Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
+  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
+  • <RECENT_PLAN_PATHS[1]>
+  • <RECENT_PLAN_PATHS[2]>
+```
+
 Build the menu options dynamically based on detected state:
 
 After printing the selected state's menu block, append this glossary line once: `Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol`.
@@ -285,10 +294,7 @@ Primary entry points (active session: '<goal>' @ <phase>):
   • Set a goal          — type a fresh goal in Other; appends to existing beads after drift confirm
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps to bead creation
 
-Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
-  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
-  • <RECENT_PLAN_PATHS[1]>
-  • <RECENT_PLAN_PATHS[2]>
+[Insert `RECENT_PLANS_BLOCK` built from `RECENT_PLAN_PATHS`.]
 
 More entry points (type the label into "Other" or run the slash command directly):
   • Work on beads       — refine / implement / inspect the open bead set
@@ -330,10 +336,7 @@ Primary entry points (<N> open beads):
   • Set a goal          — type a fresh goal in Other; appends new beads to the current set
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; merges into the current bead set
 
-Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
-  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
-  • <RECENT_PLAN_PATHS[1]>
-  • <RECENT_PLAN_PATHS[2]>
+[Insert `RECENT_PLANS_BLOCK` built from `RECENT_PLAN_PATHS`.]
 
 More entry points (type the label into "Other" or run the slash command directly):
   • Reality check       — gap-check vs vision via /reality-check-for-project
@@ -377,10 +380,7 @@ Primary entry points:
   • Scan & discover     — profile the repo and surface improvement ideas
   • Reality check       — /reality-check-for-project gap analysis
 
-Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
-  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
-  • <RECENT_PLAN_PATHS[1]>
-  • <RECENT_PLAN_PATHS[2]>
+[Insert `RECENT_PLANS_BLOCK` built from `RECENT_PLAN_PATHS`.]
 
 More entry points (type the label into "Other" or run the slash command directly):
   • Research repo       — paste a GitHub URL → /flywheel-research
