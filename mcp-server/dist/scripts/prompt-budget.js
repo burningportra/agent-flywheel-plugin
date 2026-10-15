@@ -88,10 +88,10 @@ export function compareEntries(baselineEntries, currentEntries, thresholdPercent
     }
     return violations.sort((left, right) => left.id.localeCompare(right.id));
 }
-function parseArgs(argv) {
+export function parseArgs(argv) {
     const options = {
         check: false,
-        write: false,
+        update: false,
         worker: false,
         help: false,
         root: DEFAULT_REPO_ROOT,
@@ -100,8 +100,8 @@ function parseArgs(argv) {
         const arg = argv[index];
         if (arg === "--check")
             options.check = true;
-        else if (arg === "--write")
-            options.write = true;
+        else if (arg === "--update" || arg === "--write")
+            options.update = true;
         else if (arg === "--worker")
             options.worker = true;
         else if (arg === "--help" || arg === "-h")
@@ -117,8 +117,8 @@ function parseArgs(argv) {
             throw new Error(`unknown argument: ${arg}`);
         }
     }
-    if (options.check && options.write) {
-        throw new Error("--check and --write cannot be combined");
+    if (options.check && options.update) {
+        throw new Error("--check and --update cannot be combined");
     }
     return options;
 }
@@ -540,9 +540,9 @@ function printViolations(violations, thresholdPercent) {
 async function main() {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) {
-        process.stdout.write("Usage: npx tsx scripts/prompt-budget.ts [--check | --write]\n" +
+        process.stdout.write("Usage: npx tsx scripts/prompt-budget.ts [--check | --update]\n" +
             "  default  Measure committed HEAD, print the table, and create the baseline if missing.\n" +
-            "  --write  Replace the baseline from committed HEAD.\n" +
+            "  --update Replace the baseline from committed HEAD.\n" +
             "  --check  Measure the working tree and fail when any entry grew more than 10%.\n");
         return;
     }
@@ -570,13 +570,13 @@ async function main() {
     }
     const report = measureCommittedHead(options.root);
     printTable(report);
-    if (!existsSync(baselinePath) || options.write) {
+    if (!existsSync(baselinePath) || options.update) {
         mkdirSync(path.dirname(baselinePath), { recursive: true });
         writeReport(baselinePath, report);
         process.stdout.write(`prompt-budget: wrote ${BASELINE_PATH}\n`);
     }
     else {
-        process.stdout.write(`prompt-budget: baseline already exists at ${BASELINE_PATH}; use --write to replace it\n`);
+        process.stdout.write(`prompt-budget: baseline already exists at ${BASELINE_PATH}; use --update to replace it\n`);
     }
 }
 const entryPath = process.argv[1] ? realpathSync(path.resolve(process.argv[1])) : "";

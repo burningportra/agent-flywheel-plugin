@@ -40,5 +40,13 @@ describe("prompt budget measurement", () => {
             reason: "grew",
         });
     });
+    it("uses --update for baseline writes and rejects it with --check", () => {
+        expect(budget.parseArgs(["--update"])).toMatchObject({
+            check: false,
+            update: true,
+        });
+        expect(budget.parseArgs(["--write"])).toMatchObject({ update: true });
+        expect(() => budget.parseArgs(["--check", "--update"])).toThrow("--check and --update cannot be combined");
+    });
 });
 //# sourceMappingURL=prompt-budget.test.js.map
