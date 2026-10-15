@@ -89,4 +89,36 @@ describe("pointer-command dedup guard (bead PTR)", () => {
     }
     expect(missing).toEqual([]);
   });
+
+  /**
+   * Allowlist for same-name pairs that are intentionally NOT flywheel_get_skill
+   * pointers. Every entry must carry a one-line reason. The default position is
+   * "same-name pair → pointer"; an allowlist entry means the pair has been
+   * reviewed and the exemption is deliberate (e.g. the command file is itself
+   * the canonical body and the skill is the thin alias, or the command has
+   * runtime-side arg routing that cannot be deferred into the skill body).
+   */
+  const POINTER_ALLOWLIST: Record<string, string> = {
+    // (empty — add entries as `"<command-name>": "reason"` when a new same-name
+    // pair ships that cannot be a pointer; see VCE.1/VCE.2 handoff notes.)
+  };
+
+  it("every commands/<name>.md with a same-name skills/<name>/SKILL.md is a flywheel_get_skill pointer or on the allowlist", () => {
+    const violations: Array<{ command: string; reason: string }> = [];
+    for (const file of commandFiles) {
+      const name = basename(file, ".md");
+      if (!skillDirHasSkill(name)) continue;
+      if (name in POINTER_ALLOWLIST) continue;
+      const text = readFileSync(join(COMMANDS_DIR, file), "utf8");
+      const callsGetSkill =
+        /flywheel_get_skill\s*\(\s*\{\s*name\s*:\s*["']agent-flywheel:/.test(text);
+      if (!callsGetSkill) {
+        violations.push({
+          command: file,
+          reason: `commands/${file} has sibling skills/${name}/SKILL.md but does not call flywheel_get_skill — add a pointer or allowlist with a reason`,
+        });
+      }
+    }
+    expect(violations).toEqual([]);
+  });
 });

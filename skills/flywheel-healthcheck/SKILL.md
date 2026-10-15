@@ -5,7 +5,19 @@ description: Full health check of the codebase and flywheel dependencies.
 
 Run a health check. $ARGUMENTS
 
-Produce a health score across dependencies, codebase state, and beads.
+**First action: parse `$ARGUMENTS` for `--json`.** Call `flywheel_doctor({cwd})` first for the read-only toolchain snapshot. When `--json` is present, fan out the dependency / codebase / bead / duel checks, assemble a single JSON envelope `{tool:"flywheel_healthcheck", version, status, phase, data:{doctor, dependencies, codebase, beads, duel, score}}`, print it to stdout, and exit. Otherwise render the human-friendly health report below.
+
+Produce a health score across dependencies, codebase state, beads, duel artifacts, and duel readiness.
+
+## --json output schema
+
+When invoked with `--json`, this skill emits to stdout a single JSON envelope
+that wraps the doctor report plus dependency / codebase / bead / duel sections. Pin
+the contract shape via `flywheel_capabilities` (`data.contract_version`).
+
+Top-level: `{tool:"flywheel_healthcheck", version, status, phase, data}`
+Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
+`data` keys: `doctor` (raw `flywheel_doctor` envelope), `dependencies`, `codebase`, `beads`, `duel`, `score`.
 
 **Dependency checks** (run in parallel via Bash):
 - `br --version` — bead tracker
@@ -23,6 +35,15 @@ Produce a health score across dependencies, codebase state, and beads.
 **Bead health**:
 - Run `br list --json` — count open/closed/in-progress/deferred
 - Run `bv --json` — check for cycles or orphaned beads
+
+**Duel artifact hygiene** (cwd-scoped, read-only):
+- `find . -maxdepth 1 -name 'WIZARD_*.md' -mtime +7 -print` — list duel transcripts older than 7 days
+- `find . -maxdepth 1 -name 'DUELING_WIZARDS_REPORT.md' -mtime +7 -print` — stale synthesis reports
+- For each match, surface it under STALE DUEL ARTIFACTS. Do **not** auto-delete; these transcripts feed the bead Provenance block. Suggest `/flywheel-cleanup` if the user wants to archive or remove them.
+
+**Duel readiness** (one line in the report):
+- Count of healthy {cc, cod, gmi} CLIs from doctor's last run + ntm presence.
+- Render: `Duel-ready: yes (cc+cod+gmi healthy, ntm ok)` / `partial (cc+cod only)` / `no (ntm missing)` / `no (only 1 CLI healthy)`.
 
 **Display health report**:
 ```
