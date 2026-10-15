@@ -21,6 +21,36 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
   };
 }
 
+function availableCliCalls(gemini = true): ExecCall[] {
+  return [
+    {
+      cmd: 'which',
+      args: ['claude'],
+      result: { code: 0, stdout: '/bin/claude\n', stderr: '' },
+    },
+    {
+      cmd: 'which',
+      args: ['codex'],
+      result: { code: 0, stdout: '/bin/codex\n', stderr: '' },
+    },
+    {
+      cmd: 'which',
+      args: ['gemini'],
+      result: gemini
+        ? { code: 0, stdout: '/bin/gemini\n', stderr: '' }
+        : { code: 1, stdout: '', stderr: 'gemini not found' },
+    },
+  ];
+}
+
+function unavailableCliCalls(): ExecCall[] {
+  return ['claude', 'codex', 'gemini'].map((provider) => ({
+    cmd: 'which',
+    args: [provider],
+    result: { code: 1, stdout: '', stderr: `${provider} not found` },
+  }));
+}
+
 function makeExecCalls(beads: Bead[] = [makeBead()], readyBeads?: Bead[]): ExecCall[] {
   return [
     {
@@ -46,8 +76,9 @@ function makeCtx(
   stateOverrides: Partial<FlywheelState> = {},
   execCalls: ExecCall[] = makeExecCalls(),
   cwd = '/fake/cwd',
+  capabilityCalls: ExecCall[] = availableCliCalls(),
 ) {
-  const exec = createMockExec(execCalls);
+  const exec = createMockExec([...capabilityCalls, ...execCalls]);
   const state = makeState({
     selectedGoal: 'Improve testing',
     phase: 'awaiting_bead_approval',
@@ -288,10 +319,8 @@ describe('runApprove', () => {
       phase: 'implementing',
       approvalTarget: 'beads',
       nextStep: {
-        type: 'call_tool',
-        message: 'Implement the ready bead, then call flywheel_review with its summary.',
-        tool: 'flywheel_review',
-        argsSchemaHint: { beadId: 'string', action: 'looks-good | hit-me | skip' },
+        type: 'spawn_agents',
+        message: 'Send the server-built prompt to one implementation pane, then call flywheel_review with its summary.',
       },
       data: {
         kind: 'beads_approved',
@@ -311,6 +340,14 @@ describe('runApprove', () => {
           summary: expect.stringContaining('Bead quality'),
         },
         creationAudit: { planCoverage: null, duplicateCandidates: [] },
+        lanes: [{ lane: 'cc', beadIds: ['bead-1'] }],
+        prompts: [{
+          beadId: 'bead-1',
+          lane: 'cc',
+          agentName: expect.any(String),
+          prompt: expect.stringContaining('## PRE-COMPLETION QUALITY GATE'),
+        }],
+        dispatch: { degraded: false, warnings: [] },
         matrix: expect.objectContaining({
           version: 1,
           recommendation: expect.stringMatching(/^(swarm|coordinator-serial)$/),
@@ -320,7 +357,7 @@ describe('runApprove', () => {
             id: 'bead-1',
             title: 'Add tests',
             launchInstruction: 'implement',
-            agentName: undefined,
+            agentName: expect.any(String),
           },
         ],
       },
@@ -340,7 +377,7 @@ describe('runApprove', () => {
     expect(state.beadReviews).toEqual({});
   });
 
-  it('returns agent configs when multiple beads are ready', async () => {
+  it('returns server-built prompts when multiple beads are ready', async () => {
     // Use distinct descriptions so hotspot matrix stays in swarm mode (no
     // coordinator-serial override). Without this, the shared 'HOW: src/core.test.ts'
     // in the default bead body would trigger the 4-option menu.
@@ -353,7 +390,7 @@ describe('runApprove', () => {
     const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
 
     const text = result.content[0].text;
-    expect(text).toContain('Spawn 2 parallel agents');
+    expect(text).toContain('data.lanes');
     expect(text).toContain('bead-1');
     expect(text).toContain('bead-2');
     expect(result.structuredContent).toEqual({
@@ -384,6 +421,25 @@ describe('runApprove', () => {
           summary: expect.stringContaining('Bead quality'),
         },
         creationAudit: { planCoverage: null, duplicateCandidates: [] },
+        lanes: [
+          { lane: 'cc', beadIds: ['bead-1'] },
+          { lane: 'cod', beadIds: ['bead-2'] },
+        ],
+        prompts: [
+          {
+            beadId: 'bead-1',
+            lane: 'cc',
+            agentName: expect.any(String),
+            prompt: expect.stringContaining('## PRE-COMPLETION QUALITY GATE'),
+          },
+          {
+            beadId: 'bead-2',
+            lane: 'cod',
+            agentName: expect.any(String),
+            prompt: expect.stringContaining('## PRE-COMPLETION QUALITY GATE'),
+          },
+        ],
+        dispatch: { degraded: false, warnings: [] },
         matrix: expect.objectContaining({
           version: 1,
           recommendation: 'swarm',
@@ -393,17 +449,106 @@ describe('runApprove', () => {
             id: 'bead-1',
             title: 'First task',
             launchInstruction: 'spawn-agent',
-            agentName: 'bead-bead-1',
+            agentName: expect.any(String),
           },
           {
             id: 'bead-2',
             title: 'Second task',
             launchInstruction: 'spawn-agent',
-            agentName: 'bead-bead-2',
+            agentName: expect.any(String),
           },
         ],
       },
     });
+  });
+
+  it('returns 2/2/2 lanes and a gated adapter prompt for every wave-one bead', async () => {
+    const beads = Array.from({ length: 6 }, (_, index) => makeBead({
+      id: `wave-1-${index + 1}`,
+      title: `Implement wave feature ${index + 1}`,
+      description: `Implement wave feature ${index + 1}.\nHOW: src/feature-${index + 1}.ts`,
+    }));
+    const { ctx } = makeCtx({}, makeExecCalls(beads));
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+    const structured = result.structuredContent as { data: Record<string, unknown> };
+    const data = structured.data as {
+      lanes: Array<{ lane: string; beadIds: string[] }>;
+      prompts: Array<{ beadId: string; lane: string; agentName: string; prompt: string }>;
+    };
+
+    expect(data.lanes).toEqual([
+      { lane: 'cc', beadIds: ['wave-1-1', 'wave-1-2'] },
+      { lane: 'cod', beadIds: ['wave-1-3', 'wave-1-4'] },
+      { lane: 'gmi', beadIds: ['wave-1-5', 'wave-1-6'] },
+    ]);
+    expect(data.prompts.map(({ beadId, lane }) => ({ beadId, lane }))).toEqual([
+      { beadId: 'wave-1-1', lane: 'cc' },
+      { beadId: 'wave-1-2', lane: 'cc' },
+      { beadId: 'wave-1-3', lane: 'cod' },
+      { beadId: 'wave-1-4', lane: 'cod' },
+      { beadId: 'wave-1-5', lane: 'gmi' },
+      { beadId: 'wave-1-6', lane: 'gmi' },
+    ]);
+    for (const prompt of data.prompts) {
+      expect(prompt.prompt).toContain('## PRE-COMPLETION QUALITY GATE');
+      expect(prompt.prompt).toContain(`.pi-flywheel/completion/${prompt.beadId}.json`);
+      expect(prompt.prompt).toContain(`"beadId": "${prompt.beadId}"`);
+      expect(prompt.prompt).toContain(`"agentName": "${prompt.agentName}"`);
+    }
+  });
+
+  it('returns 2/4 wave-one lanes when Gemini is unavailable', async () => {
+    const beads = Array.from({ length: 6 }, (_, index) => makeBead({
+      id: `fallback-${index + 1}`,
+      title: `Fallback ${index + 1}`,
+      description: `Implement fallback ${index + 1}.\nHOW: src/fallback-${index + 1}.ts`,
+    }));
+    const { ctx } = makeCtx(
+      {},
+      makeExecCalls(beads),
+      '/fake/cwd',
+      availableCliCalls(false),
+    );
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+    const structured = result.structuredContent as { data: Record<string, unknown> };
+
+    expect(structured.data.lanes).toEqual([
+      { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
+      {
+        lane: 'cod',
+        beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
+      },
+    ]);
+  });
+
+  it('does not mutate the implementation state when no provider is available', async () => {
+    const bead = makeBead();
+    const { ctx, state } = makeCtx(
+      { beadResults: { old: { beadId: 'old', status: 'success', summary: 'done' } } },
+      makeExecCalls([bead]),
+      '/fake/cwd',
+      unavailableCliCalls(),
+    );
+    const exec = vi.fn(ctx.exec);
+    ctx.exec = exec;
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      data: { error: { code: 'cli_not_available' } },
+    });
+    expect(state.phase).toBe('awaiting_bead_approval');
+    expect(state.beadResults).toEqual({
+      old: { beadId: 'old', status: 'success', summary: 'done' },
+    });
+    expect(exec).not.toHaveBeenCalledWith(
+      'br',
+      ['update', bead.id, '--status', 'in_progress'],
+      expect.anything(),
+    );
   });
 
   it('falls back to first 3 beads when br ready fails', async () => {

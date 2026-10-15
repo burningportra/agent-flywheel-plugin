@@ -31,6 +31,11 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
 
 function makeExecCalls(beads: Bead[], readyBeads?: Bead[]): ExecCall[] {
   return [
+    ...['claude', 'codex', 'gemini'].map((provider) => ({
+      cmd: 'which',
+      args: [provider],
+      result: { code: 0, stdout: `/bin/${provider}\n`, stderr: '' },
+    })),
     {
       cmd: 'br',
       args: ['list', '--json'],
@@ -137,9 +142,9 @@ describe('I5 — approve_beads hotspot injection', () => {
 
     expect(matrix.recommendation).toBe('swarm');
     expect(matrix.maxContention).toBeLessThanOrEqual(1);
-    // Sequential launch → legacy call_tool nextStep (not present_choices).
+    // A single ready bead still dispatches its server-built implementer prompt.
     expect(sc.data.launchMode).toBe('sequential');
-    expect(sc.nextStep?.type).toBe('call_tool');
+    expect(sc.nextStep?.type).toBe('spawn_agents');
   });
 
   it('two beads sharing a file via prose only → 4-option menu (med severity)', async () => {

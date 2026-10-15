@@ -4,9 +4,9 @@ import type { ToolContext, McpToolResult, Bead, ApproveArgs, ApproveStopReason, 
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult } from './shared.js';
 import { getRefinementModel } from '../model-detection.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
+import { buildImplementerDispatch } from '../adapters/implementer-dispatch.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
-import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
 import { computeHotspotMatrix, type HotspotInputBead } from '../plan-simulation.js';
 import { createLogger } from '../logger.js';
@@ -96,7 +96,7 @@ function makeApproveError(
   message: string,
   phase: FlywheelPhase,
   approvalTarget: ApprovalTarget,
-  code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'internal_error' | 'rubric_missing',
+  code: 'missing_prerequisite' | 'invalid_input' | 'not_found' | 'cli_failure' | 'cli_not_available' | 'parse_failure' | 'blocked_state' | 'unsupported_action' | 'internal_error' | 'rubric_missing',
   details?: Record<string, unknown>,
   hint?: string,
 ): McpToolResult<ApproveStructuredContent> {
@@ -598,17 +598,6 @@ async function handleStart(
 ): Promise<McpToolResult> {
   const { exec, cwd, state, saveState, signal } = ctx;
 
-  // Reset and move to implementing
-  _lastBeadSnapshot = undefined;
-  state.beadResults = {};
-  state.beadReviews = {};
-  state.beadReviewPassCounts = {};
-  state.beadHitMeTriggered = {};
-  state.beadHitMeCompleted = {};
-  state.iterationRound = 0;
-  state.currentGateIndex = 0;
-  state.phase = 'implementing';
-
   // Get ready beads (unblocked by dependencies)
   const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 10000, signal });
   let ready: Bead[] = [];
@@ -628,7 +617,6 @@ async function handleStart(
   }
 
   if (ready.length === 0) {
-    saveState(state);
     return makeApproveResult(
       `Beads approved! But no ready beads found (all may be blocked).\n\nRun \`br ready\` or \`br dep cycles\` to diagnose.\n\n${beadList}`,
       state.phase,
@@ -649,6 +637,41 @@ async function handleStart(
     );
   }
 
+  const dispatch = await buildImplementerDispatch({
+    exec,
+    cwd,
+    signal,
+    beads: ready,
+    coordinatorName: 'Coordinator',
+  });
+  if (dispatch.prompts.length !== ready.length) {
+    return makeApproveError(
+      'No implementation CLI is available for the first wave.',
+      state.phase,
+      'beads',
+      'cli_not_available',
+      { warnings: dispatch.warnings },
+      'Install at least one of claude, codex, or gemini, then retry flywheel_approve_beads.',
+    );
+  }
+
+  const promptByBeadId = new Map(
+    dispatch.prompts.map((prompt) => [prompt.beadId, prompt]),
+  );
+  const promptFor = (beadId: string) => {
+    const prompt = promptByBeadId.get(beadId);
+    if (!prompt) throw new Error(`missing implementer prompt for bead ${beadId}`);
+    return prompt;
+  };
+  const dispatchData = {
+    lanes: dispatch.lanes,
+    prompts: dispatch.prompts,
+    dispatch: {
+      degraded: dispatch.degraded,
+      warnings: dispatch.warnings,
+    },
+  };
+
   // Acquire per-cwd mutex for the start action
   const mutexKey = `approve-start:${cwd}`;
   if (!acquireBeadMutex(mutexKey)) {
@@ -665,7 +688,6 @@ async function handleStart(
         for (const id of transitioned) {
           await exec('br', ['update', id, '--status', 'open'], { cwd, timeout: 5000, signal });
         }
-        releaseBeadMutex(mutexKey);
         return makeApproveError(
           `Failed to mark bead ${bead.id} as in_progress: ${updateResult.stderr || `exit ${updateResult.code}`}. Rolled back ${transitioned.length} bead(s).`,
           state.phase,
@@ -681,6 +703,16 @@ async function handleStart(
       }
       transitioned.push(bead.id);
     }
+
+    _lastBeadSnapshot = undefined;
+    state.beadResults = {};
+    state.beadReviews = {};
+    state.beadReviewPassCounts = {};
+    state.beadHitMeTriggered = {};
+    state.beadHitMeCompleted = {};
+    state.iterationRound = 0;
+    state.currentGateIndex = 0;
+    state.phase = 'implementing';
     state.currentBeadId = ready[0].id;
     saveState(state);
   } finally {
@@ -711,25 +743,11 @@ async function handleStart(
   const hotspotNote = offerCoordinatorSerial ? `\n\n${formatHotspotSummary(matrix)}` : '';
 
   if (ready.length === 1) {
-    // Sequential: single bead — contention can't matter here, but surface
-    // matrix in structuredContent for observability.
     const bead = ready[0];
     return makeApproveResult(
       `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}
 
-**NEXT: Implement bead ${bead.id} (${bead.title}), then call \`flywheel_review\` when done.**
-
----
-
-## Bead ${bead.id}: ${bead.title}
-
-${bead.description}
-
-After implementing:
-1. Do a self-review of all changes
-2. Run tests if applicable
-3. Commit: \`git add <changed files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
-4. Call \`flywheel_review\` with beadId="${bead.id}" and a summary of what you did
+**NEXT: Send \`data.prompts[0].prompt\` as-is to the \`${promptFor(bead.id).lane}\` implementation lane, then call \`flywheel_review\` when it finishes.**
 
 ${beadList}`,
       state.phase,
@@ -744,40 +762,14 @@ ${beadList}`,
           id: bead.id,
           title: bead.title,
           launchInstruction: 'implement',
-          agentName: undefined,
+          agentName: promptFor(bead.id).agentName,
         }],
+        ...dispatchData,
         ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
       },
-      makeNextToolStep('call_tool', 'Implement the ready bead, then call flywheel_review with its summary.', {
-        tool: 'flywheel_review',
-        argsSchemaHint: { beadId: 'string', action: 'looks-good | hit-me | skip' },
-      })
+      makeNextToolStep('spawn_agents', 'Send the server-built prompt to one implementation pane, then call flywheel_review with its summary.')
     );
   }
-
-  // Parallel: multiple ready beads — return agent configs for CC to spawn
-  const agentConfigs = ready.map((bead) => {
-    const baseTask = `You are implementing bead ${bead.id} as part of the flywheel workflow.
-
-## ${bead.title}
-
-${bead.description}
-
-## Instructions
-1. Implement all changes described in the bead
-2. Only modify files listed in the bead scope
-3. Run tests if applicable
-4. Do a fresh-eyes self-review
-5. Commit: \`git add <files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
-
-After completing, report your summary to the agent-flywheel.`;
-
-    return {
-      name: `bead-${bead.id}`,
-      cwd,
-      task: withCassContext(baseTask, cwd, `implementing: ${bead.title}`),
-    };
-  });
 
   // 4-option menu when contention warrants it; otherwise legacy spawn-parallel nextStep.
   const nextStep = offerCoordinatorSerial
@@ -821,13 +813,7 @@ After completing, report your summary to the agent-flywheel.`;
   return makeApproveResult(
     `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}${hotspotNote}
 
-**NEXT: Spawn ${ready.length} parallel agents (one per ready bead), then call \`flywheel_review\` for each when done.**
-
-\`\`\`json
-${JSON.stringify({ agents: agentConfigs }, null, 2)}
-\`\`\`
-
-After all agents complete, call \`flywheel_review\` for each bead with its agent's summary.
+**NEXT: Spawn the counts in \`data.lanes\`, send each \`data.prompts[].prompt\` as-is to its lane, then call \`flywheel_review\` for each completed bead.**
 
 ${beadList}`,
     state.phase,
@@ -842,8 +828,9 @@ ${beadList}`,
         id: bead.id,
         title: bead.title,
         launchInstruction: 'spawn-agent',
-        agentName: `bead-${bead.id}`,
+        agentName: promptFor(bead.id).agentName,
       })),
+      ...dispatchData,
       ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
     },
     nextStep,
