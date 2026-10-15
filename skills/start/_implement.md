@@ -67,7 +67,7 @@ After every wave completes, instead of: verify-beads → read frontier → rende
 ```
 flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>])
 ```
-Returns `{ verification, nextWave: { beadIds, prompts: [{beadId, lane, prompt}], complexity } | null, waveComplete }`. If `nextWave` is non-null, dispatch the rendered prompts to NTM panes via `ntm --robot-send`. If `waveComplete: true` and `nextWave: null`, the queue is drained — proceed to Step 8.
+Returns `{ verification, nextWave: { beadIds, lanes, prompts, complexity, warnings, degraded } | null, waveComplete }`. If `nextWave` is non-null, spawn from `nextWave.lanes` and send every prompt unchanged via `ntm --robot-send`. If `waveComplete: true` and `nextWave: null`, the queue is drained. Proceed to Step 8.
 
 This is the surface that makes the flywheel actually flywheel. Use it after EVERY wave; do not re-implement the dance manually.
 
@@ -133,15 +133,7 @@ The threshold drives the `shouldTriggerBatchReview(state)` check inside `flywhee
 
 ### Pre-loop — swarm scaling + stagger
 
-**Agent ratio** — the canonical rule is mixed `cc:cod:gmi` **1:1:1** per AGENTS.md "NTM pane priority". Scale the share equally across providers; larger waves use `--cc=N --cod=N --gmi=N` for the same N. Apply the substitution ladder (gmi→cod→pi→cc) when a provider is non-green; the `claude_cli`, `codex_cli`, `gemini_cli`, `swarm_model_ratio`, `codex_config_compat`, and `gemini_model_compat` checks in `flywheel_doctor` together signal which lanes the host can fill. Cap parallel spawns at the wave's independent-bead count — do not spin up agents with nothing to do.
-
-Three independent reasoners is the point: cross-agent fresh eyes in Step 9 and duel review assume 1:1:1. A `--cc=N` alone, `--cod=N` alone, or `--pi=N` alone swarm is a degraded mode — only land on it via the substitution ladder with a non-green doctor row to justify it, and log the degradation.
-
-The 1:1:1 ratios are actually executed via the model-diversity split in step 7.2 below — not just documented. CLI availability is detected up-front and missing CLIs degrade gracefully with a user-facing warning.
-
-**Thundering-herd mitigation** — stagger spawns by **30 seconds minimum**. Do NOT spawn all agents simultaneously; they all read AGENTS.md, hit Agent Mail, and query `br ready` at once — piling onto the same frontier bead. Use `run_in_background: true` and wait 30s between each `Agent(...)` call.
-
-**Codex input-buffer quirk** — after the prompt lands in a Codex agent, send Enter TWICE (or append a trailing newline) so the long prompt clears the input buffer.
+For wave one, `flywheel_approve_beads(action="start")` returns the complete assignment in `data.lanes` and ready-to-send bytes in `data.prompts`. Later waves return the same prompt records in `nextWave.prompts`. Spawn exactly the returned lane counts and send every prompt unchanged. The server owns provider fallback, agent names, adapter selection, the completion gate, and trailing newlines. Keep `--stagger-mode=smart` on the spawn.
 
 **Rate-limit management** — if any impl agent reports a rate-limit error (429, "usage limit reached", etc.), invoke `/caam` to switch that model's account. `caam activate <model> <backup-account>` takes <100ms and keeps the wave moving. Don't kill and restart the agent; the wrapper just re-authenticates the current session.
 
@@ -181,11 +173,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
 2. **Choose spawn mechanism based on NTM availability.**
 
-   **If `NTM_AVAILABLE`** (preferred): Use NTM to spawn impl agents into visible tmux panes. This lets the user observe all agents working in real-time. `ntm spawn` takes a project name (which must be a directory under `projects_base`) and uses `--label` for the per-purpose suffix. Use `$NTM_PROJECT` captured in Step 0b (which equals `basename $PWD`):
-
-   **Model-diversified split (Claude : Codex : Gemini at 1:1:1).** Distribute the wave's beads across the three CLIs so the user gets a second/third model perspective per wave. The split is `floor(N/3)` each plus remainders by priority (claude → codex → gemini).
-
-   1. **Detect CLI availability up-front.** Run `which claude codex gemini` (or call `flywheel_doctor` and read the `claude_cli` / `codex_cli` / `gemini_cli` rows + the `swarm_model_ratio` synthesis). Build a capabilities map. The MCP server exposes `detectCliCapabilities` from `mcp-server/src/adapters/model-diversity.ts` for programmatic callers.
+   **If `NTM_AVAILABLE`** (preferred), use `$NTM_PROJECT` from the readiness pre-flight and the server-owned wave-one response. Assign `START_DATA = approveResult.structuredContent.data`. It contains `lanes`, `prompts`, and any degraded-mode warnings.
 
    1a. **Codex config compatibility pre-spawn gate (MANDATORY when lane includes a `cod` pane).** If `DOCTOR_REPORT.checks` shows `codex_config_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning. Skipping it is a known failure mode: cod pane crashes within seconds with `'gpt-5.5-xhigh' model is not supported when using Codex with a ChatGPT account` (verified 2026-05-08).
 
@@ -216,60 +204,42 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
       }])
       ```
 
-      **Looper-driven / `--no-user` contexts (auto-resume, `/agent-flywheel:flywheel-swarm`)** must skip the AskUserQuestion variants above and auto-downgrade silently with a one-line warning to the dispatch log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0` (and analogous for gemini). Redistribute the dropped share via the substitution ladder (gmi→cod→pi→cc) before computing lane sizes in Step 2.
+      In looper-driven or `--no-user` runs, apply the recommended remediation automatically. If compatibility stays non-green, stop before spawning and report the doctor row. Never rewrite `data.lanes` by hand.
 
-   2. **Compute the lane sizes** from the capabilities map and the wave size N:
-      - All three available: `floor(N/3)` each. N=3 → 1 Claude + 1 Codex + 1 Gemini. N=4 → 2C + 1Co + 1G (claude takes the +1). N=5 → 2C + 2Co + 1G. N=14 → 5C + 5Co + 4G.
-      - Missing one CLI (e.g. codex absent): redistribute its share to the surviving providers by priority. Wave of 3 with codex missing → 2 Claude + 1 Gemini, plus a degraded-mode warning to the user.
-      - All missing: fail loudly — the wave cannot be dispatched. The doctor's `swarm_model_ratio` row will be red.
+   2. **Use the returned lane sizes.** For wave one, read `START_DATA.lanes`. Later waves use `nextWave.lanes`. Surface `data.dispatch.warnings` or `nextWave.warnings` before spawning.
 
-   3. **Spawn lanes via NTM** with the correct per-model pane counts. Load `/ntm` and `/vibing-with-ntm` first if you haven't — they carry the canonical orchestrator decision tree, stuck-pane ladder, and command surface this section assumes.
+   3. **Spawn lanes via NTM** with one pane per returned bead. Set `N_cc`, `N_cod`, and `N_gmi` from the matching `START_DATA.lanes[].beadIds.length` values. Load `/ntm` and `/vibing-with-ntm` first.
       ```bash
       SESSION="${NTM_PROJECT}--impl-<goal-slug>"
 
       # --no-user omits pane 0 entirely; lanes start at pane index 1.
       # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
-      # Pane-type priority (Changed in v3.17.0 — see AGENTS.md "NTM pane priority"):
-      #   mixed cc:cod:gem 1:1:1 is canonical. Substitution ladder when a
-      #   provider is unavailable (driven by the Step 1a/1b doctor gates):
-      #     missing gmi → reassign to cod
-      #     missing cod also → reassign to pi
-      #     all three peers unavailable → cc-only floor (explicit override)
       ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-        --cc=<N_claude> --cod=<N_cod> --gmi=<N_gemini> --stagger-mode=smart
+        --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --stagger-mode=smart
       ```
 
       **Pane addressing is numeric** — `cc-1` / `cod-1` / `gmi-1` style does NOT work. With `--no-user`, panes are laid out contiguously by spawn order:
 
       | Lane    | Pane indices                                              |
       |---------|------------------------------------------------------------|
-      | Claude  | `1` … `N_claude`                                          |
-      | Codex   | `N_claude+1` … `N_claude+N_cod`                           |
-      | Gemini  | `N_claude+N_cod+1` … `N_claude+N_cod+N_gemini`            |
+      | Claude  | `1` … `N_cc`                                              |
+      | Codex   | `N_cc+1` … `N_cc+N_cod`                                   |
+      | Gemini  | `N_cc+N_cod+1` … `N_cc+N_cod+N_gmi`                      |
 
       Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
       ```bash
-      ntm --robot-send="$SESSION" --panes=1 --msg="<claude-tuned prompt>"
-      ntm --robot-send="$SESSION" --panes=$((N_claude+1)) --msg="<codex-tuned prompt>"
-      ntm --robot-send="$SESSION" --panes=$((N_claude+N_cod+1)) --msg="<gemini-tuned prompt>"
+      ntm --robot-send="$SESSION" --panes=1 --msg="<matching data.prompts[].prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_cc+1)) --msg="<matching data.prompts[].prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_cc+N_cod+1)) --msg="<matching data.prompts[].prompt>"
       ```
+
+      Send every `START_DATA.prompts[]` record once, in array order, to a pane in its `lane`. Pane spawn uses `gmi`. NTM robot-send's provider filter is `gem`, though numeric `--panes` needs no `--type` filter.
 
       **Flag note (verified 2026-05-08).** Use `--panes=N` (plural; indices comma-separated). `--pane=N` (singular) is silently broadcast to ALL panes. Combining `--panes=N --type=cc` AND-restricts to zero matches at session-init time before pane-type metadata stabilizes — drop `--type=` when you already know the index from the spawn order.
 
       ⚠ **Forbidden in automation:** `ntm view` (retiles the user's tmux layout and returns nothing useful) and `ntm dashboard` / `ntm palette` (human-only TUIs). The user can run them; the orchestrator must not.
 
-   4. **Use the per-model prompt adapters** so each pane gets a prompt tuned to its model:
-      - `mcp-server/src/adapters/claude-prompt.ts` — baseline scaffold (matches existing Step 7 template).
-      - `mcp-server/src/adapters/codex-prompt.ts` — terser preambles + strict structured `COMPLETION_REPORT` block (per `/codex:gpt-5-4-prompting`). Codex panes also need 2 trailing newlines (input-buffer quirk).
-      - `mcp-server/src/adapters/gemini-prompt.ts` — explicit role framing + bounded "STOP after report" guard.
-      All three adapters share the `BeadDispatchContext` input shape and the `AdaptedPrompt` output shape so the dispatch loop is a single `adaptPromptFor(lane.provider, ctx)` switch.
-
-   5. **Agent Mail names use the adjective+noun pool** from `mcp-server/src/adapters/agent-names.ts`. Call `allocateAgentNames(N, '<wave-id>')` for collision-free assignment across a 14-bead wave (pool capacity = 1600 unique names). Pass the chosen name as `preferred_name` in the agent's STEP 0 `macro_start_session` call. **Never use descriptive role-style names like `research-coordinator`** — the Agent Mail server rejects them; see `feedback_agent_mail_naming.md` in CASS memory.
-
-   6. **Degraded-mode warning.** When the split returns `degraded: true` (one or more CLIs missing), echo the warning to the user before spawning so they know the wave is not the canonical 1:1:1. Also surface it in the wave-completion summary.
-
-   - Stagger sends by 30 seconds (thundering-herd mitigation still applies).
-   - The Agent Mail STEP 0 bootstrap is still MANDATORY in each pane's prompt — NTM handles process lifecycle; Agent Mail handles coordination protocol, file reservations, and audit trail.
+   4. Send each server-built prompt unchanged. It already contains the provider-specific instructions, Agent Mail identity, completion gate, bead-specific JSON example, and required trailing newlines. If `START_DATA.dispatch.degraded` is true, show its warnings before spawning.
 
    **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM spawns agents asynchronously; a pane process can live while the agent inside it is idle, crashed, or skipping Agent Mail. You MUST actively monitor until every bead in the wave is closed or force-stopped.
 
@@ -286,224 +256,14 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
    flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>])
    ```
    - If `nextWave: null` and `waveComplete: true` → queue drained. `kill -TERM $tender_daemon_pid`, leave the tmux session alive (user may want to inspect panes), transition to Step 8.
-   - If `nextWave.prompts` returned → dispatch them via `ntm --robot-send` to fresh panes (or reuse idle ones via `--robot-restart-pane`), then `ScheduleWakeup(270s, …)` and end the turn. The daemon will keep logging while you're idle.
+   - If `nextWave.prompts` returned → spawn the counts in `nextWave.lanes` and dispatch every prompt unchanged via `ntm --robot-send` to fresh panes (or reuse idle ones via `--robot-restart-pane`), then `ScheduleWakeup(270s, …)` and end the turn. The daemon will keep logging while you're idle.
 
    **Do not skip the Step 8 AskUserQuestion review prompt just because you watched the panes succeed** — the user still gets "Looks good / Self review / Fresh-eyes" and fresh-eyes review is still run via `Agent()` (NOT NTM — reviewers are short-lived). See `_review.md`.
 
    **If NTM is unavailable** (fallback): Spawn via the `Agent()` tool as described below.
 
-3. Spawn an implementation agent with team membership. **Agent Mail bootstrap is ALWAYS required** — every impl agent must register, reserve files, and send start/done messages regardless of isolation mode or file overlap. The message trail creates a coordination audit log for debugging, session history, and CASS memory.
+3. If NTM is unavailable and the user accepts the fallback, create one isolated `Agent()` worker per returned prompt. Pass `START_DATA.prompts[].prompt` unchanged as the worker prompt and use its `agentName`. The server-built prompt already owns bootstrap, implementation, verification, attestation, close, and reporting instructions.
 
-   **Before spawning — pre-flight (populate template placeholders).** Fill these in from the bead before dispatch so the agent doesn't spend turns hunting for context. This matches Opus 4.7's "delegate with full upfront context" guidance — the agent is a capable engineer, not a pair programmer to guide line-by-line.
-
-   | Placeholder | How to compute |
-   |-------------|----------------|
-   | `<complexity>` | One of `simple` / `medium` / `complex` — must match the runtime `BeadComplexity` type in `mcp-server/src/model-routing.ts`. Prefer calling `classifyBeadComplexity()` directly when available; otherwise use the heuristic in the note below. |
-   | `<relevant-files>` | Paths the agent will likely edit/read, derived from bead description + dep traversal. List 3-10; the agent can still discover more. |
-   | `<prior-art-beads>` | Up to 3 closed bead IDs with similar titles. Use the shell snippet in the note below. |
-   | `<thinking-directive>` | `simple` / `medium` → `Respond quickly; don't overthink — this bead is well-scoped.` `complex` → `Think carefully and step-by-step before writing code; this bead is harder than it looks.` |
-   | `<completion-length>` | `simple` → `≤5 bullets`; `medium` → `≤10 bullets`; `complex` → `≤20 bullets`. |
-
-   **Complexity heuristic** (when `classifyBeadComplexity()` isn't available): from `br show <bead-id> --json`:
-   - 1 file + ≤3 acceptance items + 0 deps → `simple`
-   - 2–4 files OR 1 dep → `medium`
-   - 5+ files OR multiple deps OR vague acceptance → `complex`
-
-   **Prior-art lookup** (copy-paste-safe, substitute `<keyword>` with a term from the bead title):
-
-   ```bash
-   br list --status closed --json | jq -r '.[] | select(.title | test("<keyword>"; "i")) | .id' | head -3
-   ```
-
-   Spawn call:
-   ```
-   Agent(
-     subagent_type: "general-purpose",
-     isolation: "worktree",
-     name: "impl-<bead-id>",
-     team_name: "impl-<goal-slug>",
-     prompt: "
-       ## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY — DO THIS BEFORE ANYTHING ELSE)
-       Do NOT read any files or run any commands until all 3 sub-steps below are complete.
-
-       0a. Call macro_start_session(
-             human_key: '<cwd>',
-             program: 'claude-code',
-             model: '<model>',
-             task_description: 'Implementing bead <id>: <title>')
-           Note your assigned agent name.
-
-       0b. Call file_reservation_paths to reserve every file you plan to edit.
-           If any file is already reserved, wait 30 seconds and retry up to 3 times.
-           If still blocked after 3 retries, send a message to '<coordinator-agent-name>'
-           reporting the conflict, then STOP.
-
-       0c. Send a 'started' message to '<coordinator-agent-name>' via send_message
-           with subject '[impl] <bead-id> started'.
-
-       0d. **Re-read AGENTS.md end-to-end** (MANDATORY — do not skip even if
-           you think you remember it). Agents that skip this produce
-           non-idiomatic code and break project conventions. If the repo has
-           no AGENTS.md, note that in your started message.
-
-       0e. **Agent Mail runtime safety.** Use Agent Mail MCP/HTTP tools for inboxes,
-           messages, and reservations. Do NOT run mutating `am doctor` commands
-           (`repair`, `archive-normalize`, `reconstruct`, `fix`) and do NOT delete
-           `.mailbox.activity.lock` or `storage.sqlite3.activity.lock`. The live
-           `am serve-http` daemon intentionally holds those locks. If Agent Mail
-           reports "Resource is temporarily busy" or looks unhealthy, message the
-           coordinator and STOP; the coordinator should run
-           `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.
-
-       Only after 0a, 0b, 0c, 0d, 0e are ALL complete may you proceed to Step 1.
-
-       ## STEP 0.5 — LOAD MEMORY (if CASS available)
-       Call flywheel_memory with operation='search' and query='implementation gotchas <bead-title>'.
-       If results returned, review them before starting — they contain lessons from past sessions.
-
-       ## STEP 0.7 — DOMAIN-SKILL LOOKUP (invoke relevant skills BEFORE writing code)
-       Scan the bead title + description for domain keywords and invoke the matching skill
-       via the Skill tool. Each hit gives you best-practice patterns specific to that stack.
-
-         Bead mentions                            Invoke skill
-         -----------------------------------------------------------
-         admin, /admin, /api/admin              -> /admin-page-for-nextjs-sites
-         A/B test, variant, experiment          -> /ab-testing
-         MRR, churn, cohort, customer analytics -> /saas-customer-analytics
-         stripe, paypal, checkout, subscription -> /stripe-checkout
-         supabase, RLS, drizzle, postgres SaaS  -> /supabase
-         tanstack, react-query, react-table     -> /tanstack
-         react component, .tsx, JSX             -> /react-component-generator
-         og image, twitter card, social preview -> /og-share-images
-         TUI, bubble tea, charm, CLI UI         -> /tui-glamorous
-         installer, curl|bash, one-liner        -> /installer-workmanship
-         CLI automation, atuin, shell history   -> /automating-your-automations
-         perf, optimize, bottleneck, p95, p99   -> /extreme-software-optimization
-         MCP tool, MCP server                   -> /mcp-server-design
-         multi-repo, ru sync                    -> /ru-multi-repo-workflow
-         crash, segfault, hang, deadlock        -> /gdb-for-debugging
-         playwright, e2e webapp, next.js test   -> /e2e-testing-for-webapps
-         fuzz, property-based, crash discovery  -> /testing-fuzzing
-         protocol, RFC, conformance             -> /testing-conformance-harnesses
-         snapshot, approval, golden output      -> /testing-golden-artifacts
-         ML test, oracle-less, metamorphic      -> /testing-metamorphic
-         formal proof, lean, rust verification  -> /lean-formal-feedback-loop
-
-       If no keywords match, skip and proceed to STEP 1. Never force a skill invocation on
-       an unrelated bead — the lookup is hints, not mandates.
-
-       ## STEP 0.8 — DELEGATION POLICY (Opus 4.7 guidance — read before STEP 1)
-       From Anthropic's Opus 4.7 best-practices guide, verbatim:
-       > "Do not spawn a subagent for work you can complete directly in a
-       > single response (e.g., refactoring a function you can already see).
-       > Spawn multiple subagents in the same turn when fanning out across
-       > items or reading multiple files."
-
-       Concrete rubric for THIS bead:
-       - Scoped to 1 file you can see → do the work in place; do NOT spawn
-       - Need to read 5+ files → spawn parallel Explore subagents in ONE turn
-       - Ambiguous bug / unclear root cause → spawn ONE codex-rescue for second diagnosis
-       - Everything else → in-turn work, no subagents
-
-       ## STEP 1 — IMPLEMENT
-       <thinking-directive>
-
-       Title: <bead title>
-       Description: <bead description>
-       Complexity (coordinator-assigned): <complexity>
-       Acceptance criteria: <criteria>
-
-       Likely-relevant files (pre-resolved by coordinator — start here, discover more as needed):
-       <relevant-files>
-
-       Prior art (closed beads with similar scope — diff them for patterns before writing new code):
-       <prior-art-beads>
-
-       ## STEP 2 — VALIDATE (MANDATORY GATES — all must pass before STEP 3)
-       Run in order; fix failures before proceeding. Do NOT commit until all pass.
-
-       2a. **Compile + lint gate** — pick the stack's commands:
-           - Rust:       cargo check --all-targets && cargo clippy --all-targets -- -D warnings && cargo fmt --check
-           - Go:         go build ./... && go vet ./...
-           - TypeScript: npx tsc --noEmit (plus your eslint / biome script)
-                         **AND** run the project's full build: `npm run build` (or `pnpm build`,
-                         `yarn build`). `tsc --noEmit` only checks source types — it does NOT
-                         verify that tsconfig files, output paths, or scripts referenced from
-                         `package.json` actually exist. Running `npm run build` catches missing
-                         `tsconfig.*.json` files, missing entry points, and broken script chains.
-           - Python:     python -m compileall -q . (plus ruff / mypy per project)
-           Check package.json / Cargo.toml / Makefile for project-specific scripts first.
-
-       2a.1. **Reference-resolution gate** — if you added or modified any of:
-             - `package.json` scripts (commands that reference files: tsconfig paths, entry points, test runners)
-             - Shell commands in CI configs (`.github/workflows/*.yml`, `Makefile`)
-             - `import`/`require` statements with new paths
-             - Relative paths in config files (`tsconfig.json` `extends`/`references`, `vite.config`, etc.)
-             Then verify EVERY referenced path exists on disk before committing:
-             ```
-             # TypeScript example — after adding "build": "tsc && tsc -p tsconfig.scripts.json"
-             test -f tsconfig.scripts.json || echo "MISSING: tsconfig.scripts.json"
-             ```
-             A bead that wires up a new script must also create the files that script references.
-
-       2b. **Test gate** — run the test suite for files you touched (not the whole suite unless fast).
-
-       2c. **UBS gate** (if `ubs` CLI is installed): `ubs <changed-files>`. Treat
-           findings as blocking unless clearly out of scope. If `ubs` is not
-           available, note that in your completion report and skip this gate.
-
-       ## STEP 2.5 — STORE LEARNINGS
-       If you encountered anything non-obvious during implementation — unexpected API behavior,
-       tricky edge cases, workarounds for tooling issues, rebase gotchas, or decisions that
-       future agents would benefit from knowing — store each as a CASS memory:
-       Call flywheel_memory with operation='store' and content describing the learning.
-       Prefix with the bead ID for traceability, e.g.:
-       'Bead <id>: <concise learning with enough context to be useful standalone>'
-       Skip this step if the implementation was straightforward with no surprises.
-
-       ## STEP 3 — COMMIT & CLOSE BEAD
-       Create a commit with a descriptive message referencing bead <id>.
-       Then mark the bead closed: `br update <bead-id> --status closed`
-       (Note: the br CLI uses `closed`, NOT `done`.)
-       **IMPORTANT:** Always use the FULL bead ID (e.g. `my-project-k67`),
-       not a short alias. The full ID is project-path-dependent — agents
-       running from symlinked or alternative paths will fail to resolve
-       short IDs. The coordinator MUST substitute the exact ID from `br list`
-       into this prompt template before dispatching.
-       Verify the close took effect: `br show <bead-id> --json` and confirm
-       `'status': 'closed'`. If the status is anything else, retry the update
-       once before continuing to STEP 4. Stragglers are a known failure mode
-       and the coordinator will catch them via `flywheel_verify_beads`, but
-       verifying here keeps the wave clean.
-
-       ## STEP 3.5 — WRITE COMPLETION ATTESTATION (MANDATORY)
-       Follow AGENTS.md § \"Pre-Completion Quality Gate\" and § \"Completion
-       Evidence Attestation\" verbatim — those sections are the single source
-       for this step and for the `CompletionReportSchemaV1` shape your
-       attestation must match.
-
-       The per-bead implementer prompt that `flywheel_advance_wave` returned
-       in `nextWave.prompts[]` already carries the gate text and a filled-in
-       JSON example for your bead (built by
-       `mcp-server/src/adapters/completion-attestation-prompt.ts`); copy that
-       example's shape and replace the angle-bracket placeholders with real
-       evidence. If you were dispatched outside that path (e.g. a wave-1
-       launch from `flywheel_approve_beads(action: \"start\")` or a hand-written
-       marching-orders message), use the schema fields listed in AGENTS.md
-       directly — do not re-invent the gate or the example inline.
-
-       ## STEP 4 — RELEASE + REPORT (MANDATORY)
-       4a. Release all file reservations via release_file_reservations.
-       4b. Send a completion summary to '<coordinator-agent-name>' via send_message
-           with subject '[impl] <bead-id> done' (target <completion-length>) including:
-           - Files changed
-           - Tests added/modified
-           - UBS result + verify outcomes + one-line self-review
-           - Confirmation that `.pi-flywheel/completion/<bead-id>.json` is written
-           - Any open concerns or follow-ups
-     "
-   )
-   ```
 
 3. **Auto-capture failures**: If an agent reports a blocker or failure via Agent Mail, automatically store it in CASS:
    ```
@@ -569,64 +329,17 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
 ### Step 7.5: Commit-batch fresh-eyes auto-trigger (v3.17.0+)
 
-When `state.commitBatchThreshold` is set to a positive integer (via the Pre-flight gate above or `FW_COMMIT_BATCH_THRESHOLD`), `flywheel_advance_wave` checks the accumulated commit count between waves. If the count ≥ threshold, it returns:
+When the commit threshold fires, branch only on `structuredContent.data.nextStep.kind`:
 
-```ts
-{ verification, nextStep: { kind: "batch_review_due", reviewSha: "<HEAD-sha>", lastBaselineSha: "<state.lastBatchReviewSha>" }, waveComplete: false }
-```
+| `kind` | Action |
+|--------|--------|
+| `batch_review_due` | Call `flywheel_review(action="batch_review", shaRange="<lastBaselineSha>..<reviewSha>")`. Wait up to 10 minutes for its verdict. |
+| `advance_wave` | Call `flywheel_advance_wave`, then dispatch any returned `nextWave.prompts` from `nextWave.lanes`. |
+| `needs_attention` | Show the findings and ask **Continue waves / Synthesize beads / Pause to fix / Regress to plan**. |
+| `synthesized_beads_pending` | Show `beadIds` and `mapping`, then ask **Approve all / Approve subset / Reject all / Regress to plan**. Use `rollbackSynthesizedBeads` for every rejected id. |
 
-INSTEAD of the usual `{ nextWave, waveComplete }`. The coordinator MUST handle the `batch_review_due` branch before dispatching the next wave:
+The server advances `lastBatchReviewSha` when it dispatches the review, so commits arriving during review stay outside that window. On review timeout, record `review_timeout`, reset the counter, and resume the post-wave gate.
 
-1. **Dispatch the review.** Call `flywheel_review` with `action: "batch_review"`, passing the sha range `<lastBaselineSha>..<reviewSha>`. The tool builds the fresh-eyes prompt via `buildFreshEyesPrompt({ emitStructuredFindings: true, shaRange, … })` (from `gates.ts`) and dispatches to either an NTM pane (preferred — reuses warm context from the implementor's pane) or a fresh `Agent()` subagent (fallback when NTM is unavailable / panes dead).
-
-2. **Wait for the verdict.** The review subagent writes structured JSON to `.pi-flywheel/batch-reviews/<sha-range>.json`. Tail the file or poll on next ScheduleWakeup tick. Verdict shape (validated by `BatchReviewVerdictSchema`):
-   ```json
-   { "status": "pass" | "needs_attention" | "blocking", "findings": [...], "sha_range": "<from>..<to>" }
-   ```
-
-3. **Branch on `verdict.status`:**
-
-   - **`pass`** → reset `state.commitBatchCounter = 0`, advance `state.lastBatchReviewSha = reviewSha`, continue to the next `flywheel_advance_wave` call. No user prompt.
-
-   - **`needs_attention`** → surface the findings via:
-     ```
-     AskUserQuestion(questions: [{
-       question: "Batch review (<sha-range>): <N> findings. <one-line summary>. What next?",
-       header: "Review",
-       options: [
-         { label: "Continue waves",     description: "Acknowledge the findings; advance to next wave anyway" },
-         { label: "Synthesize beads",   description: "Run br create for each finding (treat as if verdict were blocking)" },
-         { label: "Pause to fix",       description: "Stop here so you can inspect + fix manually" },
-         { label: "Regress to plan",    description: "Findings show plan-level rework needed; return to Step 5.6" }
-       ],
-       multiSelect: false
-     }])
-     ```
-
-   - **`blocking`** → `review.ts` ALREADY called `synthesizeBeadsFromFindings(cwd, state, verdict.findings, sha_range)`; bead IDs sit in `state.batchReviewSynthesizedBeads[sha_range]`. The nextStep is `{ kind: "synthesized_beads_pending", beadIds, mapping }`. The coordinator surfaces the four-option approve/reject gate:
-
-     ```
-     AskUserQuestion(questions: [{
-       question: "Batch review surfaced <N> findings; auto-synthesized <N> beads (IDs above). How to proceed?",
-       header: "Synthesized",
-       options: [
-         { label: "Approve all",     description: "Merge every bead into the active wave. They become the next dispatch frontier" },
-         { label: "Approve subset",  description: "Pick which beads to keep via a follow-up multi-select gate; rejected ones are rolled back" },
-         { label: "Reject all",      description: "Roll back every synthesized bead. Counter resets; wave continues from where it was" },
-         { label: "Regress to plan", description: "Findings show plan-level rework needed; return to Step 5.6" }
-       ],
-       multiSelect: false
-     }])
-     ```
-
-     - **Approve all** → merge bead IDs into `state.activeBeadIds`, advance baseline, continue.
-     - **Approve subset** → run a multi-select follow-up gate. List ≤4 beads per page with labels `<bead-id>: <title> [<severity>]`. Multi-select keeps the chosen IDs; the unchosen ones go to `rollbackSynthesizedBeads(cwd, unchosenIds)`. When there are more than 4 beads, paginate through batches of 4.
-     - **Reject all** → call `rollbackSynthesizedBeads(cwd, state.batchReviewSynthesizedBeads[sha_range])`. Returns `{ deleted: [...], closed: [...], failed: [...] }`. The rollback tries `br delete <id>` first; on error, falls back to `br update <id> --status closed --notes "rejected via batch-review approve/reject gate"`. (Note: `br update` uses `--notes`, not `--reason`.) Surface the `failed` list to the user if non-empty.
-     - **Regress to plan** → mark synthesized beads as closed (rollback semantics), return to Step 5.6.
-
-4. **Race protection.** The baseline (`state.lastBatchReviewSha`) advances to `reviewSha` at DISPATCH time, NOT after the verdict lands. This prevents commits arriving during the review window from double-triggering the next batch.
-
-5. **Timeout.** If the verdict file doesn't appear within 10 min, record `verdict: "review_timeout"`, reset the counter, advance baseline, and resume waves. A timed-out reviewer is not a blocker — the post-wave gate still fires later.
 
 ### Parallel-wave build-artifact races
 

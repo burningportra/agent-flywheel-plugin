@@ -11,80 +11,27 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 
 0. **Invoke `/vibing-with-ntm`.** Use the `Skill` tool with `vibing-with-ntm`. Follow its guidance for session bootstrap (NTM project resolution, Agent Mail, beads claim) and pane-tending (looper cadence, stuck-pane ladder, completion polling). The rest of this skill assumes its conventions are loaded.
 
-1. Call `flywheel_approve_beads` with `action: "start"` via the agent-flywheel MCP server. This returns the list of ready beads.
+1. Call `flywheel_approve_beads(action="start")`. Read `data.lanes` and `data.prompts`, then assign `START_DATA = result.structuredContent.data`. It contains one grouped lane assignment and one server-built prompt per ready bead.
 
-2. If no beads are ready, say "No beads are ready for implementation. Run /agent-flywheel:start to create a plan first."
+2. If `START_DATA.readyCount === 0`, say "No beads are ready for implementation. Run /agent-flywheel:start to create a plan first."
 
-3. Ask the user: "How many agents should run in parallel? (Recommended: 2-4)"
+3. Bootstrap Agent Mail, create `swarm-<goal-slug>`, and resolve `$NTM_PROJECT` through the readiness procedure in `_implement.md`. Use the lane counts exactly as returned. The server has already applied provider availability and fallback.
 
-4. **Setup coordination:**
-   - Bootstrap Agent Mail: `macro_start_session(human_key: cwd, program: "claude-code", model: "<your model name>", task_description: "Swarm: <goal>")`
-   - Create a team: `TeamCreate(team_name: "swarm-<goal-slug>")`
-   - Resolve NTM project: read `projects_base` from `ntm config show` and confirm `$projects_base/$(basename $PWD)` resolves (per the readiness gate in `_implement.md` Pre-flight). On miss, follow the symlink/config path from `flywheel-setup` §6 before continuing.
-   - Apply the **AGENTS.md NTM pane priority** for swarm composition: the canonical default is mixed `cc:cod:gmi` **1:1:1** (e.g. `--cc=2 --cod=2 --gmi=2`). When a provider is non-green, apply the substitution ladder (gmi→cod→pi→cc) — missing `gmi` reassigns to `cod`, missing `cod` also reassigns to `pi`, all three peers missing collapses to `cc`-only (degraded, log it). Run `which claude codex gemini pi 2>/dev/null` (real binaries behind the `cc/cod/gmi/pi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) and `ntm deps -v` to pick the live mix; never spawn agents whose CLI is missing.
+4. Create one task per `START_DATA.prompts[]` record, then spawn the returned counts:
+   ```bash
+   IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
+   ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
+     --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --stagger-mode=smart
+   ```
+   Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. With `--no-user`, pane indices start at 1 and follow spawn order `cc`, `cod`, then `gmi`. Address panes by numeric index. Use `--panes=N`. Singular `--pane=N` broadcasts to every pane, and combining a known index with `--type` can match nothing during startup.
 
-5. For each ready bead (up to the user's limit), create a task and spawn an NTM-backed impl agent:
-   - `TaskCreate(subject: "Impl: <bead-id> <title>", status: "in_progress")`
-   - Save the task ID
-   - Spawn the pane via NTM (per `/vibing-with-ntm` and `/ntm`):
-     ```bash
-     ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-       --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --stagger-mode=smart
-     # Default 1:1:1; apply substitution ladder gmi→cod→pi→cc when a provider is non-green
-     # (see AGENTS.md "NTM pane priority").
-     ```
-   - Send the marching-orders prompt via `ntm --robot-send` (NOT inline `Agent()`). A spawn with `--label impl-<goal-slug>` creates session `${NTM_PROJECT}--impl-<goal-slug>`; address panes by index (`--panes=<N>`). ntm 1.36.1 only accepts `--panes`, `--type`, and `--all` — no pane-name-by-label flag:
-     ```
-     IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
-     ntm --robot-send="$IMPL_SESSION" --panes=<N> --msg="
-       ## Agent Mail Bootstrap
-       Call macro_start_session(human_key: '<cwd>', program: 'claude-code', model: '<your model name>',
-         task_description: 'Implementing bead <id>: <title>')
-       Note your assigned agent name for messaging.
+5. Send every prompt unchanged to its assigned pane:
+   ```bash
+   ntm --robot-send="$IMPL_SESSION" --panes=<numeric-index> --msg="<START_DATA.prompts[i].prompt>"
+   ```
+   Send each record once in array order. The prompt already contains Agent Mail bootstrap, file reservations, provider-specific instructions, the pre-completion gate, a bead-specific `CompletionReport` JSON example, and trailing newlines. Save each task id, pane index, and `agentName` for tending and restart.
 
-       ## File Reservation
-       Before editing any files, call file_reservation_paths with the files you plan to modify.
-       Release reservations when done: release_file_reservations.
-
-       ## Agent Mail Runtime Safety
-       Use the Agent Mail MCP/HTTP tools for inboxes, messages, and reservations. Do NOT run mutating
-       `am doctor` commands (`repair`, `archive-normalize`, `reconstruct`, `fix`) and do NOT delete
-       `.mailbox.activity.lock` or `storage.sqlite3.activity.lock`. The live `am serve-http` daemon
-       intentionally holds those locks. If Agent Mail reports "Resource is temporarily busy" or looks
-       unhealthy, stop and message the coordinator; the coordinator should run
-       `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.
-
-       ## Bead: <id> — <title>
-       <description>
-
-       ## Acceptance criteria
-       <criteria>
-
-       ## Pre-Completion Quality Gate
-       Follow AGENTS.md § \"Pre-Completion Quality Gate\" and § \"Completion Evidence
-       Attestation\" verbatim — those sections are the single source for the four
-       mandatory steps (UBS → verify → self-review → write
-       \`.pi-flywheel/completion/<bead-id>.json\`) and for the \`CompletionReportSchemaV1\`
-       shape your attestation must match.
-
-       The per-bead implementer prompt that \`flywheel_advance_wave\` returned in
-       \`nextWave.prompts[]\` already carries the gate text and a filled-in JSON
-       example for your bead (built by
-       \`mcp-server/src/adapters/completion-attestation-prompt.ts\`); send that prompt
-       to the implementer unchanged and do not duplicate the gate below it. If you
-       are not dispatching through \`flywheel_advance_wave\` (e.g. wave 1 from an
-       \`flywheel_approve_beads(action: \"start\")\` launch), copy the gate text from
-       AGENTS.md once per spawn — do not re-invent it inline.
-
-       ## On completion
-       Send a completion message to <your-coordinator-name> via send_message that
-       includes: (a) UBS result summary (clean / fixed / deferred-with-bead-ids),
-       (b) verify command outputs (or the helper handle), (c) one-line self-review
-       summary, (d) confirmation that \`.pi-flywheel/completion/<bead-id>.json\` is
-       written. Then close the bead per AGENTS.md.
-     "
-     ```
-   **Save each agent's task ID and pane name** — needed for `ntm --robot-restart-pane` and `TaskStop` if they become unresponsive.
+   If `START_DATA.dispatch.degraded` is true, show its warnings before spawning.
 
 6. **Monitor swarm (per `/vibing-with-ntm` tending loop):**
    - Schedule the looper at the cadence set by `/vibing-with-ntm` (typically `ScheduleWakeup(270s, …)`); poll `fetch_inbox` and `ntm --robot-is-working` between wakes. For an operator-readable view of remaining work, `ntm work triage --by-track` wraps `bv` and groups by track; for next-bead dispatch to idle panes, prefer `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` over an ad-hoc `--robot-send`.
