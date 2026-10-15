@@ -67,6 +67,23 @@ describe('classifyNtmProjectTarget', () => {
     });
   });
 
+  it('uses the Git root when called from a project subdirectory', async () => {
+    const nestedCwd = join(cwd, 'mcp-server');
+    mkdirSync(join(cwd, '.git'));
+    mkdirSync(nestedCwd);
+    symlinkSync(cwd, target);
+
+    await expect(
+      classifyNtmProjectTarget(nestedCwd, projectsBase),
+    ).resolves.toMatchObject({
+      kind: 'matching',
+      project: basename(cwd),
+      root: realpathSync(cwd),
+      target,
+      resolvedTarget: realpathSync(cwd),
+    });
+  });
+
   it('classifies a symlink to another repository as a collision', async () => {
     const other = join(scratch, 'other');
     mkdirSync(other);

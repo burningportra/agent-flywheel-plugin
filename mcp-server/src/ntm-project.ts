@@ -34,11 +34,29 @@ export function ntmProjectName(cwd: string): string {
   return basename(cwd);
 }
 
+async function resolveProjectRoot(cwd: string): Promise<string> {
+  const resolvedCwd = await realpath(cwd);
+  let candidate = resolvedCwd;
+
+  while (true) {
+    try {
+      const marker = await lstat(join(candidate, '.git'));
+      if (marker.isDirectory() || marker.isFile()) return candidate;
+    } catch (error: unknown) {
+      if (!hasErrorCode(error, 'ENOENT')) throw error;
+    }
+
+    const parent = dirname(candidate);
+    if (parent === candidate) return resolvedCwd;
+    candidate = parent;
+  }
+}
+
 export async function classifyNtmProjectTarget(
   cwd: string,
   projectsBase: string,
 ): Promise<NtmProjectTarget> {
-  const root = await realpath(cwd);
+  const root = await resolveProjectRoot(cwd);
   const project = ntmProjectName(root);
   const target = join(projectsBase, project);
 
