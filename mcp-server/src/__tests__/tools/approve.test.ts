@@ -454,13 +454,26 @@ describe('runApprove', () => {
     });
   });
 
-  it('handles blunder-hunt advancedAction', async () => {
+  it('renders one repeat-until-clean blunder-hunt pass', async () => {
     const { ctx, state } = makeCtx();
 
     const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced', advancedAction: 'blunder-hunt' });
 
     expect(state.phase).toBe('refining_beads');
-    expect(result.content[0].text).toContain('Blunder Hunt');
+    expect(result).toEqual({
+      content: [{
+        type: 'text',
+        text: `**NEXT: Run the pass below and repeat until a pass finds nothing new (at most 5 passes), then call \`flywheel_approve_beads\` again.**
+
+### Blunder Hunt Pass
+Read all beads via \`br list --json\`. Look for: incomplete descriptions, missing files, circular dependencies, wrong priorities, vague acceptance criteria. Fix anything suspicious.
+
+cd /fake/cwd
+
+Current beads:
+• bead-1: Add tests`,
+      }],
+    });
   });
 
   it('handles dedup advancedAction', async () => {

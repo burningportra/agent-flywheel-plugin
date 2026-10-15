@@ -918,14 +918,18 @@ function handleAdvanced(
     state.phase = 'refining_beads';
     saveState(state);
 
-    const passes = [1, 2, 3, 4, 5].map(i =>
-      `### Blunder Hunt Pass ${i}\nRead all beads via \`br list --json\`. Look for: incomplete descriptions, missing files, circular dependencies, wrong priorities, vague acceptance criteria. Fix anything suspicious.`
-    ).join('\n\n');
-
     return {
       content: [{
         type: 'text',
-        text: `**NEXT: Run 5 blunder hunt passes, then call \`flywheel_approve_beads\` again.**\n\n${passes}\n\ncd ${cwd}\n\nCurrent beads:\n${compactList}`,
+        text: `**NEXT: Run the pass below and repeat until a pass finds nothing new (at most 5 passes), then call \`flywheel_approve_beads\` again.**
+
+### Blunder Hunt Pass
+Read all beads via \`br list --json\`. Look for: incomplete descriptions, missing files, circular dependencies, wrong priorities, vague acceptance criteria. Fix anything suspicious.
+
+cd ${cwd}
+
+Current beads:
+${compactList}`,
       }],
     };
   }

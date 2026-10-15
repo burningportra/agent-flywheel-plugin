@@ -599,8 +599,13 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
       { cwd: fixtureCwd, action: "advanced", advancedAction: "blunder-hunt" },
     );
     const advancedText = assertToolResult("approve advanced blunder-hunt", approveAdvanced);
-    if (!advancedText.includes("Blunder Hunt Pass 5")) {
-      throw new Error("approve advanced blunder-hunt did not render all five passes");
+    const passHeading = "### Blunder Hunt Pass";
+    const passCount = advancedText.split(passHeading).length - 1;
+    if (
+      passCount !== 1
+      || !advancedText.includes("repeat until a pass finds nothing new (at most 5 passes)")
+    ) {
+      throw new Error("approve advanced blunder-hunt did not render one repeat-until-clean pass");
     }
     addToolResult(
       entries,
