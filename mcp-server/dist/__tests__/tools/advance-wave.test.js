@@ -36,11 +36,16 @@ function makeBead(overrides = {}) {
 }
 function makeCtx(stateOverrides = {}, execCalls = [], capabilityCalls = availableCliCalls()) {
     const state = makeState({
+        selectedGoal: 'test goal',
         phase: 'implementing',
         beadResults: {},
         ...stateOverrides,
     });
-    const exec = createMockExec([...capabilityCalls, ...execCalls]);
+    const exec = createMockExec([
+        ...capabilityCalls,
+        ...execCalls,
+        brListAllCall([]),
+    ]);
     const ctx = {
         exec,
         cwd: '/fake/project',
@@ -115,6 +120,13 @@ function brReadyCall(beads) {
     return {
         cmd: 'br',
         args: ['ready', '--limit', '0', '--json'],
+        result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
+    };
+}
+function brListAllCall(beads) {
+    return {
+        cmd: 'br',
+        args: ['list', '--all', '--limit', '0', '--json'],
         result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
     };
 }
@@ -330,6 +342,27 @@ describe('runAdvanceWave', () => {
         expect(data.waveComplete).toBe(true);
         expect(result.content[0].text).toContain('Queue drained');
     });
+    it('does not let a legacy checkpoint dispatch a newly tagged foreign program', async () => {
+        const labelA = 'flywheel-goal:goal-a:ccba1a8c';
+        const readyB = makeBead({
+            id: 'goal-b-ready',
+            labels: ['flywheel-goal:goal-b:9406de47'],
+        });
+        const legacyA = makeBead({ id: 'goal-a-legacy', status: 'closed' });
+        const { ctx, state } = makeCtx({ beadProgramScope: { kind: 'legacy', label: labelA } }, [
+            brShowClosed('prev-1'),
+            brReadyCall([readyB]),
+            brListAllCall([legacyA, readyB]),
+        ]);
+        const result = await runAdvanceWave(ctx, {
+            cwd: '/fake/project',
+            closedBeadIds: ['prev-1'],
+        });
+        const data = result.structuredContent.data;
+        expect(data.nextWave).toBeNull();
+        expect(state.beadProgramScope).toEqual({ kind: 'tagged', label: labelA });
+        expect(result.content[0].text).toContain('repository-wide fallback is disabled');
+    });
 });
 // ─── Completion Evidence Attestation gate (T2) ───────────
 describe('runAdvanceWave — attestation gate', () => {
@@ -353,8 +386,16 @@ describe('runAdvanceWave — attestation gate', () => {
         };
     }
     function makeCtxAt(tmpCwd, execCalls = []) {
-        const state = makeState({ phase: 'implementing', beadResults: {} });
-        const exec = createMockExec([...availableCliCalls(), ...execCalls]);
+        const state = makeState({
+            selectedGoal: 'test goal',
+            phase: 'implementing',
+            beadResults: {},
+        });
+        const exec = createMockExec([
+            ...availableCliCalls(),
+            ...execCalls,
+            brListAllCall([]),
+        ]);
         return {
             exec,
             cwd: tmpCwd,

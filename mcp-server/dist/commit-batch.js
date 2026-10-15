@@ -102,6 +102,11 @@ export async function synthesizeBeadsFromFindings(cwd, state, findings, range) {
     if (!state.batchReviewSynthesizedBeads[range]) {
         state.batchReviewSynthesizedBeads[range] = [];
     }
+    const programLabel = state.beadProgramScope?.kind === "tagged" ||
+        state.beadProgramScope?.kind === "unresolved"
+        ? state.beadProgramScope.label
+        : undefined;
+    const labels = ["auto-batch-review", programLabel].filter(Boolean).join(",");
     const created = [];
     for (let i = 0; i < findings.length; i++) {
         const finding = FindingSchema.parse(findings[i]);
@@ -114,7 +119,7 @@ export async function synthesizeBeadsFromFindings(cwd, state, findings, range) {
                 "--type", "task",
                 "--priority", "2",
                 "--description", body,
-                "--labels", "auto-batch-review",
+                "--labels", labels,
                 "--silent",
             ], { cwd, timeout: BR_TIMEOUT_MS });
             stdout = result.stdout;

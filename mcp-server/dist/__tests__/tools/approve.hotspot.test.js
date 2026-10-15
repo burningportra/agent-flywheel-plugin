@@ -33,12 +33,12 @@ function makeExecCalls(beads, readyBeads) {
         })),
         {
             cmd: 'br',
-            args: ['list', '--json'],
+            args: ['list', '--all', '--limit', '0', '--json'],
             result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
         },
         {
             cmd: 'br',
-            args: ['ready', '--json'],
+            args: ['ready', '--limit', '0', '--json'],
             result: { code: 0, stdout: JSON.stringify(readyBeads ?? beads), stderr: '' },
         },
         ...beads.map((b) => ({
@@ -233,7 +233,7 @@ describe('I5 — approve_beads hotspot injection', () => {
         // assumed by I5 and the Gate 1 regression test above.
         const { runApprove } = await importApprove();
         const execCalls = [
-            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify([]), stderr: '' } },
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify([]), stderr: '' } },
         ];
         const ctx = {
             exec: createMockExec(execCalls),

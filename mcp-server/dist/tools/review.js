@@ -7,7 +7,7 @@ import { makeOkToolResult } from './shared.js';
 import { buildFreshEyesPrompt } from '../gates.js';
 import { synthesizeBeadsFromFindings, rollbackSynthesizedBeads } from '../commit-batch.js';
 import { readMemory, appendMemory } from '../memory.js';
-import { filterBeadsForProgram, formatBeadProgramWarnings } from './bead-program.js';
+import { filterBeadsForProgram, formatBeadProgramWarnings, goalBeadProgramLabel, resolveDispatchBeadProgramScope, } from './bead-program.js';
 const log = createLogger('review');
 // ─── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────────────
 //
@@ -614,9 +614,24 @@ async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
             return errorResult(state.phase, 'parse_failure', 'br ready produced malformed JSON — fall back to manual bead selection.', { command: 'br ready --limit 0 --json', stdout: brReadyResult.stdout.slice(0, 200) }, 'Run `br ready --limit 0 --json` manually to inspect the output; upgrade br CLI if the JSON shape drifted.');
         }
     }
+    const programWarnings = [];
+    if (ready.length > 0) {
+        const expectedLabel = state.beadProgramScope?.label ??
+            (state.selectedGoal ? goalBeadProgramLabel(state.selectedGoal) : undefined);
+        if (!expectedLabel) {
+            return errorResult(state.phase, 'missing_prerequisite', 'Cannot select the next bead because no selected goal or goal-program scope is recorded.', undefined, 'Call flywheel_select, then flywheel_approve_beads, before continuing review.');
+        }
+        const resolvedProgram = await resolveDispatchBeadProgramScope(exec, cwd, state.beadProgramScope, expectedLabel, signal);
+        if (!resolvedProgram.ok) {
+            return errorResult(state.phase, resolvedProgram.code, resolvedProgram.message, resolvedProgram.details, 'Run `br list --all --limit 0 --json` manually, fix the CLI or JSON error, then retry.');
+        }
+        state.beadProgramScope = resolvedProgram.scope;
+        programWarnings.push(...resolvedProgram.warnings);
+    }
     const scopedFrontier = filterBeadsForProgram(ready, state.beadProgramScope);
     ready = scopedFrontier.beads;
-    const programWarnings = formatBeadProgramWarnings(scopedFrontier.warnings);
+    programWarnings.push(...scopedFrontier.warnings);
+    const formattedProgramWarnings = formatBeadProgramWarnings([...new Set(programWarnings)]);
     // Filter out already-completed beads
     const completed = new Set(Object.entries(state.beadResults ?? {})
         .filter(([, r]) => r.status === 'success')
@@ -628,7 +643,7 @@ async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
         state.iterationRound = 0;
         state.currentGateIndex = 0;
         saveState(state);
-        return okResult('iterating', `**${status}: Bead ${completedBeadId} (${completedTitle}).**${programWarnings}
+        return okResult('iterating', `**${status}: Bead ${completedBeadId} (${completedTitle}).**${formattedProgramWarnings}
 
 All beads complete! Entering review gates.
 
@@ -647,7 +662,7 @@ All beads complete! Entering review gates.
         state.retryCount = 0;
         state.phase = 'implementing';
         saveState(state);
-        return okResult('implementing', `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready.${programWarnings} Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`, {
+        return okResult('implementing', `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready.${formattedProgramWarnings} Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`, {
             kind: 'review_tasks',
             strategy: 'single_bead',
             completedBeadId,
@@ -666,7 +681,7 @@ All beads complete! Entering review gates.
         cwd,
         task: `Implement bead ${bead.id}: ${bead.title}\n\n${bead.description}\n\nAfter implementing, commit and report your summary.`,
     }));
-    return okResult('implementing', `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.${programWarnings}
+    return okResult('implementing', `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.${formattedProgramWarnings}
 
 **NEXT: Spawn ${ready.length} parallel agents from structuredContent.data.agentConfigs, then call \`flywheel_review\` for each when done.**`, {
         kind: 'review_tasks',
