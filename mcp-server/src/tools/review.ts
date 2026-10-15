@@ -548,8 +548,8 @@ async function handleBatchReview(
     } catch { /* CASS unavailable — proceed without */ }
 
     const callbackHint =
-      `\n\nWrite your verdict JSON to \`${verdictPath}\` (parent dir already exists). ` +
-      `Then notify the coordinator (Agent Mail subject \`[batch-review] ${shaRange} verdict ready\`, ` +
+      `\n\nAfter writing the verdict file, notify the coordinator ` +
+      `(Agent Mail subject \`[batch-review] ${shaRange} verdict ready\`, ` +
       `or pane reply if dispatched via NTM) so it can call \`flywheel_review\` with ` +
       `\`action="batch_review"\` and \`shaRange="${shaRange}"\` again to read and branch on the verdict.`;
 
@@ -560,18 +560,22 @@ async function handleBatchReview(
       callbackHint,
       regressionHint: '',
       shaRange,
+      findingsPath: verdictPath,
       emitStructuredFindings: true,
     });
 
     const text =
-      `## Batch Review Dispatch — ${shaRange}\n\n` +
+      `## Batch review dispatch - ${shaRange}\n\n` +
       `**Verdict file (reviewer writes here):** \`${verdictPath}\`\n` +
       `**Changed files:** ${changedFiles.length}\n\n` +
-      `**Coordinator: dispatch the prompt below.**\n` +
-      `- Primary path: NTM \`--robot-send\` to the implementor pane (warm context, lowest latency).\n` +
-      `- Fallback: \`Agent(subagent_type="general-purpose")\` with the prompt as the task description.\n\n` +
-      `When the reviewer writes its verdict JSON, call \`flywheel_review\` with \`action="batch_review"\`, \`shaRange="${shaRange}"\` again to read and branch.\n\n` +
-      `---\n\n${prompt}`;
+      `## Coordinator routing\n\n` +
+      `The tender daemon is already stopped. Do not restart it.\n` +
+      `Do not tear down responsive panes. Use \`list_window_identities\` and \`ntm --robot-tail\` to identify them.\n` +
+      `One responsive pane reviews one bead. Partition the changed files by bead before dispatch.\n` +
+      `Use \`ntm --robot-send\`, not \`ntm send\`, to send \`structuredContent.data.prompt\` to each implementor pane.\n` +
+      `If an implementor pane is unavailable, use \`Agent(subagent_type="general-purpose")\` with the reviewer prompt as its task.\n\n` +
+      `When the reviewer writes \`${verdictPath}\`, call \`flywheel_review\` with ` +
+      `\`action="batch_review"\` and \`shaRange="${shaRange}"\` again to read and branch.`;
 
     return okResult(state.phase, text, {
       kind: 'batch_review_dispatch',

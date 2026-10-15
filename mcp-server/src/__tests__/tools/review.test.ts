@@ -843,6 +843,55 @@ describe('runReview', () => {
       vi.mocked(readMemory).mockReturnValue('');
     });
 
+    it('dispatches one reviewer prompt with the exact verdict file as its findings channel', async () => {
+      const { ctx } = makeCtx({}, [
+        {
+          cmd: 'git',
+          args: ['diff', '--name-only', SHA_RANGE],
+          result: { code: 0, stdout: 'src/handler.ts\nsrc/handler.test.ts\n', stderr: '' },
+        },
+      ]);
+
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: '',
+        action: 'batch_review',
+        shaRange: SHA_RANGE,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const text = result.content[0].text;
+      const structured = result.structuredContent as {
+        data: {
+          kind: string;
+          verdictPath: string;
+          changedFiles: string[];
+          prompt: string;
+        };
+      };
+      const { prompt, verdictPath } = structured.data;
+
+      expect(structured.data.kind).toBe('batch_review_dispatch');
+      expect(structured.data.changedFiles).toEqual(['src/handler.ts', 'src/handler.test.ts']);
+      expect(verdictPath).toBe('/fake/cwd/.pi-flywheel/batch-reviews/abc123..def456.json');
+      expect(prompt).toContain(`\`${verdictPath}\``);
+      expect(prompt).toContain('The server reads only this file.');
+      expect(prompt).not.toContain('append a JSON object');
+      expect(prompt).not.toContain('spawn fresh reviewers');
+      expect(prompt).not.toContain('list_window_identities');
+      expect(prompt).not.toContain('ntm --robot-send');
+      expect(prompt.match(/Use ultrathink\./g)).toHaveLength(1);
+      expect([text, prompt].filter((channel) => channel.includes(prompt))).toHaveLength(1);
+
+      expect(text).toContain('ntm --robot-send');
+      expect(text).toContain('not `ntm send`');
+      expect(text).toContain('Do not tear down responsive panes.');
+      expect(text).toContain('The tender daemon is already stopped.');
+      expect(text).toContain('One responsive pane reviews one bead.');
+      expect(text).toContain('Agent(subagent_type="general-purpose")');
+      expect(text).toContain(verdictPath);
+    });
+
     it('blocking verdict → synthesized_beads_pending with 3 findings (mixed severities) and finding-to-bead mapping', async () => {
       const findings: Finding[] = [
         makeFinding({ severity: 'low', suggested_bead_title: 'Tidy log line', affected_files: ['src/log.ts'] }),
