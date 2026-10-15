@@ -4,7 +4,6 @@ import type {
   FlywheelToolError,
   FlywheelToolName,
   FlywheelPhase,
-  FlywheelState,
   ToolChoiceOption,
   ToolNextStep,
   FlywheelErrorCode,
@@ -13,10 +12,6 @@ import { readdirSync, statSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
-
-export function formatModelRef(model: { provider?: string; id: string }): string {
-  return model.provider ? `${model.provider}/${model.id}` : model.id;
-}
 
 export function makeChoiceOption(
   id: string,
@@ -72,18 +67,6 @@ export function makeToolError(
   options: Omit<FlywheelToolError, 'code' | 'message' | 'tool' | 'phase' | 'timestamp'> = {}
 ): McpToolResult<FlywheelStructuredError> {
   return makeFlywheelErrorResult(tool, phase, { code, message, ...options });
-}
-
-/**
- * Pick execution mode: single-branch (shared checkout) or worktree (isolated checkouts).
- */
-export function resolveExecutionMode(
-  coordinationMode: FlywheelState['coordinationMode'],
-  hasAgentMail: boolean
-): 'worktree' | 'single-branch' {
-  if (coordinationMode === 'single-branch') return 'single-branch';
-  if (coordinationMode === 'worktree') return 'worktree';
-  return hasAgentMail ? 'single-branch' : 'worktree';
 }
 
 /**
@@ -169,16 +152,6 @@ export function newestMtime(root: string, filter: (name: string) => boolean = ()
   }
   return max;
 }
-
-/** Default deep plan model assignments. */
-export const DEEP_PLAN_MODELS = {
-  correctness: 'claude-opus-4-7',
-  robustness: 'claude-sonnet-4-6',
-  ergonomics: 'claude-sonnet-4-6',
-  synthesis: 'claude-opus-4-7',
-} as const;
-
-export const SWARM_STAGGER_DELAY_MS = 30_000;
 
 /**
  * Slugify a goal string to a filesystem-safe identifier.
@@ -327,50 +300,4 @@ export function formatBeadQualityScore(q: BeadQualityScore): string {
     lines.push(`   Weak beads: ${q.weakBeads.slice(0, 3).join(' | ')}`);
   }
   return lines.join('\n');
-}
-
-/**
- * Build implementer instructions for a single bead.
- */
-export function implementerInstructions(
-  bead: import('../types.js').Bead,
-  profile: import('../types.js').RepoProfile,
-  prevResults: import('../types.js').BeadResult[],
-  cassMemory?: string,
-  episodic?: string
-): string {
-  const prevSummary = prevResults.length > 0
-    ? `\n\n## Prior bead results\n${prevResults.slice(-3).map(r => `- ${r.beadId}: ${r.status} — ${r.summary.slice(0, 100)}`).join('\n')}`
-    : '';
-
-  const memSection = cassMemory
-    ? `\n\n## CASS memory (relevant rules)\n${cassMemory.slice(0, 500)}`
-    : '';
-
-  const episodicSection = episodic
-    ? `\n\n## Prior session context\n${episodic.slice(0, 500)}`
-    : '';
-
-  return `## Implement Bead: ${bead.id}
-
-### ${bead.title}
-
-${bead.description}
-
----
-
-**Repo:** ${profile.name || cwd_from_profile(profile)} | **Languages:** ${profile.languages.join(', ')}
-${prevSummary}${memSection}${episodicSection}
-
-## Instructions
-1. Read the bead description carefully — it specifies WHAT, WHY, and HOW
-2. Implement all changes described
-3. Run tests if applicable
-4. Do a fresh-eyes review of your changes
-5. Commit: \`git add <files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
-6. Call \`flywheel_review\` with beadId="${bead.id}" and your summary`;
-}
-
-function cwd_from_profile(profile: import('../types.js').RepoProfile): string {
-  return profile.name || 'project';
 }

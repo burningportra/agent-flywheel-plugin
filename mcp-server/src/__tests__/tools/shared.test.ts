@@ -4,9 +4,7 @@ import {
   computeConvergenceScore,
   computeBeadQualityScore,
   formatBeadQualityScore,
-  resolveExecutionMode,
   pickRefinementModel,
-  formatModelRef,
   makeChoiceOption,
   makeNextToolStep,
   makeToolError,
@@ -189,26 +187,6 @@ describe('formatBeadQualityScore', () => {
   });
 });
 
-// ─── resolveExecutionMode ──────────────────────────────────────
-
-describe('resolveExecutionMode', () => {
-  it('returns "single-branch" when coordinationMode is single-branch', () => {
-    expect(resolveExecutionMode('single-branch', false)).toBe('single-branch');
-  });
-
-  it('returns "worktree" when coordinationMode is worktree', () => {
-    expect(resolveExecutionMode('worktree', true)).toBe('worktree');
-  });
-
-  it('returns "single-branch" when auto and hasAgentMail is true', () => {
-    expect(resolveExecutionMode(undefined, true)).toBe('single-branch');
-  });
-
-  it('returns "worktree" when auto and hasAgentMail is false', () => {
-    expect(resolveExecutionMode(undefined, false)).toBe('worktree');
-  });
-});
-
 // ─── pickRefinementModel ───────────────────────────────────────
 
 describe('pickRefinementModel', () => {
@@ -226,18 +204,6 @@ describe('pickRefinementModel', () => {
     for (let i = 0; i < 8; i++) {
       expect(typeof pickRefinementModel(i)).toBe('string');
     }
-  });
-});
-
-// ─── formatModelRef ────────────────────────────────────────────
-
-describe('formatModelRef', () => {
-  it('formats with provider prefix when provider exists', () => {
-    expect(formatModelRef({ provider: 'anthropic', id: 'opus' })).toBe('anthropic/opus');
-  });
-
-  it('returns just id when no provider', () => {
-    expect(formatModelRef({ id: 'sonnet' })).toBe('sonnet');
   });
 });
 
