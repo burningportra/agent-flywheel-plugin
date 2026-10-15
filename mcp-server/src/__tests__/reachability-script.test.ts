@@ -46,9 +46,9 @@ describe("scripts/reachability.mjs", () => {
     const root = await makeFixture({
       "package.json": JSON.stringify({ type: "module" }),
       "src/server.ts": [
-        'import { used, notCalled } from "./live.js";',
-        "used();",
-        "void notCalled;",
+        'import * as live from "./live.js";',
+        "live.used();",
+        "void live.notCalled;",
         "",
       ].join("\n"),
       "src/live.ts": [

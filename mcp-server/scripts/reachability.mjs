@@ -507,9 +507,15 @@ function typePosition(node) {
 
 function isCallReference(node) {
   let expression = node;
-  if (ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node) {
-    const property = node.parent.name.text;
-    if (property === "call" || property === "apply" || property === "bind") expression = node.parent;
+  if (ts.isPropertyAccessExpression(node.parent)) {
+    if (node.parent.name === node) {
+      expression = node.parent;
+    } else if (node.parent.expression === node) {
+      const property = node.parent.name.text;
+      if (property === "call" || property === "apply" || property === "bind") {
+        expression = node.parent;
+      }
+    }
   }
   const parent = expression.parent;
   return Boolean(
