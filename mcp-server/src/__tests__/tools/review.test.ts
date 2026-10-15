@@ -279,6 +279,7 @@ describe('runReview', () => {
       },
     });
     expect(result.content[0].text).toContain('test-bead-2');
+    expect(result.content[0].text).toContain('implement and commit it, then call');
     expect(JSON.stringify(result).split('C3_SINGLE_BEAD_DESCRIPTION')).toHaveLength(2);
   });
 

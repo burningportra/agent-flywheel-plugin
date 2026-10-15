@@ -860,7 +860,7 @@ All beads complete! Entering review gates.
 
     return okResult(
       'implementing',
-      `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready. Read structuredContent.data.beads[0], implement it, then call \`flywheel_review\` with beadId="${nextBead.id}".`,
+      `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready. Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`,
       {
         kind: 'review_tasks',
         strategy: 'single_bead',
