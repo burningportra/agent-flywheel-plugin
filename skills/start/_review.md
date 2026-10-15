@@ -156,7 +156,7 @@ Actions:
 
 After review actions are resolved for all beads in this wave, proceed immediately to Step 9. Do NOT end the turn.
 
-**Structured error branching (mandatory).** For `flywheel_review` and `flywheel_verify_beads`, branch on `result.structuredContent?.data?.error?.code` (a `FlywheelErrorCode`) rather than matching error strings:
+**Review error codes.** Follow SKILL.md Universal Rule 4. For `flywheel_review` and `flywheel_verify_beads` recovery:
 
 ```ts
 const code = result.structuredContent?.data?.error?.code;
