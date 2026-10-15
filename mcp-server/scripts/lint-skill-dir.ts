@@ -12,13 +12,17 @@
 // --format, --max-bytes. Multi-file additions: --dir <path> and
 // --update-baseline writes merged entries from every file in one pass.
 
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 
-const isCompiled = import.meta.url.includes("/dist/scripts/");
+function isCompiledScript(scriptUrl: string): boolean {
+  return scriptUrl.includes("/dist/scripts/");
+}
+
+const isCompiled = isCompiledScript(import.meta.url);
 const lintBase = isCompiled ? "../lint" : "../src/lint";
 
 type ReporterName = "pretty" | "compact" | "gha" | "json";
@@ -170,6 +174,14 @@ function walkMd(dir: string): string[] {
   return out;
 }
 
+export function resolveRepoRoot(scriptUrl: string): string {
+  const here = path.dirname(fileURLToPath(scriptUrl));
+  const mcpServerRoot = isCompiledScript(scriptUrl)
+    ? path.resolve(here, "..", "..")
+    : path.resolve(here, "..");
+  return path.resolve(mcpServerRoot, "..");
+}
+
 async function main(): Promise<number> {
   const { opts, error } = parseArgs(process.argv.slice(2));
   if (error) {
@@ -200,10 +212,7 @@ async function main(): Promise<number> {
   const tone = (await import(`${lintBase}/rules/tone001.js`)) as unknown as { tone001: unknown };
   const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001, tone.tone001];
 
-  // repoRoot = parent of this script's mcp-server/ (scripts/ -> mcp-server/ -> repo)
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const mcpServerRoot = path.resolve(here, "..");
-  const repoRoot = path.resolve(mcpServerRoot, "..");
+  const repoRoot = resolveRepoRoot(import.meta.url);
 
   const dirAbs = path.resolve(process.cwd(), opts.dir);
   let files: string[];
@@ -339,10 +348,14 @@ async function main(): Promise<number> {
   return liveErrors.length > 0 ? 1 : 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    process.stderr.write(`lint-skill-dir: ${String(err)}\n`);
-    process.exit(2);
-  },
-);
+const entryPath = process.argv[1] ? realpathSync(path.resolve(process.argv[1])) : "";
+const modulePath = realpathSync(fileURLToPath(import.meta.url));
+if (entryPath === modulePath) {
+  void main().then(
+    (code) => process.exit(code),
+    (err) => {
+      process.stderr.write(`lint-skill-dir: ${String(err)}\n`);
+      process.exit(2);
+    },
+  );
+}
