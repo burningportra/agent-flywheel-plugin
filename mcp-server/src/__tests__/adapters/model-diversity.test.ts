@@ -139,6 +139,21 @@ describe('splitBeadsByProvider', () => {
     ]);
   });
 
+  it('keeps Pi out when Gemini can inherit a missing Codex share', () => {
+    const plan = splitBeadsByProvider(
+      ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'],
+      caps({ codex: false, gemini: true, pi: true }),
+    );
+
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2'] },
+      { provider: 'gemini', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+    ]);
+    expect(plan.warnings).toEqual([
+      'codex CLI not available (codex not on PATH); reassigned 2 bead(s) to gemini',
+    ]);
+  });
+
   it('3-bead wave with all CLIs present → 1 Claude + 1 Codex + 1 Gemini', () => {
     const plan = splitBeadsByProvider(['b1', 'b2', 'b3'], caps());
     expect(plan.lanes).toHaveLength(3);
@@ -150,7 +165,7 @@ describe('splitBeadsByProvider', () => {
     expect(plan.ratio).toBe('1:1:1');
   });
 
-  it('missing codex → fallback redistributes share to claude/gemini + warning', () => {
+  it('missing Codex reassigns its share to Gemini before Pi', () => {
     const plan = splitBeadsByProvider(
       ['b1', 'b2', 'b3'],
       caps({ codex: false }),
@@ -158,14 +173,13 @@ describe('splitBeadsByProvider', () => {
     expect(plan.degraded).toBe(true);
     expect(plan.warnings.some((w) => w.includes('codex'))).toBe(true);
     expect(plan.lanes).toHaveLength(2);
-    // 3 beads, 2 lanes: floor(3/2)=1 each, remainder 1 → claude (priority 1).
     const claude = plan.lanes.find((l) => l.provider === 'claude');
     const gemini = plan.lanes.find((l) => l.provider === 'gemini');
-    expect(claude!.beadIds).toEqual(['b1', 'b2']);
-    expect(gemini!.beadIds).toEqual(['b3']);
+    expect(claude!.beadIds).toEqual(['b1']);
+    expect(gemini!.beadIds).toEqual(['b2', 'b3']);
     // No codex lane present.
     expect(plan.lanes.find((l) => l.provider === 'codex')).toBeUndefined();
-    expect(plan.ratio).toBe('2:0:1');
+    expect(plan.ratio).toBe('1:0:2');
   });
 
   it('N % 3 = 1 → claude gets the extra bead', () => {

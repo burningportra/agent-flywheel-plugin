@@ -69,7 +69,8 @@ describe.each(adapters)('%s completion attestation prompt', (_provider, adapt) =
     );
     expect(prompt).toContain('/ubs-workflow');
     expect(prompt).toContain('changed-files mode');
-    expect(prompt).toContain("repo's verify commands");
+    expect(prompt).toContain("repository's documented verify commands");
+    expect(prompt).not.toContain('AGENTS.md');
     expect(prompt).toContain('fresh-eyes self-review');
   });
 

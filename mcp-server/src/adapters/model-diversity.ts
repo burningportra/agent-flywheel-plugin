@@ -132,7 +132,7 @@ const ROUTING_PROVIDERS: readonly ModelProvider[] = Object.freeze([
 
 const FALLBACK_PRIORITY = {
   claude: ['codex', 'gemini', 'pi'],
-  codex: ['pi', 'claude', 'gemini'],
+  codex: ['gemini', 'pi', 'claude'],
   gemini: ['codex', 'pi', 'claude'],
 } as const satisfies Record<(typeof PRIMARY_PROVIDERS)[number], readonly ModelProvider[]>;
 
