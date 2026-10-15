@@ -3,28 +3,4 @@ description: Search, store, or manage CASS long-term memory.
 argument-hint: "[stats|search <query>|store <content>|view|prune]"
 ---
 
-**First action:** Parse $ARGUMENTS for the sub-action (`stats`/`search`/`store`/`view`/`prune`); if it doesn't match a known subcommand, treat the whole string as a query and call `flywheel_memory({cwd, operation: "search", query: "$ARGUMENTS"})`.
-
-Memory operation: $ARGUMENTS
-
-**Subcommands** (parse from $ARGUMENTS):
-
-- `stats` (or no args): Show memory statistics.
-  - Run `cm stats` via Bash. Display rule count, session count, last update.
-
-- `search <query>`: Search memory for relevant rules and context.
-  - Call `flywheel_memory` via `agent-flywheel` MCP with `operation: "search"` and `query: <query>`.
-  - Display results ranked by relevance.
-
-- `store <content>` or `remember <content>`: Store content as a memory rule.
-  - Call `flywheel_memory` with `operation: "store"` and `content: <content>`.
-  - Confirm: "Stored to memory."
-
-- `view`: Show recent memory entries.
-  - Run `cm list --recent 10` via Bash.
-
-- `prune`: Remove stale or low-quality entries.
-  - Run `cm prune --dry-run` via Bash first, show what would be removed.
-  - Ask for confirmation, then run `cm prune`.
-
-If $ARGUMENTS doesn't match a subcommand, treat it as a search query.
+**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:memory" })` and follow its returned `body`, forwarding `$ARGUMENTS` as the skill's input. The same-name `Skill` call reloads this command instead of `skills/memory/SKILL.md`, so the MCP response is the canonical workflow.
