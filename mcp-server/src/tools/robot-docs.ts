@@ -59,6 +59,7 @@ Resume call:        flywheel_observe(cwd: <repo-root>)
    flywheel_discover(cwd, ideas: [...])     # ideas come from your model
    flywheel_select(cwd, goal: "<chosen>")
    flywheel_plan(cwd, mode: "standard")     # or "deep" / "duel"
+                                            # + ambition: "ambitious" once the charter is written
    flywheel_approve_beads(cwd, action: "start")
    # impl swarm runs (each agent commits + writes attestation)
    flywheel_verify_beads(cwd, beadIds: [...])

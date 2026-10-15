@@ -6,6 +6,10 @@ import { runPlan } from '../../tools/plan.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 import type { FlywheelState } from '../../types.js';
 
+// Deep mode reads CASS memory through the host's real `cm` binary, which makes
+// the prompt depend on this machine and blocks for seconds per call.
+vi.mock('../../memory.js', () => ({ readMemory: () => '' }));
+
 // ─── Helpers ──────────────────────────────────────────────────
 
 function makeCtx(stateOverrides: Partial<FlywheelState> = {}, cwd = '/fake/cwd') {
@@ -512,6 +516,32 @@ describe('runPlan', () => {
       expect(result.content[0].text).not.toContain('Phase 0.5 Brainstorm');
     });
 
+    it('ignores another goal whose slug extends this one (add-caching-layer-v2)', async () => {
+      writeBrainstorm('add-caching-layer-v2', '2026-04-23', '# V2-GOAL-BRAINSTORM');
+
+      const { ctx } = makeCtx({}, tmpDir);
+
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+
+      expect(result.content[0].text).not.toContain('V2-GOAL-BRAINSTORM');
+      expect(result.content[0].text).not.toContain('Phase 0.5 Brainstorm');
+      const structured = result.structuredContent as { data: { brainstormDocument?: string } };
+      expect(structured.data.brainstormDocument).toBeUndefined();
+    });
+
+    it('does not read a lone ambition charter as the brainstorm', async () => {
+      writeBrainstorm('add-caching-layer', '2026-04-23-ambition', '# CHARTER-NOT-BRAINSTORM');
+
+      const { ctx } = makeCtx({}, tmpDir);
+
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+
+      expect(result.content[0].text).not.toContain('CHARTER-NOT-BRAINSTORM');
+      expect(result.content[0].text).not.toContain('Phase 0.5 Brainstorm');
+      const structured = result.structuredContent as { data: { brainstormDocument?: string } };
+      expect(structured.data.brainstormDocument).toBeUndefined();
+    });
+
     it('deep mode threads brainstorm into every planner agent prompt', async () => {
       writeBrainstorm('add-caching-layer', '2026-04-23', '# Brainstorm\n\nSmallest: just LRU.');
 
@@ -554,6 +584,208 @@ describe('runPlan', () => {
       } finally {
         rmSync(externalDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe('ambition axis', () => {
+    const SCOPED_ANCHOR = 'Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.';
+    const AMBITIOUS_ANCHOR = "The ambition charter below supersedes this scope anchor: treat the smallest version as the floor, delivered first, and the charter's stretch target as the goal.";
+    const CHARTER_PATH = 'docs/brainstorms/add-caching-layer-2026-04-24-ambition.md';
+    const BRAINSTORM_PATH = 'docs/brainstorms/add-caching-layer-2026-04-23.md';
+
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = mkdtempSync(join(tmpdir(), 'plan-ambition-'));
+    });
+
+    afterEach(() => {
+      rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    function writeArtifact(relPath: string, body: string) {
+      mkdirSync(join(tmpDir, 'docs', 'brainstorms'), { recursive: true });
+      writeFileSync(join(tmpDir, relPath), body, 'utf8');
+    }
+
+    type PlanData = {
+      ambition?: string;
+      ambitionDocument?: string;
+      brainstormDocument?: string;
+      planAgents: Array<{ task: string }>;
+      synthesisPrompt: string;
+      duelCommand: string;
+      error: { code: string; hint?: string };
+    };
+    const dataOf = (result: Awaited<ReturnType<typeof runPlan>>) =>
+      (result.structuredContent as { data: PlanData }).data;
+
+    it('standard ambitious injects the charter after the brainstorm and flips the scope anchor', async () => {
+      writeArtifact(BRAINSTORM_PATH, '# Brainstorm\n\nSmallest: LRU on the hot path.');
+      writeArtifact(CHARTER_PATH, '# Charter\n\nStretch target: p95 under 5ms on the replay benchmark.');
+
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard', ambition: 'ambitious' });
+
+      const text = result.content[0].text;
+      expect(result.isError).toBeUndefined();
+      expect(text).toContain('Stretch target: p95 under 5ms on the replay benchmark.');
+      expect(text).toContain(`Source: \`${CHARTER_PATH}\``);
+      expect(text).toContain('1. Open the plan with `## Ambition charter`');
+      expect(text).toContain('0. **Ambition charter** — target rung, stretch target, floor, outside judge (see Ambition mode above)\n1. **Executive Summary**');
+      expect(text).toContain(AMBITIOUS_ANCHOR);
+      expect(text).not.toContain(SCOPED_ANCHOR);
+      expect(text.indexOf('## Phase 0.5 Brainstorm')).toBeGreaterThan(-1);
+      expect(text.indexOf('## Phase 0.5 Brainstorm')).toBeLessThan(text.indexOf('## Ambition mode (read FIRST)'));
+      expect(text.indexOf('## Ambition mode (read FIRST)')).toBeLessThan(text.indexOf('## Plan Document Requirements'));
+
+      const data = dataOf(result);
+      expect(data.ambition).toBe('ambitious');
+      expect(data.ambitionDocument).toBe(CHARTER_PATH);
+      expect(data.brainstormDocument).toBe(BRAINSTORM_PATH);
+    });
+
+    it('ambitious without a charter returns missing_prerequisite and leaves state untouched', async () => {
+      writeArtifact(BRAINSTORM_PATH, '# Brainstorm only');
+
+      const { ctx, state, saved } = makeCtx({ phase: 'idle' }, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard', ambition: 'ambitious' });
+
+      expect(result.isError).toBe(true);
+      expect(dataOf(result).error.code).toBe('missing_prerequisite');
+      expect(result.content[0].text).toContain('docs/brainstorms/add-caching-layer-<YYYY-MM-DD>-ambition.md');
+      expect(dataOf(result).error.hint).toContain('skills/start/_planning.md');
+      expect(state.phase).toBe('idle');
+      expect(state.planDocument).toBeUndefined();
+      expect(saved).toHaveLength(0);
+    });
+
+    it('rejects an unknown ambition value before mutating state', async () => {
+      const { ctx, state, saved } = makeCtx({ phase: 'idle' }, tmpDir);
+      const result = await runPlan(ctx, {
+        cwd: tmpDir,
+        mode: 'standard',
+        ambition: 'moonshot' as unknown as 'ambitious',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(dataOf(result).error.code).toBe('invalid_input');
+      expect(dataOf(result).error.hint).toContain('"scoped"');
+      expect(dataOf(result).error.hint).toContain('"ambitious"');
+      expect(state.phase).toBe('idle');
+      expect(saved).toHaveLength(0);
+    });
+
+    it('scoped plans ignore a charter on disk', async () => {
+      writeArtifact(BRAINSTORM_PATH, '# Brainstorm');
+      writeArtifact(CHARTER_PATH, '# STALE-CHARTER');
+
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+
+      const text = result.content[0].text;
+      expect(text).not.toContain('STALE-CHARTER');
+      expect(text).not.toContain('Ambition mode');
+      expect(text).toContain(SCOPED_ANCHOR);
+      expect(dataOf(result).ambition).toBe('scoped');
+      expect(dataOf(result).ambitionDocument).toBeUndefined();
+    });
+
+    it.each(['standard', 'deep', 'duel'] as const)(
+      '%s scoped output is identical with or without a charter on disk',
+      async (mode) => {
+        writeArtifact(BRAINSTORM_PATH, '# Brainstorm');
+        const before = await runPlan(makeCtx({}, tmpDir).ctx, { cwd: tmpDir, mode });
+
+        writeArtifact(CHARTER_PATH, '# STALE-CHARTER');
+        const omitted = await runPlan(makeCtx({}, tmpDir).ctx, { cwd: tmpDir, mode });
+        const explicit = await runPlan(makeCtx({}, tmpDir).ctx, { cwd: tmpDir, mode, ambition: 'scoped' });
+
+        expect(omitted.content[0].text).toBe(before.content[0].text);
+        expect(explicit.content[0].text).toBe(before.content[0].text);
+        expect(omitted.structuredContent).toEqual(before.structuredContent);
+      },
+    );
+
+    it('deep ambitious threads the charter into every planner and the synthesis prompt', async () => {
+      writeArtifact(CHARTER_PATH, '# Charter\n\nFloor: cache reads only.');
+
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'deep', ambition: 'ambitious' });
+
+      const data = dataOf(result);
+      expect(data.planAgents.length).toBeGreaterThanOrEqual(3);
+      for (const agent of data.planAgents) {
+        expect(agent.task).toContain('Floor: cache reads only.');
+        expect(agent.task).toContain('### Ambitious plan requirements');
+        expect(agent.task).not.toContain('Phase 0.5 Brainstorm');
+      }
+      expect(data.synthesisPrompt).toContain('Do not average ambition down.');
+      expect(data.ambition).toBe('ambitious');
+      expect(data.ambitionDocument).toBe(CHARTER_PATH);
+
+      const json = JSON.parse(result.content[0].text) as { ambition: string; ambitionDocument: string };
+      expect(json.ambition).toBe('ambitious');
+      expect(json.ambitionDocument).toBe(CHARTER_PATH);
+    });
+
+    it('duel ambitious tells the orchestrator to pre-seed both agents with the charter', async () => {
+      writeArtifact(CHARTER_PATH, '# Charter');
+
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'duel', ambition: 'ambitious' });
+
+      expect(result.content[0].text).toContain(`Pre-seed each agent with the ambition charter at \`${CHARTER_PATH}\``);
+      expect(dataOf(result).ambition).toBe('ambitious');
+      expect(dataOf(result).ambitionDocument).toBe(CHARTER_PATH);
+      expect(dataOf(result).duelCommand).not.toContain('ambition');
+    });
+
+    it('picks the latest-dated charter when several exist', async () => {
+      writeArtifact('docs/brainstorms/add-caching-layer-2026-04-20-ambition.md', '# OLD-CHARTER');
+      writeArtifact('docs/brainstorms/add-caching-layer-2026-04-26-ambition.md', '# NEWEST-CHARTER');
+      writeArtifact('docs/brainstorms/add-caching-layer-2026-04-22-ambition.md', '# MIDDLE-CHARTER');
+
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard', ambition: 'ambitious' });
+
+      const text = result.content[0].text;
+      expect(text).toContain('NEWEST-CHARTER');
+      expect(text).not.toContain('OLD-CHARTER');
+      expect(text).not.toContain('MIDDLE-CHARTER');
+      expect(dataOf(result).ambitionDocument).toBe('docs/brainstorms/add-caching-layer-2026-04-26-ambition.md');
+    });
+
+    it('refuses a charter symlink that points outside cwd (security)', async () => {
+      mkdirSync(join(tmpDir, 'docs', 'brainstorms'), { recursive: true });
+      const externalDir = mkdtempSync(join(tmpdir(), 'plan-charter-attacker-'));
+      const externalFile = join(externalDir, 'leak.md');
+      writeFileSync(externalFile, '# LEAKED-CHARTER', 'utf8');
+
+      try {
+        symlinkSync(externalFile, join(tmpDir, CHARTER_PATH));
+
+        const { ctx, saved } = makeCtx({}, tmpDir);
+        const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard', ambition: 'ambitious' });
+
+        expect(result.isError).toBe(true);
+        expect(dataOf(result).error.code).toBe('missing_prerequisite');
+        expect(JSON.stringify(result)).not.toContain('LEAKED-CHARTER');
+        expect(saved).toHaveLength(0);
+      } finally {
+        rmSync(externalDir, { recursive: true, force: true });
+      }
+    });
+
+    it('planFile registration ignores ambition, so a missing charter does not block it', async () => {
+      writeFileSync(join(tmpDir, 'plan.md'), '# Synthesized duel plan\n');
+
+      const { ctx, state } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'duel', planFile: 'plan.md', ambition: 'ambitious' });
+
+      expect(result.isError).toBeUndefined();
+      expect(state.phase).toBe('awaiting_plan_approval');
+      expect(state.planDocument).toBe('plan.md');
     });
   });
 });

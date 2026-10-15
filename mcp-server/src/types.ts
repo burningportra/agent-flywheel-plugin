@@ -723,9 +723,12 @@ export type McpToolResult<TStructured = unknown> = {
 export interface ProfileArgs { cwd: string; goal?: string; force?: boolean }
 export interface DiscoverArgs { cwd: string; ideas: CandidateIdea[] }
 export interface SelectArgs { cwd: string; goal: string }
+export type PlanAmbition = "scoped" | "ambitious";
+
 export interface PlanArgs {
   cwd: string;
   mode?: "standard" | "deep" | "duel";
+  ambition?: PlanAmbition;
   planContent?: string;
   planFile?: string;
   /**

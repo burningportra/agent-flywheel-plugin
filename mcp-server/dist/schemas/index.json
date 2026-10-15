@@ -4,7 +4,7 @@
   "title": "flywheel input-schema manifest",
   "generated_by": "mcp-server/scripts/emit-schemas.ts",
   "tool_count": 40,
-  "sha256": "6b046f8c7a13925f88003f9af9739c656ffea704b4d4ca2e6d33f8ff7177744f",
+  "sha256": "5ef73c29a25d7867123ce18bf71c84b62c7e4656d8d8695ac252ec3f1343e84f",
   "schemas": [
     {
       "tool": "flywheel_advance_wave",

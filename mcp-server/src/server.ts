@@ -133,7 +133,7 @@ const PRIMARY_TOOLS = [
   },
   {
     name: 'flywheel_plan',
-    description: 'Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. mode=duel triggers /dueling-idea-wizards for adversarial 2-agent cross-scoring. Provide planFile (preferred) or planContent to register a completed plan and transition to bead creation.',
+    description: 'Generate a plan document for the selected goal. mode=standard returns a planning prompt for a single plan. mode=deep returns configs for 3 parallel planning agents. mode=duel triggers /dueling-idea-wizards for adversarial 2-agent cross-scoring. ambition=ambitious is orthogonal to mode: it injects the ambition charter from docs/brainstorms/<slug>-<date>-ambition.md into every generator and errors when that file is missing. Provide planFile (preferred) or planContent to register a completed plan and transition to bead creation.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -143,6 +143,12 @@ const PRIMARY_TOOLS = [
           enum: ['standard', 'deep', 'duel'],
           default: 'standard',
           description: 'standard=single-model plan prompt, deep=multi-model angle agents, duel=/dueling-idea-wizards adversarial cross-scoring',
+        },
+        ambition: {
+          type: 'string',
+          enum: ['scoped', 'ambitious'],
+          default: 'scoped',
+          description: 'scoped=plan the goal as asked. ambitious=plan to the ambition charter (target rung, stretch target, floor, outside judge) that the Step 5 ambition pass writes to docs/brainstorms/<slug>-<date>-ambition.md; returns missing_prerequisite when no charter exists. Combines with any mode. Ignored when registering planFile or planContent.',
         },
         planFile: {
           type: 'string',

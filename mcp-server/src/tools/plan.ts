@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
+import type { ToolContext, McpToolResult, PlanAmbition, PlanArgs } from '../types.js';
 import { makeOkToolResult, slugifyGoal } from './shared.js';
 import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
@@ -13,24 +13,48 @@ import {
 } from '../utils/path-safety.js';
 import { normalizeText } from '../utils/text-normalize.js';
 
+type PlannerArtifact = { path: string; content: string };
+
+type PlannerInputs =
+  | { ambition: 'scoped'; brainstorm: PlannerArtifact | null }
+  | { ambition: 'ambitious'; brainstorm: PlannerArtifact | null; charter: PlannerArtifact };
+
 /**
- * Locate the most-recent brainstorm artifact for this goal.
+ * Filename shape after `<goal-slug>-` for each planning artifact the
+ * orchestrator writes to `docs/brainstorms/`. Anchoring on the date keeps goal
+ * `foo` from reading goal `foo-bar`'s files and keeps the charter from being
+ * read as the brainstorm.
+ */
+const ARTIFACT_NAME_AFTER_SLUG = {
+  brainstorm: /^\d{4}-\d{2}-\d{2}\.md$/,
+  charter: /^\d{4}-\d{2}-\d{2}-ambition\.md$/,
+} as const;
+
+/**
+ * Locate the most-recent planning artifact of `kind` for this goal.
  *
- * Phase 0.5 of `skills/start/_planning.md` writes pressure-test outcomes to
- * `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>.md`. We pick the lexically-greatest
- * match (dates in the filename make lexical order equal chronological order),
- * falling back to `null` when the directory is missing or no slug match exists.
+ * Phase 0.5 of `skills/start/_planning.md` writes the brainstorm to
+ * `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>.md`, and the ambition pass writes
+ * the charter to `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>-ambition.md`. We
+ * pick the lexically-greatest match (dates in the filename make lexical order
+ * equal chronological order), falling back to `null` when the directory is
+ * missing or nothing matches.
  *
  * Returns the raw file contents so the caller can splice them directly into
  * the planner prompt — callers should NOT parse the file structure, because
  * the orchestrator writes arbitrary synthesis prose.
  */
-function readLatestBrainstorm(cwd: string, goalSlug: string): { path: string; content: string } | null {
+function readLatestArtifact(
+  cwd: string,
+  goalSlug: string,
+  kind: keyof typeof ARTIFACT_NAME_AFTER_SLUG,
+): PlannerArtifact | null {
   try {
     const dir = join(cwd, 'docs', 'brainstorms');
     if (!existsSync(dir)) return null;
+    const prefix = `${goalSlug}-`;
     const entries = readdirSync(dir)
-      .filter(f => f.endsWith('.md') && f.startsWith(`${goalSlug}-`));
+      .filter(f => f.startsWith(prefix) && ARTIFACT_NAME_AFTER_SLUG[kind].test(f.slice(prefix.length)));
     if (entries.length === 0) return null;
     // Sort lexically descending — filenames embed ISO dates, so this == latest.
     entries.sort().reverse();
@@ -48,10 +72,57 @@ function readLatestBrainstorm(cwd: string, goalSlug: string): { path: string; co
   }
 }
 
-/** Format a brainstorm artifact as a prompt section; empty string if null. */
-function formatBrainstormSection(brainstorm: { path: string; content: string } | null): string {
-  if (!brainstorm) return '';
-  return `\n## Phase 0.5 Brainstorm (read FIRST)\n\nSource: \`${brainstorm.path}\` — pressure-test outcome from Phase 0.5 of the planning skill. Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.\n\n\`\`\`markdown\n${brainstorm.content.trim()}\n\`\`\`\n`;
+/**
+ * Read the artifacts the planner prompt is built from. Returns `null` when the
+ * plan is ambitious and no charter is on disk. A scoped plan never reads the
+ * charter, so a stale one cannot leak into it.
+ */
+function resolvePlannerInputs(cwd: string, goalSlug: string, ambition: PlanAmbition): PlannerInputs | null {
+  const brainstorm = readLatestArtifact(cwd, goalSlug, 'brainstorm');
+  if (ambition === 'scoped') return { ambition, brainstorm };
+  const charter = readLatestArtifact(cwd, goalSlug, 'charter');
+  return charter ? { ambition, brainstorm, charter } : null;
+}
+
+const BRAINSTORM_SCOPE_ANCHOR: Record<PlanAmbition, string> = {
+  scoped: 'Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.',
+  ambitious: "The ambition charter below supersedes this scope anchor: treat the smallest version as the floor, delivered first, and the charter's stretch target as the goal.",
+};
+
+function formatBrainstormSection(brainstorm: PlannerArtifact, ambition: PlanAmbition): string {
+  return `\n## Phase 0.5 Brainstorm (read FIRST)\n\nSource: \`${brainstorm.path}\` — pressure-test outcome from Phase 0.5 of the planning skill. ${BRAINSTORM_SCOPE_ANCHOR[ambition]}\n\n\`\`\`markdown\n${brainstorm.content.trim()}\n\`\`\`\n`;
+}
+
+function formatCharterSection(charter: PlannerArtifact): string {
+  return `
+## Ambition mode (read FIRST)
+
+The user chose an ambitious plan. The charter below sets the target rung, the stretch target, the floor, the crew of fields, and the outside judge. Plan to reach it. Do not scale it back to the goal as first asked.
+
+Source: \`${charter.path}\`
+
+\`\`\`markdown
+${charter.content.trim()}
+\`\`\`
+
+### Ambitious plan requirements
+
+1. Open the plan with \`## Ambition charter\`: the target rung, stretch target, floor, and outside judge, copied from the charter. Change a number only with evidence, and say what the evidence is.
+2. Order phases floor-first. The first phase ships the floor on its own. Later phases climb toward the stretch target, and each names the outside-judge measurement that shows it landed.
+3. Plan the work with the instruments the charter names under Depth (the actual methods and tools), not with their vocabulary.
+4. Turn the charter's assumption check and new-knowledge target into phases with runnable checks.
+5. Give each crew field concrete work in at least one phase, doing what that field does. No personas or role-play.
+6. Keep bold phases. When a phase looks too ambitious, keep it and attach a fallback instead of cutting it.
+7. Every acceptance criterion for the stretch target names an outside judge: a benchmark, test, dataset, or user metric. A reviewer's or model's opinion of its own work does not count.
+8. If the target rung needs access agents don't have yet (data, tools, machines, permissions), the first phases build that access.
+`;
+}
+
+function formatPlannerSections(inputs: PlannerInputs): string {
+  const brainstormSection = inputs.brainstorm ? formatBrainstormSection(inputs.brainstorm, inputs.ambition) : '';
+  return inputs.ambition === 'ambitious'
+    ? brainstormSection + formatCharterSection(inputs.charter)
+    : brainstormSection;
 }
 
 function okResult(text: string, phase: 'planning' | 'awaiting_plan_approval', data: Record<string, unknown>): McpToolResult {
@@ -82,6 +153,10 @@ function errorResult(
  * mode="duel":  Returns instructions to invoke /dueling-idea-wizards --mode=architecture for 2-agent
  *               adversarial planning (CC + COD/GMI cross-scoring). Synthesis lands at
  *               docs/plans/<date>-<slug>-duel.md and is registered via planFile on the next call.
+ *
+ * ambition is orthogonal to mode. "scoped" (default) plans the goal as asked; "ambitious" requires the
+ * charter at docs/brainstorms/<slug>-<date>-ambition.md and injects it, with fixed ambitious-plan
+ * requirements, into whichever generator the mode picks. planFile/planContent registration ignores it.
  */
 export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpToolResult> {
   const { state, saveState, cwd } = ctx;
@@ -93,6 +168,17 @@ export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpTool
       'Error: No goal selected. Call flywheel_select first.',
       undefined,
       'Call flywheel_select with the chosen goal before flywheel_plan.',
+    );
+  }
+
+  const ambition: unknown = args.ambition === undefined ? 'scoped' : args.ambition;
+  if (ambition !== 'scoped' && ambition !== 'ambitious') {
+    return errorResult(
+      'planning',
+      'invalid_input',
+      `Error: invalid ambition ${JSON.stringify(ambition)}.`,
+      { ambition },
+      'Pass ambition: "scoped" (the default) or "ambitious".',
     );
   }
 
@@ -273,6 +359,19 @@ Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').len
     );
   }
 
+  const inputs = resolvePlannerInputs(cwd, planSlug, ambition);
+  if (!inputs) {
+    return errorResult(
+      'planning',
+      'missing_prerequisite',
+      `Error: ambition "ambitious" needs a charter at docs/brainstorms/${planSlug}-<YYYY-MM-DD>-ambition.md, and none was found.`,
+      { goalSlug: planSlug },
+      'Run the ambition pass (skills/start/_planning.md, Step 5 "Ambition pass") to write the charter, then call flywheel_plan again.',
+    );
+  }
+  const plannerSections = formatPlannerSections(inputs);
+  const ambitionDocument = inputs.ambition === 'ambitious' ? inputs.charter.path : undefined;
+
   state.phase = 'planning';
   state.planRefinementRound = 0;
   saveState(state);
@@ -282,10 +381,9 @@ Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').len
     const profileContext = profile
       ? `\n\n### Repository Context\n- **Name:** ${profile.name}\n- **Languages:** ${profile.languages.join(', ')}\n- **Frameworks:** ${profile.frameworks.join(', ')}\n- **Has tests:** ${profile.hasTests}`
       : '';
-
-    // Phase 0.5 handoff: if the brainstorm artifact exists for this goal, surface it.
-    const brainstorm = readLatestBrainstorm(cwd, planSlug);
-    const brainstormSection = formatBrainstormSection(brainstorm);
+    const ambitionRequirement = inputs.ambition === 'ambitious'
+      ? '0. **Ambition charter** — target rung, stretch target, floor, outside judge (see Ambition mode above)\n'
+      : '';
 
     const planPath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}.md`;
     state.planDocument = planPath;
@@ -294,13 +392,13 @@ Plan saved (${args.planContent.length} chars, ${args.planContent.split('\n').len
     return okResult(
       `**NEXT: Generate a detailed plan document and save it to \`${planPath}\`.**
 
-Goal: "${goal}"${constraintsSummary}${profileContext}${brainstormSection}
+Goal: "${goal}"${constraintsSummary}${profileContext}${plannerSections}
 
 ## Plan Document Requirements
 
 Write a comprehensive implementation plan that covers:
 
-1. **Executive Summary** — What will be built and why
+${ambitionRequirement}1. **Executive Summary** — What will be built and why
 2. **Architecture** — High-level design decisions and component breakdown
 3. **Implementation Phases** — Ordered list of phases with dependencies
 4. **File-Level Changes** — For each component: files to create/modify, interfaces, data shapes
@@ -320,21 +418,26 @@ Target: 500-3000 lines. Be specific — vague plans produce vague beads.
         goal,
         planDocument: planPath,
         constraints: state.constraints,
-        brainstormDocument: brainstorm?.path,
+        brainstormDocument: inputs.brainstorm?.path,
+        ambition: inputs.ambition,
+        ambitionDocument,
       }
     );
   }
 
   // ── Duel plan (adversarial cross-scoring via /dueling-idea-wizards) ──────
   if (mode === 'duel') {
-    const brainstorm = readLatestBrainstorm(cwd, planSlug);
+    const { brainstorm } = inputs;
     const planPath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}-duel.md`;
     state.planDocument = planPath;
     saveState(state);
 
     const brainstormHint = brainstorm
       ? `\n  - Pre-seed each agent with the brainstorm artifact at \`${brainstorm.path}\` (read FIRST in their study phase) so both planners share scope-floor / 10x-ceiling / adjacent-ask framing.`
-      : '\n  - No Phase 0.5 brainstorm artifact found — both agents will study the repo profile only.';
+      : '\n  - No Phase 0.5 brainstorm artifact found, so both agents study the repo profile without brainstorm framing.';
+    const ambitionHint = inputs.ambition === 'ambitious'
+      ? `\n  - Pre-seed each agent with the ambition charter at \`${inputs.charter.path}\` (read FIRST in their study phase, ahead of any brainstorm or repo profile). Both plans must target the charter's rung and stretch target, and cross-scoring should mark down a plan that scales them back.`
+      : '';
 
     const text = `**NEXT: Invoke \`/dueling-idea-wizards --mode=architecture --top=3 --rounds=1\` for adversarial planning.**
 
@@ -346,7 +449,7 @@ This mode runs two independent planning agents (Claude Code + Codex, plus Gemini
 
 ### Steps for the orchestrator
 
-1. **Pre-flight** — verify ntm is installed and at least 2 of {claude, codex, gemini} are on \`$PATH\` (the real binaries behind the \`cc/cod/gmi\` ntm pane types — do NOT \`which cc\` literally; it matches \`/usr/bin/cc\`). If only one agent is available, fall back to \`mode=deep\` (single-model angle agents) and emit a one-line warning.${brainstormHint}
+1. **Pre-flight** — verify ntm is installed and at least 2 of {claude, codex, gemini} are on \`$PATH\` (the real binaries behind the \`cc/cod/gmi\` ntm pane types — do NOT \`which cc\` literally; it matches \`/usr/bin/cc\`). If only one agent is available, fall back to \`mode=deep\` (single-model angle agents) and emit a one-line warning.${brainstormHint}${ambitionHint}
 2. **Invoke** the skill via \`Skill\` with:
    \`\`\`
    /dueling-idea-wizards --mode=architecture --top=3 --rounds=1 --focus="${goal.replace(/"/g, '\\"')}" --output=${planPath}
@@ -370,6 +473,8 @@ After the duel completes and you call \`flywheel_plan\` again with \`planFile\`,
       goal,
       constraints: state.constraints,
       brainstormDocument: brainstorm?.path,
+      ambition: inputs.ambition,
+      ambitionDocument,
       planDocument: planPath,
       duelCommand: `/dueling-idea-wizards --mode=architecture --top=3 --rounds=1 --focus="${goal}" --output=${planPath}`,
     });
@@ -388,15 +493,11 @@ After the duel completes and you call \`flywheel_plan\` again with \`planFile\`,
     if (mem) memorySection = `\n## Prior Session Context\n${mem}\n`;
   } catch { /* CASS unavailable — proceed without */ }
 
-  // Phase 0.5 handoff: inject brainstorm artifact if present.
-  const brainstorm = readLatestBrainstorm(cwd, planSlug);
-  const brainstormSection = formatBrainstormSection(brainstorm);
-
   const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
-${memorySection}${brainstormSection}
+${memorySection}${plannerSections}
 Write a comprehensive implementation plan from your designated perspective. The plan will be synthesized with plans from other agents with different perspectives.
 
 ## Plan requirements
@@ -460,12 +561,18 @@ Question every architectural choice: is there a simpler way? A more standard app
     });
   }
 
+  const synthesisAmbition = inputs.ambition === 'ambitious'
+    ? '\n\nAmbition mode: the synthesized plan keeps the charter\'s target rung, stretch target, and floor-first phase order. Where plans disagree on how far to climb, keep the more ambitious path that still has an outside judge and a fallback. Do not average ambition down.'
+    : '';
+
   const payload = {
     kind: 'deep_plan_spawn',
     mode: 'deep',
     goal,
     constraints: state.constraints,
-    brainstormDocument: brainstorm?.path,
+    brainstormDocument: inputs.brainstorm?.path,
+    ambition: inputs.ambition,
+    ambitionDocument,
     planAgents,
     instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
     synthesisPrompt: `Use ultrathink.
@@ -486,7 +593,7 @@ Then synthesize:
 5. **Provide git-diff style changes** showing what was merged vs what was cut.
 6. **Flag unresolved tensions** — where plans fundamentally disagree and a judgment call was made.
 
-The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.`,
+The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.${synthesisAmbition}`,
   };
 
   return okResult(
@@ -494,6 +601,8 @@ The synthesis must be BETTER than any individual plan, not a lowest-common-denom
         action: 'spawn-plan-agents',
         goal,
         constraints: state.constraints,
+        ambition: payload.ambition,
+        ambitionDocument: payload.ambitionDocument,
         planAgents,
         instructions: payload.instructions,
         synthesisPrompt: payload.synthesisPrompt,

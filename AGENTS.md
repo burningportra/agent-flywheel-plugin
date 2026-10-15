@@ -90,7 +90,7 @@ Current-tool index (HEAD = v3.12.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_get_skill({ name })`** — bundled skill body in one round-trip. Preferred over `Read` for skill lookups.
 - **`flywheel_memory({ operation, query?, content? })`** — CASS memory; operations: `search | store | draft_postmortem | draft_solution_doc | refresh_learnings`. The `refresh_learnings` op classifies `docs/solutions/` entries Keep/Update/Consolidate/Replace/Delete.
 - **`flywheel_observe`** — single-call session-state snapshot; surfaces hints from missing completion attestations.
-- **`flywheel_plan({ mode })`** — planner; modes: `standard | deep | duel`. Deep auto-detects `docs/brainstorms/<slug>-*.md`.
+- **`flywheel_plan({ mode, ambition? })`** — planner; modes: `standard | deep | duel`. Every mode auto-detects `docs/brainstorms/<slug>-<date>.md`. `ambition: "ambitious"` (orthogonal to mode) also requires the ambition charter `docs/brainstorms/<slug>-<date>-ambition.md` from the `_planning.md` Step 5 ambition pass and injects it into every planner prompt.
 - **`flywheel_profile`** — repo profile with git-HEAD-keyed cache. Always call first.
 - **`flywheel_remediate({ checkName })`** — apply canonical fix for a failing doctor check (per-check mutex, `dry_run` default).
 - **`flywheel_review`** — 5 fresh-eyes reviewers per risky bead, or duel for p0 / security beads.

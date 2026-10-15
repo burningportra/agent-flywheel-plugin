@@ -12,7 +12,7 @@ Skip Phase 0.5 entirely and jump to Step 5 when **any** of the following holds:
 
 1. `flywheel_discover` returned a top-ranked idea with `confidence >= 0.8` (the agent is highly certain about framing — no pressure-test needed).
 2. The user's initial prompt captured in Step 0.preflight (`USER_INPUT`) is **>100 characters** AND reads as a detailed goal statement (multiple clauses specifying scope, users, or constraints — not just a one-word topic).
-3. **Grill-complete brainstorm already on disk** — a file matching `docs/brainstorms/<goal-slug>-*.md` (prefer the path in `GRILL_BRAINSTORM_PATH` when set) contains **all three** headings: `## Framing synthesis`, plus either (`## Scope floor` **or** `## Smallest version`) **and** either (`## Ambition ceiling` **or** `## 10x version`). This is the normal exit from `skills/grill-with-docs` / Goal framing mode "Grill with docs" — re-asking floor/ceiling would double-interview.
+3. **Grill-complete brainstorm already on disk** — a file matching `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>.md` (prefer the path in `GRILL_BRAINSTORM_PATH` when set) contains **all three** headings: `## Framing synthesis`, plus either (`## Scope floor` **or** `## Smallest version`) **and** either (`## Ambition ceiling` **or** `## 10x version`). This is the normal exit from `skills/grill-with-docs` / Goal framing mode "Grill with docs" — re-asking floor/ceiling would double-interview.
 4. `FRAMING_MODE === "grill"` **and** `GRILL_STATUS === "approved"` even if the path check is momentarily racy — trust the skill completion marker and skip; still prefer reading the brainstorm for planner context.
 
 If ANY condition holds, emit a single line to the transcript noting the skip reason (e.g. `"Phase 0.5 skipped: discover confidence 0.87 >= 0.8"`, `"Phase 0.5 skipped: grill brainstorm docs/brainstorms/foo-2026-07-16.md has floor+ceiling+framing"`, or `"Phase 0.5 skipped: initial prompt is 247 chars with detailed framing"`) and proceed directly to Step 5.
@@ -213,19 +213,109 @@ Before presenting the choice, briefly frame the Three Reasoning Spaces to help t
 Use `AskUserQuestion`:
 
 ```
-AskUserQuestion(questions: [{
-  question: "How would you like to plan?",
-  header: "Plan mode",
-  options: [
-    { label: "Standard plan", description: "Single planning pass — faster (~5 min)" },
-    { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality (~15 min, Recommended)" },
-    { label: "Duel plan", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards --mode=architecture — surviving design choices + contested-decision narrative (~30 min; needs ntm + 2 healthy CLIs)" },
-    { label: "Triangulated plan", description: "Deep plan + /multi-model-triangulation second-opinion on the synthesis before alignment check — highest quality, longest" },
-    { label: "planning-workflow", description: "Invoke /planning-workflow — 4-5 sequential Codex review rounds via NTM + optional multi-model blending. Highest quality for major new features" }
-  ],
-  multiSelect: false
-}])
+AskUserQuestion(questions: [
+  {
+    question: "How would you like to plan?",
+    header: "Plan mode",
+    options: [
+      { label: "Standard plan", description: "Single planning pass — faster (~5 min)" },
+      { label: "Deep plan", description: "3 AI models give competing perspectives, then synthesize — higher quality (~15 min, Recommended)" },
+      { label: "Duel plan", description: "Adversarial 2-agent cross-scoring via /dueling-idea-wizards --mode=architecture — surviving design choices + contested-decision narrative (~30 min; needs ntm + 2 healthy CLIs)" },
+      { label: "planning-workflow", description: "Invoke /planning-workflow — 4-5 sequential Codex review rounds via NTM + optional multi-model blending. Highest quality for major new features" }
+    ],
+    multiSelect: false
+  },
+  {
+    question: "How ambitious should the plan be?",
+    header: "Ambition",
+    options: [
+      { label: "As scoped", description: "Plan the goal as stated; the 10x version stays a future-direction appendix (Recommended)" },
+      { label: "Ambitious", description: "Aim past the goal as asked: plan for the outcome behind it, a stretch target an outside check can verify, and methods borrowed from other fields. The scoped version ships first as the floor (adds ~5 min and one extra round of questions)" }
+    ],
+    multiSelect: false
+  }
+])
 ```
+
+A second opinion from other models on the finished plan (formerly "Triangulated plan") is the **Triangulate** option in the Step 5.6 refinement menu, and it works for every plan mode.
+
+**Ambitious**: run the ambition pass below first, then call `flywheel_plan` with the chosen mode plus `ambition: "ambitious"`. The tool injects the charter and the ambitious-plan requirements into every planner prompt (standard, each deep planner, and the duel pre-seed). If the charter file is missing, it returns `missing_prerequisite`; run the pass and call again. **As scoped**: omit `ambition`. A charter left on disk from an earlier run is then ignored.
+
+### Ambition pass (only when Ambition = "Ambitious")
+
+The pass rewrites the goal into an **ambition charter** before any planner sees it, so every planner and duel agent works toward the same higher target and competes only on how to reach it. It follows Felix Rieseberg's ["How to be more ambitious: A tutorial for humans with models"](https://felixrieseberg.com/how-to-be-more-ambitious-a-tutorial-for-humans-with-models/). Ambition has three axes there: altitude (the outcome behind the task), depth (how the best people in the field would do it) and range (methods from other fields). Specific hard goals beat "do your best", and a floor gives permission to fail.
+
+1. **Draft the charter.** Read the goal, the Phase 0.5 brainstorm if one exists (its 10x answer seeds the climb) and the repo profile. Then fill in each part of the template in step 3 in your own words.
+   - **Altitude.** Ask what the user wants to happen after this goal is done. Write three rungs: the goal as asked, the outcome it serves, and the standing outcome that agents could keep true without a human handing out tasks. For example, "fix this crash" climbs to "ship releases without crash regressions" and then to "keep the app crash-free". Name the access a higher rung needs, such as crash reports, a version-to-commit map, or machines to reproduce on.
+   - **Depth.** Answer four questions. What would a top professional in this field do here that wasn't asked for? What raw material would they start from instead of the digested version? Which specific methods and tools would they use (the instruments themselves, not their vocabulary)? What, other than you or the user, would show the result is right? Then set a stretch target about an order of magnitude past the obvious one, written as a number: asked for 5 s, aim for 200 ms. Treat it as reachable. Name one assumption the plan depends on and the raw-data check that could refute it, and one piece of new knowledge the work should produce.
+   - **Range.** Restate the deliverable as verbs. "A dashboard" becomes "show an on-call engineer what broke and why in under a minute". From the verbs, pick 3–5 fields whose methods apply, including one adversarial field such as a red team, a short seller or a forensic auditor. Write the concrete method each one contributes. Borrow the field's methods, not a persona: plan to do what a short seller does, not to write like one.
+   - **Floor.** Name the version that still ships if the stretch misses. Planners deliver it first. Also name an existence proof that the stretch is reachable, or write "none found" when it would be new.
+2. **Let the user pick the rung and the stretch target** in one call. Fill the option descriptions with the rungs and numbers you drafted:
+
+```
+AskUserQuestion(questions: [
+  {
+    question: "Which rung should this plan target?",
+    header: "Rung",
+    options: [
+      { label: "Standing outcome", description: "<rung 3 as drafted>: agents keep it true without a human handing out tasks (Recommended)" },
+      { label: "The outcome", description: "<rung 2 as drafted>: the result the goal exists to produce" },
+      { label: "As asked", description: "<rung 1>: keep the goal's scope, but still plan with depth and range" }
+    ],
+    multiSelect: false
+  },
+  {
+    question: "Which stretch target should the plan commit to?",
+    header: "Stretch",
+    options: [
+      { label: "Full stretch", description: "<drafted stretch number>, verified by <outside judge> (Recommended)" },
+      { label: "Halfway", description: "<a number between the obvious target and the stretch>" },
+      { label: "Obvious target", description: "<the target as first asked>; ambition comes from rung, depth and range only" }
+    ],
+    multiSelect: false
+  }
+])
+```
+
+3. **Write the charter** with the Write tool to `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>-ambition.md`, using the user's picks and this template:
+
+```markdown
+# Ambition charter — <goal title>
+
+**Date:** <YYYY-MM-DD>
+**Goal slug:** <goal-slug>
+**Source:** Step 5 ambition pass (skills/start/_planning.md)
+
+## Goal ladder
+1. **As asked:** <the goal as stated>
+2. **Outcome:** <the goal beyond the goal>
+3. **Standing outcome:** <what agents keep true without a human handing out tasks>
+- **Target rung:** <the user's pick>
+- **Access this rung needs:** <data, tools, machines or permissions agents need to own it>
+
+## Stretch target
+- **Stretch:** <the user's pick, as a number>
+- **Floor:** <the version that still ships if the stretch misses; delivered first>
+- **Existence proof:** <precedent showing it is reachable, or "none found">
+
+## Depth
+- **What a top professional would add:** <…>
+- **Raw material:** <…>
+- **Instruments:** <specific methods and tools>
+- **Assumption to challenge:** <belief + the raw-data check that could refute it>
+- **New knowledge:** <one finding the work should produce>
+
+## Range
+- **Verbs:** <the deliverable restated as verbs>
+- **Crew:** <one line per field: field → the concrete method it contributes; one adversarial field>
+
+## Outside judge
+- <for the stretch target and each climb: the benchmark, test, dataset or user metric that shows it worked; never a model's opinion of its own work>
+```
+
+4. Mention the charter path in one line, then call `flywheel_plan` with the chosen mode and `ambition: "ambitious"` in the same response. Don't end the turn between writing the charter and calling the tool.
+
+### Plan mode routes
 
 **When to pick Duel plan**: high-stakes architectural decisions where reasonable people disagree (rewrite vs. iterate, framework choice, data-model shape), contested existing code, or no obvious right answer. Cost is a budget choice, not a failure mode — see the high-stakes track in AGENTS.md. If only one of {cc, cod, gmi} is healthy at duel pre-flight, the plan tool downgrades to Deep automatically and emits a warning.
 
@@ -250,7 +340,11 @@ Pre-flight (MANDATORY before invoking the duel skill):
 
 When the duel completes, the synthesized plan lands at the `--output` path. Re-call `flywheel_plan({ cwd, mode: "duel", planFile: "<that path>" })` to register and advance phase to `awaiting_plan_approval`. Then jump directly to Step 5.55 (Plan alignment check) — the duel surfaces tensions the alignment check exists to surface; do NOT skip it.
 
-**planning-workflow**: Invoke `/planning-workflow` to get the exact review prompt, then run 4-5 sequential Codex review rounds via NTM. Each round spawns a fresh Codex pane with the current plan and the planning-workflow review prompt; after it completes, integrate its revisions with `ultrathink` before spawning the next round. Optionally follow with multi-model blending (additional NTM panes for Gemini/Pi perspectives). After all rounds converge:
+**planning-workflow**: Invoke `/planning-workflow` to get the exact review prompt, then run 4-5 sequential Codex review rounds via NTM. Each round spawns a fresh Codex pane with the current plan and the planning-workflow review prompt; after it completes, integrate its revisions with `ultrathink` before spawning the next round. Optionally follow with multi-model blending (additional NTM panes for Gemini/Pi perspectives).
+
+When Ambition is "Ambitious", run the ambition pass first. Open the draft plan with an `## Ambition charter` section built from the charter file, and paste the charter file into every review round's prompt so the rounds deepen the plan toward the stretch target instead of trimming it back. This route registers its plan through `planFile`, so `flywheel_plan` doesn't inject the charter for you.
+
+After all rounds converge:
 1. Write the final plan to `docs/plans/<date>-<goal-slug>-planning-workflow.md`.
 2. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-planning-workflow.md"`.
 3. Jump to Step 5.55 (Plan alignment check).
@@ -514,8 +608,6 @@ Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes,
 8. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-synthesized.md"`.
    **Never pass `planContent`** — large text over MCP stdio stalls the server. Always write to disk first.
 
-   **Triangulated plan mode** — if the user picked "Triangulated plan" at Step 5 entry, AFTER `flywheel_plan` returns, invoke `/multi-model-triangulation` with the synthesized plan file as input. Capture the triangulation report (agreements, disagreements, unique insights per model). Present the report alongside the Step 5.55 alignment questions so the user sees where external models diverge from the Opus synthesis before approving.
-
 9. **STOP — jump to Step 5.55 (Plan alignment check).** That step runs the qualifying-questions loop and only then hands off to Step 5.6 (Plan-ready gate). Do NOT skip 5.55 or proceed to bead creation without the user explicitly selecting "Create beads" from the Step 5.6 menu.
 
 ## Step 5.55: Plan alignment check (MANDATORY — both standard and deep)
@@ -689,14 +781,17 @@ AskUserQuestion(questions: [{
 ```
 AskUserQuestion(questions: [{
   question: "How should we refine the plan?",
-  header: "Refinement mode",
+  header: "Refine mode",
   options: [
     { label: "Internal (Opus agent)", description: "Spawn a fresh-context Opus agent to critique and revise in-process — fast, no external tools needed (Recommended)" },
-    { label: "planning-workflow (Codex via NTM)", description: "Invoke /planning-workflow — spawn a Codex review round via NTM with the exact review prompt, integrate revisions with ultrathink, repeat until convergence" }
+    { label: "planning-workflow (Codex via NTM)", description: "Invoke /planning-workflow — spawn a Codex review round via NTM with the exact review prompt, integrate revisions with ultrathink, repeat until convergence" },
+    { label: "Triangulate", description: "Invoke /multi-model-triangulation on the plan for a second opinion from other models, then resolve where they diverge" }
   ],
   multiSelect: false
 }])
 ```
+
+**Triangulate**: invoke `/multi-model-triangulation` with the plan file as input. Capture the triangulation report (agreements, disagreements, unique insights per model). Turn each disagreement into a qualifying question and run them through Step 5.55 so the user sees where external models diverge from the plan before approving. Then return to the "Plan ready" menu above.
 
 **planning-workflow (Codex via NTM)**: invoke `/planning-workflow` to get the exact review prompt. Spawn a Codex pane via NTM (`ntm spawn --type=cod`) with the current plan and the planning-workflow review prompt. Wait with `ntm --robot-wait`, then integrate the returned revisions in-place using `ultrathink` — be meticulous. Repeat until convergence (minor wording changes only) or 5 rounds. After integration, return to the "Plan ready" menu above.
 

@@ -36,6 +36,7 @@ export declare const TOOLS: ({
             };
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -163,6 +164,7 @@ export declare const TOOLS: ({
             goal?: undefined;
             force?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -212,6 +214,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -255,6 +258,12 @@ export declare const TOOLS: ({
                 description: string;
             };
             mode: {
+                type: string;
+                enum: string[];
+                default: string;
+                description: string;
+            };
+            ambition: {
                 type: string;
                 enum: string[];
                 default: string;
@@ -380,6 +389,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -441,6 +451,7 @@ export declare const TOOLS: ({
             goal?: undefined;
             force?: undefined;
             ideas?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -492,6 +503,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -562,6 +574,7 @@ export declare const TOOLS: ({
             goal?: undefined;
             force?: undefined;
             ideas?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -616,6 +629,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -682,6 +696,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -723,6 +738,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -774,6 +790,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -826,6 +843,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -886,6 +904,7 @@ export declare const TOOLS: ({
             goal?: undefined;
             force?: undefined;
             ideas?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -934,6 +953,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -1011,6 +1031,7 @@ export declare const TOOLS: ({
             goal?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -1060,6 +1081,7 @@ export declare const TOOLS: ({
             goal?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;
@@ -1111,6 +1133,7 @@ export declare const TOOLS: ({
             force?: undefined;
             ideas?: undefined;
             mode?: undefined;
+            ambition?: undefined;
             planFile?: undefined;
             planContent?: undefined;
             source?: undefined;

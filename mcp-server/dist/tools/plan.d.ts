@@ -8,6 +8,10 @@ import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
  * mode="duel":  Returns instructions to invoke /dueling-idea-wizards --mode=architecture for 2-agent
  *               adversarial planning (CC + COD/GMI cross-scoring). Synthesis lands at
  *               docs/plans/<date>-<slug>-duel.md and is registered via planFile on the next call.
+ *
+ * ambition is orthogonal to mode. "scoped" (default) plans the goal as asked; "ambitious" requires the
+ * charter at docs/brainstorms/<slug>-<date>-ambition.md and injects it, with fixed ambitious-plan
+ * requirements, into whichever generator the mode picks. planFile/planContent registration ignores it.
  */
 export declare function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpToolResult>;
 //# sourceMappingURL=plan.d.ts.map

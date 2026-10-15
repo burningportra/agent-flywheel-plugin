@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Ambitious planning.** The Step 5 plan menu asks a second question, **Ambition**: *As scoped* (today's behavior) or *Ambitious*. Ambitious runs an ambition pass based on Felix Rieseberg's "How to be more ambitious: A tutorial for humans with models". The pass climbs the goal ladder to the outcome behind the task (altitude), answers what a top professional would add, sets a numeric stretch target with an outside judge (depth), and borrows concrete methods from 3–5 other fields, including an adversarial one (range). It also names a floor that ships first. The user picks the rung and the stretch target, and the pass writes `docs/brainstorms/<slug>-<date>-ambition.md`. `flywheel_plan` takes a new `ambition: "scoped" | "ambitious"` argument that works with every mode. When it is `"ambitious"`, the tool injects the charter and eight ambitious-plan requirements into the standard prompt, every deep planner and the duel pre-seed, and returns `missing_prerequisite` when the charter is missing.
+
+### Changed
+
+- **The Step 5 plan menu fits AskUserQuestion's 4-option limit.** It had five options, so the call couldn't render as written. *Triangulated plan* moved to the Step 5.6 refinement menu as **Triangulate**, where it now works for every plan mode.
+
+### Fixed
+
+- **Brainstorm lookup no longer reads another goal's file.** `flywheel_plan` matched `docs/brainstorms/<slug>-*.md` by prefix, so goal `foo` could pick up `foo-bar-<date>.md`. It now matches `<slug>-<YYYY-MM-DD>.md` exactly.
+
 ## [3.19.1] - 2026-10-14
 
 Makes the Agent Mail guard block again, removes the per-Bash-call hook spawn, and cuts `flywheel_doctor` time by about two-thirds.
