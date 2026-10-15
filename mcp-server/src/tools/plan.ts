@@ -16,6 +16,8 @@ import {
 } from '../utils/path-safety.js';
 import { normalizeText } from '../utils/text-normalize.js';
 import { markdownFenceFor } from '../utils/markdown-fence.js';
+import { writeAtomic } from '../atomic-write.js';
+import { acquireBeadMutex, makeConcurrentWriteError, releaseBeadMutex } from '../mutex.js';
 
 const CODEX_SUBAGENT_TYPE = 'codex:codex-rescue' as const;
 
@@ -506,7 +508,7 @@ After the duel completes and you call \`flywheel_plan\` again with \`planFile\`,
     if (mem) memorySection = `\n## Prior Session Context\n${mem}\n`;
   } catch { /* CASS unavailable — proceed without */ }
 
-  const basePrompt = `You are a planning agent for an agentic coding workflow. Use ultrathink.
+  const plannerBrief = `You are a planning agent for an agentic coding workflow.
 
 **Goal:** ${goal}${constraintsSummary}
 **${profileSummary}**
@@ -523,43 +525,112 @@ Write a comprehensive implementation plan from your designated perspective. The 
 - Risk & mitigation
 - Target: 500-2000 lines of detailed content
 
-Focus deeply on your assigned perspective lens.
+Focus deeply on your assigned perspective lens.`;
 
-Use ultrathink.`;
+  const briefCandidate = join('.pi-flywheel', 'plans', planSlug, 'planner-brief.md');
+  const safeBrief = assertSafeRelativePath(briefCandidate, { root: cwd });
+  if (!safeBrief.ok) {
+    return errorResult(
+      'planning',
+      'invalid_input',
+      `Error: planner brief path rejected (${safeBrief.reason}): ${safeBrief.message}`,
+      { briefDocument: briefCandidate, reason: safeBrief.reason },
+      'Use a selected goal that produces a filesystem-safe plan slug.',
+    );
+  }
+  const briefDocument = safeBrief.value;
+  const briefMutexKey = `planner-brief:${cwd}:${planSlug}`;
+  if (!acquireBeadMutex(briefMutexKey)) {
+    return makeConcurrentWriteError('flywheel_plan', 'planning', briefMutexKey);
+  }
+  try {
+    const briefDirectories = [
+      '.pi-flywheel',
+      join('.pi-flywheel', 'plans'),
+      join('.pi-flywheel', 'plans', planSlug),
+    ];
+    for (const relativeDirectory of briefDirectories) {
+      const absoluteDirectory = join(cwd, relativeDirectory);
+      if (!existsSync(absoluteDirectory)) mkdirSync(absoluteDirectory, { recursive: true });
+      const stat = lstatSync(absoluteDirectory);
+      const resolved = resolveRealpathWithinRoot(relativeDirectory, {
+        root: cwd,
+        label: 'planner brief directory',
+        rootLabel: 'cwd',
+      });
+      if (stat.isSymbolicLink() || !stat.isDirectory() || !resolved.ok) {
+        return errorResult(
+          'planning',
+          'invalid_input',
+          `Error: planner brief directory rejected: ${relativeDirectory}`,
+          { briefDocument, relativeDirectory },
+          'Remove symlinks or non-directory entries from .pi-flywheel/plans and retry.',
+        );
+      }
+    }
+
+    for (const relativeTarget of [briefDocument, `${briefDocument}.tmp`]) {
+      const absoluteTarget = join(cwd, relativeTarget);
+      try {
+        const stat = lstatSync(absoluteTarget);
+        const resolved = resolveRealpathWithinRoot(relativeTarget, {
+          root: cwd,
+          label: 'planner brief target',
+          rootLabel: 'cwd',
+        });
+        if (stat.isSymbolicLink() || !stat.isFile() || !resolved.ok) {
+          return errorResult(
+            'planning',
+            'invalid_input',
+            `Error: planner brief target rejected: ${relativeTarget}`,
+            { briefDocument, relativeTarget },
+            'Remove symlinks or non-file entries at the planner brief target and retry.',
+          );
+        }
+      } catch (err: unknown) {
+        const missing = typeof err === 'object' && err !== null && 'code' in err && err.code === 'ENOENT';
+        if (!missing) throw err;
+      }
+    }
+
+    await writeAtomic(join(cwd, briefDocument), `${plannerBrief.trimEnd()}\n`);
+  } finally {
+    releaseBeadMutex(briefMutexKey);
+  }
 
   const geminiAvailable = await isGeminiPlannerCliAvailable(exec, { cwd, signal });
   const dynamicModels = getDeepPlanModels({ geminiAvailable });
+
+  const plannerTask = (lens: string): string =>
+    `Read \`${briefDocument}\` first. The path is relative to the project checkout. Use ultrathink. Your lens: ${lens}`;
 
   const planAgents: PlanAgent[] = [
     {
       runner: 'agent-model',
       model: dynamicModels.correctness,
       perspective: 'correctness',
-      task: `${basePrompt}
-
-## Your perspective: CORRECTNESS
-Focus on: type safety, edge cases, error handling, validation, data integrity, invariants.
-Ask: What can go wrong? What are the failure modes? Are the interfaces correct?`,
+      task: plannerTask(
+        'CORRECTNESS — Focus on type safety, edge cases, error handling, validation, data integrity, and invariants. ' +
+        'Ask what can go wrong, which failure modes matter, and whether the interfaces are correct.',
+      ),
     },
     {
       runner: 'agent-subagent',
       subagent_type: CODEX_SUBAGENT_TYPE,
       perspective: 'robustness',
-      task: `${basePrompt}
-
-## Your perspective: ROBUSTNESS
-Focus on: performance, scalability, retry logic, timeouts, graceful degradation, observability.
-Ask: What happens under load? What are the operational concerns? How does it fail gracefully?`,
+      task: plannerTask(
+        'ROBUSTNESS — Focus on performance, scalability, retry logic, timeouts, graceful degradation, and observability. ' +
+        'Ask what happens under load, which operational concerns matter, and how the system fails gracefully.',
+      ),
     },
     {
       runner: 'agent-model',
       model: dynamicModels.ergonomics,
       perspective: 'ergonomics',
-      task: `${basePrompt}
-
-## Your perspective: ERGONOMICS
-Focus on: API design, developer experience, naming, documentation, discoverability, simplicity.
-Ask: Is it easy to use correctly? Hard to misuse? Does it follow existing patterns in the codebase?`,
+      task: plannerTask(
+        'ERGONOMICS — Focus on API design, developer experience, naming, documentation, discoverability, and simplicity. ' +
+        'Ask whether it is easy to use correctly, hard to misuse, and consistent with existing codebase patterns.',
+      ),
     },
   ];
 
@@ -568,13 +639,10 @@ Ask: Is it easy to use correctly? Hard to misuse? Does it follow existing patter
     planAgents.push({
       ...dynamicModels.freshPerspective,
       perspective: 'fresh-perspective',
-      task: `${basePrompt}
-
-## Your perspective: FRESH PERSPECTIVE
-You are a fresh pair of eyes who has not seen the other plans.
-Challenge shared assumptions. Propose the simplest alternative that satisfies the goal.
-Flag anything under-specified, contradictory, or likely to cause confusion during implementation.
-Question every architectural choice: is there a simpler way? A more standard approach? A hidden dependency?`,
+      task: plannerTask(
+        'FRESH PERSPECTIVE — Challenge shared assumptions, propose the simplest alternative that satisfies the goal, ' +
+        'flag under-specified or contradictory work, and question every architectural choice for simpler standard approaches or hidden dependencies.',
+      ),
     });
   }
 
@@ -594,6 +662,7 @@ Question every architectural choice: is there a simpler way? A more standard app
     brainstormDocument: inputs.brainstorm?.path,
     ambition: inputs.ambition,
     ambitionDocument,
+    briefDocument,
     planAgents,
     synthesisModel: dynamicModels.synthesis,
     instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true and bootstrap Agent Mail with macro_start_session.${geminiDispatch} Every planner writes to docs/plans/<date>-<perspective>.md. Agent-routed planners send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
@@ -625,6 +694,7 @@ The synthesis must be BETTER than any individual plan, not a lowest-common-denom
         constraints: state.constraints,
         ambition: payload.ambition,
         ambitionDocument: payload.ambitionDocument,
+        briefDocument: payload.briefDocument,
         planAgents,
         synthesisModel: payload.synthesisModel,
         instructions: payload.instructions,

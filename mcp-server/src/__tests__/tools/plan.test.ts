@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPlan } from '../../tools/plan.js';
@@ -12,7 +12,13 @@ vi.mock('../../memory.js', () => ({ readMemory: () => '' }));
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function makeCtx(stateOverrides: Partial<FlywheelState> = {}, cwd = '/fake/cwd') {
+const defaultCwd = mkdtempSync(join(tmpdir(), 'plan-default-'));
+
+afterAll(() => {
+  rmSync(defaultCwd, { recursive: true, force: true });
+});
+
+function makeCtx(stateOverrides: Partial<FlywheelState> = {}, cwd = defaultCwd) {
   const exec = createMockExec();
   const state = makeState({ selectedGoal: 'Add caching layer', ...stateOverrides });
   const saved: FlywheelState[] = [];
@@ -420,6 +426,144 @@ describe('runPlan', () => {
     ]);
   });
 
+  it('writes shared planner context once and returns short self-contained tasks', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'plan-brief-'));
+    try {
+      const { ctx } = makeCtx({}, cwd);
+      const result = await runPlan(ctx, { cwd, mode: 'deep' });
+      const structured = result.structuredContent as {
+        data: { briefDocument: string; planAgents: Array<{ perspective: string; task: string }> };
+      };
+
+      expect(structured.data.briefDocument).toBe(
+        '.pi-flywheel/plans/add-caching-layer/planner-brief.md',
+      );
+      const brief = readFileSync(join(cwd, structured.data.briefDocument), 'utf8');
+      expect(brief).toContain('**Goal:** Add caching layer');
+      expect(brief).toContain('## Plan requirements');
+      expect(brief).not.toContain('Your perspective:');
+      expect(brief).not.toContain('Use ultrathink.');
+
+      for (const agent of structured.data.planAgents) {
+        expect(agent.task).toContain(`Read \`${structured.data.briefDocument}\` first.`);
+        expect(agent.task).toContain('Your lens:');
+        expect(agent.task.match(/Use ultrathink\./g)).toHaveLength(1);
+        expect(agent.task).not.toContain('\n');
+        expect(agent.task).not.toContain('**Goal:** Add caching layer');
+        expect(agent.task).not.toContain('## Plan requirements');
+      }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('overwrites the same planner brief on repeated deep calls', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'plan-brief-overwrite-'));
+    try {
+      const first = await runPlan(
+        makeCtx({ constraints: ['FIRST_CONTEXT'] }, cwd).ctx,
+        { cwd, mode: 'deep' },
+      );
+      const firstData = first.structuredContent as { data: { briefDocument: string } };
+      expect(firstData.data.briefDocument).toBe(
+        '.pi-flywheel/plans/add-caching-layer/planner-brief.md',
+      );
+
+      const second = await runPlan(
+        makeCtx({ constraints: ['SECOND_CONTEXT'] }, cwd).ctx,
+        { cwd, mode: 'deep' },
+      );
+      const secondData = second.structuredContent as { data: { briefDocument: string } };
+      expect(secondData.data.briefDocument).toBe(firstData.data.briefDocument);
+
+      const brief = readFileSync(join(cwd, secondData.data.briefDocument), 'utf8');
+      expect(brief).toContain('SECOND_CONTEXT');
+      expect(brief).not.toContain('FIRST_CONTEXT');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps artifact-free scoped deep output byte-stable across calls', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'plan-brief-stable-'));
+    try {
+      const first = await runPlan(makeCtx({}, cwd).ctx, { cwd, mode: 'deep' });
+      const firstData = first.structuredContent as { data: { briefDocument: string } };
+      const firstBrief = readFileSync(join(cwd, firstData.data.briefDocument), 'utf8');
+
+      const second = await runPlan(makeCtx({}, cwd).ctx, { cwd, mode: 'deep' });
+      const secondData = second.structuredContent as { data: { briefDocument: string } };
+      const secondBrief = readFileSync(join(cwd, secondData.data.briefDocument), 'utf8');
+
+      expect(second.content[0].text).toBe(first.content[0].text);
+      expect(second.structuredContent).toEqual(first.structuredContent);
+      expect(secondBrief).toBe(firstBrief);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a planner-brief directory symlink that escapes cwd', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'plan-brief-symlink-'));
+    const outside = mkdtempSync(join(tmpdir(), 'plan-brief-outside-'));
+    try {
+      mkdirSync(join(cwd, '.pi-flywheel', 'plans'), { recursive: true });
+      symlinkSync(outside, join(cwd, '.pi-flywheel', 'plans', 'add-caching-layer'));
+
+      const result = await runPlan(makeCtx({}, cwd).ctx, { cwd, mode: 'deep' });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        data: { error: { code: 'invalid_input' } },
+      });
+      expect(existsSync(join(outside, 'planner-brief.md'))).toBe(false);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a symlink planted at the atomic planner-brief temp path', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'plan-brief-temp-symlink-'));
+    const outside = mkdtempSync(join(tmpdir(), 'plan-brief-temp-outside-'));
+    const outsideFile = join(outside, 'target.md');
+    try {
+      const briefDir = join(cwd, '.pi-flywheel', 'plans', 'add-caching-layer');
+      mkdirSync(briefDir, { recursive: true });
+      writeFileSync(outsideFile, 'OUTSIDE_SENTINEL');
+      symlinkSync(outsideFile, join(briefDir, 'planner-brief.md.tmp'));
+
+      const result = await runPlan(makeCtx({}, cwd).ctx, { cwd, mode: 'deep' });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        data: { error: { code: 'invalid_input' } },
+      });
+      expect(readFileSync(outsideFile, 'utf8')).toBe('OUTSIDE_SENTINEL');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a concurrent write to the same planner brief with a retryable error', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'plan-brief-concurrent-'));
+    try {
+      const [first, second] = await Promise.all([
+        runPlan(makeCtx({}, cwd).ctx, { cwd, mode: 'deep' }),
+        runPlan(makeCtx({}, cwd).ctx, { cwd, mode: 'deep' }),
+      ]);
+      const results = [first, second];
+      expect(results.filter((result) => result.isError)).toHaveLength(1);
+      expect(results.find((result) => result.isError)?.structuredContent).toMatchObject({
+        data: { error: { code: 'concurrent_write', retryable: true } },
+      });
+      expect(results.filter((result) => !result.isError)).toHaveLength(1);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('adds a fresh-perspective NTM gmi planner when the Gemini CLI signal is healthy', async () => {
     const { ctx } = makeCtx();
     const exec = createMockExec([
@@ -461,7 +605,7 @@ describe('runPlan', () => {
 
     expect(exec).toHaveBeenCalledWith('which', ['gemini'], {
       timeout: 1500,
-      cwd: '/fake/cwd',
+      cwd: defaultCwd,
       signal,
     });
   });
@@ -490,7 +634,7 @@ describe('runPlan', () => {
 
     const structured = result.structuredContent as { data: { planAgents: Array<{ task: string }> } };
     for (const agent of structured.data.planAgents) {
-      expect(agent.task).toContain('Use ultrathink.');
+      expect(agent.task.match(/Use ultrathink\./g)).toHaveLength(1);
     }
   });
 
@@ -632,7 +776,7 @@ describe('runPlan', () => {
       expect(structured.data.brainstormDocument).toBeUndefined();
     });
 
-    it('deep mode threads brainstorm into every planner agent prompt', async () => {
+    it('deep mode writes the brainstorm into the shared planner brief', async () => {
       writeBrainstorm('add-caching-layer', '2026-04-23', '# Brainstorm\n\nSmallest: just LRU.');
 
       const { ctx } = makeCtx({}, tmpDir);
@@ -640,12 +784,16 @@ describe('runPlan', () => {
       const result = await runPlan(ctx, { cwd: tmpDir, mode: 'deep' });
 
       const structured = result.structuredContent as {
-        data: { brainstormDocument?: string; planAgents: Array<{ task: string }> };
+        data: { brainstormDocument?: string; briefDocument: string; planAgents: Array<{ task: string }> };
       };
       expect(structured.data.brainstormDocument).toBe('docs/brainstorms/add-caching-layer-2026-04-23.md');
+      const brief = readFileSync(join(tmpDir, structured.data.briefDocument), 'utf8');
+      expect(brief).toContain('Phase 0.5 Brainstorm');
+      expect(brief).toContain('Smallest: just LRU.');
       for (const agent of structured.data.planAgents) {
-        expect(agent.task).toContain('Phase 0.5 Brainstorm');
-        expect(agent.task).toContain('Smallest: just LRU.');
+        expect(agent.task).toContain(structured.data.briefDocument);
+        expect(agent.task).not.toContain('Phase 0.5 Brainstorm');
+        expect(agent.task).not.toContain('Smallest: just LRU.');
       }
     });
 
@@ -730,6 +878,7 @@ describe('runPlan', () => {
       ambition?: string;
       ambitionDocument?: string;
       brainstormDocument?: string;
+      briefDocument: string;
       planAgents: Array<{ task: string }>;
       synthesisPrompt: string;
       duelCommand: string;
@@ -841,7 +990,7 @@ describe('runPlan', () => {
       },
     );
 
-    it('deep ambitious threads the charter into every planner and the synthesis prompt', async () => {
+    it('deep ambitious writes the charter into the shared brief and synthesis prompt', async () => {
       writeArtifact(CHARTER_PATH, '# Charter\n\nFloor: cache reads only.');
 
       const { ctx } = makeCtx({}, tmpDir);
@@ -849,9 +998,14 @@ describe('runPlan', () => {
 
       const data = dataOf(result);
       expect(data.planAgents.length).toBeGreaterThanOrEqual(3);
+      const brief = readFileSync(join(tmpDir, data.briefDocument), 'utf8');
+      expect(brief).toContain('Floor: cache reads only.');
+      expect(brief).toContain('### Ambitious plan requirements');
+      expect(brief).not.toContain('Phase 0.5 Brainstorm');
       for (const agent of data.planAgents) {
-        expect(agent.task).toContain('Floor: cache reads only.');
-        expect(agent.task).toContain('### Ambitious plan requirements');
+        expect(agent.task).toContain(data.briefDocument);
+        expect(agent.task).not.toContain('Floor: cache reads only.');
+        expect(agent.task).not.toContain('### Ambitious plan requirements');
         expect(agent.task).not.toContain('Phase 0.5 Brainstorm');
       }
       expect(data.synthesisPrompt).toContain('Do not average ambition down.');
