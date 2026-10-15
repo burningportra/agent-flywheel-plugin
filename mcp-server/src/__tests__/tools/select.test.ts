@@ -167,6 +167,45 @@ describe('runSelect', () => {
     expect(text).toContain('br create');
     expect(text).toContain('br dep add <downstream> <upstream>');
     expect(text).not.toContain('--depends-on');
+    expect(text).not.toContain('## Provenance');
+  });
+
+  it('includes the selected duel idea provenance in the direct-to-beads prompt', async () => {
+    const { ctx } = makeCtx({
+      candidateIdeas: [{
+        id: 'durable-provenance',
+        title: 'Durable provenance',
+        description: 'Carry duel evidence into implementation.',
+        category: 'reliability',
+        effort: 'medium',
+        impact: 'high',
+        rationale: 'Reviewers need the adversarial context.',
+        tier: 'top',
+        provenance: {
+          source: 'duel',
+          runAt: '2026-10-15T14:22:00Z',
+          agentScores: { cc: 880, cod: 910 },
+          contested: false,
+          survivingCritique: 'The goal still needs a rollback path.',
+        },
+      }],
+    });
+
+    const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Durable provenance' });
+    const text = result.content[0].text;
+
+    expect(text).toContain('## Provenance');
+    expect(text).toContain('- **Agent scores:** cc=880, cod=910, gmi=<0-1000 or n/a>');
+    expect(text).toContain('The goal still needs a rollback path.');
+  });
+
+  it('clears a stale plan source before rendering a new selection', async () => {
+    const { ctx, state } = makeCtx({ planSource: 'duel', candidateIdeas: [] });
+
+    const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Ordinary task' });
+
+    expect(state.planSource).toBeUndefined();
+    expect(result.content[0].text).not.toContain('## Provenance');
   });
 
   it('works without a repoProfile on state', async () => {

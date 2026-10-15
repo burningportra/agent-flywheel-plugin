@@ -1,6 +1,7 @@
 import type { ToolContext, McpToolResult, SelectArgs } from '../types.js';
 import { createLogger } from '../logger.js';
 import { beadCreationPrompt, formatRepoProfile, makeChoiceOption, makeNextToolStep, makeToolError, makeToolResult } from './shared.js';
+import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
 
 const log = createLogger('select');
 
@@ -29,6 +30,7 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
   state.selectedGoal = args.goal.trim();
   state.phase = 'planning';
   state.constraints = state.constraints || [];
+  state.planSource = undefined;
 
   // ── v3.13.0 outcome-grading: cycle boundary reset ──
   // Capture the git HEAD as the cycle-start SHA. The `gradeOutcome` 4-tier
@@ -49,6 +51,7 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
   const constraintsSummary = state.constraints.length > 0
     ? `\nConstraints: ${state.constraints.join(', ')}`
     : '';
+  const provenance = resolveDuelProvenanceInstructions(state);
 
   const text = `**Goal selected:** "${state.selectedGoal}"${constraintsSummary}
 
@@ -68,7 +71,7 @@ Skip planning — create beads directly using \`br create\` and \`br dep add\`, 
 **Ask the user which workflow they prefer, then proceed.**
 
 ### Bead creation instructions (for Option C)
-${beadCreationPrompt(state.selectedGoal, repoContext, state.constraints)}`;
+${beadCreationPrompt(state.selectedGoal, repoContext, state.constraints, provenance)}`;
 
   return makeToolResult(text, {
     tool: 'flywheel_select',

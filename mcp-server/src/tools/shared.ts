@@ -209,12 +209,14 @@ export function formatRepoProfile(profile: import('../types.js').RepoProfile): s
 export function beadCreationPrompt(
   goal: string,
   repoContext: string,
-  constraints: string[]
+  constraints: string[],
+  provenance?: string,
 ): string {
   return buildBeadCreationPrompt({
     goal,
     repoContext,
     constraints,
+    provenance,
   });
 }
 

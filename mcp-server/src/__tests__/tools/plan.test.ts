@@ -779,6 +779,16 @@ describe('runPlan', () => {
       expect(dataOf(result).duelCommand).not.toContain('ambition');
     });
 
+    it('describes server-built provenance behavior without claiming approve autoinjects it', async () => {
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'duel' });
+      const text = result.content[0].text;
+
+      expect(text).toContain('bead-creation prompt');
+      expect(text).toContain('Never invent scores');
+      expect(text).not.toContain('flywheel_approve_beads tool autoinjects');
+    });
+
     it('picks the latest-dated charter when several exist', async () => {
       writeArtifact('docs/brainstorms/add-caching-layer-2026-04-20-ambition.md', '# OLD-CHARTER');
       writeArtifact('docs/brainstorms/add-caching-layer-2026-04-26-ambition.md', '# NEWEST-CHARTER');

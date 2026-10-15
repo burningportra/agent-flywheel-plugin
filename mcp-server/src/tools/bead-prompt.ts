@@ -1,4 +1,5 @@
 import { listTemplates } from '../bead-templates.js';
+import { markdownFenceFor } from '../utils/markdown-fence.js';
 
 export interface BeadCreationPromptOpts {
   goal: string;
@@ -26,7 +27,10 @@ export function buildBeadCreationPrompt(opts: BeadCreationPromptOpts): string {
 
   if (opts.planPath) {
     const preview = opts.planPreview
-      ? `\n\n### Plan preview\n\`\`\`\n${opts.planPreview}\n\`\`\``
+      ? (() => {
+          const fence = markdownFenceFor(opts.planPreview);
+          return `\n\n### Plan preview\n${fence}markdown\n${opts.planPreview}\n${fence}`;
+        })()
       : '';
     sections.push(`## Approved plan\nRead the full plan from \`${opts.planPath}\` before creating beads.${preview}`);
   }

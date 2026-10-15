@@ -11,6 +11,7 @@ import { parseBrList } from '../parsers.js';
 import { computeHotspotMatrix, type HotspotInputBead } from '../plan-simulation.js';
 import { createLogger } from '../logger.js';
 import { normalizeText } from '../utils/text-normalize.js';
+import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
 
 const log = createLogger('approve');
 
@@ -515,7 +516,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
   state.planRefinementRound = 0;
   saveState(state);
 
-  const beadPrompt = buildPlanToBeadsPrompt(plan, state.selectedGoal!, planPath);
+  const beadPrompt = buildPlanToBeadsPrompt(plan, state.selectedGoal!, planPath, state);
 
   return makeApproveResult(
     `**Plan approved!** (${lineCount} lines)${sizeGate}\n\n**NEXT: Create beads from the plan using \`br create\` and \`br dep add\`, then call \`flywheel_approve_beads\` with action="start" to launch implementation.**\n\n---\n\n${beadPrompt}`,
@@ -533,12 +534,19 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
   );
 }
 
-function buildPlanToBeadsPrompt(plan: string, goal: string, planPath: string): string {
+function buildPlanToBeadsPrompt(
+  plan: string,
+  goal: string,
+  planPath: string,
+  state: ToolContext['state'],
+): string {
   const preview = plan.slice(0, 2000) + (plan.length > 2000 ? '\n...(read full plan from file)' : '');
+  const provenance = resolveDuelProvenanceInstructions(state, { path: planPath, content: plan });
   return buildBeadCreationPrompt({
     goal,
     planPath,
     planPreview: preview,
+    provenance,
     nextAction: `After creating all beads, call \`flywheel_approve_beads\` with action="start" to review and launch.`,
   });
 }

@@ -12,6 +12,7 @@ import {
   resolveRealpathWithinRoot,
 } from '../utils/path-safety.js';
 import { normalizeText } from '../utils/text-normalize.js';
+import { markdownFenceFor } from '../utils/markdown-fence.js';
 
 type PlannerArtifact = { path: string; content: string };
 
@@ -88,12 +89,6 @@ const BRAINSTORM_SCOPE_ANCHOR: Record<PlanAmbition, string> = {
   scoped: 'Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.',
   ambitious: "The ambition charter below supersedes this scope anchor: treat the smallest version as the floor, delivered first, and the charter's stretch target as the goal.",
 };
-
-function markdownFenceFor(content: string): string {
-  const longestRun = (content.match(/`+/g) ?? [])
-    .reduce((longest, run) => Math.max(longest, run.length), 0);
-  return '`'.repeat(Math.max(3, longestRun + 1));
-}
 
 function formatBrainstormSection(brainstorm: PlannerArtifact, ambition: PlanAmbition): string {
   const fence = markdownFenceFor(brainstorm.content);
@@ -447,7 +442,7 @@ This mode runs two independent planning agents (Claude Code + Codex, plus Gemini
    /dueling-idea-wizards --mode=architecture --top=3 --rounds=1 --focus="${goal.replace(/"/g, '\\"')}" --output=${planPath}
    \`\`\`
 3. **Synthesis pickup** — when the duel completes, the skill writes its final report to the \`--output\` path. The orchestrator should then call \`flywheel_plan({ cwd, mode: "duel", planFile: "${planPath}" })\` to register the synthesized plan and advance phase to \`awaiting_plan_approval\`.
-4. **Provenance carry-through** — when beads are created from this plan in Step 5.5, every bead's body MUST include a \`## Provenance\` block with: \`Source: dueling-wizards (mode=architecture)\`, agent cross-scores, the strongest surviving critique, and (if Phase 6.75 ran) the steelman one-liner. The flywheel_approve_beads tool autoinjects this when state.planSource = "duel".
+4. **Provenance carry-through** — when beads are created from this plan in Step 5.5, the server-built bead-creation prompt includes the \`## Provenance\` template. It fills values that parse cleanly from the registered duel report and leaves explicit placeholders for missing values. Read those values from the report before running \`br create\`. Never invent scores.
 
 ### When to use this vs. deep plan
 
