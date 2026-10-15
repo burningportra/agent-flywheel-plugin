@@ -95,7 +95,7 @@ Current-tool index (HEAD = v3.20.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_profile`** — repo profile with git-HEAD-keyed cache. Always call first.
 - **`flywheel_remediate({ checkName })`** — apply canonical fix for a failing doctor check (per-check mutex, `dry_run` default).
 - **`flywheel_rescue({ phase, beadId?, errorEnvelope?, notes? })`** — build a Codex rescue packet and prompt for a stalled plan, implementation, or review phase, materialize its artifact, and store the canonical event in CASS.
-- **`flywheel_review`** — 5 fresh-eyes reviewers per risky bead, or duel for p0 / security beads.
+- **`flywheel_review`** — 5 fresh-eyes reviewers per risky bead, or duel for p0 / security beads. Headless coordinators finish with `action: "report"`, `findingCount`, and `crashed`; clean reports return exit code 0, findings return `review_headless_findings` with `details.exitCode: 1`, and reviewer crashes use exit code 2.
 - **`flywheel_select({ goal })`** — set selected goal and transition to planning phase.
 - **`flywheel_verify_beads`** — verify closed beads have valid completion evidence; reads `.pi-flywheel/completion/<id>.json`.
 - **`flywheel_synthesize_rubric({ action })`** — v3.13.0; synthesize / validate / edit / regenerate the cycle-level outcome rubric at `.pi-flywheel/plans/<slug>/rubric.md`. Called from `_planning.md` Step 5.6.5 after the operator picks Create beads.
