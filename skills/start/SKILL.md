@@ -35,13 +35,15 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 > | Saturation suite | `agent-flywheel:start_saturation` | `_saturation.md` | (saturation-pipeline routing) |
 > | In-flight resume | `agent-flywheel:start_inflight_prompt` | `_inflight_prompt.md` | (auto-swarm) |
 >
-> Why MCP-first: one round-trip, served from the bundled body at `mcp-server/dist/skills.bundle.json` with `srcSha256` integrity check + transparent disk fallback. `Read` is two-step (path resolution then file I/O) and burns more context on listing noise.
->
-> **Skill-stub recovery.** If invoking the `Skill` tool itself ever returns just the description / pointer text instead of the canonical body (the harness sometimes ack's instead of inlining for already-loaded skills), do NOT fall back to `Read` — call `flywheel_get_skill({ name: "agent-flywheel:start" })` for the entry-point or the relevant `start_<phase>` for sub-phases. Single MCP round-trip, served from the same bundle, no path-resolution noise.
+> **Skill-stub recovery.** If invoking the `Skill` tool itself ever returns just the description / pointer text instead of the canonical body (the harness sometimes ack's instead of inlining for already-loaded skills), treat it as a miss. Call `flywheel_get_skill({ name: "agent-flywheel:start" })` for the entry-point or the relevant `start_<phase>` for sub-phases.
 >
 > Fetch the body **before** executing that phase. Do NOT guess or improvise — the sub-files contain critical gates, edge-case handling, and `AskUserQuestion` templates.
 >
 > **Disk fallback.** If `flywheel_get_skill` errors (e.g. `FW_SKILL_BUNDLE=off`, missing bundle, MCP transport down), then `Read skills/start/_<phase>.md` from disk. Existing `Read` references throughout this skill are valid fallbacks — but try MCP first.
+
+> ## ⚠️ UNIVERSAL RULE 4 — route tool failures by structured error code
+>
+> Route every flywheel tool failure on `result.structuredContent?.data?.error?.code` (`FlywheelErrorCode`), never on human-readable error text. When `data.error.hint` is present, render it inline for every retry, recovery choice, or handoff. Phase files define only their local codes and recovery actions.
 
 ## Step 0: Opening Ceremony
 
@@ -134,12 +136,6 @@ AskUserQuestion(questions: [{
   multiSelect: false
 }])
 ```
-
-**Default recommendation rules:**
-- **Ambiguous** USER_INPUT → mark **Grill with docs** as Recommended (already set above).
-- **Goal-shaped but operator picked Refine first** → Grill with docs Recommended.
-- **Concrete ≤300 chars** (caller already skipped this menu) → never show this menu.
-- If the goal is clearly a full product design (UI-heavy, multi-surface, greenfield), the operator may still pick Full brainstorm.
 
 **Routing:**
 
@@ -276,6 +272,8 @@ Route the choice immediately: **Inspect first** → show `git worktree list --po
 
 Build the menu options dynamically based on detected state:
 
+After printing the selected state's menu block, append this glossary line once: `Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol`.
+
 **If a previous session exists** (checkpoint found with non-idle phase):
 
 Print this block first (per the menu-visibility rule below):
@@ -303,7 +301,6 @@ More entry points (type the label into "Other" or run the slash command directly
   • Setup               — /agent-flywheel:flywheel-setup
   • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
 
-Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
 
 Then call:
@@ -313,7 +310,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — cc:cod:gem 2:2:2 model-diversified swarm (substitution ladder gmi→cod→pi→cc per AGENTS.md NTM pane priority; §3a model-config gate auto-downgrades broken lanes), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Auto-swarm (Recommended)", description: "Resume '<goal>' from <phase> with the canonical in-flight swarm route in Step 0e" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends to the current bead set after a drift confirmation. Does NOT discard the checkpoint" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps" }
@@ -348,7 +345,6 @@ More entry points (type the label into "Other" or run the slash command directly
   • Setup               — /agent-flywheel:flywheel-setup
   • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
 
-Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
 
 Then call:
@@ -358,7 +354,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Universal in-flight resume — cc:cod:gem 2:2:2 model-diversified swarm (substitution ladder gmi→cod→pi→cc per AGENTS.md NTM pane priority; §3a model-config gate auto-downgrades broken lanes), 4-min looper, bv-triaged dispatch, stalled-bead recovery, auto code-review on completion. See skills/start/_inflight_prompt.md" },
+    { label: "Auto-swarm (Recommended)", description: "Dispatch the <N> open beads with the canonical in-flight swarm route in Step 0e" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends new beads to the existing set without discarding them" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then Step 5.45 surfaces (Validate / Approve / Refine / Scrap); validated gaps merge into the current bead set" }
@@ -396,7 +392,6 @@ More entry points (type the label into "Other" or run the slash command directly
   • Quick fix           — /agent-flywheel:flywheel-fix
   • Auto-swarm          — in-flight resume; only meaningful with active beads
 
-Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol
 ```
 
 Then call (when `IS_FIRST_RUN === true`, **substitute** the "Take the 5-min tour" row for whichever existing option would otherwise have been Recommended — keep the 4-option cap):
@@ -455,7 +450,7 @@ When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-
 
 `flywheel_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, branch on `result.structuredContent?.data?.error?.code`; if it is `missing_prerequisite`, bootstrap first and only then retry approve.
 
-Use structured code branches (`FlywheelErrorCode`) for this and all other tool failures:
+Apply Universal Rule 4. For this bootstrap:
 
 ```ts
 const code = result.structuredContent?.data?.error?.code;
@@ -464,10 +459,6 @@ if (code === "missing_prerequisite") {
   return await flywheel_approve_beads({ cwd, action: "start" });
 }
 ```
-
-Never parse human-readable error text to route control flow. Route only on structured `data.error.code`.
-
-**Always surface `error.hint` when present.** Every `FlywheelErrorCode` throw site carries a one-sentence recovery action in `result.structuredContent?.data?.error?.hint`. When handling a structured error — whether you route on `code`, retry, or hand off to the user — render the hint inline (e.g. `Hint: <error.hint>`). Do not drop it silently; it is the user's next step.
 
 Bootstrap it before any approve call:
 
@@ -769,16 +760,8 @@ AskUserQuestion(questions: [{
 
 Once the user chooses, call `flywheel_select` with `cwd` and `goal` set to their choice.
 
-## Steps 5–12: Phase execution (load instructions on demand)
+## Steps 5–12: Phase execution
 
-Each remaining phase has detailed instructions in a sub-file. **Read the file when you reach that phase.**
-
-| When you reach... | Read this file | What it covers |
-|-------------------|----------------|----------------|
-| Step 5 (planning) | `skills/start/_planning.md` | Planning mode selection, deep plan orchestration, plan alignment check (5.55), plan-ready gate (5.6) |
-| Step 5.5 (bead creation) or Step 6 (approval) | `skills/start/_beads.md` | Bead creation from plan, coverage/dedup checks, quality scoring, launch gate |
-| Step 7 (implementation) | `skills/start/_implement.md` | Swarm scaling, agent spawning, Agent Mail bootstrap, validation gates, stuck-swarm diagnostics |
-| Step 8 (review) or Step 9 (loop) | `skills/start/_review.md` | Wave-completion gate, review modes, verify + compliance audit, test-coverage sweep (9.25), UI polish pass (9.4) |
-| Step 9.5 (wrap-up) or later | `skills/start/_wrapup.md` | Commit review, docs update, version bump, rebuild, CASS learnings (10), skill refinement (11), post-flywheel menu (12) |
+Apply Universal Rule 3 at each phase boundary.
 
 **Do NOT skip phases or exit the workflow early.** The flywheel's value comes from completing the full cycle: scan → discover → plan → implement → review → verify → wrap-up → learn → refine.
