@@ -386,6 +386,69 @@ describe('runApprove', () => {
     });
   });
 
+  it('does not claim ready beads from another goal program', async () => {
+    const goalALabel = 'flywheel-goal:goal-a:ccba1a8c';
+    const goalBLabel = 'flywheel-goal:goal-b:9406de47';
+    const goalAReady = makeBead({
+      id: 'goal-a-ready',
+      title: 'Goal A ready',
+      description: 'Implement goal A.\nHOW: src/goal-a.ts',
+      labels: [goalALabel],
+    });
+    const goalABlocked = makeBead({
+      id: 'goal-a-blocked',
+      title: 'Goal A blocked',
+      description: 'Implement blocked goal A work.\nHOW: src/goal-a-blocked.ts',
+      labels: [goalALabel],
+    });
+    const goalBReady = makeBead({
+      id: 'goal-b-ready',
+      title: 'Goal B ready',
+      description: 'Implement goal B.\nHOW: src/goal-b.ts',
+      labels: [goalBLabel],
+    });
+    const goalBBlocked = makeBead({
+      id: 'goal-b-blocked',
+      title: 'Goal B blocked',
+      description: 'Implement blocked goal B work.\nHOW: src/goal-b-blocked.ts',
+      labels: [goalBLabel],
+    });
+    const allBeads = [goalAReady, goalABlocked, goalBReady, goalBBlocked];
+    const { ctx, state } = makeCtx(
+      { selectedGoal: 'Goal A' },
+      [
+        { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify(allBeads), stderr: '' } },
+        { cmd: 'br', args: ['ready', '--json'], result: { code: 0, stdout: JSON.stringify([goalBReady, goalAReady]), stderr: '' } },
+        { cmd: 'br', args: ['update', goalBReady.id, '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
+        { cmd: 'br', args: ['update', goalAReady.id, '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
+      ],
+    );
+    const exec = vi.fn(ctx.exec);
+    ctx.exec = exec;
+
+    const result = await runApprove(ctx, {
+      cwd: '/fake/cwd',
+      action: 'start',
+      coordinatorName: 'WindyBasin',
+    });
+    const data = (result.structuredContent as { data: Record<string, unknown> }).data;
+
+    expect(state.activeBeadIds).toEqual([goalAReady.id, goalABlocked.id]);
+    expect(data.readyBeads).toEqual([
+      expect.objectContaining({ id: goalAReady.id }),
+    ]);
+    expect(exec).toHaveBeenCalledWith(
+      'br',
+      ['update', goalAReady.id, '--status', 'in_progress'],
+      expect.anything(),
+    );
+    expect(exec).not.toHaveBeenCalledWith(
+      'br',
+      ['update', goalBReady.id, '--status', 'in_progress'],
+      expect.anything(),
+    );
+  });
+
   it('resets beadResults and beadReviews on start', async () => {
     const bead = makeBead();
     const { ctx, state } = makeCtx(
