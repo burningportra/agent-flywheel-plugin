@@ -220,7 +220,7 @@ describe('auditBeadCreation', () => {
         description: 'Implement request caching.\n\n### Files:\n  src/cache.ts',
       }),
       makeBead({
-        id: 'cache-test-1',
+        id: 'cache-3',
         title: 'Test: Add request cache',
         description: 'Test request caching.\n\n### Files:\n  src/cache.ts',
       }),
