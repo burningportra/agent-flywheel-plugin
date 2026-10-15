@@ -3,21 +3,33 @@ name: flywheel-swarm-stop
 description: Stop all running swarm agents and release their file reservations.
 ---
 
-Stop the swarm and clean up.
+Parse $ARGUMENTS before any mutation.
 
-1. Fetch all active agents via `fetch_inbox` on the `agent-mail` MCP tool to identify who is running.
+- With neither `--yes` nor `--dry-run`, print this block and exit:
 
-2. Call `release_file_reservations` via `agent-mail` MCP tool with `project_key` set to the current working directory to release all reservations.
+  ```
+  /flywheel-swarm-stop is destructive: it kills all running swarm agents
+  and releases every file reservation held by that swarm.
 
-3. Send a stop signal to each active agent **individually** via `send_message` in `agent-mail` (do NOT broadcast to `"*"` — structured messages cannot be broadcast):
-   - For each known active agent name, send:
-     - Plain text nudge first: `send_message(to: "<name>", subject: "STOP — Swarm shutdown requested", body_md: "Please finish your current step, commit any partial work, and exit.", importance: "urgent")`
-   - Then send structured shutdown: `SendMessage(to: "<name>", message: {"type": "shutdown_request", "reason": "Swarm stopped by user."})`
-   - Use `TaskStop(task_id: "<id>")` for agents that don't respond (use saved task IDs from when they were spawned).
+  Safe alternatives:
+    /agent-flywheel:flywheel-swarm-status
+    /flywheel-swarm-stop --dry-run
 
-4. For beads still marked `in_progress` in `br list --json`, reset them to `open`:
-   Run `br update <id> --status open` via Bash for each.
+  Re-run with --yes to proceed.
+  ```
 
-5. Use `TaskList` to find active swarm tasks, then `TaskUpdate` each to `status: "deleted"`.
+- With `--dry-run`, identify the active swarm agents, their reservations, and their `in_progress` beads. Print what the command would stop, release, and reopen. Call no mutating tool.
 
-6. Report: "Swarm stopped. N agents signaled to stop, N beads reset to open."
+- With `--yes`, run the sequence below.
+
+1. Use the current task list, NTM pane status, and Agent Mail identities to identify agents and beads owned by this swarm.
+
+2. Send each active agent an urgent Agent Mail request to finish its current step, commit recoverable partial work, and exit. Send structured shutdown requests individually. Structured messages cannot be broadcast.
+
+3. Wait for acknowledgements. Use each saved task ID with `TaskStop` only for an agent that does not stop.
+
+4. Call `release_file_reservations` once per stopped Agent Mail identity, passing that `agent_name` and the current project key.
+
+5. Reopen only the stopped swarm's remaining `in_progress` beads with `br update <id> --status open`.
+
+6. Mark the stopped swarm tasks deleted and report the numbers of agents stopped, reservations released, and beads reopened.
