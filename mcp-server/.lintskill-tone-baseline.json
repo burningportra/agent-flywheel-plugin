@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "generated": "2026-10-15T17:12:00.000Z",
+  "counts": {
+    "skills/start/SKILL.md": 23,
+    "skills/start/_beads.md": 6,
+    "skills/start/_deslop.md": 5,
+    "skills/start/_implement.md": 22,
+    "skills/start/_inflight_prompt.md": 6,
+    "skills/start/_planning.md": 34,
+    "skills/start/_reality_check.md": 7,
+    "skills/start/_review.md": 10,
+    "skills/start/_saturation.md": 2,
+    "skills/start/_tutorial_bead.md": 1,
+    "skills/start/_wrapup.md": 6
+  }
+}

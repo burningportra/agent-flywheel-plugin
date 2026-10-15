@@ -197,7 +197,8 @@ async function main(): Promise<number> {
   const err = (await import(`${lintBase}/rules/errorCodeReferences.js`)) as unknown as { err001: unknown };
   const reserve = (await import(`${lintBase}/rules/reserve001.js`)) as unknown as { reserve001: unknown };
   const pane = (await import(`${lintBase}/rules/pane001.js`)) as unknown as { pane001: unknown };
-  const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001];
+  const tone = (await import(`${lintBase}/rules/tone001.js`)) as unknown as { tone001: unknown };
+  const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001, tone.tone001];
 
   // repoRoot = parent of this script's mcp-server/ (scripts/ -> mcp-server/ -> repo)
   const here = path.dirname(fileURLToPath(import.meta.url));

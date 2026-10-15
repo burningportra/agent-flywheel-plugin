@@ -441,11 +441,13 @@ The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names are
 
 ## SKILL.md linting
 
-Changes to `skills/start/SKILL.md` (and any future SKILL.md files) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, and Universal Rule 1 enforcement.
+Changes to any `skills/start/*.md` file (SKILL.md and the `_*.md` sub-skills) must pass `npm run lint:skill` from `mcp-server/`. The linter validates AskUserQuestion call sites, slash-skill references, placeholder definitions, Universal Rule 1 enforcement, and a per-file tone-token ratchet.
+
+Style guide for the prose itself lives at [`docs/skill-style.md`](docs/skill-style.md) — plain sentences over all-caps directives, tool facts stated once, no quotas, rationale in `docs/design/` not skills. The TONE001 rule in `mcp-server/src/lint/rules/tone001.ts` counts the discouraged tokens per file and ratchets the ceiling down over time; a PR that raises any file's count above its baseline fails CI.
 
 - Local: `cd mcp-server && npm run lint:skill`
 - Auto-fix safe issues (future): `npm run lint:skill -- --fix` (deferred to v1.1)
 - Update baseline after curating findings: `npm run lint:skill:update-baseline`
 - Update skill manifest after adding/removing skills: `npm run lint:skill:update-manifest`
 
-CI enforces this on every PR via `.github/workflows/ci.yml` (`lint-skill` job). The job runs `node dist/scripts/lint-skill.js --ci --baseline` and emits PR annotations via the `gha` reporter format.
+CI enforces this on every PR via `.github/workflows/ci.yml` (`lint-skill` job). The job runs `node dist/scripts/lint-skill-dir.js --dir ../skills/start --ci --baseline` and emits PR annotations via the `gha` reporter format.
