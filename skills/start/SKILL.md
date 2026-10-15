@@ -9,19 +9,15 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 > ## ⚠️ UNIVERSAL RULE 1 — `AskUserQuestion` is the only way to ask the user anything
 >
-> Every user decision in this skill — phase routing, plan refinement, bead approval, launch confirmation, wrap-up choices, recovery branches — MUST be presented via the `AskUserQuestion` tool with concrete labeled options (2–4 per question). Free-text "ask the user…" prompts, "wait for confirmation", "wait for the user's next message", or implicit decision points are bugs. The "Other" field absorbs custom answers when none of the prepared options fit.
+> Present every user decision through `AskUserQuestion` with two to four labeled options. Use the client-provided Other field for custom answers. Prose questions, waits for confirmation, and implicit decisions are bugs.
 >
-> If you find yourself about to write text like *"surface this to the user"*, *"propose this to the user"*, *"check with the user"*, or *"only do X if the user confirms"* — STOP and write an `AskUserQuestion` call instead. No exceptions.
+> ## UNIVERSAL RULE 2: invoke specialist skills by name when they apply
 >
-> ## ⚠️ UNIVERSAL RULE 2 — invoke specialist skills by name when they apply
->
-> This SKILL references many specialist skills by slash-name (`/idea-wizard`, `/ubs-workflow`, `/caam`, `/ui-polish`, `/docs-de-slopify`, testing-*, stack-specific skills, etc.). When a step names one, invoke it via the `Skill` tool rather than re-implementing its logic inline. Specialist skills carry project-tested prompts and conventions you don't have time to recreate.
->
-> Equally important: if a step does NOT name a skill but you notice one applies to the situation (e.g. a React component bead and `/react-component-generator` exists), invoke it anyway. Skills are hints-with-authority — use them by default, skip only when they clearly don't fit.
+> Invoke named or applicable specialist skills through the `Skill` tool and follow their bodies instead of recreating them inline.
 
-> ## ⚠️ UNIVERSAL RULE 3 — load phase instructions on demand (PRIMARY: `flywheel_get_skill`)
+> ## UNIVERSAL RULE 3: load phase instructions on demand with `flywheel_get_skill`
 >
-> Steps 5–12 are stored in separate files to keep this prompt within token limits. When you reach a phase boundary, fetch the corresponding body via the bundled MCP tool — **do not default to `Read`**. Call: `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })`.
+> At each phase boundary, call `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })` before executing that phase.
 >
 > | Phase | Skill name | Sub-file (fallback) | Steps |
 > |-------|-----------|---------------------|-------|
@@ -35,28 +31,26 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 > | Saturation suite | `agent-flywheel:start_saturation` | `_saturation.md` | (saturation-pipeline routing) |
 > | In-flight resume | `agent-flywheel:start_inflight_prompt` | `_inflight_prompt.md` | (auto-swarm) |
 >
-> **Skill-stub recovery.** If invoking the `Skill` tool itself ever returns just the description / pointer text instead of the canonical body (the harness sometimes ack's instead of inlining for already-loaded skills), treat it as a miss. Call `flywheel_get_skill({ name: "agent-flywheel:start" })` for the entry-point or the relevant `start_<phase>` for sub-phases.
+> **Skill-stub recovery.** Pointer commands call `flywheel_get_skill` first, forward `$ARGUMENTS`, and follow the returned body. A same-name `Skill` call can return "already loaded above". Canonical bodies live at the table's skill and sub-file paths. Use `flywheel_get_skill({ name: "agent-flywheel:start" })` for this entry point.
 >
-> Fetch the body **before** executing that phase. Do NOT guess or improvise — the sub-files contain critical gates, edge-case handling, and `AskUserQuestion` templates.
->
-> **Disk fallback.** If `flywheel_get_skill` errors (e.g. `FW_SKILL_BUNDLE=off`, missing bundle, MCP transport down), then `Read skills/start/_<phase>.md` from disk. Existing `Read` references throughout this skill are valid fallbacks — but try MCP first.
+> **Disk fallback.** Read `skills/start/_<phase>.md` only when `flywheel_get_skill` errors because the bundle is disabled, missing, or unreachable.
 
-> ## ⚠️ UNIVERSAL RULE 4 — route tool failures by structured error code
+> ## UNIVERSAL RULE 4: route tool failures by structured error code
 >
-> Route every flywheel tool failure on `result.structuredContent?.data?.error?.code` (`FlywheelErrorCode`), never on human-readable error text. When `data.error.hint` is present, render it inline for every retry, recovery choice, or handoff. Phase files define only their local codes and recovery actions.
+> Branch on `result.structuredContent?.data?.error?.code` (`FlywheelErrorCode`) and render `data.error.hint` in retries, recovery choices, and handoffs. Phase files define their local codes and actions.
 
 ## Step 0: Opening Ceremony
 
 ### 0a. Detect version
 
-Prefer `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json` if the env var is set — that's the canonical plugin root. Otherwise, find it under the plugins cache. The install path is `.../agent-flywheel/agent-flywheel/<VERSION>/mcp-server/package.json`, so use a pattern that matches the interposed version directory and pick the most-recently-modified match:
+Read the version from `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json`. If that path is unavailable, use the newest cached plugin package:
 ```bash
 { [ -n "$CLAUDE_PLUGIN_ROOT" ] && cat "$CLAUDE_PLUGIN_ROOT/mcp-server/package.json"; } \
   || ls -t ~/.claude/plugins/cache/agent-flywheel/agent-flywheel/*/mcp-server/package.json 2>/dev/null | head -1 | xargs cat 2>/dev/null
 ```
-Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name). If no version can be resolved, render the banner with `v?` rather than inventing a number.
+Extract the version and read the project name from the working directory's `package.json`, falling back to the directory name. Use `v?` when version resolution fails.
 
-### 0.banner — SHOW THIS FIRST, ALWAYS
+### 0.banner: show this first
 
 **Resolve `VERSION` first, then print the banner.** Step 0a is the only work before this first visible output. Use `v?` when resolution failed; never print a stale hardcoded version.
 
@@ -64,18 +58,13 @@ Read it and extract the version. Also read the project name from `package.json` 
 ░▒▓ CLAUDE // AGENT-FLYWHEEL v<VERSION> ▓▒░
 ```
 
-Output it as a plain code block so the user always sees the banner even if the rest of the skill fails. Then continue with 0.preflight.
+Print the code block, then continue with 0.preflight.
 
 ### 0.preflight — Captured user input
 
-If the user's prompt contains anything beyond `/start <args>` — a goal sentence, a pasted plan, a path to a plan file, a directive like "fix X then Y" — capture it as `USER_INPUT` and treat it as a candidate goal or plan. **Do NOT act on it yet. Do NOT skip the welcome banner or Step 0b detection.** Run the full Step 0a–0d flow silently so the user sees current state (existing session, open beads, AM status) before deciding.
+Capture any prompt beyond `/start <args>` as `USER_INPUT`. Run Steps 0a–0d before acting on it so the operator sees current state, then use the Step 0e override instead of the default menu.
 
-Then route in Step 0e instead of showing the default main menu:
-
-**Classification heuristics**:
-- **Plan-shaped USER_INPUT** — multi-paragraph, contains `##`/`###` headers, mentions specific files, OR is an existing path matching `docs/plans/*.md` → treat as plan.
-- **Goal-shaped USER_INPUT** — ≤300 chars, no markdown headers, reads as one or two sentences → treat as goal.
-- **Ambiguous** — long unstructured prose → treat as goal but route through the **Goal framing mode** menu (Light / Grill / Full brainstorm) before `flywheel_select`.
+Classify multi-paragraph input, Markdown sections, file-specific text, or an existing `docs/plans/*.md` path as a plan. Classify up to 300 characters without headings as a goal. Route longer unstructured prose through **Goal framing mode** before `flywheel_select`.
 
 **Routing override for Step 0e** (only when USER_INPUT is non-empty):
 
@@ -92,9 +81,9 @@ Then route in Step 0e instead of showing the default main menu:
     multiSelect: false
   }])
   ```
-  - "Use as plan" → if USER_INPUT was a file path, call `flywheel_plan` with `planFile`. If it was inline, write it to `docs/plans/<date>-<goal-slug>.md` first, then call `flywheel_plan` with `planFile`. Then jump to Step 5.5.
-  - "Treat as goal" → call `flywheel_select` with the input as goal, jump to Step 5.
-  - "Discard" → fall back to the default Step 0e menu.
+  - **Use as plan** → pass a path through `planFile`. Write inline content to `docs/plans/<date>-<goal-slug>.md` first. Continue at Step 5.5.
+  - **Treat as goal** → call `flywheel_select` and continue at Step 5.
+  - **Discard** → show the default Step 0e menu.
 
 - Goal-shaped:
   ```
@@ -110,18 +99,18 @@ Then route in Step 0e instead of showing the default main menu:
     multiSelect: false
   }])
   ```
-  - "Yes, full flywheel" → call `flywheel_select` with USER_INPUT as goal, proceed to Step 5 (Phase 0.5 still applies unless skipped).
-  - "Refine first" → run **Goal framing mode** (below) with `RAW_GOAL = USER_INPUT`, then `flywheel_select` with the enriched goal and continue to Step 5.
-  - "Plan only" → call `flywheel_select`, proceed through Step 5, stop after bead creation.
-  - "Discard" → fall back to the default Step 0e menu.
+  - **Yes, full flywheel** → call `flywheel_select` and continue at Step 5, including Phase 0.5 when its skip rule does not match.
+  - **Refine first** → run **Goal framing mode** with `RAW_GOAL = USER_INPUT`, then select the enriched goal and continue at Step 5.
+  - **Plan only** → select the goal, run Step 5, and stop after bead creation.
+  - **Discard** → show the default Step 0e menu.
 
 - Ambiguous → always run **Goal framing mode** first (Recommended default: Grill with docs), then route as goal-shaped after refinement.
 
-**Hard rule**: never act on USER_INPUT directly without first showing the banner and getting an explicit menu choice. The flywheel's gates exist for a reason — pre-prompt content does NOT bypass them.
+USER_INPUT still passes through the banner and an explicit menu choice.
 
 #### Goal framing mode (shared by Set a goal / Refine first / Ambiguous)
 
-Use this whenever a goal needs refinement **before** `flywheel_select`. Do **not** chain multiple framing paths (no brainstorm + grill + Phase 0.5 triple interview).
+Use one framing path before `flywheel_select`.
 
 ```
 AskUserQuestion(questions: [{
@@ -137,34 +126,34 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**Routing:**
+Route the selected mode:
 
-- **Light (Phase 0.5 only)** → set `FRAMING_MODE = light`, `enrichedGoal = RAW_GOAL`. Do not write brainstorm yet. Call `flywheel_select({ goal: enrichedGoal })`, then load `_planning.md` and **run** Step 4.5 normally.
-- **Grill with docs (Recommended)** → set `FRAMING_MODE = grill`. Prefer `flywheel_get_skill({ name: "agent-flywheel:grill-with-docs" })` (fallback: `Skill(skill: "agent-flywheel:grill-with-docs")` or `Read skills/grill-with-docs/SKILL.md`). Execute the skill body with `RAW_GOAL`, `CWD`, derived `GOAL_SLUG`, `TODAY`. On `GRILL_STATUS=aborted`, return to the start menu — do **not** call `flywheel_select`. On `GRILL_STATUS=approved`, set `enrichedGoal = GRILL_ENRICHED_GOAL` (or the brainstorm path's framing synthesis if the marker is missing), set `GRILL_BRAINSTORM_PATH` from the skill output, call `flywheel_select({ goal: enrichedGoal })`, load `_planning.md`, and enter Step 4.5 which **must skip** when the brainstorm already has floor+ceiling+framing (see `_planning.md` §4.5a).
-- **Full brainstorm** → set `FRAMING_MODE = brainstorm`. Invoke `/brainstorming` (or `skills/brainstorming`). When it returns an approved design, derive `enrichedGoal` from the design's goal/scope summary (or the original RAW_GOAL if no summary), call `flywheel_select`, then Step 4.5 (usually still useful — brainstorm specs are not the same as floor/ceiling pressure-test; only skip 4.5 if the operator already answered those three dimensions explicitly in the design).
-- **Skip framing** → set `FRAMING_MODE = skip`, `enrichedGoal = RAW_GOAL`, call `flywheel_select`, then Step 4.5 with normal skip heuristics.
+- **Light (Phase 0.5 only)** → set `FRAMING_MODE = light`, select `RAW_GOAL`, then run `_planning.md` Step 4.5.
+- **Grill with docs (Recommended)** → set `FRAMING_MODE = grill` and load `agent-flywheel:grill-with-docs` through `flywheel_get_skill`, with `Skill(skill: "agent-flywheel:grill-with-docs")` as its fallback. Execute it with `RAW_GOAL`, `CWD`, `GOAL_SLUG`, and `TODAY`. An aborted grill returns to Start. An approved grill selects `GRILL_ENRICHED_GOAL`, records `GRILL_BRAINSTORM_PATH`, and enters Step 4.5, whose complete-brainstorm rule skips the repeated questions.
+- **Full brainstorm** → set `FRAMING_MODE = brainstorm`, invoke `/brainstorming`, select its approved goal summary or `RAW_GOAL`, then run Step 4.5 unless the design already answers its three dimensions.
+- **Skip framing** → set `FRAMING_MODE = skip`, select `RAW_GOAL`, then apply the normal Step 4.5 skip rules.
 
-**Anti-double-interview rule:** after Grill with docs approves, do **not** offer Full brainstorm or re-enter Goal framing mode in the same cycle. Phase 0.5 is the only remaining pressure-test, and it auto-skips on a complete grill brainstorm.
+**Anti-double-interview rule:** an approved Grill with docs goes directly to Phase 0.5 and never re-enters Goal framing mode in the same cycle.
 
 ### 0b. Detect state
 
-Gather context silently (do NOT display raw output yet). Call `flywheel_doctor` with `cwd` before any other MCP tool. From a successful result, cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. If the call fails outright, set `DOCTOR_REPORT = null`, `PREFLIGHT_BANNER = null`, and `IS_FIRST_RUN = false`; doctor is advisory, and suppressing the tutorial is safer when first-run state is unknown.
+Call `flywheel_doctor({ cwd })` before another MCP tool. Cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. On failure, set the first two values to `null` and `IS_FIRST_RUN = false`.
 
 After the doctor bootstrap, run checks 1-7 in parallel where possible:
 
-1. **MCP tools**: Call `flywheel_profile` directly with `cwd` — if the call succeeds, MCP is available (cache the result to avoid a redundant call in Step 2). If the tool is not found or errors, set `MCP_DEGRADED = true`. Do NOT use `ToolSearch` — MCP tools may be deferred and unavailable to ToolSearch at startup.
-2. **Existing session**: Read `.pi-flywheel/checkpoint.json` if it exists. Note phase and goal.
-3. **Existing beads**: Run `br list --json 2>/dev/null` and count open/in-progress/closed beads.
-4. **Git status**: Run `git log --oneline -1` to get latest commit.
-5. **CASS memory**: Call `flywheel_memory` with `operation: "search"` and `query: "session learnings flywheel"` to load prior session context. If CASS is unavailable, skip silently.
-6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/flywheel-setup` — single-agent workflows work fine without it.
-7. **NTM**: Read `DOCTOR_REPORT.ntm` for the opening status. Before any route chooses a spawn mechanism, run the canonical **Pre-flight: resolve NTM readiness** procedure in `_implement.md`; it calls `flywheel_doctor`, applies the registered remediations, and recomputes `NTM_AVAILABLE` and `NTM_PROJECT` on every invocation. Do not run a separate shell readiness check here.
+1. **MCP tools.** Call `flywheel_profile({ cwd })` and cache a success for Step 2. Set `MCP_DEGRADED = true` on error. Deferred MCP tools make `ToolSearch` unreliable here.
+2. **Existing session.** Read `.pi-flywheel/checkpoint.json` when present and note its phase and goal.
+3. **Existing beads.** Run `br list --json 2>/dev/null` and count open, in-progress, and closed beads.
+4. **Git status.** Run `git log --oneline -1`.
+5. **CASS memory.** Search `session learnings flywheel`. Skip an unavailable CASS service.
+6. **Agent Mail.** Probe `http://127.0.0.1:8765/health/liveness` with a two-second limit. On failure set `AGENT_MAIL_DOWN = true` and show `Agent Mail: offline`. Single-agent routes remain available.
+7. **NTM.** Read `DOCTOR_REPORT.ntm` for display. Before a spawn route, run `_implement.md` **Pre-flight: resolve NTM readiness** to recompute `NTM_AVAILABLE` and `NTM_PROJECT`.
 
 If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the welcome banner marks the warning state and surfaces every yellow or red check. `IS_FIRST_RUN` is true only when all five server-side signals are absent: no checkpoint, beads, plan markdown, legacy orchestrator state, or project-scoped CASS history.
 
 ### 0c. Display the welcome banner
 
-Display a single cohesive welcome message. Example:
+Display one welcome message:
 
 ```
  ╔══════════════════════════════════════════════════╗
@@ -179,29 +168,27 @@ Display a single cohesive welcome message. Example:
  ╚══════════════════════════════════════════════════╝
 ```
 
-If beads is zero, show `Beads: none yet`. If MCP tools are unavailable, show `MCP: not configured` in the banner.
-
-Also append a `Doctor:` line to the banner using `DOCTOR_REPORT.overall` from the Step 0b doctor bootstrap:
+Show `Beads: none yet` at zero and `MCP: not configured` when degraded. Add the doctor status:
 
 - `green` → `Doctor: green ✓`
 - `yellow` → `Doctor: yellow ⚠`
 - `red` → `Doctor: red ✗`
 - null / not run → `Doctor: not run`
 
-If `DOCTOR_REPORT.overall === "red"` OR `DOCTOR_REPORT.overall === "yellow"`, under the banner list every check with `severity` in `{ "yellow", "red" }` — one line each — and include a pointer to the slash command. Prefix each row with a severity glyph so the operator can see the mix at a glance: `⚠` for yellow, `✗` for red.
+If `DOCTOR_REPORT.overall === "red"` OR `DOCTOR_REPORT.overall === "yellow"`, list each check with `severity` in `{ "yellow", "red" }`. Use `⚠` for yellow and `✗` for red.
 
 > **Doctor flagged:**
 > - `⚠ <check_name>` — <detail>     <!-- yellow rows -->
 > - `✗ <check_name>` — <detail>     <!-- red rows -->
 > - ...
 >
-> Yellow checks are non-blocking (advisory — the session can proceed); red checks indicate real degradation that will likely bite downstream. Run `/agent-flywheel:flywheel-doctor` for the full report and remediation steps.
+> Yellow checks are non-blocking. Red checks indicate degraded behavior. Run `/agent-flywheel:flywheel-doctor` for details and remediation.
+
+**detail**: the doctor check's concise failure reason.
 
 #### Pre-flight issue surfacing (T4.1)
 
-Print `PREFLIGHT_BANNER` exactly once above the menu. When it is `null`, none of the 6 critical checks (`br_binary`, `bv_binary`, `cm_binary`, `agent_mail_liveness`, `mcp_connectivity`, `projects_base_misconfig`) is non-green, so skip this gate entirely.
-
-When `PREFLIGHT_BANNER` is a string, print the block above the menu and then surface the AskUserQuestion gate so the operator can route to setup, continue with degraded features, or inspect the details before deciding:
+Print a non-null `PREFLIGHT_BANNER` once above the menu, followed by this gate. A null banner skips the gate.
 
 ```
 AskUserQuestion(questions: [{
@@ -216,38 +203,27 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-Route the choice:
-- **Run setup now** → invoke `/agent-flywheel:flywheel-setup` and re-enter Step 0 from the top after it returns.
-- **Continue with degraded** → fall through to the welcome banner + main menu unchanged; downstream gates may surface the same checks again.
-- **Show me what's degraded** → print the full `DOCTOR_REPORT.checks` table verbatim then re-prompt this same gate (so the operator can decide with full context).
+**Run setup now** invokes setup and restarts Step 0. **Continue with degraded** opens the main menu. **Show me what's degraded** prints `DOCTOR_REPORT.checks` and repeats this gate.
 
-If CASS returned learnings from prior sessions, display them below the banner:
+Display three to five relevant CASS learnings when available:
 
 > **From prior sessions:**
 > - <top 3-5 most relevant learnings, anti-patterns, or gotchas>
 
-**Error-code trends (last 10 sessions):** call `flywheel_memory` with `operation: "search"` and `query: "error-code telemetry"` (or read `.pi-flywheel/error-counts.json` directly via `readTelemetry({ cwd })` from `telemetry.ts` when available). If telemetry is non-empty, display the top 3 codes below the CASS learnings block:
+Search `error-code telemetry`, or read `.pi-flywheel/error-counts.json`, and show the top three nonzero codes:
 
 > **Error-code trends (last 10 sessions):**
 > - `<code_1>` — <count> occurrence(s)
 > - `<code_2>` — <count> occurrence(s)
 > - `<code_3>` — <count> occurrence(s)
 
-If telemetry is unavailable or empty, skip this block silently. The telemetry is advisory — never gate on it.
-
-**Reality-check freshness suggestion** — call `flywheel_memory` with `operation: "search"` and `query: "reality-check session learnings gap analysis"`. Count distinct prior sessions for THIS project (`cwd`-scoped) and find the most recent reality-check date (look for entries tagged `reality-check-<YYYY-MM-DD>` or with body containing "reality check" / "gap report"). If ≥3 prior flywheel sessions exist AND no reality-check has run in the last 7 sessions (or ever), append below the error-code trends:
+Search project-scoped memory for `reality-check session learnings gap analysis`. After at least three sessions, suggest a reality check when none ran in the last seven sessions:
 
 > **Suggestion:** It's been <X> sessions since the last reality-check pass — consider running `/agent-flywheel:flywheel-reality-check` (or pick "Reality check" from the menu) to verify the implementation still matches the project's vision before continuing.
 
-Placeholder meanings used in the Step 0c display examples:
+**count**: a telemetry occurrence count. **X**: the number of sessions since the last reality check.
 
-- **detail**: One concise failure reason returned by the doctor check.
-- **count**: The number of occurrences for the displayed telemetry code.
-- **X**: The number of prior flywheel sessions since the last reality-check pass.
-
-This is advisory only — never gate on it. If CASS is unavailable, skip silently.
-
-This gives the user (and the agent-flywheel) context from past runs before making any decisions.
+These memory blocks are advisory and disappear when their data is unavailable.
 
 If `DOCTOR_REPORT.checks` contains a yellow `orphaned_worktrees` row whose `message` mentions `orphaned worktree`, `stale worktree`, or `locked stale worktree`, run this cleanup gate before the main menu:
 
@@ -264,7 +240,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-Route the choice immediately: **Inspect first** → show `git worktree list --porcelain`, summarize the candidates from the doctor row, then surface this same cleanup gate again; **Clean up** → run the flywheel-cleanup command, then continue to the main menu; **Skip** → continue to the main menu. Locked stale worktrees must be treated as inspect-first candidates unless the user explicitly chooses cleanup.
+**Inspect first** shows `git worktree list --porcelain` and repeats the gate. **Clean up** runs `flywheel-cleanup`. **Skip** opens the main menu. Treat locked stale worktrees as inspect-first unless the operator chooses cleanup.
 
 ### 0d. Present the main menu
 
@@ -368,7 +344,7 @@ AskUserQuestion(questions: [{
 
 **If no beads and no session** (fresh start):
 
-> **Menu visibility rule (MANDATORY).** `AskUserQuestion` caps at 4 labeled options. Before calling it, print the **full menu** (all top-level + sub-options the routing table can reach in this state) as a visible markdown block so the user can see every entry point at load. Do NOT hide options behind an "Other" sub-menu — surface them. The 4 options inside `AskUserQuestion` are the most-common entry points; the extras (Simplify pass, Duel, Audit, Setup, Speed up, Auto-swarm, Quick fix) are reachable via the printed block by typing the label into "Other" or by invoking the matching `/flywheel-*` slash command directly. Apply this same rule to the previous-session-exists and open-beads-exist menus above.
+> **Menu visibility rule.** Before each four-option `AskUserQuestion`, print the state's complete menu. The operator reaches extra entries through Other or their slash commands.
 
 Print this block first (the `• Take the 5-min tour` row appears ONLY when `IS_FIRST_RUN === true` per Step 0b check 9):
 
@@ -413,14 +389,7 @@ AskUserQuestion(questions: [{
 
 When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-option set: `Set a goal`, `Pick up existing plan`, `Scan & discover`, `Reality check`.
 
-**Conditional Recommendation (fresh-start menu only).** Pick the `(Recommended)` row dynamically from this priority chain:
-
-1. **`IS_FIRST_RUN === true`** → "Take the 5-min tour (Recommended)" — first-run trumps every other signal; the operator hasn't seen the loop yet and the tour exists specifically for this case (T5.1+T5.2).
-2. **`RECENT_PLAN_PATHS.length > 0`** → "Pick up existing plan (Recommended)" — a ready-to-go plan is the strongest available signal once first-run is past; the operator almost always wants to pick it up.
-3. **`HAS_VISION_DOCS === true`** (AGENTS.md or README.md at root, detected by Glob in 0b) → "Reality check (Recommended)" — vision docs exist; gap-check before adding more.
-4. **Otherwise (greenfield)** → "Scan & discover (Recommended)" — no docs, no plans; profile first.
-
-"Set a goal" is never auto-Recommended on the fresh-start menu; if the operator already knows their goal, they can pick it directly. This avoids the bias toward "type something" when the project already has structure to lean on.
+Use the server-provided recommendation for the non-tutorial rows. `IS_FIRST_RUN === true` still selects **Take the 5-min tour (Recommended)**.
 
 ### 0e. Route the user's choice
 
@@ -428,25 +397,25 @@ When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-
 
 | Choice | Action |
 |--------|--------|
-| **Auto-swarm** | **Read `skills/start/_inflight_prompt.md` end-to-end and execute the verbatim prompt + the operator-decoder table + the 7-item pre-conditions checklist.** This is the canonical in-flight resume path: NTM readiness gate → CLI capability check → §3a model-config pre-spawn gate → disk-space guard → tender-daemon spawn → bead snapshot + stalled-bead reopen → looper schedule → swarm dispatch (cc:cod:gem 2:2:2 model-diversified default; substitution ladder gmi→cod→pi→cc when a model is unavailable, per AGENTS.md NTM pane priority). Do NOT paraphrase the prompt; the slash-named skills (`/ntm`, `/vibing-with-ntm`, `/rch`, `/bv`, `/testing-*`, `/mock-code-finder`, etc.) are load-bearing. |
-| **Take the 5-min tour** | Read `skills/start/_tutorial_bead.md` end-to-end and execute it verbatim — the 7 sections drive the operator through scan → plan → bead → implement → commit on a real trivial goal so they see the loop fire once. The skill returns to the Step 0d main menu on completion (or to the rollback gate handled by T5.4 on the wrap-up step). Only surface this route when `IS_FIRST_RUN === true` (Step 0b check 9). |
-| **Other** | The user typed a label not in the 4 displayed options — match it (case-insensitive, leading-substring OK) against the printed block surfaced before the `AskUserQuestion` call. Recognized labels per state — fresh-start: `Research repo / Simplify pass / Duel / Audit / Setup / Speed up / Quick fix / Auto-swarm`. Open-beads-exist: `Reality check / Duel / New goal / Simplify pass / Research repo / Audit / Setup / Speed up`. Previous-session-exists: `Work on beads / New goal / Reality check / Duel / Simplify pass / Research repo / Audit / Setup / Speed up`. **Special handling:** if the typed text starts with a path-like token (e.g. `docs/plans/`, ends in `.md`, or matches one of the surfaced `RECENT_PLAN_PATHS`), route as **Pick up existing plan** with the typed text as `<plan-path>`. Otherwise route the matched label through the corresponding row below (do NOT surface another `AskUserQuestion` — the printed block already showed every reachable entry point). If no label matches AND it isn't path-shaped, treat the free-text as a custom goal and route to **Set a goal** with the typed text as `<goal>`. |
-| **Simplify pass** (a.k.a. Deslop pass) | Read `skills/start/_deslop.md` end-to-end and surface its mode-selection `AskUserQuestion` (Single-pass / Single + fresh-eyes / 5-Pi swarm — cod fallback if Pi unavailable, per AGENTS.md NTM pane priority / Iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching mode's section verbatim; the canonical skill `/simplify-and-refactor-code-isomorphically` is the engine of every mode, with `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm` orchestrating around it. Baseline capture (tests + LOC + warnings) BEFORE any edits is mandatory — without it the skill cannot prove isomorphism preservation. |
-| **Duel** | Invoke `/agent-flywheel:flywheel-duel` (state-aware routing — picks `mode=ideas` for fresh starts, `mode=architecture` when a goal is selected but no plan exists, `mode=reliability\|security` when reviewing risky open beads). Pre-flight (MANDATORY): run `which ntm` + `which claude codex gemini 2>/dev/null` (real binaries behind the `cc/cod/gmi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) — need ntm + ≥2 of {claude, codex, gemini}; on failure, emit a one-line warning and surface a sub-menu offering `Deep (idea-wizard) / Triangulated / Cancel`. After the duel completes, parse `DUELING_WIZARDS_REPORT.md`, stamp `state.planSource = "duel"` (or the discovery equivalent so `_beads.md` Provenance block fires), and continue into the standard goal-selection or plan-approval flow per current phase. Do NOT skip the alignment check at Step 5.55 — duels surface contested decisions the alignment check exists to surface. |
-| **Reality check** | Read `skills/start/_reality_check.md` end-to-end and surface its depth-selection `AskUserQuestion` (Reality check only / Reality check + beads / Full pipeline). Do NOT pick a depth unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. Then execute the matching section verbatim; the slash-named skill (`/reality-check-for-project`) is load-bearing. Phase 1 (the docs+code+gap-report prompt) typically takes 15–20 minutes — do NOT short-circuit it with a docs-only summary. Bead creation is `br`-only per `/beads-workflow`. |
+| **Auto-swarm** | Load `skills/start/_inflight_prompt.md` and execute its canonical in-flight route. |
+| **Take the 5-min tour** | Load `skills/start/_tutorial_bead.md`. Surface this route only when `IS_FIRST_RUN === true`. |
+| **Other** | Match the printed menu label for the current state. Route a `docs/plans/` or `.md` path as **Pick up existing plan** using `RECENT_PLAN_PATHS`. Route unmatched prose as **Set a goal**. |
+| **Simplify pass** (a.k.a. Deslop pass) | Load `skills/start/_deslop.md` and present its mode gate. |
+| **Duel** | Invoke `/agent-flywheel:flywheel-duel`, then resume the phase it returns. Its preflight checks `which claude codex gemini`. `which cc` resolves `/usr/bin/cc`, not the Claude lane. |
+| **Reality check** | Load `skills/start/_reality_check.md` and present its depth gate. |
 | **Resume session** | Run the **drift check** below before jumping to the saved phase |
-| **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below — do NOT call `flywheel_approve_beads` directly |
+| **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below before `flywheel_approve_beads` |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
-| **Set a goal** | Read the typed `<goal>` from the Other field. If empty, prompt for it via a follow-up `AskUserQuestion`. Then: if the goal is already concrete and ≤300 chars (0.preflight heuristics), skip framing and call `flywheel_select` directly; otherwise run **Goal framing mode** (Light / Grill with docs / Full brainstorm). After framing returns `approved` (or was skipped), **in the same turn** call `flywheel_select` (Step 4) with the enriched goal, read `_planning.md`, and run through Step 4.5 (Phase 0.5 — auto-skips when a grill brainstorm already has floor+ceiling+framing) and Step 5's `AskUserQuestion` without pausing for user input — see "Stay-in-turn rule" below. **State-aware behavior:** on previous-session-exists, do NOT delete the checkpoint — append-mode (the new goal sits alongside the existing session). On open-beads-exist, the new beads merge into the existing set. On fresh-start, just proceed normally. |
-| **Pick up existing plan** | Read the typed `<plan-path>` from the Other field. Validate: it must exist on disk AND end in `.md`. If invalid, surface a follow-up `AskUserQuestion` listing `RECENT_PLAN_PATHS` as labeled options plus an Other field for a custom path. Once a valid path is in hand: call `flywheel_select` with a synthesized goal derived from the plan's first H1/H2 header (or the filename if no header), then call `flywheel_plan({ planFile: <plan-path>, source: "picked-up-existing-plan" })`. **Do NOT jump straight to Step 5.5** — the picked-up source signal triggers **Step 5.45** (the plan-stage menu) first. Skip Step 2 (profile) and Step 3 (discover) entirely — the plan already represents committed scope. **State-aware behavior:** on previous-session-exists, run the drift check (same one used by Resume session) before registering the new plan; if drift is severe, ask whether to discard the checkpoint first. On open-beads-exist, surface a confirmation that the plan's beads will merge into the existing set (no automatic dedup at this stage — Step 5.5's coverage + dedup sweep will handle it). On fresh-start, just proceed. |
+| **Set a goal** | Read `<goal>` from Other. Run **Goal framing mode** unless it is concrete and at most 300 characters, then call `flywheel_select`, load `_planning.md`, and continue through Steps 4.5 and 5 in the same turn. Existing sessions append. Open bead sets merge. |
+| **Pick up existing plan** | Validate `<plan-path>` as an existing Markdown file, then derive a goal and call `flywheel_plan({ planFile: <plan-path>, source: "picked-up-existing-plan" })`. Enter **Step 5.45** before Step 5.5. Previous sessions run the drift check. Open bead sets confirm that new beads will merge. |
 | **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
 | **Quick fix** | Invoke `/flywheel-fix` |
 | **Audit** | Invoke `/flywheel-audit` |
 | **Setup** | Invoke `/flywheel-setup` |
 | **Speed up** | Invoke `/agent-flywheel:flywheel-speedup` |
 
-#### Work on beads — sub-menu + bootstrap (MANDATORY)
+#### Work on beads: sub-menu and bootstrap
 
 `flywheel_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, branch on `result.structuredContent?.data?.error?.code`; if it is `missing_prerequisite`, bootstrap first and only then retry approve.
 
@@ -491,9 +460,9 @@ Bootstrap it before any approve call:
    ```
    - **"Implement"** → jump to Step 6 (read `_beads.md`).
    - **"Refine"** → jump to Step 6 but pre-select the polish path: call `flywheel_approve_beads(action: "polish")` first to enter `refining_beads` phase, then show Step 6's menu so the user can iterate until satisfied.
-   - **"Inspect"** → run `br list` + `bv --robot-triage` (or `bv` alone if `--robot-triage` not supported), display, then re-show the action sub-menu.
+   - **"Inspect"** → run `br list` and `bv --robot-triage`, falling back to `bv --robot-insights`, then repeat the action sub-menu.
 
-#### Resume session — drift check (MANDATORY)
+#### Resume session: drift check
 
 Before jumping to the saved phase, compare the checkpoint to reality:
 
@@ -560,7 +529,7 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
 **Agent Mail offline** (`AGENT_MAIL_DOWN = true` from step 0b check 6):
 
 - Display in the banner: `Agent Mail: offline — parallel agents will skip file reservations`
-- Do NOT block or require `/flywheel-setup`. All flywheel coordination still works.
+- Continue without requiring `/flywheel-setup`. Only parallel coordination is degraded.
 - Overrides for affected steps only:
   - **Step 7 (impl agents):** Skip STEP 0 (Agent Mail bootstrap) in agent prompts. Agents work without file reservations or messaging — the coordinator monitors via TaskOutput instead of inbox.
   - **Step 5 (deep plan):** Skip Agent Mail bootstrap for plan agents. Agents write plan files to disk; coordinator reads them directly.
@@ -568,13 +537,9 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
 
 ## Step 5.45: Picked-up-plan stage menu (gated on `state.planSource === "picked-up-existing-plan"`)
 
-> **When to surface this.** ONLY after `flywheel_plan` returns with `state.planSource === "picked-up-existing-plan"` (set when the Step 0d "Pick up existing plan" route called `flywheel_plan({ planFile, source: "picked-up-existing-plan" })`). Plans coming from /brainstorming, mode=deep, mode=duel, or mode=standard skip this step entirely and flow straight to Step 5.5.
->
-> **Why this exists.** A picked-up plan was written hours/days/weeks ago. Bits of it may already be implemented in HEAD. Bits may be stale relative to the current codebase. The default Step 5.5 bead-creation flow assumes the plan is fresh — beading every section blindly wastes work and produces stragglers that get auto-closed by `flywheel_verify_beads` later. Step 5.45 gives the operator four levers BEFORE the bead-set materializes.
+Surface this menu only after `flywheel_plan({ planFile, source: "picked-up-existing-plan" })` sets `state.planSource === "picked-up-existing-plan"`. Other plan sources continue to Step 5.5.
 
-After `flywheel_plan` returns successfully (response contains `pickedUp: true`), call `flywheel_convergence({ planSlug: <slug-derived-from-plan-path> })` and read the result. If `status: "ok"`, mention the score in the question text below. The 4 labeled options NEVER change — score never arms a default (per Phase 12 §12.5 + README §Design Philosophy #3, every decision is `AskUserQuestion`).
-
-> **Score in question text only.** When `convergence.score` is present, append `(score <X.YY>, <status>)` to the question text — e.g. `Plan registered: 'foo.md' (score 0.82, nearly_converged). What does this plan need?`. When no convergence state exists yet (first registration), omit the score parenthetical and surface the bare question.
+For `pickedUp: true`, call `flywheel_convergence` with the plan slug. Append a present score and status to the question text. Keep the four options unchanged and let the operator choose without a score-based default.
 
 ```
 AskUserQuestion(questions: [{
@@ -594,57 +559,40 @@ AskUserQuestion(questions: [{
 
 #### "Validate against code" (Recommended)
 
-Run a section-vs-file analysis to identify which parts of the plan have already shipped:
+Compare every plan section's file and bead claims with the current code and commits newer than the plan. Classify each section as done, partial, or missing, then present the report:
 
-1. **Parse plan into sections.** Read `state.planDocument`. Split on `^##\s` and `^###\s` headers; each section becomes a `{ title, body, lineRange }` record.
-2. **Extract file claims per section.** For each section, scan the body for backtick-quoted paths (`` `mcp-server/src/foo.ts` ``), explicit "Create:" / "New file:" / "Modify:" directives, and bullet items mentioning paths. Build `<section> → [paths-claimed]`.
-3. **Match against git history.** For each claimed path:
-   - `git log --oneline --diff-filter=A -- <path>` — if non-empty, the file was ADDED at some point. New-file claims are satisfied.
-   - `git log --oneline -- <path>` — if non-empty, the file has commits. Modify claims are partially satisfied.
-   - `git log --oneline --grep="<bead-id-shape>"` for any bead IDs the plan section mentions (`claude-orchestrator-XXX`) — if matching commits exist, count it as fully done.
-   - Compare commit timestamps to the plan file's mtime: commits AFTER the plan was written are likely the implementation; commits BEFORE are pre-existing context the plan was written against.
-4. **Build a coverage table** of `<section> → done | partial | missing`:
-   - `done` — all claimed paths have post-mtime commits OR matching bead-id commits.
-   - `partial` — some paths have post-mtime commits, others don't.
-   - `missing` — no claimed paths show evidence of post-mtime work.
-5. **Surface the report and route the next action via `AskUserQuestion`:**
+```
+AskUserQuestion(questions: [{
+  question: "Plan coverage: <D> done / <P> partial / <M> missing. <one-line summary of the gap>. What next?",
+  header: "Coverage",
+  options: [
+    { label: "Bead-ify gaps only (Recommended)", description: "Pre-filter the plan so Step 5.5 only sees the partial + missing sections. <P+M> beads expected" },
+    { label: "Bead-ify everything", description: "Ignore the coverage analysis and bead the full plan as-is" },
+    { label: "Retire the plan", description: "Coverage shows the plan is fully shipped — append `## Retired` block with today's date and return to Step 0d" },
+    { label: "Inspect first", description: "Show the per-section coverage breakdown, then re-prompt" }
+  ],
+  multiSelect: false
+}])
+```
 
-   ```
-   AskUserQuestion(questions: [{
-     question: "Plan coverage: <D> done / <P> partial / <M> missing. <one-line summary of the gap>. What next?",
-     header: "Coverage",
-     options: [
-       { label: "Bead-ify gaps only (Recommended)", description: "Pre-filter the plan so Step 5.5 only sees the partial + missing sections. <P+M> beads expected" },
-       { label: "Bead-ify everything", description: "Ignore the coverage analysis and bead the full plan as-is" },
-       { label: "Retire the plan", description: "Coverage shows the plan is fully shipped — append `## Retired` block with today's date and return to Step 0d" },
-       { label: "Inspect first", description: "Show the per-section coverage breakdown, then re-prompt" }
-     ],
-     multiSelect: false
-   }])
-   ```
-
-   - **"Bead-ify gaps only"** → write a filtered plan to `docs/plans/<original-name>-gaps-<YYYY-MM-DD>.md` containing only the partial/missing sections. Re-call `flywheel_plan({ planFile: <gaps-plan>, source: "picked-up-existing-plan" })`? No — set `state.planDocument` to the gaps file directly, mark the picked-up signal as already-validated (so 5.45 doesn't re-fire), then proceed to Step 5.5.
-   - **"Bead-ify everything"** → proceed to Step 5.5 with the original plan unchanged.
-   - **"Retire the plan"** → append `## Retired\n\nValidated against HEAD on <YYYY-MM-DD>; all sections shipped.\n` to the plan file, clear `state.planDocument` and `state.planSource`, return to Step 0d.
-   - **"Inspect first"** → print the per-section table (one row per section: `<title> | <status> | <commits-found>`), then re-show this 4-option menu.
+- **Bead-ify gaps only** → write partial and missing sections to `docs/plans/<original-name>-gaps-<YYYY-MM-DD>.md`, set it as `state.planDocument`, mark the source validated, and continue at Step 5.5.
+- **Bead-ify everything** → continue at Step 5.5 with the original plan.
+- **Retire the plan** → append a dated `## Retired` block, clear the plan state, and return to Step 0d.
+- **Inspect first** → print `<title> | <status> | <commits-found>` for each section and repeat the menu.
 
 #### "Approve and bead-ify"
 
-Skip validation. Jump directly to Step 5.5 (load `_beads.md`). The plan's beads materialize as if it had come from /brainstorming.
+Load `_beads.md` and continue at Step 5.5.
 
 #### "Refine plan first"
 
-1. Invoke `/superpowers:writing-plans` with the existing plan file as input. The skill returns a refined plan path (typically `docs/plans/<original-name>-refined-<YYYY-MM-DD>.md`).
-2. Re-call `flywheel_plan({ planFile: <refined-path>, source: "picked-up-existing-plan" })`.
-3. The 5.45 menu re-fires with the refined plan. The operator can pick Validate, Approve, Refine again, or Scrap.
+Invoke `/superpowers:writing-plans` on the plan, then register its result with `source: "picked-up-existing-plan"` so this menu runs again.
 
 #### "Scrap and restart"
 
-1. Append `## Retired\n\nDiscarded by operator on <YYYY-MM-DD>; reason: scrapped during pick-up.\n` to the plan file (so future Pick-up runs skip it from the `RECENT_PLAN_PATHS` suggestions).
-2. Clear `state.planDocument`, `state.planSource`, `state.selectedGoal`.
-3. Jump back to Step 0d main menu.
+Append a dated `## Retired` block, clear `state.planDocument`, `state.planSource`, and `state.selectedGoal`, then return to Step 0d.
 
-> **One-time gate.** Step 5.45 fires ONCE per `flywheel_plan` registration. After the operator picks any of the 4 options, set `state.planSource = undefined` (or `"picked-up-validated"` if you want to keep telemetry) so re-entering Step 5.5 from the same plan doesn't re-prompt. The Refine path is the only exception — it re-registers the plan with the picked-up source, so 5.45 fires again on the refined plan.
+> **One-time gate.** Set `state.planSource` to `undefined` or `"picked-up-validated"` after a choice. Refine re-registers the picked-up source and runs this gate again.
 
 ## Step 2: Scan and profile the repository
 
@@ -675,19 +623,9 @@ AskUserQuestion(questions: [{
 - **"Set a goal"** → capture the goal (prompt via Other if needed), run **Goal framing mode** (Light / Grill with docs / Full brainstorm; skip only when concrete ≤300 chars), then **stay in the same turn** and call `flywheel_select` (Step 4) + enter Step 4.5 / Step 5 without waiting for user input (see "Stay-in-turn rule" below)
 - **"Re-scan"** → call `flywheel_profile` with `force: true`, then return to this menu
 
-#### Stay-in-turn rule (MANDATORY between every step)
+#### Stay in turn between steps
 
-Per UNIVERSAL RULE 1, every user decision flows through `AskUserQuestion`. Between steps, never end your turn on prose like "Ready to plan?", "Shall we continue?", or "Let me know when you're ready." Those are implicit decisions the user cannot answer with labeled options — they kick the user out of the flywheel UX.
-
-**Rule:** after writing a file, calling a tool, or invoking a sub-skill, the next thing in your response must be EITHER another tool call (including the next step's `AskUserQuestion`) OR the explicit completion of a phase. Do not end a turn in the middle of a phase.
-
-Concretely:
-- After Goal framing mode / `/brainstorming` / grill-with-docs returns approved → same turn: `flywheel_select` → read `_planning.md` → run Step 4.5 (or skip per §4.5a) → Step 5 `AskUserQuestion`.
-- After writing the brainstorm artifact in 4.5c → same turn: Step 5 `AskUserQuestion`.
-- After `flywheel_plan` returns → same turn: Step 5.55 alignment-check `AskUserQuestion` (or Step 5.6 if alignment already satisfied).
-- After `flywheel_approve_beads` returns → same turn: Step 6 launch menu.
-
-If you find yourself writing "Ready to <next step>?" — STOP and call the next `AskUserQuestion` instead.
+After a file write, tool call, or sub-skill, continue to the next tool or `AskUserQuestion` until the phase completes. Framing continues through selection and Steps 4.5–5. A brainstorm artifact continues to Step 5. A plan continues to Step 5.55 or 5.6. Bead approval continues to the Step 6 launch gate.
 
 ## Step 3: Discover improvement ideas
 
@@ -764,4 +702,4 @@ Once the user chooses, call `flywheel_select` with `cwd` and `goal` set to their
 
 Apply Universal Rule 3 at each phase boundary.
 
-**Do NOT skip phases or exit the workflow early.** The flywheel's value comes from completing the full cycle: scan → discover → plan → implement → review → verify → wrap-up → learn → refine.
+Complete the full cycle: scan → discover → plan → implement → review → verify → wrap-up → learn → refine.
