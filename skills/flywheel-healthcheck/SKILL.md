@@ -13,7 +13,7 @@ Produce a health score across dependencies, codebase state, and beads.
 - `curl -s --max-time 3 http://127.0.0.1:8765/health/liveness` — agent-mail
 - `git status --short` — repo cleanliness
 - `ls .pi-flywheel/checkpoint.json 2>/dev/null` — checkpoint state
-- `ls mcp-server/dist/server.js 2>/dev/null` — MCP server built
+- `ls "$CLAUDE_PLUGIN_ROOT/mcp-server/dist/server.js" 2>/dev/null` — MCP server built
 
 **Codebase health** (use Agent(Explore)):
 - TODO/FIXME count: `grep -r "TODO\|FIXME\|HACK" --include="*.ts" | wc -l`
