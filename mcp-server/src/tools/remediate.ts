@@ -28,6 +28,7 @@ export const RemediateInputSchema = z.object({
   mode: z.enum(['dry_run', 'execute']).optional().default('dry_run'),
 });
 export type RemediateInput = z.infer<typeof RemediateInputSchema>;
+export const REMEDIATION_CHECK_NAMES = DOCTOR_CHECK_NAMES;
 
 export interface RemediationPlan {
   description: string;

@@ -20,6 +20,20 @@ function cleanup(dir: string) {
 }
 
 describe('createCallToolHandler', () => {
+  it('advertises projects_base_misconfig remediation', () => {
+    const remediation = TOOLS.find(
+      (tool) => tool.name === 'flywheel_remediate',
+    );
+
+    expect(remediation?.inputSchema).toMatchObject({
+      properties: {
+        checkName: {
+          enum: expect.arrayContaining(['projects_base_misconfig']),
+        },
+      },
+    });
+  });
+
   it('preserves structuredContent returned by tool implementations', async () => {
     const cwd = process.cwd();
     const structuredContent = {

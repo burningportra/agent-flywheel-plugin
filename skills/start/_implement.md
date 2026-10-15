@@ -2,72 +2,37 @@
 
 ## Step 7: Implement each bead
 
-### Pre-flight: NTM readiness gate (MANDATORY — run BEFORE Pre-loop)
+### Pre-flight: resolve NTM readiness
 
-`NTM_AVAILABLE` and `NTM_PROJECT` are captured in SKILL.md Step 0b but **not persisted to `checkpoint.json`**. After `/compact`, session resume, or any context reset, they are lost — and the implementation loop below will silently fall through to `Agent()` spawning, which strips the user of visible tmux panes. This is the #1 reason NTM "always gets skipped."
+Run this procedure before every NTM spawn decision, including after `/compact` or session resume. It recomputes `NTM_AVAILABLE` and `NTM_PROJECT`; neither value comes from checkpoint state.
 
-**You MUST re-run the detection inline before choosing a spawn mechanism**, even if you think you remember the earlier result. The detection now **auto-symlinks** nested repos silently — only true ambiguity (name-collision) surfaces an `AskUserQuestion`:
+1. Call `flywheel_doctor({ cwd })` and cache `data.report` as `DOCTOR_REPORT`.
+2. Inspect `ntm_binary`, then `projects_base_misconfig`. For each non-green row, call `flywheel_remediate({ cwd, checkName: "<row name>", mode: "execute", autoConfirm: true })`, then call `flywheel_doctor` again before inspecting the next row. Remediate each row at most once per procedure call.
+3. Copy `NTM_AVAILABLE` and `NTM_PROJECT` from the final `DOCTOR_REPORT.ntm`. Treat a missing `ntm` object as `NTM_AVAILABLE=false` with reason `incomplete`. Only `NTM_AVAILABLE=true` permits the NTM branch below; every other result uses the single-agent fallback after surfacing the final doctor hint.
 
-```bash
-if ! command -v ntm >/dev/null 2>&1; then
-  echo "NTM_AVAILABLE=false reason=cli-missing"
-else
-  NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
-  PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
-  PROJECT_BASENAME=$(basename "$PROJECT_ROOT")
-  TARGET="$NTM_BASE/$PROJECT_BASENAME"
+When `DOCTOR_REPORT.ntm.reason === "collision"`, keep the occupied target unchanged and ask how to continue:
 
-  if [ -z "$NTM_BASE" ]; then
-    echo "NTM_AVAILABLE=false reason=no-projects-base"
-  elif [ ! -e "$TARGET" ]; then
-    # Auto-symlink: nested or sibling repo not yet linked under projects_base.
-    # This is the common case (e.g. ~/Documents/GitHub/foo/services/bar — basename=bar
-    # not under base=~/Documents/GitHub directly). Silent fix, no user prompt.
-    ln -s "$PROJECT_ROOT" "$TARGET" \
-      && echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE action=auto-symlinked" \
-      || echo "NTM_AVAILABLE=false reason=symlink-failed target=$TARGET"
-  elif [ -L "$TARGET" ] && [ "$(readlink "$TARGET")" = "$PROJECT_ROOT" ]; then
-    echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE action=existing-symlink-ok"
-  elif [ "$(realpath "$TARGET" 2>/dev/null)" = "$(realpath "$PROJECT_ROOT" 2>/dev/null)" ]; then
-    echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME base=$NTM_BASE action=existing-dir-matches"
-  else
-    # COLLISION: $TARGET exists but points to a different repo. Do NOT clobber.
-    echo "NTM_AVAILABLE=false reason=name-collision target=$TARGET points-to=$(readlink -f "$TARGET" 2>/dev/null) want=$PROJECT_ROOT"
-  fi
-fi
-```
-
-**Decision rule** (no silent fallthrough):
-
-- `NTM_AVAILABLE=true` (any `action=*`) → **you MUST use NTM** for this wave. Record `NTM_PROJECT = $PROJECT_BASENAME` and proceed to the NTM branch in step 2 of the Implementation loop. Do NOT spawn via `Agent()` as a shortcut just because the NTM block is longer — the user's visibility into the wave depends on tmux panes, and skipping NTM here silently degrades the flywheel UX.
-- `NTM_AVAILABLE=false reason=cli-missing` → NTM not installed. Spawn via `Agent()` (fallback). No user prompt needed.
-- `NTM_AVAILABLE=false reason=no-projects-base` → `ntm config show` returned empty. Surface a one-question fix:
   ```
   AskUserQuestion(questions: [{
-    question: "NTM is installed but has no projects_base configured. Set it to the parent of this repo?",
-    header: "NTM setup",
-    options: [
-      { label: "Set + auto-symlink (Recommended)", description: "ntm config set projects_base $(dirname \"$(git rev-parse --show-toplevel)\") and re-run the gate" },
-      { label: "Fall back to Agent()", description: "Skip NTM this session — agents run invisibly via Agent() tool" },
-      { label: "Run /flywheel-setup", description: "Full setup wizard to configure NTM permanently" }
-    ],
-    multiSelect: false
-  }])
-  ```
-- `NTM_AVAILABLE=false reason=name-collision` → another repo with the same basename is already linked under `projects_base`. Surface the conflict via `AskUserQuestion` (NEVER auto-clobber — destructive):
-  ```
-  AskUserQuestion(questions: [{
-    question: "NTM has a different repo named '$PROJECT_BASENAME' already at $TARGET (resolves to $points-to). What should I do?",
+    question: "NTM project name collision at <target>: it resolves to <resolvedTarget>, not this project. How should this wave continue?",
     header: "NTM collide",
     options: [
-      { label: "Use unique label", description: "Replace target name in the spawn with a project-disambiguating label like '$PROJECT_BASENAME-$(git rev-parse --short HEAD)'" },
-      { label: "Replace symlink", description: "rm $TARGET && ln -s $PROJECT_ROOT $TARGET — destroys the link to the OTHER repo, only safe if it's stale" },
-      { label: "Fall back to Agent()", description: "Skip NTM this session — agents run invisibly via Agent() tool" }
+      { label: "Fall back to Agent() (Recommended)", description: "Run this wave without NTM and leave the other repository mapping intact" },
+      { label: "Run setup", description: "Open /agent-flywheel:flywheel-setup for safe projects_base guidance" },
+      { label: "Stop and inspect", description: "Pause before spawning so the conflicting path can be resolved manually" }
     ],
     multiSelect: false
   }])
   ```
-- `NTM_AVAILABLE=false reason=symlink-failed` → permission error or other filesystem failure. Surface the error verbatim and fall back to `Agent()`.
+
+- **Fall back to Agent()** → keep `NTM_AVAILABLE=false` and continue through the existing fallback branch.
+- **Run setup** → invoke `/agent-flywheel:flywheel-setup`, then rerun this readiness procedure from step 1.
+- **Stop and inspect** → stop before spawning and print `target` plus `resolvedTarget` from `DOCTOR_REPORT.ntm`.
+
+The remediation handler refuses regular files, directories for another repository, wrong-target symlinks, and dangling symlinks. Never unlink or overwrite the occupied target.
+
+- `NTM_AVAILABLE=true` → use NTM for this wave with `NTM_PROJECT` from the doctor result.
+- `NTM_AVAILABLE=false` → use the `Agent()` fallback for this wave unless the collision question stops the workflow.
 
 ### Wave-to-wave reliability (v3.6.0+)
 

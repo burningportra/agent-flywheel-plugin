@@ -21,7 +21,11 @@ import { runVerifyBeads } from './tools/verify-beads.js';
 import { runComplianceAudit } from './tools/compliance-audit.js';
 import { runAdvanceWave } from './tools/advance-wave.js';
 import { runObserve } from './tools/observe.js';
-import { runRemediate, RemediateInputSchema } from './tools/remediate.js';
+import {
+  REMEDIATION_CHECK_NAMES,
+  runRemediate,
+  RemediateInputSchema,
+} from './tools/remediate.js';
 import { runCalibrate, CalibrateInputSchema } from './tools/calibrate.js';
 import { runConvergence } from './tools/convergence-tool.js';
 import { runSynthesizeRubric } from './tools/synthesize-rubric.js';
@@ -483,12 +487,7 @@ const PRIMARY_TOOLS = [
         cwd: { type: 'string', description: 'Project working directory (absolute path)' },
         checkName: {
           type: 'string',
-          enum: [
-            'mcp_connectivity', 'agent_mail_liveness', 'br_binary', 'bv_binary',
-            'ntm_binary', 'cm_binary', 'node_version', 'git_status', 'dist_drift',
-            'orphaned_worktrees', 'checkpoint_validity', 'claude_cli', 'codex_cli',
-            'gemini_cli', 'swarm_model_ratio', 'codex_config_compat', 'rescues_last_30d',
-          ],
+          enum: [...REMEDIATION_CHECK_NAMES],
           description: 'The doctor check name to remediate',
         },
         autoConfirm: {

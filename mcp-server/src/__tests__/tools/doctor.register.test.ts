@@ -11,7 +11,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { TOOLS, createCallToolHandler } from '../../server.js';
 import { DoctorReportSchema, createInitialState } from '../../types.js';
@@ -123,6 +123,11 @@ describe('I4 — flywheel_doctor tool registration', () => {
       // The structured report must validate against DoctorReportSchema.
       const parsed = DoctorReportSchema.safeParse(sc.data.report);
       expect(parsed.success).toBe(true);
+      expect(sc.data.report.ntm).toMatchObject({
+        NTM_AVAILABLE: expect.any(Boolean),
+        NTM_PROJECT: basename(cwd),
+        reason: expect.any(String),
+      });
 
       expect(sc.data.preflightBanner).toBe(
         renderPreflightBanner(sc.data.report),
@@ -233,6 +238,11 @@ describe('I4 — flywheel_doctor tool registration', () => {
       expect(sc.data.report.checks).toEqual([]);
       expect(sc.data.report.overall).toBe('red');
       expect(sc.data.report.elapsedMs).toBe(0);
+      expect(sc.data.report.ntm).toEqual({
+        NTM_AVAILABLE: false,
+        NTM_PROJECT: basename(cwd),
+        reason: 'incomplete',
+      });
     } finally {
       cleanup(cwd);
     }

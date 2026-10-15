@@ -8,7 +8,15 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, lstatSync, mkdirSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 
@@ -16,6 +24,7 @@ import {
   remediateProjectsBase,
   projectsBaseMisconfigHandler,
 } from '../../tools/remediations/projects_base_misconfig.js';
+import type { HandlerCtx } from '../../tools/remediate.js';
 
 describe('remediateProjectsBase (T6.1)', () => {
   let scratch: string;
@@ -90,6 +99,18 @@ describe('remediateProjectsBase (T6.1)', () => {
     });
     expect(result.target).toBe(`${ntmBase}/${basename(cwdDir)}`);
   });
+
+  it('refuses a target that points at another repository', async () => {
+    const otherRepo = join(scratch, 'other-repo');
+    const target = join(ntmBase, basename(cwdDir));
+    mkdirSync(otherRepo);
+    symlinkSync(otherRepo, target);
+
+    await expect(
+      remediateProjectsBase({ cwd: cwdDir, ntmBase, mode: 'execute' }),
+    ).rejects.toThrow(/refus|collision/i);
+    expect(realpathSync(target)).toBe(realpathSync(otherRepo));
+  });
 });
 
 describe('projectsBaseMisconfigHandler (T6.1 registry shape)', () => {
@@ -110,5 +131,41 @@ describe('projectsBaseMisconfigHandler (T6.1 registry shape)', () => {
     } as unknown as Parameters<typeof projectsBaseMisconfigHandler.buildPlan>[0]);
     expect(plan.steps).toEqual([]);
     expect(plan.mutating).toBe(false);
+  });
+
+  it('reports and preserves a project-name collision', async () => {
+    const localScratch = mkdtempSync(join(tmpdir(), 'fw-t61-collision-'));
+    try {
+      const project = join(localScratch, 'my-project');
+      const base = join(localScratch, 'ntm-base');
+      const otherRepo = join(localScratch, 'other-repo');
+      const target = join(base, basename(project));
+      mkdirSync(project);
+      mkdirSync(base);
+      mkdirSync(otherRepo);
+      symlinkSync(otherRepo, target);
+      const ctx: HandlerCtx = {
+        cwd: project,
+        signal: new AbortController().signal,
+        exec: async (cmd, args) => cmd === 'ntm' && args[0] === 'config'
+          ? {
+              code: 0,
+              stdout: `projects_base = "${base}"\n`,
+              stderr: '',
+            }
+          : { code: 1, stdout: '', stderr: 'unexpected command' },
+      };
+
+      const plan = await projectsBaseMisconfigHandler.buildPlan(ctx);
+      expect(plan.description).toMatch(/collision|refus/i);
+      expect(plan.steps).toEqual([]);
+      await expect(projectsBaseMisconfigHandler.execute(ctx)).rejects.toThrow(
+        /refus|collision/i,
+      );
+      expect(await projectsBaseMisconfigHandler.verifyProbe(ctx)).toBe(false);
+      expect(realpathSync(target)).toBe(realpathSync(otherRepo));
+    } finally {
+      rmSync(localScratch, { recursive: true, force: true });
+    }
   });
 });

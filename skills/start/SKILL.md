@@ -162,23 +162,7 @@ After the doctor bootstrap, run checks 1-7 in parallel where possible:
 4. **Git status**: Run `git log --oneline -1` to get latest commit.
 5. **CASS memory**: Call `flywheel_memory` with `operation: "search"` and `query: "session learnings flywheel"` to load prior session context. If CASS is unavailable, skip silently.
 6. **Agent Mail**: Run `curl -s --max-time 2 http://127.0.0.1:8765/health/liveness` via Bash. If unreachable, set `AGENT_MAIL_DOWN = true` — display `Agent Mail: offline` in the banner and warn before any step that spawns parallel agents. Do NOT block the session or require `/flywheel-setup` — single-agent workflows work fine without it.
-7. **NTM**: Run `which ntm 2>/dev/null` via Bash. If not found, set `NTM_AVAILABLE = false` and skip the rest of this check. If found, do NOT declare availability yet — `ntm spawn` requires the current project to live under `projects_base`, and failing that, it will cd into the wrong directory (or fail outright). Run these follow-up checks:
-
-   ```bash
-   NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
-   PROJECT_BASENAME=$(basename "$PWD")
-   if [ -n "$NTM_BASE" ] && [ -d "$NTM_BASE/$PROJECT_BASENAME" ]; then
-     echo "ntm-ready project=$PROJECT_BASENAME base=$NTM_BASE"
-   else
-     echo "ntm-misconfigured base=$NTM_BASE project=$PROJECT_BASENAME"
-   fi
-   ```
-
-   - `ntm-ready` → set `NTM_AVAILABLE = true`, capture `NTM_PROJECT = $PROJECT_BASENAME`, display `NTM: available` in the banner. Preferred mechanism for launching parallel agents (planners and impl agents) — use `ntm spawn <NTM_PROJECT> --label <purpose>` + `ntm --robot-send` instead of the `Agent()` tool. Never use bare `ntm send`: the CASS-dedup prompt silently aborts it (see `_implement.md`). Gives the user visible tmux panes they can observe and interact with directly.
-   - `ntm-misconfigured` → set `NTM_AVAILABLE = false`, display `NTM: installed but not configured (projects_base=<base>, missing <base>/<PROJECT_BASENAME>)` in the banner, and mention that `/flywheel-setup` can fix it via either `ntm config set projects_base <parent>` or a symlink. Fall back to `Agent()` for this session.
-   - Bash error / `NTM_BASE` empty → set `NTM_AVAILABLE = false`, treat like ntm-misconfigured.
-
-   Never set `NTM_AVAILABLE = true` based on `which ntm` alone — the spawn step downstream will silently fail.
+7. **NTM**: Read `DOCTOR_REPORT.ntm` for the opening status. Before any route chooses a spawn mechanism, run the canonical **Pre-flight: resolve NTM readiness** procedure in `_implement.md`; it calls `flywheel_doctor`, applies the registered remediations, and recomputes `NTM_AVAILABLE` and `NTM_PROJECT` on every invocation. Do not run a separate shell readiness check here.
 
 If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the welcome banner marks the warning state and surfaces every yellow or red check. `IS_FIRST_RUN` is true only when all five server-side signals are absent: no checkpoint, beads, plan markdown, legacy orchestrator state, or project-scoped CASS history.
 

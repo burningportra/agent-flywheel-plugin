@@ -11,11 +11,14 @@
  * Mutating but reversible (a single symlink that can be removed with `rm`).
  */
 
-import { basename } from 'node:path';
 import { symlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import type { HandlerCtx, RemediationHandler } from '../remediate.js';
 import { createLogger } from '../../logger.js';
+import {
+  classifyNtmProjectTarget,
+  parseNtmProjectsBase,
+  type NtmProjectTarget,
+} from '../../ntm-project.js';
 
 const log = createLogger('remediation.projects_base_misconfig');
 
@@ -30,6 +33,7 @@ export type RemediateProjectsBaseInput = {
 export type RemediateProjectsBaseResult = {
   command: string;
   executed: boolean;
+  changed: boolean;
   target: string;
 };
 
@@ -41,20 +45,31 @@ export type RemediateProjectsBaseResult = {
 export async function remediateProjectsBase(
   opts: RemediateProjectsBaseInput,
 ): Promise<RemediateProjectsBaseResult> {
-  const target = joinPath(opts.ntmBase, basename(opts.cwd));
-  const command = `ln -s "${opts.cwd}" "${target}"`;
-  if (opts.mode === 'dry-run' || opts.mode === 'skip') {
-    return { command, executed: false, target };
+  const targetState = await classifyNtmProjectTarget(opts.cwd, opts.ntmBase);
+  const command = symlinkCommand(opts.cwd, targetState.target);
+  if (opts.mode === 'skip') {
+    return { command, executed: false, changed: false, target: targetState.target };
   }
-  if (!existsSync(target)) {
-    await symlink(opts.cwd, target);
+  if (targetState.kind === 'collision') {
+    throw new Error(collisionMessage(targetState));
   }
-  return { command, executed: true, target };
+  if (opts.mode === 'dry-run') {
+    return { command, executed: false, changed: false, target: targetState.target };
+  }
+  if (targetState.kind === 'matching') {
+    return { command, executed: true, changed: false, target: targetState.target };
+  }
+  await symlink(opts.cwd, targetState.target);
+  return { command, executed: true, changed: true, target: targetState.target };
 }
 
-function joinPath(a: string, b: string): string {
-  if (a.endsWith('/')) return `${a}${b}`;
-  return `${a}/${b}`;
+function symlinkCommand(source: string, target: string): string {
+  return `ln -s "${source}" "${target}"`;
+}
+
+function collisionMessage(target: Extract<NtmProjectTarget, { kind: 'collision' }>): string {
+  const actual = target.resolvedTarget ?? target.reason;
+  return `Refusing projects_base name collision at ${target.target}: resolves to ${actual}; expected ${target.root}.`;
 }
 
 async function readNtmBase(ctx: HandlerCtx): Promise<string | null> {
@@ -65,8 +80,7 @@ async function readNtmBase(ctx: HandlerCtx): Promise<string | null> {
       signal: ctx.signal,
     });
     if (res.code !== 0) return null;
-    const match = res.stdout.match(/projects_base\s*[=:]\s*"?([^"\n]+)"?/);
-    return match?.[1]?.trim() ?? null;
+    return parseNtmProjectsBase(res.stdout);
   } catch (err) {
     log.warn('readNtmBase failed', {
       err: err instanceof Error ? err.message : String(err),
@@ -92,22 +106,26 @@ export const projectsBaseMisconfigHandler: RemediationHandler = {
         reversible: false,
       };
     }
-    const { command, target } = await remediateProjectsBase({
-      cwd: ctx.cwd,
-      ntmBase,
-      mode: 'dry-run',
-    });
-    if (existsSync(target)) {
+    const target = await classifyNtmProjectTarget(ctx.cwd, ntmBase);
+    if (target.kind === 'collision') {
       return {
-        description: `projects_base symlink already present at ${target} — nothing to do.`,
+        description: collisionMessage(target),
+        steps: [],
+        mutating: false,
+        reversible: false,
+      };
+    }
+    if (target.kind === 'matching') {
+      return {
+        description: `projects_base target already resolves to ${target.root} — nothing to do.`,
         steps: [],
         mutating: false,
         reversible: false,
       };
     }
     return {
-      description: `Symlink ${ctx.cwd} → ${target} so ntm spawn resolves correctly.`,
-      steps: [command],
+      description: `Symlink ${target.root} → ${target.target} so ntm spawn resolves correctly.`,
+      steps: [symlinkCommand(ctx.cwd, target.target)],
       mutating: true,
       reversible: true,
     };
@@ -118,21 +136,28 @@ export const projectsBaseMisconfigHandler: RemediationHandler = {
     if (ntmBase === null) {
       return { stepsRun: 0, stderr: 'ntm config show did not return a projects_base; nothing to symlink.' };
     }
-    const { executed, target } = await remediateProjectsBase({
+    const { changed, executed, target } = await remediateProjectsBase({
       cwd: ctx.cwd,
       ntmBase,
       mode: 'execute',
     });
     return {
-      stepsRun: executed ? 1 : 0,
-      stdout: executed ? `Symlinked ${ctx.cwd} → ${target}` : undefined,
+      stepsRun: changed ? 1 : 0,
+      stdout: changed
+        ? `Symlinked ${ctx.cwd} → ${target}`
+        : executed
+          ? `projects_base target already resolves to ${ctx.cwd}`
+          : undefined,
     };
   },
 
   async verifyProbe(ctx) {
     const ntmBase = await readNtmBase(ctx);
-    if (ntmBase === null) return true; // nothing to verify when ntm is absent
-    const target = joinPath(ntmBase, basename(ctx.cwd));
-    return existsSync(target);
+    if (ntmBase === null) return false;
+    try {
+      return (await classifyNtmProjectTarget(ctx.cwd, ntmBase)).kind === 'matching';
+    } catch {
+      return false;
+    }
   },
 };
