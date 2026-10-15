@@ -308,7 +308,7 @@ if (code === "cli_not_available") return showInstallGuide(planResult.structuredC
 
 Pre-flight (MANDATORY before invoking the duel skill):
 
-1. **NTM readiness gate** — same script as Deep plan above (auto-symlinks nested repos; refuses on name-collision). On `NTM_AVAILABLE=false`, fall back to `mode: "deep"` and emit `Duel-plan downgraded to Deep — NTM unavailable` to the user.
+1. **NTM readiness** — run `_implement.md` **Pre-flight: resolve NTM readiness**, the canonical doctor/remediate procedure. On `NTM_AVAILABLE=false`, fall back to `mode: "deep"` and emit `Duel-plan downgraded to Deep — NTM unavailable` to the user.
 2. **Agent inventory** — run `which claude codex gemini 2>/dev/null` (these are the real binaries behind the `cc/cod/gmi` ntm pane types; do NOT `which cc` — it matches `/usr/bin/cc`). Need at least 2 of the 3. If only 1 is available, fall back to `mode: "deep"`.
 3. **Brainstorm handoff** — same auto-detection as Deep plan. The duel agents read `docs/brainstorms/<goal-slug>-*.md` in their study phase.
 
@@ -340,34 +340,7 @@ Use `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition` to block u
 
 > **Brainstorm handoff.** `flywheel_plan` auto-detects the most-recent `docs/brainstorms/<goal-slug>-*.md` artifact (if any) and injects its synthesized framing into every per-perspective planner prompt under a `## Phase 0.5 Brainstorm` header. Each spawned planner therefore inherits the scope floor, 10x ceiling, and adjacent-ask decisions from Phase 0.5 without you having to repeat them. If Phase 0.5 was skipped by heuristic, planners simply proceed without that section.
 
-> **NTM readiness gate (MANDATORY — run BEFORE step 1).** `NTM_AVAILABLE` / `NTM_PROJECT` from SKILL.md Step 0b are in-turn variables, not persisted in `checkpoint.json` — after `/compact` or session resume they are lost and the branch below silently falls through to `Agent()`, stripping the user of visible tmux panes. Re-run the detection inline even if you think you remember the earlier result. The detection now **auto-symlinks** nested repos silently — only true ambiguity (name-collision) surfaces an `AskUserQuestion`. See the canonical implementation in `_implement.md` Pre-flight gate; the same script applies here.
->
-> **Quick reference** (full version + edge cases in `_implement.md`):
->
-> ```bash
-> if ! command -v ntm >/dev/null 2>&1; then
->   echo "NTM_AVAILABLE=false reason=cli-missing"
-> else
->   NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
->   PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
->   PROJECT_BASENAME=$(basename "$PROJECT_ROOT")
->   TARGET="$NTM_BASE/$PROJECT_BASENAME"
->   if [ ! -e "$TARGET" ]; then
->     ln -s "$PROJECT_ROOT" "$TARGET" \
->       && echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME action=auto-symlinked" \
->       || echo "NTM_AVAILABLE=false reason=symlink-failed"
->   elif [ "$(realpath "$TARGET" 2>/dev/null)" = "$(realpath "$PROJECT_ROOT" 2>/dev/null)" ]; then
->     echo "NTM_AVAILABLE=true project=$PROJECT_BASENAME action=existing-ok"
->   else
->     echo "NTM_AVAILABLE=false reason=name-collision target=$TARGET"
->   fi
-> fi
-> ```
->
-> **Decision rule**:
-> - `NTM_AVAILABLE=true` (any `action=*`) → you MUST use the NTM branch below. Do NOT fall back to `Agent()` just because the NTM block is longer.
-> - `NTM_AVAILABLE=false reason=cli-missing` → use the `Agent()` fallback silently.
-> - `NTM_AVAILABLE=false reason=name-collision` or `symlink-failed` → surface `AskUserQuestion` per `_implement.md` Pre-flight gate. NEVER auto-clobber an existing symlink that points elsewhere — destructive.
+> **NTM readiness (MANDATORY — run BEFORE step 1).** Run `_implement.md` **Pre-flight: resolve NTM readiness**, including after `/compact` or session resume. The canonical doctor/remediate procedure recomputes `NTM_AVAILABLE` and `NTM_PROJECT` on every invocation and owns the safe collision question. Use the NTM branch below only when its final doctor result says `NTM_AVAILABLE=true`; otherwise use the `Agent()` fallback.
 
 > **Codex config compatibility pre-spawn gate (MANDATORY when spawn includes a `cod` pane).** If `DOCTOR_REPORT.checks` shows `codex_config_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning. Skipping it is a known failure mode: cod pane crashes within seconds with `'gpt-5.5-xhigh' model is not supported when using Codex with a ChatGPT account` (verified 2026-05-08).
 >
