@@ -79,6 +79,13 @@ Resume call:        flywheel_observe(cwd: <repo-root>)
 4. Memory:
    flywheel_memory(cwd, operation: "search", query: "<term>")
    flywheel_memory(cwd, operation: "store", content: "<note>")
+
+5. Rescue a stalled phase with Codex:
+   flywheel_rescue(cwd, phase: "plan" | "impl" | "review",
+                   beadId?: "<bead-id>", errorEnvelope?: { code, message, hint },
+                   notes?: "<proposed next step>")
+   # Pass data.codexPrompt to /codex:rescue --wait.
+   # The tool writes any needed artifact and stores data.memoryLine in CASS.
 `.trim(),
   },
 

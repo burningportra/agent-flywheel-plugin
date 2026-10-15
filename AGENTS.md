@@ -79,7 +79,7 @@ The repository is the **source of truth for the Claude Code plugin**. The OpenCo
 
 ## MCP tools quick reference
 
-Current-tool index (HEAD = v3.12.0). One line per tool, alphabetical. Detailed semantics live in the version-sliced sections below; this is the cold-reader affordance.
+Current-tool index (HEAD = v3.20.0). One line per tool, alphabetical. Detailed semantics live in the version-sliced sections below; this is the cold-reader affordance.
 
 - **`flywheel_advance_wave`** — close a completed wave, mark beads `closed`, surface `nextWave[]` ready beads. Stage-1 attestation gate: `FW_ATTESTATION_REQUIRED=1` flips warn-only to hard-block on missing/invalid completion evidence.
 - **`flywheel_approve_beads({ action })`** — review/approve bead set; actions: `start | polish | reject | advanced | git-diff-review`. Returns quality score + hotspot matrix + 3 or 4-option launch menu.
@@ -93,6 +93,7 @@ Current-tool index (HEAD = v3.12.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_plan({ mode, ambition? })`** — planner; modes: `standard | deep | duel`. Every mode auto-detects `docs/brainstorms/<slug>-<date>.md`. `ambition: "ambitious"` (orthogonal to mode) also requires the ambition charter `docs/brainstorms/<slug>-<date>-ambition.md` from the `_planning.md` Step 5 ambition pass and injects it into every planner prompt.
 - **`flywheel_profile`** — repo profile with git-HEAD-keyed cache. Always call first.
 - **`flywheel_remediate({ checkName })`** — apply canonical fix for a failing doctor check (per-check mutex, `dry_run` default).
+- **`flywheel_rescue({ phase, beadId?, errorEnvelope?, notes? })`** — build a Codex rescue packet and prompt for a stalled plan, implementation, or review phase, materialize its artifact, and store the canonical event in CASS.
 - **`flywheel_review`** — 5 fresh-eyes reviewers per risky bead, or duel for p0 / security beads.
 - **`flywheel_select({ goal })`** — set selected goal and transition to planning phase.
 - **`flywheel_verify_beads`** — verify closed beads have valid completion evidence; reads `.pi-flywheel/completion/<id>.json`.
@@ -221,6 +222,12 @@ State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 
 - **`cycleStartSha` capture point.** `flywheel_select` writes `state.cycleStartSha` at goal-set time (OQ-A resolution). On detached HEAD / no-commits / git-missing, the field stays undefined and the grader's 4-tier ladder fires.
 - **Skip-rubric stickiness.** One cycle per skip (OQ-B resolution). The next `flywheel_select` clears `state.outcomeGradingSkipped` so the operator gets a fresh prompt at every Step 5.6.5. CASS records consecutive skips as a learning so a recurring skip pattern surfaces in `flywheel_doctor` over time.
+
+## MCP tools added in v3.20.0
+
+- **`flywheel_rescue({ cwd, phase, beadId?, errorEnvelope?, notes? })`** — turns the existing `codex-handoff.ts` contract into a callable MCP tool. `phase` accepts `plan`, `impl`, or `review`. The tool reuses an active plan document or writes a phase artifact under `.pi-flywheel/rescue/`, builds a `RescuePacket`, renders a Codex prompt with the existing adapter, and stores the canonical `flywheel-rescue` memory line through `flywheel_memory`.
+- **Result contract.** Success returns `data.packet`, `data.codexPrompt`, and `data.memoryLine`. `codexPrompt` includes the two trailing newlines required by the Codex input buffer. Invalid phases return `invalid_input`; artifact, Git, and CASS failures reuse existing structured error codes.
+- **Deprecated alias.** `orch_rescue` has the same input and runner during the v4.0 deprecation window. New callers use `flywheel_rescue`.
 
 ## NTM is mandatory for all spawned work
 

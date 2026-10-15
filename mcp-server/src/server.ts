@@ -28,6 +28,7 @@ import { runSynthesizeRubric } from './tools/synthesize-rubric.js';
 import { runGradeOutcome } from './tools/grade-outcome.js';
 import { runCapabilitiesWith } from './tools/capabilities.js';
 import { runRobotDocs, ROBOT_DOCS_SECTIONS } from './tools/robot-docs.js';
+import { runRescue } from './tools/rescue.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -353,6 +354,41 @@ const PRIMARY_TOOLS = [
     },
   },
   {
+    name: 'flywheel_rescue',
+    description:
+      'Build a Codex rescue packet for a stalled plan, implementation, or review phase; materialize the phase artifact when needed; render a dispatch-ready Codex prompt; and store the canonical rescue event in CASS. Returns { packet, codexPrompt, memoryLine }.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+        phase: {
+          type: 'string',
+          enum: ['plan', 'impl', 'review'],
+          description: 'The stalled flywheel phase to rescue',
+        },
+        beadId: {
+          type: 'string',
+          description: 'Optional bead id for implementation or review rescue; falls back to state.currentBeadId',
+        },
+        errorEnvelope: {
+          type: 'object',
+          description: 'Optional FlywheelToolError-shaped object. code and hint are copied into the rescue packet.',
+          properties: {
+            code: { type: 'string', description: 'FlywheelErrorCode from the stalled operation' },
+            message: { type: 'string', description: 'Error message from the stalled operation' },
+            hint: { type: 'string', description: 'Actionable hint copied verbatim into the packet' },
+          },
+          required: ['code'],
+        },
+        notes: {
+          type: 'string',
+          description: 'Optional proposed next step or phase-specific context for the rescue agent',
+        },
+      },
+      required: ['cwd', 'phase'],
+    },
+  },
+  {
     name: 'flywheel_doctor',
     description: 'Run an 11-check health sweep of the flywheel environment: MCP connectivity, agent-mail liveness, required/optional CLIs (br/bv/ntm/cm), node version, git status, dist drift, orphaned worktrees, and checkpoint validity. Read-only — never mutates checkpoint or state. Returns a DoctorReport with per-check severity (green/yellow/red).',
     inputSchema: {
@@ -602,9 +638,12 @@ const DEFAULT_RUNNERS: Record<FlywheelToolName, ToolRunner> = {
  *
  * bead `agent-flywheel-plugin-zbx` — `flywheel_emit_codex`.
  * bead `claude-orchestrator-2tl` (T8) — `flywheel_remediate` + `orch_remediate` alias.
+ * bead `agent-flywheel-plugin-m66.3.7` (B7) — `flywheel_rescue` + `orch_rescue` alias.
  */
 const EXTENSION_RUNNERS: Record<string, ToolRunner> = {
   flywheel_emit_codex: runEmitCodex as ToolRunner,
+  flywheel_rescue: runRescue as ToolRunner,
+  orch_rescue: runRescue as ToolRunner,
   flywheel_remediate: async (ctx, args) => {
     const parsed = RemediateInputSchema.parse(args);
     return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal) as Promise<McpToolResult>;
