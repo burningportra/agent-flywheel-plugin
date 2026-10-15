@@ -255,6 +255,29 @@ function importedSpecifiers(sourceFile) {
   return [...specifiers];
 }
 
+function compiledArtifactTargets(sourceFile, root, knownFiles) {
+  const targets = new Set();
+  const visit = (node) => {
+    if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+      const argumentsList = node.arguments ?? [];
+      const literalParts = argumentsList.map((argument) =>
+        ts.isStringLiteralLike(argument) ? argument.text : null,
+      );
+      const distIndex = literalParts.indexOf("dist");
+      if (distIndex >= 0) {
+        const tail = literalParts.slice(distIndex + 1);
+        if (tail.length > 0 && tail.every((part) => part !== null)) {
+          const target = resolveEntrypoint(root, path.posix.join("dist", ...tail), knownFiles);
+          if (target) targets.add(target);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return targets;
+}
+
 function resolveLocalModule(specifier, containingFile, knownFiles) {
   if (!specifier.startsWith(".")) return null;
 
@@ -298,7 +321,7 @@ function compilerHost(options, knownFiles) {
   return host;
 }
 
-function buildReachableGraph(entrypoints, sourceFiles, knownFiles) {
+function buildReachableGraph(root, entrypoints, sourceFiles, knownFiles) {
   const reachable = new Set();
   const queue = [...entrypoints];
 
@@ -312,6 +335,9 @@ function buildReachableGraph(entrypoints, sourceFiles, knownFiles) {
     for (const specifier of importedSpecifiers(sourceFile)) {
       const target = resolveLocalModule(specifier, filePath, knownFiles);
       if (target && !reachable.has(target)) queue.push(target);
+    }
+    for (const target of compiledArtifactTargets(sourceFile, root, knownFiles)) {
+      if (!reachable.has(target)) queue.push(target);
     }
   }
 
@@ -674,7 +700,7 @@ function analyze(root) {
 
   const entrypoints = discoverEntrypoints(root, knownFiles);
   if (entrypoints.length === 0) throw new Error(`no entry points found under ${root}`);
-  const reachable = buildReachableGraph(entrypoints, sourceFiles, knownFiles);
+  const reachable = buildReachableGraph(root, entrypoints, sourceFiles, knownFiles);
   const productionFiles = files.filter((filePath) => isProductionSource(root, filePath));
   const { records, recordsBySymbol } = collectExports(
     root,

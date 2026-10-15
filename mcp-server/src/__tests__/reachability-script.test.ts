@@ -96,11 +96,14 @@ describe("scripts/reachability.mjs", () => {
       "src/from-script.ts": "export function fromScript(): void {}\n",
       "src/dynamic-a.ts": "export const dynamicA = true;\n",
       "src/dynamic-b.ts": "export const dynamicB = true;\n",
+      "src/runtime-only.ts": "export const runtimeOnly = true;\n",
       "scripts/tool.ts": [
         'import { fromScript } from "../src/from-script.js";',
         'const target = process.env.USE_A ? "../src/dynamic-a.js" : "../src/dynamic-b.js";',
+        'const runtimeUrl = new URL(`file://${resolve(here, "..", "dist", "runtime-only.js")}`);',
         "fromScript();",
         "await import(target);",
+        "await import(runtimeUrl.href);",
         "",
       ].join("\n"),
     });
@@ -111,5 +114,6 @@ describe("scripts/reachability.mjs", () => {
     expect(output).not.toContain("UNREACHABLE_FILE src/from-script.ts");
     expect(output).not.toContain("UNREACHABLE_FILE src/dynamic-a.ts");
     expect(output).not.toContain("UNREACHABLE_FILE src/dynamic-b.ts");
+    expect(output).not.toContain("UNREACHABLE_FILE src/runtime-only.ts");
   });
 });
