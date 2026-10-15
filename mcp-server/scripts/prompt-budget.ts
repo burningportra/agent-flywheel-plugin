@@ -175,8 +175,8 @@ export function compareEntries(
   const violations: GrowthViolation[] = [];
 
   for (const current of currentEntries) {
-    const baseline = baselineById.get(current.id);
-    if (!baseline) {
+    const baselineChars = baselineById.get(current.id)?.chars;
+    if (baselineChars === undefined) {
       if (current.chars > 0) {
         violations.push({
           id: current.id,
@@ -188,7 +188,7 @@ export function compareEntries(
       }
       continue;
     }
-    if (baseline.chars === 0) {
+    if (baselineChars === 0) {
       if (current.chars > 0) {
         violations.push({
           id: current.id,
@@ -200,11 +200,11 @@ export function compareEntries(
       }
       continue;
     }
-    const growthPercent = ((current.chars - baseline.chars) / baseline.chars) * 100;
+    const growthPercent = ((current.chars - baselineChars) / baselineChars) * 100;
     if (growthPercent > thresholdPercent) {
       violations.push({
         id: current.id,
-        baselineChars: baseline.chars,
+        baselineChars,
         currentChars: current.chars,
         growthPercent,
         reason: "grew",
