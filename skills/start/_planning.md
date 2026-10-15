@@ -826,7 +826,7 @@ After the refinement agent completes, return to the "Plan ready" menu above. Sto
 
 ## Step 5.6.5: Rubric gate (MANDATORY — fires after "Create beads" picks Step 5.6)
 
-> **Hard rule**: After the operator picks "Create beads" from Step 5.6, you MUST run this rubric gate before `_beads.md`. The wrap-up grader (`flywheel_grade_outcome` in `_wrapup.md` Step 9.5) reads `state.outcomeRubricPath` to decide what to grade against; skipping this gate leaves it nothing to read AND silently skips outcome grading without recording the skip flag. The only way to legitimately skip outcome grading for a cycle is the operator picking **Skip rubric** at the gate below — which sets `state.outcomeGradingSkipped = true` so the wrap-up surfaces a verbatim §"Skipped Notice" instead of a verdict.
+> **Hard rule**: After the operator picks "Create beads" from Step 5.6, you MUST run this rubric gate before `_beads.md`. The wrap-up grader (`flywheel_grade_outcome` in `_wrapup.md` Step 9.5) reads `state.outcomeRubricPath` to decide what to grade against; skipping this gate leaves it nothing to read AND silently skips outcome grading without recording the skip flag. A successful `flywheel_synthesize_rubric({ action: "skip" })` call is the only legitimate skip path for either an explicit operator choice or a synthesis-error fallback. It saves `state.outcomeGradingSkipped = true` so wrap-up surfaces the verbatim §"Skipped Notice" instead of a verdict.
 
 ### 5.6.5a — Synthesize the draft rubric
 
