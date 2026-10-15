@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -732,8 +733,9 @@ async function main(): Promise<void> {
   }
 }
 
-const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
-if (entryPath === fileURLToPath(import.meta.url)) {
+const entryPath = process.argv[1] ? realpathSync(path.resolve(process.argv[1])) : "";
+const modulePath = realpathSync(fileURLToPath(import.meta.url));
+if (entryPath === modulePath) {
   void main().catch((error: unknown) => {
     process.stderr.write(`prompt-budget: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;
