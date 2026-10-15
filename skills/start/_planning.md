@@ -349,15 +349,19 @@ After all rounds converge:
 2. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-planning-workflow.md"`.
 3. Jump to Step 5.55 (Plan alignment check).
 
-NTM spawn pattern for each review round. Rounds are sequential — each round reads the plan revised by the prior round — but within a round the mixed `cc:cod:gmi` 1:1:1 cross-check runs in parallel. The review-round guidance comes from the `/planning-workflow` skill, not an unversioned filesystem file:
+NTM spawn pattern for each review round. Rounds are sequential — each round reads the plan revised by the prior round — but within a round the mixed `cc:cod:gmi` 1:1:1 cross-check runs in parallel. Each pane writes to its own per-pane revision file so concurrent writes don't clobber each other; the coordinator reconciles the three revisions into the canonical plan file before dispatching round N+1. The review-round guidance comes from the `/planning-workflow` skill, not an unversioned filesystem file. A spawn with `--label plan-review-round-<N>` creates the session `${NTM_PROJECT}--plan-review-round-<N>`; `--robot-send` and `--robot-wait` both target that session, and panes are addressed by index (`--panes=1`, `--panes=2`, `--panes=3`). Do not try to pass a name instead of an index — ntm 1.36.1 only accepts `--panes`, `--type`, and `--all`.
 
 ```
+SESSION="${NTM_PROJECT}--plan-review-round-<N>"
 ntm spawn "$NTM_PROJECT" --label plan-review-round-<N> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
-# Then --robot-send the same prompt to each of the three panes:
-ntm --robot-send="$NTM_PROJECT" --pane-name="plan-review-round-<N>" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at docs/plans/<date>-<goal-slug>-planning-workflow.md. Write your revised plan back to the same file; the coordinator will reconcile the three revisions before dispatching round N+1."
+# Then --robot-send the per-pane prompt to each of the three panes by index:
+for PANE in 1 2 3; do
+  PERSPECTIVE=$(case $PANE in 1) echo cc;; 2) echo cod;; 3) echo gmi;; esac)
+  ntm --robot-send="$SESSION" --panes="$PANE" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at docs/plans/<date>-<goal-slug>-planning-workflow.md. Write YOUR revised plan to docs/plans/<date>-<goal-slug>-planning-workflow-round-<N>-${PERSPECTIVE}.md — do not touch the canonical plan file; the coordinator will reconcile the three per-pane revisions before dispatching round N+1."
+done
 ```
 
-Use `ntm --robot-wait plan-review-round-<N>` to block until all three panes complete. Reconcile their revisions (take the strongest point from each; break ties by majority) before integrating into the plan file, then spawn round N+1. Stop at convergence (minor wording changes only) or after 5 rounds. Review rounds are sequential by design (each reads the prior round's revision); the per-perspective planner spawn later in this skill is a separate concern (deep-plan).
+Use `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition` to block until all three panes complete, then read the three `-round-<N>-{cc,cod,gmi}.md` files and reconcile (take the strongest point from each; break ties by majority) into the canonical `docs/plans/<date>-<goal-slug>-planning-workflow.md` before spawning round N+1. Stop at convergence (minor wording changes only) or after 5 rounds. Review rounds are sequential by design (each reads the prior round's reconciled revision); the per-perspective planner spawn later in this skill is a separate concern (deep-plan).
 
 **Deep plan**:
 

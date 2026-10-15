@@ -26,13 +26,14 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 5. For each ready bead (up to the user's limit), create a task and spawn an NTM-backed impl agent:
    - `TaskCreate(subject: "Impl: <bead-id> <title>", status: "in_progress")`
    - Save the task ID
-   - Spawn the pane via NTM (per `/vibing-with-ntm` and `/ntm`):
+   - Spawn the pane via NTM (per `/vibing-with-ntm` and `/ntm`). A `--label impl-<goal-slug>` spawn creates session `${NTM_PROJECT}--impl-<goal-slug>`; address panes by index (`--panes=<N>`). ntm 1.36.1 only accepts `--panes`, `--type`, and `--all` — no pane-name-by-label flag:
      ```
-     ntm spawn "$NTM_PROJECT" --pane-name="impl-<bead-id>" --agent="<cc|cod|pi>"
+     IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
+     ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
      ```
    - Send the marching-orders prompt via `ntm --robot-send` (NOT inline `Agent()`):
      ```
-     ntm --robot-send="$NTM_PROJECT" --pane-name="impl-<bead-id>" --msg="
+     ntm --robot-send="$IMPL_SESSION" --panes=<N> --msg="
        ## Agent Mail Bootstrap
        Call macro_start_session(human_key: '<cwd>', program: 'claude-code', model: '<resolved-model>',
          task_description: 'Implementing bead <id>: <title>')

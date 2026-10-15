@@ -33,9 +33,10 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
      # Default 1:1:1; apply substitution ladder gmi→cod→pi→cc when a provider is non-green
      # (see AGENTS.md "NTM pane priority").
      ```
-   - Send the marching-orders prompt via `ntm --robot-send` (NOT inline `Agent()`):
+   - Send the marching-orders prompt via `ntm --robot-send` (NOT inline `Agent()`). A spawn with `--label impl-<goal-slug>` creates session `${NTM_PROJECT}--impl-<goal-slug>`; address panes by index (`--panes=<N>`). ntm 1.36.1 only accepts `--panes`, `--type`, and `--all` — no pane-name-by-label flag:
      ```
-     ntm --robot-send="$NTM_PROJECT" --pane-name="impl-<bead-id>" --msg="
+     IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
+     ntm --robot-send="$IMPL_SESSION" --panes=<N> --msg="
        ## Agent Mail Bootstrap
        Call macro_start_session(human_key: '<cwd>', program: 'claude-code', model: '<your model name>',
          task_description: 'Implementing bead <id>: <title>')
