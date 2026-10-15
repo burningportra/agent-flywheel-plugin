@@ -2,7 +2,7 @@
   "version": 1,
   "gitHead": "37c7888bb7275d139d06a8eda6648e2b1e586b57",
   "sourceMode": "committed-head",
-  "tokenEstimate": "ceil(chars / 4)",
+  "estimateMethod": "ceil(chars / 4)",
   "thresholdPercent": 10,
   "entries": [
     {
