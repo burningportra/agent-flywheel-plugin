@@ -157,7 +157,7 @@ const draftMarkdown = res.structuredContent?.data?.draft?.markdown;
 const warnings = res.structuredContent?.data?.draft?.warnings ?? [];
 ```
 
-`warnings.includes("postmortem_empty_session")` means the draft has no shippable commits. `warnings.includes("postmortem_checkpoint_stale")` means the draft used a fallback git range. Both are successful degraded drafts, so show the warning with the partial draft. Apply Universal Rule 4 only to an error envelope.
+`warnings.includes("postmortem_empty_session")` means the draft has no shippable commits; rebuild it from `git log --since="<session-start-time>" --oneline` before asking. `warnings.includes("postmortem_checkpoint_stale")` means the draft used a fallback git range. Both are successful degraded drafts, so show the warning with the partial draft. Apply Universal Rule 4 only to an error envelope.
 
 Present to the user:
 
@@ -203,10 +203,10 @@ Run this step only when `storeResult` succeeded. Capture `entryId` from the fina
 const draftRes = await flywheel_memory({
   cwd,
   operation: "draft_solution_doc",
-  entryId, // captured in step 1
+  entryId,
 });
-const doc = draftRes.structuredContent?.data?.doc;          // SolutionDoc object
-const rendered = draftRes.structuredContent?.data?.rendered; // full markdown w/ frontmatter
+const doc = draftRes.structuredContent?.data?.doc;
+const rendered = draftRes.structuredContent?.data?.rendered;
 ```
 
 For `invalid_input`, derive `entryId` once more from the store text and retry. Skip the write for any other error. `doc.path` is a validated path under `docs/solutions/`. Create its parent directory first because Write fails when the parent is missing, then use the native tool:
