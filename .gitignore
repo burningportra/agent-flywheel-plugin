@@ -17,7 +17,6 @@ mcp-server/.deps-install.lock/
 
 # Vitest coverage output
 mcp-server/coverage/
-mcp-server/.lintskill-baseline.json
 
 # Local runtime state
 storage.sqlite3

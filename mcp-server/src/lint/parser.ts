@@ -371,13 +371,49 @@ function firstNonWhitespace(src: string, from: number, to: number): number {
   return i;
 }
 
+/**
+ * '>' is a CommonMark blockquote marker when it appears at the start of a line
+ * (possibly after up to 3 spaces/tabs of indent, or other '>' for nested
+ * blockquotes). Content inside the blockquote keeps the marker as literal text
+ * in the raw source, so option elements of an AskUserQuestion written across
+ * blockquote lines start at '\n> {...}'. Fixed by stepping over any such
+ * markers before probing the first meaningful char.
+ */
+function isBlockquoteMarkerAt(src: string, i: number): boolean {
+  if (src[i] !== ">") return false;
+  for (let j = i - 1; j >= 0; j--) {
+    const ch = src[j];
+    if (ch === "\n") return true;
+    if (ch === " " || ch === "\t" || ch === ">") continue;
+    return false;
+  }
+  return true;
+}
+
+function firstMeaningfulChar(src: string, from: number, to: number): number {
+  let i = from;
+  while (i < to) {
+    const ch = src[i]!;
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    if (ch === ">" && isBlockquoteMarkerAt(src, i)) {
+      i++;
+      continue;
+    }
+    return i;
+  }
+  return to;
+}
+
 function parseAuqQuestion(
   src: string,
   start: number,
   end: number,
   toLC: OffsetToLineCol,
 ): AuqQuestion | null {
-  const objStart = firstNonWhitespace(src, start, end);
+  const objStart = firstMeaningfulChar(src, start, end);
   if (src[objStart] !== "{") return null;
   const fields = parseObjectFields(src, objStart);
   if (!fields) return null;
@@ -429,7 +465,7 @@ function parseAuqOption(
   end: number,
   toLC: OffsetToLineCol,
 ): AuqOption | null {
-  const head = firstNonWhitespace(src, start, end);
+  const head = firstMeaningfulChar(src, start, end);
   const ch = src[head];
   if (ch === '"' || ch === "'" || ch === "`") {
     const subTokens = tokenize(src, head, end);
@@ -490,7 +526,7 @@ function extractAuqCalls(src: string, toLC: OffsetToLineCol): AskUserQuestionCal
     try {
       const inner = src.slice(parenIdx + 1, closeParen);
       const innerStartAbs = parenIdx + 1;
-      const objStart = firstNonWhitespace(inner, 0, inner.length);
+      const objStart = firstMeaningfulChar(inner, 0, inner.length);
       // Two supported forms:
       //   1) AskUserQuestion({ questions: [...] })  — outer object literal
       //   2) AskUserQuestion(questions: [...])      — labeled args (no outer braces)
@@ -666,8 +702,16 @@ function extractFences(tree: Root, source: string, toLC: OffsetToLineCol): {
         if (openMatch) {
           const fenceChar = openMatch[1]![0];
           const openLen = openMatch[1]!.length;
+          // CommonMark allows the close line to be indented 0..3 spaces at the
+          // document root. Inside list items or blockquotes the raw slice we
+          // extract keeps whatever leading indent + '> ' markers that container
+          // adds — e.g. '      ```' (6-space list indent) or '> ```' (blockquote).
+          // Allow any mix of spaces, tabs, and '>' before the close fence so we
+          // don't flag these as unclosed. (remark already handed us a Code node,
+          // so the fence IS closed; our regex is a safety-net against unclosed
+          // openers that extend to EOF.)
           const closeRe = new RegExp(
-            `\\n[ ]{0,3}${fenceChar === "`" ? "`" : "~"}{${openLen},}\\s*$`,
+            `\\n[ \\t>]*${fenceChar === "`" ? "`" : "~"}{${openLen},}[ \\t]*$`,
             "m",
           );
           if (!closeRe.test(text)) {

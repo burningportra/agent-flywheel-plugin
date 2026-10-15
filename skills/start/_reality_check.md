@@ -13,7 +13,7 @@ This is the canonical "come-to-Jesus" pass after days or weeks of bead work. It'
 ```
 AskUserQuestion(questions: [{
   question: "How deep should the reality check go?",
-  header: "Reality check",
+  header: "Depth",
   options: [
     { label: "Reality check only", description: "Run §2 — agent reads docs + investigates code + applies /reality-check-for-project exhaustively. Stop after the gap report. Best when you want to read the findings and decide manually." },
     { label: "Reality check + beads", description: "Run §2, then §3 — convert every gap into a granular self-contained bead graph via br, with comments capturing background/reasoning. Stops before implementation. (Recommended)" },

@@ -58,7 +58,7 @@ fi
   ```
   AskUserQuestion(questions: [{
     question: "NTM has a different repo named '$PROJECT_BASENAME' already at $TARGET (resolves to $points-to). What should I do?",
-    header: "NTM name collision",
+    header: "NTM collide",
     options: [
       { label: "Use unique label", description: "Replace target name in the spawn with a project-disambiguating label like '$PROJECT_BASENAME-$(git rev-parse --short HEAD)'" },
       { label: "Replace symlink", description: "rm $TARGET && ln -s $PROJECT_ROOT $TARGET — destroys the link to the OTHER repo, only safe if it's stale" },
@@ -242,7 +242,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
       ```
       AskUserQuestion(questions: [{
         question: "Doctor flagged gemini_model_compat (configured gemini model is outside the documented allowlist). How to handle the gem lane?",
-        header: "Gemini config",
+        header: "Gemini",
         options: [
           { label: "Skip gem from swarm (Recommended)", description: "Re-shape lane sizes via substitution ladder (gmi→cod→pi→cc). Loses Gemini perspective but avoids spawn crash." },
           { label: "Continue anyway", description: "Spawn gem panes despite known incompatibility — they will likely reject the configured model and exit." }

@@ -13,7 +13,7 @@ Otherwise, surface:
 ```
 AskUserQuestion(questions: [{
   question: "Before wrap-up: gap-check the implementation against the original goal '<state.selectedGoal>'?",
-  header: "Reality check",
+  header: "Gap check",
   options: [
     { label: "Skip — looks aligned", description: "Proceed directly to Step 9.5 wrap-up (Recommended if scope was tight and reviews already converged)" },
     { label: "Quick check", description: "Read AGENTS.md + README.md, scan the closed beads, surface any obvious aspirational-vs-real divergence inline (no new beads)" },

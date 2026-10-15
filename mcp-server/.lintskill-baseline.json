@@ -1,87 +1,623 @@
 {
   "schemaVersion": 1,
   "rulesetVersion": 1,
-  "generated": "2026-04-27T01:01:34.951Z",
+  "generated": "2026-10-15T16:52:41.172Z",
   "entries": [
     {
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 209,
-      "fingerprint": "sha256:f92eef67973014be2dd0dde9e91e0a664d7179c0f208897f72a489c554259ace",
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 596,
+      "fingerprint": "sha256:94ed868e26c6bcb22f5716680161d087506f8047ed1d3c461b86608f363d6028",
       "reason": ""
     },
     {
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 658,
+      "fingerprint": "sha256:523bb41f48b10b4fe51aca8593aefec663aac17beb1b2d765266f377de080110",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 122,
+      "fingerprint": "sha256:c27c161a2200d989c971ce5f4572794c15710708e2b210688bd68b4ee3b7cf9e",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 231,
+      "fingerprint": "sha256:3c53287e2cf8d4cd8214055e9e691a6acb73b0cee6915259b446e3d49d35ac69",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 611,
+      "fingerprint": "sha256:d3d5266e525685728295f880bc6f1efc36875e52a6181e1579c0419f6370e37d",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 732,
+      "fingerprint": "sha256:619a1eaf9d440894d294b5a9bd549ac99c717ac2d7b176bfeefe3a19a5828692",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 734,
+      "fingerprint": "sha256:c040b4419f6d0098ebd69d5e656c01574ab109c036e6e2250e5fbbfeffbab1b3",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 734,
+      "fingerprint": "sha256:c040b4419f6d0098ebd69d5e656c01574ab109c036e6e2250e5fbbfeffbab1b3",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/SKILL.md",
+      "line": 774,
+      "fingerprint": "sha256:a966972cc2eae1345f592749689b2424ad9bd832d03a5b498e706ce536d46f6a",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_deslop.md",
+      "line": 40,
+      "fingerprint": "sha256:151c06dea52d0d61430d525302d3cf7f841f5f7199eadf75f4914adb1480ce88",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_deslop.md",
+      "line": 202,
+      "fingerprint": "sha256:acc3df86072ad8ed39267415501506fa956326835fbf81b5743090bbc1a8b194",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_deslop.md",
+      "line": 18,
+      "fingerprint": "sha256:47d73d5d8f7417bbc6629cfcb14ed85fda2a9a79d3012aa382ca891b46ccaf64",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_deslop.md",
+      "line": 21,
+      "fingerprint": "sha256:bead8527adc7f2b54b2a95633d3b6c278d1eaca180393f5a603c2d8c2ca95c60",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_implement.md",
+      "line": 203,
+      "fingerprint": "sha256:f126ac1236778142f7a7e5db770c11e3ce9de6aacdc1b96fe4937a87c322a0c9",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_implement.md",
+      "line": 52,
+      "fingerprint": "sha256:8495c86bbc57f6385ecf7d3bdeb37e25d04292c93c923f1e726ceb7da3513337",
+      "reason": ""
+    },
+    {
+      "ruleId": "ERR001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_implement.md",
+      "line": 189,
+      "fingerprint": "sha256:b599feba7107f695183f8c7ee7bc319a5228c376213cc5d8f35782c90fb02a5c",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 13,
+      "fingerprint": "sha256:72ec5fe86c102f107cfaef28867db149d871c7a59f699e12eab40dd1a65de6f1",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 13,
+      "fingerprint": "sha256:72ec5fe86c102f107cfaef28867db149d871c7a59f699e12eab40dd1a65de6f1",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 13,
+      "fingerprint": "sha256:72ec5fe86c102f107cfaef28867db149d871c7a59f699e12eab40dd1a65de6f1",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 15,
+      "fingerprint": "sha256:60a8bb094bf7e05fd62804156a70231d30b334bb8f16265a82b3d9c254568c7c",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 19,
+      "fingerprint": "sha256:9bfe036f79f646f3e4ecb3c476eb2531fc8d7b02496e48be577077452b0cc7d6",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 21,
+      "fingerprint": "sha256:f683d76da52ee00e4e849639a5dc5b434b3d544c847007271231c425f4e12fba",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 21,
+      "fingerprint": "sha256:f683d76da52ee00e4e849639a5dc5b434b3d544c847007271231c425f4e12fba",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 21,
+      "fingerprint": "sha256:f683d76da52ee00e4e849639a5dc5b434b3d544c847007271231c425f4e12fba",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 21,
+      "fingerprint": "sha256:f683d76da52ee00e4e849639a5dc5b434b3d544c847007271231c425f4e12fba",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 23,
+      "fingerprint": "sha256:bc8c1cfd67339cb6029f5bf6e70b3455e59b5f481855b60ed1b3fb5af911edf7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 31,
+      "fingerprint": "sha256:544a6912b88baaecd03f5d4d94c586cfa9bb87b3169e3ae9cbba2e65563f8962",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 31,
+      "fingerprint": "sha256:544a6912b88baaecd03f5d4d94c586cfa9bb87b3169e3ae9cbba2e65563f8962",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 34,
+      "fingerprint": "sha256:cd722986982d9ba472840a6ceac4a86f54d1bade2b629788a3a7476669038643",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 37,
+      "fingerprint": "sha256:1e57639909f6701956f9be7ffa95d6ffb4eba7dc88a7d47906edbbacea3a1936",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 37,
+      "fingerprint": "sha256:1e57639909f6701956f9be7ffa95d6ffb4eba7dc88a7d47906edbbacea3a1936",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 37,
+      "fingerprint": "sha256:1e57639909f6701956f9be7ffa95d6ffb4eba7dc88a7d47906edbbacea3a1936",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 37,
+      "fingerprint": "sha256:1e57639909f6701956f9be7ffa95d6ffb4eba7dc88a7d47906edbbacea3a1936",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 37,
+      "fingerprint": "sha256:1e57639909f6701956f9be7ffa95d6ffb4eba7dc88a7d47906edbbacea3a1936",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 37,
+      "fingerprint": "sha256:1e57639909f6701956f9be7ffa95d6ffb4eba7dc88a7d47906edbbacea3a1936",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 41,
+      "fingerprint": "sha256:d302e037fab7b3568f3f781f9a0816695cdf4778cfaf6b231436f06a619499a1",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_inflight_prompt.md",
+      "line": 42,
+      "fingerprint": "sha256:f4c1267951a5169112b772811d031fbff635107a5384d1aa948902b5f45948e7",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 223,
+      "fingerprint": "sha256:f279e868279aaace3c8c6c33ec338011d9b89a8c6cc0181cdbfe027395b0aefd",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
       "line": 224,
-      "fingerprint": "sha256:409207e827e9f83d46759007b4fbb5ea7f90fc23176b28d5b831c72d5890f893",
+      "fingerprint": "sha256:31a1db81c3b00a5eeee821c10a3662e6645e060f4b35d7b481e986790e75b517",
       "reason": ""
     },
     {
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 241,
-      "fingerprint": "sha256:b619d33345c683a5f543a00259b385ade3305d8b7252a883de9be96bbbe7e257",
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 794,
+      "fingerprint": "sha256:aa1d5045bad39d99906a74027baa390af1b62a69b54801030c804e374377dfda",
       "reason": ""
     },
     {
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 451,
-      "fingerprint": "sha256:d12e9e6791b585d9b544b6fe622cb1161580255b7fe182cf319ae5369ba014b1",
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 795,
+      "fingerprint": "sha256:09995394826d9b4cbebb9091570640d3564ae325e9a92e1100289ac7a93edb89",
       "reason": ""
     },
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 169,
-      "fingerprint": "sha256:e32bf24eb509870236863352cecbc6b71320f0be98cae8ba7c97e65239269ac4",
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 434,
+      "fingerprint": "sha256:ab5a048ef132a0790fc9bed6889c34dc7c161df2204353b74514356c40c1445a",
       "reason": ""
     },
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 182,
-      "fingerprint": "sha256:1b6f029ddbb28a2218dcddc84bde793baa643e99ebb91def269e8bddb78f5602",
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 643,
+      "fingerprint": "sha256:691c287c0aab7635eeb8cc5c733f8e8e1898d29fd89f687b6dcbaa562fb629f4",
       "reason": ""
     },
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 183,
-      "fingerprint": "sha256:551cf7b35a3ddf1f027754deaeb977ea65c0b5f9930ace5a3f294f3e3dca3280",
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 644,
+      "fingerprint": "sha256:1046e31a6d57f27fea3f0c6ffd3e8eadd0d0c673b5624b90ac8ce13a5f1083a1",
       "reason": ""
     },
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 184,
-      "fingerprint": "sha256:b0fa0c49e6965ded39e7226ee9e0cc31a53d67ee7a3ce44e2228f3ffba2fe99d",
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 695,
+      "fingerprint": "sha256:8859f60dde0df87e3731a8b5a99e0c04c7cd49f4868fc21f89be3d535daf9c8a",
+      "reason": ""
+    },
+    {
+      "ruleId": "ERR001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_planning.md",
+      "line": 330,
+      "fingerprint": "sha256:4cdfa6fea95b6e10a1f3738b01b9fac8ec101adda7749c3aaa63935d6e58d21a",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_reality_check.md",
+      "line": 42,
+      "fingerprint": "sha256:bf6737e45e5bea308cff1b7e66160341b0f91096e68f6d6c23642d1bc3e26c6b",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_reality_check.md",
+      "line": 108,
+      "fingerprint": "sha256:45276faa45fe65240f07d6bcf54f47ea6e0ca4505b9b6289eb17f8969c5b40a3",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_reality_check.md",
+      "line": 108,
+      "fingerprint": "sha256:45276faa45fe65240f07d6bcf54f47ea6e0ca4505b9b6289eb17f8969c5b40a3",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_reality_check.md",
+      "line": 108,
+      "fingerprint": "sha256:45276faa45fe65240f07d6bcf54f47ea6e0ca4505b9b6289eb17f8969c5b40a3",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_reality_check.md",
+      "line": 18,
+      "fingerprint": "sha256:43644a583d8249d7fd08bfee8be45836e3dfa366eb91c08c71fdc25da6dbe56b",
       "reason": ""
     },
     {
       "ruleId": "PLACE001",
       "rulesetVersion": 1,
-      "file": "skills/start/SKILL.md",
-      "line": 190,
-      "fingerprint": "sha256:84f9e825371e71eb235b9331d088361e28341c838f5ce41270c6aafb9755e0a4",
+      "file": "agent-flywheel-plugin/skills/start/_reality_check.md",
+      "line": 93,
+      "fingerprint": "sha256:9361525d76402c3dfcfd263c8f39ab4f9286f98500e38a83fb95cb8491cc423f",
       "reason": ""
     },
     {
-      "ruleId": "RESERVE001",
+      "ruleId": "SLASH001",
       "rulesetVersion": 1,
-      "file": "mcp-server/src/agent-mail.ts",
-      "line": 229,
-      "fingerprint": "sha256:d9d37ceaaf48ae6747c666738c3b0182db5aac4b2f3336aaabe8c4f8504c26cb",
-      "reason": "Orphan reserveFileReservations() helper, zero callers. Kept as RESERVE001 baseline per duel-plan T4. Remove with the orphan when promoting RESERVE001 to error in v3.12. (line shifted +1 by the errMsg import added during the 2026-04-30 single-pass deslop run.)"
+      "file": "agent-flywheel-plugin/skills/start/_review.md",
+      "line": 279,
+      "fingerprint": "sha256:1e8115e03f8083feecc25aa13ff82a0fc5550535c17b166dcb37b913a61c85a9",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_review.md",
+      "line": 371,
+      "fingerprint": "sha256:f810c1f22f1af4da8631bf8ee34bc7220b2fa1e4b25a10f985becefe861a867d",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_review.md",
+      "line": 394,
+      "fingerprint": "sha256:99e58d538a32f6c9e967a3c0a3d1fa36ec001dc31a8bbe2a431edaf9c1ccb4d1",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_review.md",
+      "line": 416,
+      "fingerprint": "sha256:276fc74aaeacef7e3934bd0fb7eeb7c07c3f613df8d7d55152c2b9503eb20f48",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_saturation.md",
+      "line": 19,
+      "fingerprint": "sha256:cc17ce010565d5085b02ad6738c33af87dfb052436d4cefb9ffea10f4628e09e",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_saturation.md",
+      "line": 19,
+      "fingerprint": "sha256:cc17ce010565d5085b02ad6738c33af87dfb052436d4cefb9ffea10f4628e09e",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_saturation.md",
+      "line": 19,
+      "fingerprint": "sha256:cc17ce010565d5085b02ad6738c33af87dfb052436d4cefb9ffea10f4628e09e",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_saturation.md",
+      "line": 19,
+      "fingerprint": "sha256:cc17ce010565d5085b02ad6738c33af87dfb052436d4cefb9ffea10f4628e09e",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_saturation.md",
+      "line": 19,
+      "fingerprint": "sha256:cc17ce010565d5085b02ad6738c33af87dfb052436d4cefb9ffea10f4628e09e",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_saturation.md",
+      "line": 19,
+      "fingerprint": "sha256:cc17ce010565d5085b02ad6738c33af87dfb052436d4cefb9ffea10f4628e09e",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_saturation.md",
+      "line": 114,
+      "fingerprint": "sha256:d89da4d40e7e73e41e3e4375cd5492b747611628a4da734decd736d7ea43aa55",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_tutorial_bead.md",
+      "line": 167,
+      "fingerprint": "sha256:e5ca767662b236bd5fc19d643f230de2bac07de093d03bd2ca74d063c0cb8b99",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_tutorial_bead.md",
+      "line": 165,
+      "fingerprint": "sha256:6904375a569bd0f45397d0e1737f15486d988282bd433729dd6dae1aa5f90add",
+      "reason": ""
+    },
+    {
+      "ruleId": "PLACE001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_tutorial_bead.md",
+      "line": 165,
+      "fingerprint": "sha256:6904375a569bd0f45397d0e1737f15486d988282bd433729dd6dae1aa5f90add",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_wrapup.md",
+      "line": 462,
+      "fingerprint": "sha256:495a49ed27e4533c05173027028c08dcec4e8557714fd774055730eff9853341",
+      "reason": ""
+    },
+    {
+      "ruleId": "SLASH001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_wrapup.md",
+      "line": 463,
+      "fingerprint": "sha256:8e59670a4ae550d053a5e14f9d1913b6dcdf6186aba1ba896e3cbcf2080f48fa",
+      "reason": ""
+    },
+    {
+      "ruleId": "ERR001",
+      "rulesetVersion": 1,
+      "file": "agent-flywheel-plugin/skills/start/_wrapup.md",
+      "line": 371,
+      "fingerprint": "sha256:26a10af38642dc1346381f419d58aed292899ec346aff4e0df63316c7dfa9790",
+      "reason": ""
     }
   ]
 }

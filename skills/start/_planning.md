@@ -416,7 +416,7 @@ Use `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition` to block u
 > ```
 > AskUserQuestion(questions: [{
 >   question: "Doctor flagged gemini_model_compat (configured gemini model outside the documented allowlist). How to handle the gmi lane?",
->   header: "Gemini config",
+>   header: "Gemini",
 >   options: [
 >     { label: "Skip gmi from swarm (Recommended)", description: "Re-shape lane sizes via substitution ladder (gmi→cod→pi→cc). Loses Gemini perspective but avoids spawn crash." },
 >     { label: "Continue anyway", description: "Spawn gmi panes despite known incompatibility — they will likely reject the configured model and exit." }
@@ -694,7 +694,7 @@ Do NOT pad with low-value questions. 2 sharp questions beat 4 fuzzy ones.
 
 - **Decisive convergence** — all answers request changes AND every change is a consistent pick from a SINGLE alternative source (e.g. the user picked the Codex column on every row of a triangulation report, or picked "plan B" on every question where plans diverged): run ONE refinement round to incorporate the user's selections, then **skip the re-extract loop and proceed directly to Step 5.6**. Rationale: the user has already arbitrated every open question in a single batch; re-asking "is the revised plan aligned?" is ceremonial. Surface in your end-of-turn summary: "Decisive convergence on <source> — skipped re-alignment round."
 
-- **Mixed answers (some confirm, some change; or changes drawn from multiple sources)** → run a refinement round automatically (do NOT prompt the user again first). Spawn:
+- **Mixed answers (some confirm, some change; or changes drawn from multiple sources)** → run a refinement round automatically. The Step 2 AskUserQuestion already captured the user's answers; no further confirmation gate before spawning. Spawn:
 
   ```
   Agent(model: "opus", name: "align-refine-<N>", isolation: "worktree", run_in_background: true,
