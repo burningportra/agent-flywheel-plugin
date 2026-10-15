@@ -78,7 +78,7 @@ AskUserQuestion(questions: [{
 
 If the user asks for the quality score before choosing, call `flywheel_approve_beads(action="start")`; it is the only response that includes the launch score. Still require the launch-confirmation gate below before dispatching Step 7.
 
-**Structured error branching (mandatory).** For `flywheel_approve_beads` failures, branch on `result.structuredContent?.data?.error?.code` (typed as `FlywheelErrorCode`) and never parse `error.message` text:
+**Approval error codes.** Follow SKILL.md Universal Rule 4. For `flywheel_approve_beads` recovery:
 
 ```ts
 const code = approveResult.structuredContent?.data?.error?.code;
