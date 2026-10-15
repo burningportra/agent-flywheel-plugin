@@ -19,42 +19,42 @@
     {
       "id": "ask-user-question",
       "pattern": "\\bAskUserQuestion\\b",
-      "baseline": 197,
+      "baseline": 131,
       "reason": "Structured translation to OpenCode question payloads is deferred to v2.",
       "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\bAskUserQuestion\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
     },
     {
       "id": "agent-spawn",
       "pattern": "\\bAgent\\(",
-      "baseline": 77,
+      "baseline": 32,
       "reason": "Claude Agent spawning requires an NTM-aware semantic overlay in v2.",
       "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\bAgent\\(' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
     },
     {
       "id": "team-comms",
       "pattern": "\\b(?:TeamCreate|TeamDelete|SendMessage)\\b",
-      "baseline": 66,
+      "baseline": 25,
       "reason": "Claude team lifecycle and messaging require an NTM-aware semantic overlay in v2.",
       "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\b(TeamCreate|TeamDelete|SendMessage)\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
     },
     {
       "id": "task-lifecycle",
       "pattern": "\\bTask(?:Stop|List|Create)?\\s*\\(|\\bTask(?:Stop|List)\\b",
-      "baseline": 35,
+      "baseline": 14,
       "reason": "Claude agent-task lifecycle calls and prose require an OpenCode workflow overlay in v2.",
       "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\bTask(Stop|List|Create)?\\s*\\(|\\bTask(Stop|List)\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
     },
     {
       "id": "claude-paths",
       "pattern": "~/\\.claude/(?:teams|plugins/cache)",
-      "baseline": 10,
+      "baseline": 3,
       "reason": "Claude team and plugin-cache remediation paths need platform-specific OpenCode guidance in v2.",
       "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '~/\\.claude/(teams|plugins/cache)' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
     },
     {
       "id": "claude-hook-prose",
       "pattern": "\\b(?:PreToolUse|SessionStart|SubagentStop)\\b\"?\\s*:|\\b(?:PreToolUse|SessionStart|SubagentStop)\\b(?:\\s*\\([^\\n)]*\\))?\\s*->|\\b(?:PreToolUse|SessionStart|SubagentStop)\\b[^\\n]{0,40}\\b(?:[Hh]ook|[Ee]ntry)\\b|\\b(?:[Hh]ook|[Ee]ntry)\\b[^\\n]{0,40}\\b(?:PreToolUse|SessionStart|SubagentStop)\\b",
-      "baseline": 9,
+      "baseline": 6,
       "reason": "Claude hook setup and the checked-in hook-map commentary remain visible until the v2 prose overlay.",
       "rgCommand": "rg --sort path --no-heading -n -o --glob '*.{md,js}' -e '\\b(PreToolUse|SessionStart|SubagentStop)\\b\"?\\s*:|\\b(PreToolUse|SessionStart|SubagentStop)\\b(\\s*\\([^\\n)]*\\))?\\s*->|\\b(PreToolUse|SessionStart|SubagentStop)\\b[^\\n]{0,40}\\b([Hh]ook|[Ee]ntry)\\b|\\b([Hh]ook|[Ee]ntry)\\b[^\\n]{0,40}\\b(PreToolUse|SessionStart|SubagentStop)\\b' commands/flywheel-*.md opencode/commands/grill-with-docs.md opencode/commands/start.md opencode/plugins/agent-flywheel.js skills/flywheel-* skills/start"
     }

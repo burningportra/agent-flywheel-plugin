@@ -144,10 +144,10 @@ try {
       .map((match) => [match[1], Number(match[2])]),
   );
   const baselines = new Map([
-    ["ask-user-question", 197],
-    ["agent-spawn", 77],
-    ["team-comms", 66],
-    ["task-lifecycle", 35],
+    ["ask-user-question", 131],
+    ["agent-spawn", 32],
+    ["team-comms", 25],
+    ["task-lifecycle", 14],
   ]);
   for (const [group, baseline] of baselines) {
     const count = counts.get(group);
@@ -160,12 +160,12 @@ try {
   assert.deepEqual(
     Object.fromEntries(counts),
     {
-      "ask-user-question": 197,
-      "agent-spawn": 77,
-      "team-comms": 66,
-      "task-lifecycle": 36,
-      "claude-paths": 10,
-      "claude-hook-prose": 9,
+      "ask-user-question": 131,
+      "agent-spawn": 32,
+      "team-comms": 25,
+      "task-lifecycle": 14,
+      "claude-paths": 3,
+      "claude-hook-prose": 6,
     },
     "current staged occurrence counts are the reviewed deterministic inventory",
   );
