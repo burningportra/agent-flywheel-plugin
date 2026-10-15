@@ -46,7 +46,7 @@ Compression and correctness pass (program `agent-flywheel-plugin-m66`): the meas
 
 ### Removed
 
-- **`mcp-server/src/prompts.ts` (A6).** The five live exports moved to their callers; the file was unreachable after that and is deleted. The reachability report (`npm run dead-code`) is clean at HEAD.
+- **`mcp-server/src/prompts.ts` (A6).** The five live exports moved to their callers; the file was unreachable after that and is deleted. `npm run dead-code` still lists 20 unreachable files (25 at the start of the pass); their delete-or-wire triage is bead n4k.
 - **Unused `_planning.md` readiness chain (A3).** The orphaned chain is gone; the Pre-flight gate is the only readiness path.
 - **Dead `swarm` helpers (A4) and dead `shared` exports (A5).**
 

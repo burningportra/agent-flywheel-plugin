@@ -172,9 +172,23 @@ success criteria is checked.
 | Dead `swarm` helpers                                              | **Deleted** (`2c68173`) |
 | Dead `shared` exports                                             | **Deleted** (`2ef2f50`) |
 
-The unreachable-server-code goal of the root epic (goal 1) is clean per the
-reachability report (`npm run dead-code`), which has stayed green since A6
-landed.
+Root success criterion 5 (unreachable code gone, reachability report clean)
+is **partly met**. Every item the audit named is deleted (the rows above plus
+`runGuidedGates`, the deep-plan runner, and `foregone.ts` / `plan-coverage.ts`).
+The report itself isn't clean. `npm run dead-code` exits 0 because it reports
+rather than gates, and its counts moved as follows:
+
+| Report row               | A0 (start of program) | HEAD `85b570a` |
+|--------------------------|----------------------:|---------------:|
+| Production files reachable | 117 / 142           | 124 / 144      |
+| `UNREACHABLE_FILE`       | 25                    | 20 (~183 KB)   |
+| `UNREACHABLE_EXPORT`     | 176                   | 132            |
+
+The 20 remaining files were never in an A-bead's scope. Some are documented as
+live (AGENTS.md calls `reserveOrFail()` in `agent-mail-helpers.ts` mandatory,
+yet no production code imports it), so they need a delete-or-wire triage
+rather than a blind delete. That triage, plus a `--check` mode wired into CI,
+is filed as **`agent-flywheel-plugin-n4k`** (A7, not dispatched).
 
 ## 7. vce command/skill shadowing resolution
 
