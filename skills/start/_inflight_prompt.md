@@ -29,7 +29,7 @@
 | Phrase in prompt | Concrete action |
 |------------------|-----------------|
 | "use /ntm and /vibing-with-ntm" | Invoke both skills via `Skill` tool BEFORE spawning. They carry the canonical orchestrator decision tree, OC cards, stuck-pane ladder. |
-| "swarm comprising 2 cc + 2 cod + 2 gmi" (cc:cod:gem 1:1:1, six panes) | `ntm spawn $NTM_PROJECT --label inflight-resume --no-user --cc=2 --cod=2 --gmi=2 --stagger-mode=smart`. Pane indices: cc=1,2  cod=3,4  gmi=5,6. Run NTM readiness gate (Step 7 Pre-flight in `_implement.md`) first. **Substitution ladder** (per AGENTS.md NTM pane priority): when a model is unavailable, reassign its share in order `gmi→cod→pi→cc`. Concretely: gmi missing → bump cod (`--cc=2 --cod=4`); gmi+cod both missing → bump pi (`--cc=2 --pi=4`); both pi and cod also missing → fall back to all-cc (`--cc=6`). Run §3a Model-config pre-spawn gate before dispatch — it auto-downgrades broken `--cod=`/`--gmi=` shares per the same ladder. |
+| "swarm comprising 2 cc + 2 cod + 2 gmi" (cc:cod:gem 1:1:1, six panes) | Execute the **Shared swarm pre-conditions** below. When the final result permits NTM, run `ntm spawn $NTM_PROJECT --label inflight-resume --no-user --cc=2 --cod=2 --gmi=2 --stagger-mode=smart` with the lane substitutions it produced. The canonical pane indices are cc=1,2, cod=3,4, and gmi=5,6. |
 | "clearing stale build artifacts" | Every 30 min OR when disk free <5GB, run `git clean -fdX -- '<build-output-dirs>'` (respects gitignore, only removes ignored build artifacts). Never run `git clean -fdx` (lowercase x) — that nukes untracked source files. |
 | "use rch for all builds/tests (see /rch)" | Invoke `/rch` skill for the canonical build-runner contract. Pass `rch build` / `rch test` to each impl agent's prompt as the validate-gate command instead of a stack-specific `npm run build` / `cargo test`. |
 | "avoid excessive build contention" | Implement a project-level build mutex via the portable wrapper: `scripts/build-mutex.sh rch build` and `scripts/build-mutex.sh rch test`. Document this in each impl agent's STEP 2 prompt. The wrapper uses atomic `mkdir` locking and does not require the Linux-only `flock` binary. |
@@ -47,28 +47,18 @@
 
 ---
 
-## Pre-conditions checklist (run before dispatching the swarm)
+## Shared swarm pre-conditions (run before dispatch)
 
-1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight). If misconfigured, surface fix-or-fallback `AskUserQuestion`. **Windows-native branch** below covers the case where ntm is structurally unavailable (not just misconfigured).
-2. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture your registration token.
+1. **NTM and provider readiness.** Execute `_implement.md` **Pre-flight: resolve NTM readiness** and use its final `DOCTOR_REPORT`, `NTM_AVAILABLE`, and `NTM_PROJECT`. An unavailable result ends this swarm branch and takes the procedure's single-agent fallback. The Windows-native branch below provides its platform route. For an NTM spawn, derive the lane shape from the final report's CLI, `swarm_model_ratio`, and model-compatibility rows. Do not call `which` or the doctor again. Treat a requested lane as unavailable when its row is non-green, then apply the AGENTS.md substitution ladder (`gmi→cod→pi→cc`). This `--no-user` flow logs each downgrade without another question. If both `cod` and `gmi` are unavailable and the operator has not approved all-cc, surface the degraded-mode `AskUserQuestion`. Treat a missing compatibility row from an older server as green.
+2. **Agent Mail bootstrap.** Run `macro_start_session` for the coordinator and capture the registration token.
    - When writing `.pi-flywheel/inflight-briefing.md` for spawned panes, its STEP 0 must tell agents to reuse NTM's pane identity: if `$NTM_AGENT_NAME` is set, call `macro_start_session(..., agent_name: "$NTM_AGENT_NAME")` and use that same value for `AGENT_NAME` in git commands.
    - If `$NTM_AGENT_NAME` is absent, call `macro_start_session` without `agent_name`, capture the generated name, and note that audit trails will remain split until NTM exports the pane identity. Current `ntm spawn --help` exposes `NTM_SPAWN_*` metadata but no `NTM_AGENT_NAME` / `--agent-name` support.
-3. **CLI capability check** — `which claude codex gemini`. The cc:cod:gem 1:1:1 baseline assumes all three CLIs are present. Missing `codex` collapses the `--cod=` lane; missing `gemini` collapses the `--gmi=` lane; either case triggers the substitution ladder (gmi→cod→pi→cc) in §3a. Surface a degraded-mode `AskUserQuestion` only if all of cod+gmi are missing AND the operator hasn't already opted into all-cc spawning.
-3a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gmi=M>0`).** Call `flywheel_doctor` (cached) and read `DOCTOR_REPORT.checks`. Apply per check, BEFORE `ntm spawn`:
+3. **Disk-space guard.** Run `df -h $PWD`. If free space is below 5GB, remove stale ignored build artifacts before spawning.
+4. **Tender-daemon spawn.** Start `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --project=$PWD --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &` and capture its PID. Pass `--project` for compatibility with versions before v3.6.7.
+5. **Bead snapshot.** Run `br list --json` and `br ready --json`. Reopen stalled in-progress beads under the rule above.
+6. **Looper schedule.** Invoke `Skill: loop` with a `4m` interval and the marching orders from the operator-decoder table.
 
-   | Check | Trigger | Action |
-   |-------|---------|--------|
-   | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Redistribute the dropped share via the substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc). Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. |
-   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder (gmi→cod→pi→cc). Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist; see AGENTS.md NTM pane priority substitution ladder)`. |
-
-   In `--no-user` auto-resume / looper-driven contexts (this file's default), auto-downgrade with the log line — do NOT block on `AskUserQuestion`. The resumed swarm proceeds with the new pane shape; the operator sees the downgrade in the dispatch banner. For interactive `/start` variants, see `_implement.md` Step 1a for the AskUserQuestion variant. The `gemini_model_compat` doctor check is provided by bead `claude-orchestrator-37n6`; until it ships, treat the check as `green` (default open).
-
-4. **Disk-space guard** — `df -h $PWD`. If <5GB free, run the stale-artifact cleanup BEFORE spawning so agents don't die mid-build.
-5. **Tender-daemon spawn** — start `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --project=$PWD --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &` (v3.6.0+; `--project` defaults to `process.cwd()` in v3.6.7+, but pass it explicitly for compatibility). Capture PID for shutdown.
-6. **Bead snapshot** — `br list --json` and `br ready --json`. Identify any stalled in-progress beads up front and reopen them per the rule above.
-7. **Looper schedule** — invoke `Skill: loop` with `4m` interval and the marching-orders prompt referenced in the operator-decoder table.
-
-After all 7 pass, dispatch the swarm and enter the monitor loop documented in `_implement.md` Pre-loop / Implementation loop / Post-wave bridge.
+After all six pass, dispatch the swarm and enter the monitor loop documented in `_implement.md` Pre-loop / Implementation loop / Post-wave bridge.
 
 ### Windows-native fallback (T5.5)
 
@@ -88,7 +78,7 @@ Then re-frame the rest of the in-flight prompt:
 - **Tender-daemon** → still spawn it (it observes Beads + Agent Mail regardless of pane backing) but at the lower 60s interval since there's no pane stall risk to catch.
 - **Build mutex** → not needed; sequential dispatch can't deadlock against itself.
 
-All other pre-conditions (Agent Mail bootstrap, CLI capability check, disk-space guard, bead snapshot) run unchanged. The pane-type priority rule in the operator-decoder table is moot on this branch — there are no panes.
+All other pre-conditions (Agent Mail bootstrap, provider readiness, disk-space guard, bead snapshot) run unchanged. The pane-type priority rule in the operator-decoder table is moot on this branch — there are no panes.
 
 WSL2 is the recommended path for any real swarm work on Windows; the native fallback exists so a Windows operator can still complete a `/start` invocation end-to-end (just slower and serially) without being told to go install tmux first.
 

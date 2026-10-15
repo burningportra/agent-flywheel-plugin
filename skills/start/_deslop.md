@@ -64,27 +64,16 @@ The fresh-eyes review is the second-half of the proof obligation — the skill s
 
 This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refactor-not-feature work.
 
-### 4a. Pre-flight (mandatory — same as `_implement.md`)
+### 4a. Pre-flight
 
-1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight at top of Step 7). If misconfigured, surface fix-or-fallback `AskUserQuestion`.
-2. **CLI capability check** — `which codex` MUST succeed. If not, fall back to §5 iterative mode (don't silently degrade — surface a `AskUserQuestion` first).
-2a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gmi=M>0`).** Call `flywheel_doctor` and read `DOCTOR_REPORT.checks`. Apply per check BEFORE `ntm spawn`:
-
-   | Check | Trigger | Action |
-   |-------|---------|--------|
-   | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Per the substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc), redistribute the dropped share. Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. Then route to §5 iterative mode if the surviving cod count is 0. |
-   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. The check ships in `mcp-server/src/tools/doctor.ts`; if it is absent from `DOCTOR_REPORT.checks` (older MCP server), treat as `green`. |
-
-   Deslop's primary lane is `cod` (per §4b). If the downgrade leaves zero usable cod panes, surface an `AskUserQuestion` offering routes: (1) proceed all-cc swarm, (2) fall back to §5 iterative mode, (3) abort. Do NOT silently spawn a degraded swarm with fewer-than-intended panes — operator should make the call.
-3. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture registration token.
-4. **Baseline capture (THE proof obligation)** — BEFORE any deslop edits, record:
+1. **Shared swarm pre-conditions.** Execute the **NTM and provider readiness**, **Agent Mail bootstrap**, **Disk-space guard**, and **Tender-daemon spawn** steps in `_inflight_prompt.md`. Its first step executes `_implement.md` **Pre-flight: resolve NTM readiness** and uses the final doctor result. An unavailable result routes to §5 instead of §4b. Skip the in-flight bead snapshot and 4-minute looper because §4e owns deslop supervision.
+2. **Deslop lane override.** Require green `codex_cli` and `codex_config_compat` rows for the primary `--cod=5` lane. If no usable Codex pane survives, ask the operator to choose all-cc swarm, §5 iterative mode, or abort.
+3. **Baseline capture (THE proof obligation).** BEFORE any deslop edits, record:
    - Full test suite green: `rch test` (or stack-appropriate command). Capture pass-count + duration.
    - LOC: `tokei .` or `cloc . --vcs=git`. Snapshot to `.pi-flywheel/deslop-baseline-<sha>.json`.
    - Warnings: `rch build 2>&1 | grep -ic warning` (or stack equivalent).
    - Optional golden artifacts: capture stdout/stderr of any deterministic CLI commands the project ships.
    The skill's ledger compares post-edit numbers to this baseline. **No baseline = no proof = abort.**
-5. **Disk-space guard** — `df -h $PWD`. <5GB → run stale-artifact cleanup (`git clean -fdX -- '<build-output-dirs>'` only — never `-fdx`) before spawning.
-6. **Tender-daemon spawn** (v3.6.0+) — `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &`. Capture PID for shutdown.
 
 ### 4b. Spawn the swarm
 
@@ -184,7 +173,7 @@ For solo-agent use without NTM. Invoke once via the `Skill` tool:
 Skill(skill: "repeatedly-apply-skill", args: "10 times: simplify-and-refactor-code-isomorphically; apply fresh-eyes review between each pass")
 ```
 
-The wrapper handles the loop, fresh-eyes review interleaving, and termination. Pre-conditions §4a items 1, 3, 4 still apply (skip NTM-specific items 2, 5, 6).
+The wrapper handles the loop, fresh-eyes review interleaving, and termination. Before the first pass, run D1's NTM readiness procedure, register the coordinator with Agent Mail, and capture the §4a baseline. Skip the deslop swarm lane, disk, daemon, bead-snapshot, and looper steps.
 
 ---
 
@@ -193,7 +182,7 @@ The wrapper handles the loop, fresh-eyes review interleaving, and termination. P
 | Phrase in user's documentation | Concrete action |
 |--------------------------------|-----------------|
 | "isomorphism cards" | The skill's per-candidate proof-table covering ordering, errors, logs, metrics, side effects, async cancellation, hook identity, serialization, lifecycle. Required before any edit lands. |
-| "baseline" | Recorded in §4a item 4 BEFORE any edits. Without it the skill cannot prove preservation. |
+| "baseline" | Recorded in §4a **Baseline capture** before any edits. Without it the skill cannot prove preservation. |
 | "ledger" | The skill's per-pass record of accepted/rejected candidates + isomorphism-card outcomes. Lives in the project's `.simplify-ledger/` (the skill creates it). Read this AFTER each pass to drive the controller fresh-eyes review. |
 | "one lever per commit" | Each accepted candidate = one commit. Do NOT batch. The skill enforces this; the swarm-mode prompt repeats it. |
 | "no rewrites, no sed, no drive-by fixes" | Mechanical edits only — `Edit` tool one location at a time. If a candidate requires a rewrite, the skill's risk-scorer should reject it. |

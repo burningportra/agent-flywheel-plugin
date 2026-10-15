@@ -107,29 +107,18 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 >
 > Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch a mixed cc:cod:gem 2:2:2 swarm (2 claude + 2 codex + 2 gemini panes, per AGENTS.md NTM pane priority — model-diversified is the canonical default; fall back via the substitution ladder gmi→cod→pi→cc when a provider is unavailable on this host) and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
 
-### 4a. Pre-flight (mandatory — same as `_implement.md`)
+### 4a. Pre-flight
 
-1. **NTM readiness gate** — re-detect inline (per `_implement.md` Pre-flight at top of Step 7). If misconfigured, surface fix-or-fallback `AskUserQuestion`.
-2. **CLI capability check** — `which claude` MUST succeed. `which codex` and `which gemini` are advisory: any missing peer triggers the substitution ladder (gmi→cod→pi→cc, per AGENTS.md NTM pane priority). If all three peers are unavailable, surface a degraded-mode `AskUserQuestion` (proceed cc-only? abort?). Use the swarm-capability output from `flywheel_doctor` (`claude_cli`, `codex_cli`, `gemini_cli`, `swarm_model_ratio`) — do not parse `which` output twice.
-2a. **Model-config pre-spawn gate (MANDATORY when spawn requests `--cod=N>0` or `--gmi=M>0`).** Call `flywheel_doctor` and read `DOCTOR_REPORT.checks`. Apply per check BEFORE `ntm spawn`:
-
-   | Check | Trigger | Action |
-   |-------|---------|--------|
-   | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Redistribute via substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc). Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. |
-   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. The check ships in `mcp-server/src/tools/doctor.ts`; if it is absent from `DOCTOR_REPORT.checks` (older MCP server), treat as `green`. |
-
-   In interactive `/start` contexts, prefer the AskUserQuestion variants in `_implement.md` Step 1a/1b. The full-pipeline reality-check path is typically dispatched as a single user choice, so silent auto-downgrade with the log line is the default here.
-3. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture registration token.
-4. **Disk-space guard** — `df -h $PWD`. <5GB → run stale-artifact cleanup (`git clean -fdX -- '<build-output-dirs>'` only — never `-fdx`) before spawning.
-5. **Tender-daemon spawn** — `node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js --session=… --interval=30000 --logfile=.pi-flywheel/tender-events.log --agent=<your-name> &`. Capture PID for shutdown.
-6. **Bead snapshot** — `br list --json` and `br ready --json`. Identify any stalled in-progress beads up front and reopen per the rule in `_inflight_prompt.md` (in_progress + no commit in 30min + agent absent from `list_window_identities`).
-7. **Build mutex documented** — every impl agent's STEP 2 prompt must use `scripts/build-mutex.sh rch build` so the 6 panes don't compile simultaneously. Do not use bare `flock`; macOS does not ship it.
+1. **Shared swarm pre-conditions.** Execute the **NTM and provider readiness**, **Agent Mail bootstrap**, **Disk-space guard**, and **Tender-daemon spawn** steps in `_inflight_prompt.md`. Its first step executes `_implement.md` **Pre-flight: resolve NTM readiness** and uses the final doctor result. An unavailable result takes the D1 single-agent fallback instead of continuing to §4b. This full-pipeline route uses the shared unattended lane downgrades because the depth choice already authorized the swarm.
+2. **Reality-check lane requirement.** Require a green `claude_cli` row. The shared substitution ladder handles non-green `cod` and `gmi` rows. If neither peer remains, surface the existing cc-only or abort choice.
+3. **Bead snapshot.** Run `br list --json` and `br ready --json`. Reopen any stalled in-progress bead under the rule in `_inflight_prompt.md`.
+4. **Build mutex.** Put `scripts/build-mutex.sh rch build` in every implementation agent's STEP 2 prompt so the six panes do not compile at once. Do not use `flock`; macOS does not ship it.
 
 ### 4b. Spawn the swarm
 
 `ntm spawn $NTM_PROJECT --label reality-check-closure --no-user --cc=2 --cod=2 --gmi=2 --stagger-mode=smart`. Pane indices: cc=1,2  cod=3,4  gmi=5,6.
 
-**Pane-type priority** (per AGENTS.md "NTM pane priority"): mixed `cc:cod:gem` 1:1:1 is the canonical default. Apply the substitution ladder when a provider is unavailable on this host (driven by Step 4a model-config gates):
+**Pane-type priority** (per AGENTS.md "NTM pane priority"): mixed `cc:cod:gem` 1:1:1 is the canonical default. Apply the lane shape produced by the shared provider-readiness step:
 
 1. Missing `gmi` (or `gemini_model_compat` non-green) → reassign to `--cod=` (`--cc=2 --cod=4`).
 2. Missing `cod` *also* (or `codex_config_compat` non-green) → reassign to `--pi=` (`--cc=2 --cod=0 --pi=4`).
