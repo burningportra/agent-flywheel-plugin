@@ -726,6 +726,11 @@ Current beads:
       expect(state.phase).toBe('planning');
       expect(state.planRefinementRound).toBe(1);
       expect(result.content[0].text).toContain('Git-diff review');
+      expect(result.content[0].text).toContain('Carefully review this entire plan for me');
+      expect(result.content[0].text).toContain('# Plan\nSome content here');
+      expect(result.content[0].text).toContain('OK, now integrate these revisions to the markdown plan in-place');
+      expect(result.content[0].text).toContain('## Original Plan\n<original plan from plan.md>');
+      expect(result.content[0].text).toContain('## Proposed Revisions\n<reviewer proposed revisions>');
       expect(result.structuredContent).toEqual({
         tool: 'flywheel_approve_beads',
         version: 1,

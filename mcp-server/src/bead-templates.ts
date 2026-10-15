@@ -247,7 +247,7 @@ Acceptance criteria:
     placeholders: [
       { name: "featureName", description: "Feature or function needing coverage", example: "plan-to-bead audit warnings", required: true },
       { name: "riskArea", description: "High-risk behavior or regression area", example: "empty sections and weak mappings", required: true },
-      { name: "implementationFile", description: "Referenced source file", example: "src/prompts.ts", required: true },
+      { name: "implementationFile", description: "Referenced source file", example: "src/tools/plan.ts", required: true },
       { name: "testFile", description: "Test file to create or extend", example: "src/flywheel.test.ts", required: true },
     ],
     acceptanceCriteria: [
@@ -819,16 +819,6 @@ export function getTemplateById(templateId: string, version?: number): BeadTempl
     ? matches.reduce((acc, candidate) => candidate.version > acc.version ? candidate : acc)
     : matches.find((candidate) => candidate.version === version);
   return resolved ? cloneTemplate(resolved) : undefined;
-}
-
-export function formatTemplatesForPrompt(): string {
-  if (BUILTIN_TEMPLATES.length === 0) {
-    return "(No bead templates available — write custom bead descriptions.)";
-  }
-  return BUILTIN_TEMPLATES.map((template) => {
-    const placeholderNames = template.placeholders.map((placeholder) => placeholder.name).join(", ");
-    return `- ${template.id}@${template.version}: ${template.summary} Placeholders: ${placeholderNames}`;
-  }).join("\n");
 }
 
 function validatePlaceholderValues(placeholders: Record<string, string>): string | undefined {

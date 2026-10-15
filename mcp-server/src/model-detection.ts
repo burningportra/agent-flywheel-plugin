@@ -35,6 +35,29 @@ export interface DetectedModels {
   freshPerspectiveModel: string | null;
 }
 
+/** Models used by the swarm launcher. */
+export const SWARM_MODELS = {
+  opus: "anthropic/claude-opus-4-7",
+  codex: "codex",
+  haiku: "anthropic/claude-haiku-4-5",
+} as const;
+
+/** Models used by cost-aware model routing tiers. */
+export const MODEL_ROUTING_TIERS = {
+  simple: {
+    implementation: "anthropic/claude-haiku-4-5",
+    review: "anthropic/claude-sonnet-4-6",
+  },
+  medium: {
+    implementation: "anthropic/claude-opus-4-7",
+    review: "anthropic/claude-sonnet-4-6",
+  },
+  complex: {
+    implementation: "anthropic/claude-opus-4-7",
+    review: "anthropic/claude-opus-4-7",
+  },
+} as const;
+
 /**
  * Model preferences by provider, ordered by capability.
  * These are the "best" models from each provider for planning tasks.

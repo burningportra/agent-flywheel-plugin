@@ -11,7 +11,7 @@
  */
 
 import type { Bead } from "./types.js";
-import { MODEL_ROUTING_TIERS } from "./prompts.js";
+import { MODEL_ROUTING_TIERS } from "./model-detection.js";
 
 // ─── Types ──────────────────────────────────────────────────
 

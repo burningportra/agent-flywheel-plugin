@@ -2,7 +2,6 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatS
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, PlanAmbition, PlanArgs } from '../types.js';
 import { makeOkToolResult, slugifyGoal } from './shared.js';
-import { CODEX_SUBAGENT_TYPE } from '../prompts.js';
 import { getDeepPlanModels } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
@@ -13,6 +12,8 @@ import {
 } from '../utils/path-safety.js';
 import { normalizeText } from '../utils/text-normalize.js';
 import { markdownFenceFor } from '../utils/markdown-fence.js';
+
+const CODEX_SUBAGENT_TYPE = 'codex:codex-rescue' as const;
 
 type PlannerArtifact = { path: string; content: string };
 

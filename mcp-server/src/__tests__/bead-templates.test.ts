@@ -5,7 +5,6 @@ import {
   listTemplates,
   listBeadTemplates,
   TEMPLATE_INTEGRITY_WARNINGS,
-  formatTemplatesForPrompt,
 } from "../bead-templates.js";
 
 // Helper: a minimal valid input for each I8 template so render-correctness
@@ -31,7 +30,7 @@ describe("bead-templates — module-load integrity", () => {
   });
 
   it("listBeadTemplates is an alias for listTemplates", () => {
-    // Stable ordering is important for snapshot consumers (prompts.ts).
+    // Stable ordering is important for prompt consumers.
     const a = listBeadTemplates().map((t) => `${t.id}@${t.version}`);
     const b = listTemplates().map((t) => `${t.id}@${t.version}`);
     expect(a).toEqual(b);
@@ -60,12 +59,6 @@ describe("bead-templates — module-load integrity", () => {
     }
   });
 
-  it("formatTemplatesForPrompt mentions each (id, version) tuple", () => {
-    const rendered = formatTemplatesForPrompt();
-    for (const t of listTemplates()) {
-      expect(rendered).toContain(`${t.id}@${t.version}`);
-    }
-  });
 });
 
 describe("getTemplateById", () => {

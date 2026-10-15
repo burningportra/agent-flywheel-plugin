@@ -21,7 +21,6 @@ import type { RepoProfile, CandidateIdea, ScanResult } from './types.js';
 
 /**
  * Format a RepoProfile (and optional ScanResult) into a prompt-injectable string.
- * Inlined here since prompts.ts is not ported to this project.
  */
 function formatRepoProfile(profile: RepoProfile, scanResult?: ScanResult): string {
   const lines: string[] = [
