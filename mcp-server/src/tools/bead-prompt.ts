@@ -1,5 +1,6 @@
 import { listTemplates } from '../bead-templates.js';
 import { markdownFenceFor } from '../utils/markdown-fence.js';
+import { goalBeadProgramLabel } from './bead-program.js';
 
 export interface BeadCreationPromptOpts {
   goal: string;
@@ -18,6 +19,7 @@ function formatBuiltInTemplateIds(): string {
 
 export function buildBeadCreationPrompt(opts: BeadCreationPromptOpts): string {
   const sections: string[] = [];
+  const programLabel = goalBeadProgramLabel(opts.goal);
 
   sections.push(`## Goal\n${opts.goal}`);
 
@@ -46,7 +48,7 @@ Each bead is one focused unit of work (1-4 hours). Scope beads to single concern
 Use the \`br\` CLI. The canonical commands are:
 
 \`\`\`
-br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority <0-4> --type task
+br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority <0-4> --type task --labels "${programLabel}"
 br dep add <downstream> <upstream>
 br update <id> --status <open|in_progress|deferred|closed>
 br close <id> --reason "..."
@@ -55,6 +57,8 @@ br close <id> --reason "..."
 **Dependency syntax:** \`br dep add\` takes two positional arguments — the downstream (dependent) bead first, then the upstream (dependency) it waits on. Do not pass any flags; br silently accepts unknown flags and returns empty output, so a mistyped flag looks like success but creates no edge.
 
 **Priority:** 0 (highest) through 4 (lowest).
+
+**Goal program:** Add \`--labels "${programLabel}"\` to every bead created for this goal, including epics, implementation beads, test beads, and follow-up beads. This label keeps concurrent flywheel cycles from claiming each other's work.
 
 Each bead description must include:
 

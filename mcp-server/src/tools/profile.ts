@@ -6,6 +6,7 @@ import { createLogger } from '../logger.js';
 import { runOpeningCeremony } from '../opening-ceremony.js';
 import { VERSION } from '../version.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
+import { goalBeadProgramLabel } from './bead-program.js';
 
 const log = createLogger('profile');
 
@@ -92,7 +93,15 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   state.coordinationBackend = coordinationBackend;
   state.coordinationStrategy = coordinationStrategy as FlywheelState['coordinationStrategy'];
   state.coordinationMode ??= 'worktree';
-  if (args.goal) state.selectedGoal = args.goal;
+  if (args.goal) {
+    state.selectedGoal = args.goal;
+    state.beadProgramScope = {
+      kind: 'unresolved',
+      label: goalBeadProgramLabel(args.goal),
+    };
+    state.activeBeadIds = [];
+    state.currentBeadId = null;
+  }
   state.phase = 'discovering';
   saveState(state);
 

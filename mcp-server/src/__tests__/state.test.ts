@@ -74,6 +74,10 @@ describe('saveState + loadState round-trip', () => {
       ...createInitialState(),
       phase: 'reviewing',
       activeBeadIds: ['abc-123', 'def-456'],
+      beadProgramScope: {
+        kind: 'tagged',
+        label: 'flywheel-goal:add-rate-limiting:57d0156d',
+      },
       currentBeadId: 'abc-123',
       beadResults: {
         'abc-123': { beadId: 'abc-123', status: 'success', summary: 'done' },
@@ -82,6 +86,10 @@ describe('saveState + loadState round-trip', () => {
     await saveState(testDir, state);
     const restored = loadState(testDir);
     expect(restored.activeBeadIds).toEqual(['abc-123', 'def-456']);
+    expect(restored.beadProgramScope).toEqual({
+      kind: 'tagged',
+      label: 'flywheel-goal:add-rate-limiting:57d0156d',
+    });
     expect(restored.currentBeadId).toBe('abc-123');
     expect(restored.beadResults?.['abc-123']?.status).toBe('success');
   });

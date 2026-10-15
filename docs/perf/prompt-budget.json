@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "gitHead": "4ca654619e611090a77d5c39ed6c4c54395a5d29",
+  "gitHead": "370af66794330c42823be81ffae2f62f8677ee41",
   "sourceMode": "committed-head",
   "estimateMethod": "ceil(chars / 4)",
   "thresholdPercent": 10,
@@ -30,29 +30,29 @@
       "id": "command:commands/flywheel-audit.md",
       "group": "command",
       "source": "commands/flywheel-audit.md",
-      "chars": 3916,
-      "estimatedTokens": 979
+      "chars": 1344,
+      "estimatedTokens": 336
     },
     {
       "id": "command:commands/flywheel-doctor.md",
       "group": "command",
       "source": "commands/flywheel-doctor.md",
-      "chars": 2668,
-      "estimatedTokens": 667
+      "chars": 1755,
+      "estimatedTokens": 439
     },
     {
       "id": "command:commands/flywheel-duel.md",
       "group": "command",
       "source": "commands/flywheel-duel.md",
-      "chars": 3681,
-      "estimatedTokens": 921
+      "chars": 2171,
+      "estimatedTokens": 543
     },
     {
       "id": "command:commands/flywheel-fix.md",
       "group": "command",
       "source": "commands/flywheel-fix.md",
-      "chars": 2291,
-      "estimatedTokens": 573
+      "chars": 1258,
+      "estimatedTokens": 315
     },
     {
       "id": "command:commands/flywheel-reality-check.md",
@@ -65,8 +65,8 @@
       "id": "command:commands/flywheel-setup.md",
       "group": "command",
       "source": "commands/flywheel-setup.md",
-      "chars": 11773,
-      "estimatedTokens": 2944
+      "chars": 402,
+      "estimatedTokens": 101
     },
     {
       "id": "command:commands/flywheel-speedup.md",
@@ -79,8 +79,8 @@
       "id": "command:commands/flywheel-swarm-status.md",
       "group": "command",
       "source": "commands/flywheel-swarm-status.md",
-      "chars": 2158,
-      "estimatedTokens": 540
+      "chars": 427,
+      "estimatedTokens": 107
     },
     {
       "id": "command:commands/start.md",
@@ -170,8 +170,8 @@
       "id": "mcp.approve.start.text",
       "group": "mcp-text",
       "source": "flywheel_approve_beads",
-      "chars": 502,
-      "estimatedTokens": 126
+      "chars": 707,
+      "estimatedTokens": 177
     },
     {
       "id": "mcp.plan.deep.ambitious.text",
@@ -247,8 +247,8 @@
       "id": "skill:skills/start/_implement.md",
       "group": "skill",
       "source": "skills/start/_implement.md",
-      "chars": 32912,
-      "estimatedTokens": 8228
+      "chars": 17602,
+      "estimatedTokens": 4401
     },
     {
       "id": "skill:skills/start/_inflight_prompt.md",
@@ -275,49 +275,49 @@
       "id": "skill:skills/start/_review.md",
       "group": "skill",
       "source": "skills/start/_review.md",
-      "chars": 16252,
-      "estimatedTokens": 4063
+      "chars": 16331,
+      "estimatedTokens": 4083
     },
     {
       "id": "skill:skills/start/_wrapup.md",
       "group": "skill",
       "source": "skills/start/_wrapup.md",
-      "chars": 22400,
-      "estimatedTokens": 5600
+      "chars": 13585,
+      "estimatedTokens": 3397
     },
     {
       "id": "skill:skills/start/SKILL.md",
       "group": "skill",
       "source": "skills/start/SKILL.md",
-      "chars": 60595,
-      "estimatedTokens": 15149
+      "chars": 42731,
+      "estimatedTokens": 10683
     }
   ],
   "totals": {
     "all": {
-      "chars": 303808,
-      "estimatedTokens": 75952
+      "chars": 242973,
+      "estimatedTokens": 60744
     },
     "startCycle": {
-      "chars": 255995,
-      "estimatedTokens": 63999
+      "chars": 194955,
+      "estimatedTokens": 48739
     },
     "hotPath": {
-      "chars": 47813,
-      "estimatedTokens": 11954
+      "chars": 48018,
+      "estimatedTokens": 12005
     },
     "byGroup": {
       "skill": {
-        "chars": 218947,
-        "estimatedTokens": 54737
+        "chars": 177037,
+        "estimatedTokens": 44260
       },
       "command": {
-        "chars": 37048,
-        "estimatedTokens": 9262
+        "chars": 17918,
+        "estimatedTokens": 4480
       },
       "mcp-text": {
-        "chars": 12322,
-        "estimatedTokens": 3081
+        "chars": 12527,
+        "estimatedTokens": 3132
       },
       "mcp-structured": {
         "chars": 22653,

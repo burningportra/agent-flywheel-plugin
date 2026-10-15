@@ -185,6 +185,11 @@ export interface BeadResult {
   summary: string;
 }
 
+export type BeadProgramScope =
+  | { kind: "unresolved"; label: string }
+  | { kind: "tagged"; label: string }
+  | { kind: "legacy"; label: string };
+
 export type OpeningCeremonyMode = "animated" | "static" | "skip";
 
 export interface OpeningCeremonyFrame {
@@ -427,6 +432,8 @@ export interface FlywheelState {
   // ─── Bead-centric state (new) ──────────────────────────────
   /** Bead IDs created for this flywheel run (ordered). */
   activeBeadIds?: string[];
+  /** Durable goal-program identity and its resolved compatibility mode. */
+  beadProgramScope?: BeadProgramScope;
   /** Results keyed by bead ID. */
   beadResults?: Record<string, BeadResult>;
   /** Review verdicts keyed by bead ID. */

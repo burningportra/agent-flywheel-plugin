@@ -220,10 +220,22 @@ describe('runProfile', () => {
 
   it('sets state.selectedGoal when goal arg provided', async () => {
     const { ctx, state } = makeCtx();
+    state.activeBeadIds = ['old-program-bead'];
+    state.currentBeadId = 'old-program-bead';
+    state.beadProgramScope = {
+      kind: 'tagged',
+      label: 'flywheel-goal:old:deadbeef',
+    };
 
     await runProfile(ctx, { cwd: '/fake/cwd', goal: 'Add rate limiting' });
 
     expect(state.selectedGoal).toBe('Add rate limiting');
+    expect(state.beadProgramScope).toEqual({
+      kind: 'unresolved',
+      label: 'flywheel-goal:add-rate-limiting:57d0156d',
+    });
+    expect(state.activeBeadIds).toEqual([]);
+    expect(state.currentBeadId).toBeNull();
   });
 
   it('does not set selectedGoal when goal arg is absent', async () => {

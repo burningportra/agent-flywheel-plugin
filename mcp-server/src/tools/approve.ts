@@ -13,6 +13,12 @@ import { createLogger } from '../logger.js';
 import { normalizeText } from '../utils/text-normalize.js';
 import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
 import { auditBeadCreation } from '../beads.js';
+import {
+  filterBeadsForProgram,
+  formatBeadProgramWarnings,
+  goalBeadProgramLabel,
+  resolveBeadProgram,
+} from './bead-program.js';
 
 const log = createLogger('approve');
 
@@ -260,7 +266,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
 
   // ── Bead approval mode ─────────────────────────────────────────
   // Read current beads from br CLI
-  const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000, signal });
+  const brListResult = await exec('br', ['list', '--all', '--limit', '0', '--json'], { cwd, timeout: 10000, signal });
   if (brListResult.code !== 0) {
     return makeApproveError(
       `Error reading beads: ${brListResult.stderr}\n\nEnsure \`br\` CLI is installed and \`br init\` has been run in this directory.`,
@@ -268,7 +274,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
       'beads',
       'cli_failure',
       {
-        command: 'br list --json',
+        command: 'br list --all --limit 0 --json',
         stderr: brListResult.stderr,
       },
       'Install the br CLI and run `br init` in the repo root, then retry flywheel_approve_beads.',
@@ -286,16 +292,25 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
       state.phase,
       'beads',
       'parse_failure',
-      { command: 'br list --json', parseError: parsed.error },
-      'Run `br list --json` manually to inspect output; upgrade br CLI if the JSON shape drifted.',
+      { command: 'br list --all --limit 0 --json', parseError: parsed.error },
+      'Run `br list --all --limit 0 --json` manually to inspect output; upgrade br CLI if the JSON shape drifted.',
     );
   }
 
-  const beads = allBeads.filter(b => b.status === 'open' || b.status === 'in_progress');
+  const expectedProgramLabel = state.beadProgramScope?.label ?? goalBeadProgramLabel(state.selectedGoal);
+  const program = resolveBeadProgram(allBeads, expectedProgramLabel);
+  const beads = program.beads;
+  const programWarnings = formatBeadProgramWarnings(program.warnings);
+  state.beadProgramScope = program.scope;
+  if (!beads.some((bead) => bead.id === state.currentBeadId)) {
+    state.currentBeadId = null;
+  }
 
   if (beads.length === 0) {
+    state.activeBeadIds = [];
+    saveState(state);
     return makeApproveResult(
-      `No open beads found. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..."\n\`\`\`\n\nThen call \`flywheel_approve_beads\` again.`,
+      `No open beads found for ${expectedProgramLabel}. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..." --labels "${expectedProgramLabel}"\n\`\`\`${programWarnings}\n\nThen call \`flywheel_approve_beads\` again.`,
       state.phase,
       'beads',
       {
@@ -459,6 +474,7 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
     convergenceScore,
     matrix,
     args.coordinatorName ?? 'Coordinator',
+    programWarnings,
   );
 }
 
@@ -604,30 +620,26 @@ async function handleStart(
   convergenceScore: number | undefined,
   matrix: HotspotMatrix,
   coordinatorName: string,
+  programWarnings: string,
 ): Promise<McpToolResult> {
   const { exec, cwd, state, saveState, signal } = ctx;
 
   // Get ready beads (unblocked by dependencies)
-  const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 10000, signal });
+  const brReadyResult = await exec('br', ['ready', '--limit', '0', '--json'], { cwd, timeout: 10000, signal });
   let ready: Bead[] = [];
 
   if (brReadyResult.code === 0) {
     const readyParsed = parseBrList(brReadyResult.stdout);
     if (readyParsed.ok) {
-      ready = readyParsed.data;
+      ready = filterBeadsForProgram(readyParsed.data, state.beadProgramScope).beads;
     } else {
       log.warn('Failed to parse br ready output', { error: readyParsed.error });
     }
   }
 
-  // Fallback: if br ready fails, find beads with no open dependencies
-  if (ready.length === 0) {
-    ready = beads.slice(0, 3); // take first few as fallback
-  }
-
   if (ready.length === 0) {
     return makeApproveResult(
-      `Beads approved! But no ready beads found (all may be blocked).\n\nRun \`br ready\` or \`br dep cycles\` to diagnose.\n\n${beadList}`,
+      `Beads approved! But no ready beads found for this goal (all may be blocked).${programWarnings}\n\nRun \`br ready\` or \`br dep cycles\` to diagnose.\n\n${beadList}`,
       state.phase,
       'beads',
       {
@@ -754,7 +766,7 @@ async function handleStart(
   if (ready.length === 1) {
     const bead = ready[0];
     return makeApproveResult(
-      `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}
+      `**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}${programWarnings}
 
 **NEXT: Send \`data.prompts[0].prompt\` as-is to the \`${promptFor(bead.id).lane}\` implementation lane, then call \`flywheel_review\` when it finishes.**
 
@@ -820,7 +832,7 @@ ${beadList}`,
       );
 
   return makeApproveResult(
-    `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}${hotspotNote}
+    `**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}${hotspotNote}${programWarnings}
 
 **NEXT: Spawn the counts in \`data.lanes\`, send each \`data.prompts[].prompt\` as-is to its lane, then call \`flywheel_review\` for each completed bead.**
 
@@ -1142,16 +1154,21 @@ async function handleRemediate(
   const titleTailRoom = Math.max(20, 80 - titleHead.length - 2);
   const title = `${titleHead}: ${shortenForTitle(r.criterionDescription, titleTailRoom)}`;
   const description = renderRemediationBeadBody(r);
+  const programLabel = state.beadProgramScope?.kind === 'tagged' || state.beadProgramScope?.kind === 'unresolved'
+    ? state.beadProgramScope.label
+    : undefined;
+  const createArgs = [
+    'create',
+    '--title', title,
+    '--description', description,
+    '--priority', '2',
+    '--type', 'task',
+  ];
+  if (programLabel) createArgs.push('--labels', programLabel);
 
   const create = await exec(
     'br',
-    [
-      'create',
-      '--title', title,
-      '--description', description,
-      '--priority', '2',
-      '--type', 'task',
-    ],
+    createArgs,
     { cwd, timeout: 10000, signal },
   );
   if (create.code !== 0) {

@@ -141,16 +141,7 @@ export function newestMtime(root: string, filter: (name: string) => boolean = ()
   return max;
 }
 
-/**
- * Slugify a goal string to a filesystem-safe identifier.
- */
-export function slugifyGoal(goal: string): string {
-  return goal
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'plan';
-}
+export { slugifyGoal } from './bead-program.js';
 
 /**
  * Format a repo profile into a readable summary string for prompts.

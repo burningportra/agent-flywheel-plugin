@@ -2,6 +2,7 @@ import type { ToolContext, McpToolResult, SelectArgs } from '../types.js';
 import { createLogger } from '../logger.js';
 import { beadCreationPrompt, formatRepoProfile, makeChoiceOption, makeNextToolStep, makeToolError, makeToolResult, slugifyGoal } from './shared.js';
 import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
+import { goalBeadProgramLabel } from './bead-program.js';
 
 const log = createLogger('select');
 
@@ -39,6 +40,12 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
   // that would otherwise drop the 60-char cut or the fallback keep working for
   // long or all-symbol goals.
   const goalSlug = slugifyGoal(state.selectedGoal);
+  state.beadProgramScope = {
+    kind: 'unresolved',
+    label: goalBeadProgramLabel(state.selectedGoal),
+  };
+  state.activeBeadIds = [];
+  state.currentBeadId = null;
 
   // ── v3.13.0 outcome-grading: cycle boundary reset ──
   // Capture the git HEAD as the cycle-start SHA. The `gradeOutcome` 4-tier

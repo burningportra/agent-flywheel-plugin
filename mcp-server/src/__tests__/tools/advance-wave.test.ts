@@ -173,7 +173,7 @@ function brUpdate(id: string): ExecCall {
 function brReadyCall(beads: Bead[]): ExecCall {
   return {
     cmd: 'br',
-    args: ['ready', '--json'],
+    args: ['ready', '--limit', '0', '--json'],
     result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
   };
 }
@@ -387,6 +387,53 @@ describe('runAdvanceWave', () => {
         beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
       },
     ]);
+  });
+
+  it('dispatches only ready beads from the persisted goal program', async () => {
+    const labelA = 'flywheel-goal:goal-a:ccba1a8c';
+    const readyA = makeBead({ id: 'goal-a-ready', labels: [labelA] });
+    const readyB = makeBead({
+      id: 'goal-b-ready',
+      labels: ['flywheel-goal:goal-b:9406de47'],
+    });
+    const { ctx } = makeCtx(
+      { beadProgramScope: { kind: 'tagged', label: labelA } },
+      [brShowClosed('prev-1'), brReadyCall([readyB, readyA])],
+    );
+
+    const result = await runAdvanceWave(ctx, {
+      cwd: '/fake/project',
+      closedBeadIds: ['prev-1'],
+      coordinatorName: 'WindyBasin',
+    });
+    const data = (result.structuredContent as any).data;
+
+    expect(data.nextWave.beadIds).toEqual([readyA.id]);
+    expect(data.nextWave.prompts).toEqual([
+      expect.objectContaining({ beadId: readyA.id }),
+    ]);
+  });
+
+  it('reports the current program drained when only another program is ready', async () => {
+    const labelA = 'flywheel-goal:goal-a:ccba1a8c';
+    const readyB = makeBead({
+      id: 'goal-b-ready',
+      labels: ['flywheel-goal:goal-b:9406de47'],
+    });
+    const { ctx } = makeCtx(
+      { beadProgramScope: { kind: 'tagged', label: labelA } },
+      [brShowClosed('prev-1'), brReadyCall([readyB])],
+    );
+
+    const result = await runAdvanceWave(ctx, {
+      cwd: '/fake/project',
+      closedBeadIds: ['prev-1'],
+    });
+    const data = (result.structuredContent as any).data;
+
+    expect(data.nextWave).toBeNull();
+    expect(data.waveComplete).toBe(true);
+    expect(result.content[0].text).toContain('Queue drained');
   });
 });
 
