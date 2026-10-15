@@ -55,6 +55,8 @@ Print `result.content[0].text` verbatim once. The server text owns the verdict s
 
 ### 2. Branch on `result.structuredContent.data`
 
+Follow SKILL.md Universal Rule 4 for every error envelope in this phase.
+
 - `kind: "grading_skipped"` → continue to Step 9.5 without a question.
 - `kind: "grader_verdict" | "grading_capped" | "grading_persistence_failed"` → bind `data.verdict` as `verdict`, then branch on `verdict.status` below. The in-memory verdict remains authoritative when persistence failed.
 - Error envelope → use the recovery question below.
@@ -226,7 +228,7 @@ const res = await flywheel_memory({ cwd, operation: "draft_postmortem" });
 const draftMarkdown = res.structuredContent?.data?.draft?.markdown;
 ```
 
-**Structured error branching (mandatory).** Route on `res.structuredContent?.data?.error?.code` (`FlywheelErrorCode`):
+**Post-mortem error codes.**
 - `postmortem_empty_session` → still returns a terse draft; proceed with the AskUserQuestion below, note that the session had no shippable commits. **Common cause (verified 2026-05-08)**: this cycle SHIPPED a state-capture feature at a session-boundary point (e.g. `cycleStartSha` capture in `flywheel_select`), but the capture wasn't yet implemented when this cycle's `flywheel_select` was called — so the auto-postmortem can't see this cycle's commits. Hand-write the post-mortem from `git log --since="<session-start-time>" --oneline` instead. The next cycle will work correctly.
 - `postmortem_checkpoint_stale` → `sessionStartSha` no longer resolves in `git log`. Surface the reconstruction warning from `error.hint` inline and let the user decide whether to keep the (partial) draft.
 - any other code → skip Step 10.0, proceed to Step 10.
@@ -262,7 +264,7 @@ Call `flywheel_memory` with `operation: "store"` and `cwd` to distill and persis
 - Key decisions made during this session and their outcomes
 - Any patterns worth replicating or avoiding in future sessions
 
-**Structured error branching (mandatory).** For wrap-up tool failures (including `flywheel_memory`), route using `result.structuredContent?.data?.error?.code` (`FlywheelErrorCode`) instead of string matching on error text:
+**Memory-store error codes.**
 
 ```ts
 const code = memoryResult.structuredContent?.data?.error?.code;
@@ -318,7 +320,7 @@ const doc = draftRes.structuredContent?.data?.doc;          // SolutionDoc objec
 const rendered = draftRes.structuredContent?.data?.rendered; // full markdown w/ frontmatter
 ```
 
-**Structured error branching (mandatory).** Route on `draftRes.structuredContent?.data?.error?.code`:
+**SolutionDoc error codes.**
 - `invalid_input` → `entryId` was missing or empty. Re-derive it from Step 10's response, then retry once. If still missing, skip the rest of Step 10.55.
 - any other code → log the error and skip the file write; do not block on solution-doc capture.
 
