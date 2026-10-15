@@ -111,7 +111,7 @@ interface RuntimeModules {
 
 interface CliOptions {
   check: boolean;
-  write: boolean;
+  update: boolean;
   worker: boolean;
   help: boolean;
   root: string;
@@ -216,10 +216,10 @@ export function compareEntries(
   return violations.sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function parseArgs(argv: string[]): CliOptions {
+export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     check: false,
-    write: false,
+    update: false,
     worker: false,
     help: false,
     root: DEFAULT_REPO_ROOT,
@@ -227,7 +227,7 @@ function parseArgs(argv: string[]): CliOptions {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--check") options.check = true;
-    else if (arg === "--write") options.write = true;
+    else if (arg === "--update" || arg === "--write") options.update = true;
     else if (arg === "--worker") options.worker = true;
     else if (arg === "--help" || arg === "-h") options.help = true;
     else if (arg === "--root") {
@@ -239,8 +239,8 @@ function parseArgs(argv: string[]): CliOptions {
       throw new Error(`unknown argument: ${arg}`);
     }
   }
-  if (options.check && options.write) {
-    throw new Error("--check and --write cannot be combined");
+  if (options.check && options.update) {
+    throw new Error("--check and --update cannot be combined");
   }
   return options;
 }
@@ -755,9 +755,9 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
     process.stdout.write(
-      "Usage: npx tsx scripts/prompt-budget.ts [--check | --write]\n" +
+      "Usage: npx tsx scripts/prompt-budget.ts [--check | --update]\n" +
         "  default  Measure committed HEAD, print the table, and create the baseline if missing.\n" +
-        "  --write  Replace the baseline from committed HEAD.\n" +
+        "  --update Replace the baseline from committed HEAD.\n" +
         "  --check  Measure the working tree and fail when any entry grew more than 10%.\n",
     );
     return;
@@ -801,12 +801,12 @@ async function main(): Promise<void> {
 
   const report = measureCommittedHead(options.root);
   printTable(report);
-  if (!existsSync(baselinePath) || options.write) {
+  if (!existsSync(baselinePath) || options.update) {
     mkdirSync(path.dirname(baselinePath), { recursive: true });
     writeReport(baselinePath, report);
     process.stdout.write(`prompt-budget: wrote ${BASELINE_PATH}\n`);
   } else {
-    process.stdout.write(`prompt-budget: baseline already exists at ${BASELINE_PATH}; use --write to replace it\n`);
+    process.stdout.write(`prompt-budget: baseline already exists at ${BASELINE_PATH}; use --update to replace it\n`);
   }
 }
 

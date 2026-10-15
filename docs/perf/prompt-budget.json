@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "gitHead": "37c7888bb7275d139d06a8eda6648e2b1e586b57",
+  "gitHead": "4ca654619e611090a77d5c39ed6c4c54395a5d29",
   "sourceMode": "committed-head",
   "estimateMethod": "ceil(chars / 4)",
   "thresholdPercent": 10,
@@ -9,22 +9,22 @@
       "id": "adapter.claude.implementer",
       "group": "adapter",
       "source": "adapters/claude-prompt.ts",
-      "chars": 3526,
-      "estimatedTokens": 882
+      "chars": 3490,
+      "estimatedTokens": 873
     },
     {
       "id": "adapter.codex.implementer",
       "group": "adapter",
       "source": "adapters/codex-prompt.ts",
-      "chars": 3875,
-      "estimatedTokens": 969
+      "chars": 3836,
+      "estimatedTokens": 959
     },
     {
       "id": "adapter.gemini.implementer",
       "group": "adapter",
       "source": "adapters/gemini-prompt.ts",
-      "chars": 3892,
-      "estimatedTokens": 973
+      "chars": 3858,
+      "estimatedTokens": 965
     },
     {
       "id": "command:commands/flywheel-audit.md",
@@ -58,8 +58,8 @@
       "id": "command:commands/flywheel-reality-check.md",
       "group": "command",
       "source": "commands/flywheel-reality-check.md",
-      "chars": 4580,
-      "estimatedTokens": 1145
+      "chars": 5040,
+      "estimatedTokens": 1260
     },
     {
       "id": "command:commands/flywheel-setup.md",
@@ -72,8 +72,8 @@
       "id": "command:commands/flywheel-speedup.md",
       "group": "command",
       "source": "commands/flywheel-speedup.md",
-      "chars": 1078,
-      "estimatedTokens": 270
+      "chars": 1458,
+      "estimatedTokens": 365
     },
     {
       "id": "command:commands/flywheel-swarm-status.md",
@@ -83,25 +83,18 @@
       "estimatedTokens": 540
     },
     {
-      "id": "command:commands/flywheel-swarm.md",
-      "group": "command",
-      "source": "commands/flywheel-swarm.md",
-      "chars": 11223,
-      "estimatedTokens": 2806
-    },
-    {
       "id": "command:commands/start.md",
       "group": "command",
       "source": "commands/start.md",
-      "chars": 3152,
-      "estimatedTokens": 788
+      "chars": 4063,
+      "estimatedTokens": 1016
     },
     {
       "id": "gate.fresh-eyes",
       "group": "gate",
       "source": "gates.ts#buildFreshEyesPrompt",
-      "chars": 3210,
-      "estimatedTokens": 803
+      "chars": 1654,
+      "estimatedTokens": 414
     },
     {
       "id": "mcp.approve.advanced-blunder-hunt.structured",
@@ -114,22 +107,22 @@
       "id": "mcp.approve.start.structured",
       "group": "mcp-structured",
       "source": "flywheel_approve_beads",
-      "chars": 1309,
-      "estimatedTokens": 328
+      "chars": 9317,
+      "estimatedTokens": 2330
     },
     {
       "id": "mcp.plan.deep.ambitious.structured",
       "group": "mcp-structured",
       "source": "flywheel_plan",
-      "chars": 11621,
-      "estimatedTokens": 2906
+      "chars": 4850,
+      "estimatedTokens": 1213
     },
     {
       "id": "mcp.plan.deep.scoped.structured",
       "group": "mcp-structured",
       "source": "flywheel_plan",
-      "chars": 6048,
-      "estimatedTokens": 1512
+      "chars": 4497,
+      "estimatedTokens": 1125
     },
     {
       "id": "mcp.plan.duel.ambitious.structured",
@@ -163,180 +156,180 @@
       "id": "mcp.review.hit-me.structured",
       "group": "mcp-structured",
       "source": "flywheel_review",
-      "chars": 3280,
-      "estimatedTokens": 820
+      "chars": 2061,
+      "estimatedTokens": 516
     },
     {
       "id": "mcp.approve.advanced-blunder-hunt.text",
       "group": "mcp-text",
       "source": "flywheel_approve_beads",
-      "chars": 1211,
-      "estimatedTokens": 303
+      "chars": 443,
+      "estimatedTokens": 111
     },
     {
       "id": "mcp.approve.start.text",
       "group": "mcp-text",
       "source": "flywheel_approve_beads",
-      "chars": 1762,
-      "estimatedTokens": 441
+      "chars": 502,
+      "estimatedTokens": 126
     },
     {
       "id": "mcp.plan.deep.ambitious.text",
       "group": "mcp-text",
       "source": "flywheel_plan",
-      "chars": 11603,
-      "estimatedTokens": 2901
+      "chars": 278,
+      "estimatedTokens": 70
     },
     {
       "id": "mcp.plan.deep.scoped.text",
       "group": "mcp-text",
       "source": "flywheel_plan",
-      "chars": 6026,
-      "estimatedTokens": 1507
+      "chars": 275,
+      "estimatedTokens": 69
     },
     {
       "id": "mcp.plan.duel.ambitious.text",
       "group": "mcp-text",
       "source": "flywheel_plan",
-      "chars": 3043,
-      "estimatedTokens": 761
+      "chars": 3032,
+      "estimatedTokens": 758
     },
     {
       "id": "mcp.plan.duel.scoped.text",
       "group": "mcp-text",
       "source": "flywheel_plan",
-      "chars": 2722,
-      "estimatedTokens": 681
+      "chars": 2711,
+      "estimatedTokens": 678
     },
     {
       "id": "mcp.plan.standard.ambitious.text",
       "group": "mcp-text",
       "source": "flywheel_plan",
-      "chars": 3342,
-      "estimatedTokens": 836
+      "chars": 3364,
+      "estimatedTokens": 841
     },
     {
       "id": "mcp.plan.standard.scoped.text",
       "group": "mcp-text",
       "source": "flywheel_plan",
-      "chars": 1523,
-      "estimatedTokens": 381
+      "chars": 1545,
+      "estimatedTokens": 387
     },
     {
       "id": "mcp.review.hit-me.text",
       "group": "mcp-text",
       "source": "flywheel_review",
-      "chars": 3381,
-      "estimatedTokens": 846
+      "chars": 172,
+      "estimatedTokens": 43
     },
     {
       "id": "skill:skills/flywheel-swarm/SKILL.md",
       "group": "skill",
       "source": "skills/flywheel-swarm/SKILL.md",
-      "chars": 11481,
-      "estimatedTokens": 2871
+      "chars": 6614,
+      "estimatedTokens": 1654
     },
     {
       "id": "skill:skills/start/_beads.md",
       "group": "skill",
       "source": "skills/start/_beads.md",
-      "chars": 16303,
-      "estimatedTokens": 4076
+      "chars": 6998,
+      "estimatedTokens": 1750
     },
     {
       "id": "skill:skills/start/_deslop.md",
       "group": "skill",
       "source": "skills/start/_deslop.md",
-      "chars": 17523,
-      "estimatedTokens": 4381
+      "chars": 13294,
+      "estimatedTokens": 3324
     },
     {
       "id": "skill:skills/start/_implement.md",
       "group": "skill",
       "source": "skills/start/_implement.md",
-      "chars": 62105,
-      "estimatedTokens": 15527
+      "chars": 32912,
+      "estimatedTokens": 8228
     },
     {
       "id": "skill:skills/start/_inflight_prompt.md",
       "group": "skill",
       "source": "skills/start/_inflight_prompt.md",
-      "chars": 19097,
-      "estimatedTokens": 4775
+      "chars": 14058,
+      "estimatedTokens": 3515
     },
     {
       "id": "skill:skills/start/_planning.md",
       "group": "skill",
       "source": "skills/start/_planning.md",
-      "chars": 66327,
-      "estimatedTokens": 16582
+      "chars": 31984,
+      "estimatedTokens": 7996
     },
     {
       "id": "skill:skills/start/_reality_check.md",
       "group": "skill",
       "source": "skills/start/_reality_check.md",
-      "chars": 15568,
-      "estimatedTokens": 3892
+      "chars": 13840,
+      "estimatedTokens": 3460
     },
     {
       "id": "skill:skills/start/_review.md",
       "group": "skill",
       "source": "skills/start/_review.md",
-      "chars": 33113,
-      "estimatedTokens": 8279
+      "chars": 16252,
+      "estimatedTokens": 4063
     },
     {
       "id": "skill:skills/start/_wrapup.md",
       "group": "skill",
       "source": "skills/start/_wrapup.md",
-      "chars": 27402,
-      "estimatedTokens": 6851
+      "chars": 22400,
+      "estimatedTokens": 5600
     },
     {
       "id": "skill:skills/start/SKILL.md",
       "group": "skill",
       "source": "skills/start/SKILL.md",
-      "chars": 65378,
-      "estimatedTokens": 16345
+      "chars": 60595,
+      "estimatedTokens": 15149
     }
   ],
   "totals": {
     "all": {
-      "chars": 454119,
-      "estimatedTokens": 113530
+      "chars": 303808,
+      "estimatedTokens": 75952
     },
     "startCycle": {
-      "chars": 380817,
-      "estimatedTokens": 95205
+      "chars": 255995,
+      "estimatedTokens": 63999
     },
     "hotPath": {
-      "chars": 73302,
-      "estimatedTokens": 18326
+      "chars": 47813,
+      "estimatedTokens": 11954
     },
     "byGroup": {
       "skill": {
-        "chars": 334297,
-        "estimatedTokens": 83575
+        "chars": 218947,
+        "estimatedTokens": 54737
       },
       "command": {
-        "chars": 46520,
-        "estimatedTokens": 11630
+        "chars": 37048,
+        "estimatedTokens": 9262
       },
       "mcp-text": {
-        "chars": 34613,
-        "estimatedTokens": 8654
+        "chars": 12322,
+        "estimatedTokens": 3081
       },
       "mcp-structured": {
-        "chars": 24186,
-        "estimatedTokens": 6047
+        "chars": 22653,
+        "estimatedTokens": 5664
       },
       "adapter": {
-        "chars": 11293,
-        "estimatedTokens": 2824
+        "chars": 11184,
+        "estimatedTokens": 2796
       },
       "gate": {
-        "chars": 3210,
-        "estimatedTokens": 803
+        "chars": 1654,
+        "estimatedTokens": 414
       }
     }
   }

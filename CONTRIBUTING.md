@@ -68,6 +68,22 @@ npm test --prefix mcp-server
 
 If you added a new MCP tool or touched a runner in `mcp-server/src/tools/`, add a matching test under `mcp-server/src/__tests__/`. The test suite runs on every PR.
 
+### Check the prompt budget
+
+Run the check from `mcp-server/` before a PR:
+
+```bash
+npm run prompt-budget -- --check
+```
+
+After you commit and review an intentional prompt change, update and commit the baseline with one command:
+
+```bash
+npm run prompt-budget -- --update
+```
+
+The update measures committed `HEAD` and writes `docs/perf/prompt-budget.json`. CI fails when a measured entry grows more than 10% above that baseline.
+
 ### Changing OpenCode-managed sources
 
 The OpenCode port is generated from repo sources by `scripts/sync-opencode.sh` (see [`docs/opencode.md`](docs/opencode.md)). If you change any **managed source** — anything under `skills/`, `commands/`, `hooks/`, or `opencode/` — run the temp-home black-box suite before you push:
@@ -84,7 +100,7 @@ bats install/test/
 2. Keep the PR scoped: one skill, or one bug fix, or one doc change. Multi-skill PRs are harder to review.
 3. Include `mcp-server/dist/` changes if you rebuilt.
 4. Run `/agent-flywheel:flywheel-doctor` locally — if it is `red`, fix the red checks before pushing.
-5. The CI pipeline runs: `npm run build`, `npm test`, dist-drift check, and `lint-skill` across every `SKILL.md`.
+5. The CI pipeline runs `npm run build`, `npm test`, the prompt-budget check, the dist-drift check, and `lint-skill` across every `SKILL.md`.
 
 ## Template starting point
 

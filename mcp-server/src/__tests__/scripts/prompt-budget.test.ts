@@ -12,6 +12,13 @@ interface BudgetEntry {
 
 interface PromptBudgetModule {
   measureText: (id: string, group: "skill", source: string, value: string) => BudgetEntry;
+  parseArgs: (argv: string[]) => {
+    check: boolean;
+    update: boolean;
+    worker: boolean;
+    help: boolean;
+    root: string;
+  };
   compareEntries: (
     baseline: BudgetEntry[],
     current: BudgetEntry[],
@@ -68,5 +75,16 @@ describe("prompt budget measurement", () => {
       growthPercent: 20,
       reason: "grew",
     });
+  });
+
+  it("uses --update for baseline writes and rejects it with --check", () => {
+    expect(budget.parseArgs(["--update"])).toMatchObject({
+      check: false,
+      update: true,
+    });
+    expect(budget.parseArgs(["--write"])).toMatchObject({ update: true });
+    expect(() => budget.parseArgs(["--check", "--update"])).toThrow(
+      "--check and --update cannot be combined",
+    );
   });
 });
