@@ -66,7 +66,7 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
 
 ### 4a. Pre-flight
 
-1. **Shared swarm pre-conditions.** Execute the **NTM and provider readiness**, **Agent Mail bootstrap**, **Disk-space guard**, and **Tender-daemon spawn** steps in `_inflight_prompt.md`. Its first step executes `_implement.md` **Pre-flight: resolve NTM readiness** and uses the final doctor result. An unavailable result routes to §5 instead of §4b. Skip the in-flight bead snapshot and 4-minute looper because §4e owns deslop supervision.
+1. **Shared swarm pre-conditions.** Execute the **NTM and provider readiness** and **Agent Mail bootstrap** steps in `_inflight_prompt.md`. Its first step executes `_implement.md` **Pre-flight: resolve NTM readiness** and uses the final doctor result. An unavailable result routes to §5 instead of §4b. Skip the in-flight bead snapshot and 4-minute looper because §4e owns deslop supervision.
 2. **Deslop lane override.** Require green `codex_cli` and `codex_config_compat` rows for the primary `--cod=5` lane. If no usable Codex pane survives, ask the operator to choose all-cc swarm, §5 iterative mode, or abort.
 3. **Baseline capture (THE proof obligation).** BEFORE any deslop edits, record:
    - Full test suite green: `rch test` (or stack-appropriate command). Capture pass-count + duration.
@@ -74,6 +74,7 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
    - Warnings: `rch build 2>&1 | grep -ic warning` (or stack equivalent).
    - Optional golden artifacts: capture stdout/stderr of any deterministic CLI commands the project ships.
    The skill's ledger compares post-edit numbers to this baseline. **No baseline = no proof = abort.**
+4. **Swarm process guards.** After the lane choice and baseline pass, execute the **Disk-space guard** and **Tender-daemon spawn** steps in `_inflight_prompt.md`.
 
 ### 4b. Spawn the swarm
 
