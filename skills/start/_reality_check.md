@@ -116,7 +116,7 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
    | Check | Trigger | Action |
    |-------|---------|--------|
    | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Redistribute via substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc). Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. |
-   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. If the check is absent from `DOCTOR_REPORT.checks` (bead `claude-orchestrator-37n6` not yet shipped), treat as `green`. |
+   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. The check ships in `mcp-server/src/tools/doctor.ts`; if it is absent from `DOCTOR_REPORT.checks` (older MCP server), treat as `green`. |
 
    In interactive `/start` contexts, prefer the AskUserQuestion variants in `_implement.md` Step 1a/1b. The full-pipeline reality-check path is typically dispatched as a single user choice, so silent auto-downgrade with the log line is the default here.
 3. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture registration token.

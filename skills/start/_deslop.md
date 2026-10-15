@@ -60,7 +60,7 @@ The fresh-eyes review is the second-half of the proof obligation — the skill s
 
 ---
 
-## Step 4: 5-Pi swarm via NTM (Codex fallback)
+## Step 4: 5-Codex swarm via NTM (substitution-ladder fallback)
 
 This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refactor-not-feature work.
 
@@ -73,7 +73,7 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
    | Check | Trigger | Action |
    |-------|---------|--------|
    | `codex_config_compat` severity ∈ {yellow, red} | `--cod=N>0` | Auto-downgrade `--cod=N → 0`. Per the substitution ladder (gmi→cod→pi→cc; codex unavailable → reassign to gmi if green, else cc), redistribute the dropped share. Log: `⚠ codex_config_compat=<sev>; downgrading --cod=N→0 (fix: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}))`. Then route to §5 iterative mode if the surviving cod count is 0. |
-   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. If the check is absent from `DOCTOR_REPORT.checks` (bead `claude-orchestrator-37n6` not yet shipped), treat as `green`. |
+   | `gemini_model_compat` severity ∈ {yellow, red} | `--gmi=M>0` | Auto-downgrade `--gmi=M → 0`. Redistribute via ladder. Log: `⚠ gemini_model_compat=<sev>; downgrading --gmi=M→0 (configured model outside allowlist)`. The check ships in `mcp-server/src/tools/doctor.ts`; if it is absent from `DOCTOR_REPORT.checks` (older MCP server), treat as `green`. |
 
    Deslop's primary lane is `cod` (per §4b). If the downgrade leaves zero usable cod panes, surface an `AskUserQuestion` offering routes: (1) proceed all-cc swarm, (2) fall back to §5 iterative mode, (3) abort. Do NOT silently spawn a degraded swarm with fewer-than-intended panes — operator should make the call.
 3. **Agent Mail bootstrap** — `macro_start_session` for the coordinator (you). Capture registration token.
@@ -153,7 +153,7 @@ Bake `scripts/build-mutex.sh` into every per-pane prompt's STEP 2 (above). The w
 
 **Default — `Skill: loop` (5-min cadence per user spec).** Invoke the `Skill` tool with `loop`:
 ```
-Skill(skill: "loop", args: "5m tend the deslop swarm; tail .pi-flywheel/tender-events.log; ensure each Pi pane picks a different code area (no overlap); verify isomorphism claims by spot-checking ledger entries; nudge idle panes via ntm --robot-send (or ntm assign --auto --strategy=dependency for next-bead picks); reopen any stalled in_progress beads (in_progress + no commit in 30min + agent absent from list_window_identities)")
+Skill(skill: "loop", args: "5m tend the deslop swarm; tail .pi-flywheel/tender-events.log; ensure each Codex pane picks a different code area (no overlap); verify isomorphism claims by spot-checking ledger entries; nudge idle panes via ntm --robot-send (or ntm assign --auto --strategy=dependency for next-bead picks); reopen any stalled in_progress beads (in_progress + no commit in 30min + agent absent from list_window_identities)")
 ```
 
 **Alternative — `ntm controller` (opt-in; offload supervision to a dedicated pane).** If the user wants to walk away from the main Claude session, spawn a dedicated coordinator agent in pane 0:

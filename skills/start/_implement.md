@@ -168,17 +168,11 @@ The threshold drives the `shouldTriggerBatchReview(state)` check inside `flywhee
 
 ### Pre-loop — swarm scaling + stagger
 
-**Agent ratio by open-bead count** (from `br ready --json`). Pick the smallest tier that accommodates your wave:
+**Agent ratio** — the canonical rule is mixed `cc:cod:gmi` **1:1:1** per AGENTS.md "NTM pane priority". Scale the share equally across providers; larger waves use `--cc=N --cod=N --gmi=N` for the same N. Apply the substitution ladder (gmi→cod→pi→cc) when a provider is non-green; the `claude_cli`, `codex_cli`, `gemini_cli`, `swarm_model_ratio`, `codex_config_compat`, and `gemini_model_compat` checks in `flywheel_doctor` together signal which lanes the host can fill. Cap parallel spawns at the wave's independent-bead count — do not spin up agents with nothing to do.
 
-| Open beads | Claude : Codex : Gemini | Notes |
-|-----------|--------------------------|-------|
-| < 100     | 1 : 1 : 1                | Single rep each — coordination overhead stays low |
-| 100-399   | 3 : 3 : 2                | Standard swarm |
-| 400+      | 4 : 4 : 2                | Parallel tracks essential |
+Three independent reasoners is the point: cross-agent fresh eyes in Step 9 and duel review assume 1:1:1. A `--cc=N` alone, `--cod=N` alone, or `--pi=N` alone swarm is a degraded mode — only land on it via the substitution ladder with a non-green doctor row to justify it, and log the degradation.
 
-Claude owns architecture / complex reasoning, Codex owns fast iteration / testing, Gemini provides a second perspective for docs / review. Cap parallel spawns at the wave's independent-bead count — do not spin up agents with nothing to do.
-
-The 1:1:1 (and richer) ratios are now actually executed via the model-diversity split in step 7.2 below — not just documented. CLI availability is detected up-front and missing CLIs degrade gracefully with a user-facing warning.
+The 1:1:1 ratios are actually executed via the model-diversity split in step 7.2 below — not just documented. CLI availability is detected up-front and missing CLIs degrade gracefully with a user-facing warning.
 
 **Thundering-herd mitigation** — stagger spawns by **30 seconds minimum**. Do NOT spawn all agents simultaneously; they all read AGENTS.md, hit Agent Mail, and query `br ready` at once — piling onto the same frontier bead. Use `run_in_background: true` and wait 30s between each `Agent(...)` call.
 

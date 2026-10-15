@@ -20,8 +20,8 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 4. **Setup coordination:**
    - Bootstrap Agent Mail: `macro_start_session(human_key: cwd, program: "claude-code", model: "<your model name>", task_description: "Swarm: <goal>")`
    - Create a team: `TeamCreate(team_name: "swarm-<goal-slug>")`
-   - Resolve NTM project: read `projects_base` from `ntm config show` and confirm `$projects_base/$(basename $PWD)` resolves (per the readiness gate in `_inflight_prompt.md`). On miss, follow the symlink/config path from `flywheel-setup` §6 before continuing.
-   - Apply the **AGENTS.md NTM pane priority** for swarm composition: prefer **4 cod + 2 cc** when both are healthy; fall back to **4 pi** if Codex is unavailable. Run `which claude codex gemini pi 2>/dev/null` (real binaries behind the `cc/cod/gmi/pi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) and `ntm deps -v` to pick the live mix; never spawn agents whose CLI is missing.
+   - Resolve NTM project: read `projects_base` from `ntm config show` and confirm `$projects_base/$(basename $PWD)` resolves (per the readiness gate in `_implement.md` Pre-flight). On miss, follow the symlink/config path from `flywheel-setup` §6 before continuing.
+   - Apply the **AGENTS.md NTM pane priority** for swarm composition: the canonical default is mixed `cc:cod:gmi` **1:1:1** (e.g. `--cc=2 --cod=2 --gmi=2`). When a provider is non-green, apply the substitution ladder (gmi→cod→pi→cc) — missing `gmi` reassigns to `cod`, missing `cod` also reassigns to `pi`, all three peers missing collapses to `cc`-only (degraded, log it). Run `which claude codex gemini pi 2>/dev/null` (real binaries behind the `cc/cod/gmi/pi` ntm pane types — do NOT `which cc` literally, it matches `/usr/bin/cc`) and `ntm deps -v` to pick the live mix; never spawn agents whose CLI is missing.
 
 5. For each ready bead (up to the user's limit), create a task and spawn an NTM-backed impl agent:
    - `TaskCreate(subject: "Impl: <bead-id> <title>", status: "in_progress")`
@@ -29,8 +29,9 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    - Spawn the pane via NTM (per `/vibing-with-ntm` and `/ntm`):
      ```bash
      ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-       --cc=<N_claude> --cod=<N_cod> --stagger-mode=smart
-     # Fall back to --pi=<N> only if Codex is unavailable (see AGENTS.md NTM pane priority)
+       --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --stagger-mode=smart
+     # Default 1:1:1; apply substitution ladder gmi→cod→pi→cc when a provider is non-green
+     # (see AGENTS.md "NTM pane priority").
      ```
    - Send the marching-orders prompt via `ntm --robot-send` (NOT inline `Agent()`):
      ```

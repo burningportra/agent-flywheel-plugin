@@ -349,12 +349,15 @@ After all rounds converge:
 2. Call `flywheel_plan` with `cwd`, `mode: "deep"`, and `planFile: "docs/plans/<date>-<goal-slug>-planning-workflow.md"`.
 3. Jump to Step 5.55 (Plan alignment check).
 
-NTM spawn pattern for each review round (sequential, not parallel — each round reads the plan revised by the prior round):
+NTM spawn pattern for each review round. Rounds are sequential — each round reads the plan revised by the prior round — but within a round the mixed `cc:cod:gmi` 1:1:1 cross-check runs in parallel. The review-round guidance comes from the `/planning-workflow` skill, not an unversioned filesystem file:
+
 ```
-ntm spawn --type=cod --name="plan-review-round-<N>" \
-  --prompt="$(cat /planning-workflow-review-prompt.txt)\n\n<paste current plan content>"
+ntm spawn "$NTM_PROJECT" --label plan-review-round-<N> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
+# Then --robot-send the same prompt to each of the three panes:
+ntm --robot-send="$NTM_PROJECT" --pane-name="plan-review-round-<N>" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at docs/plans/<date>-<goal-slug>-planning-workflow.md. Write your revised plan back to the same file; the coordinator will reconcile the three revisions before dispatching round N+1."
 ```
-Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes, then integrate its output before spawning round N+1. Stop at convergence (minor wording changes only) or after 5 rounds.
+
+Use `ntm --robot-wait plan-review-round-<N>` to block until all three panes complete. Reconcile their revisions (take the strongest point from each; break ties by majority) before integrating into the plan file, then spawn round N+1. Stop at convergence (minor wording changes only) or after 5 rounds. Review rounds are sequential by design (each reads the prior round's revision); the per-perspective planner spawn later in this skill is a separate concern (deep-plan).
 
 **Deep plan**:
 
@@ -404,7 +407,7 @@ Use `ntm --robot-wait plan-review-round-<N>` to block until the round completes,
 > }])
 > ```
 >
-> **Gemini model compatibility pre-spawn gate (MANDATORY when spawn includes a `gmi` pane).** If `DOCTOR_REPORT.checks` shows `gemini_model_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning. The 2026-05-15 reality-check swarm confirmed gemini CLI rejects models outside its documented allowlist (`gemini-3.1-flash-preview`). If the check is absent from `DOCTOR_REPORT.checks` entirely (bead `claude-orchestrator-37n6` not yet shipped), treat it as `green` and continue.
+> **Gemini model compatibility pre-spawn gate (MANDATORY when spawn includes a `gmi` pane).** If `DOCTOR_REPORT.checks` shows `gemini_model_compat` with severity `yellow` or `red`, surface this gate BEFORE spawning. The 2026-05-15 reality-check swarm confirmed gemini CLI rejects models outside its documented allowlist (`gemini-3.1-flash-preview`). The check ships in `mcp-server/src/tools/doctor.ts`; if it is absent from `DOCTOR_REPORT.checks` (older MCP server), treat it as `green` and continue.
 >
 > ```
 > AskUserQuestion(questions: [{

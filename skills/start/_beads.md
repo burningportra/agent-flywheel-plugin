@@ -132,7 +132,20 @@ AskUserQuestion(questions: [{
 - "Polish" -> call `flywheel_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
 - "Reject" -> call `flywheel_approve_beads` with `action: "reject"`, return to Step 3
 
-If the user asks "what's the quality score?" before choosing to start, call `flywheel_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then wait for confirmation before proceeding to implementation.
+If the user asks "what's the quality score?" before choosing to start, call `flywheel_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then route the next step through `AskUserQuestion` (per Universal Rule 1):
+
+```
+AskUserQuestion(questions: [{
+  question: "Quality score surfaced. Proceed to implementation?",
+  header: "Score review",
+  options: [
+    { label: "Start implementation", description: "Proceed to Step 7 and dispatch the first wave" },
+    { label: "Polish beads first",   description: "Call flywheel_approve_beads action=\"polish\" to tighten the bead set" },
+    { label: "Reject and replan",    description: "Call flywheel_approve_beads action=\"reject\" and return to Step 3" }
+  ],
+  multiSelect: false
+}])
+```
 
 **Structured error branching (mandatory).** For `flywheel_approve_beads` failures, branch on `result.structuredContent?.data?.error?.code` (typed as `FlywheelErrorCode`) and never parse `error.message` text:
 
@@ -145,7 +158,7 @@ if (code === "already_closed") return continueToNextBeadOrGate();
 
 After calling `flywheel_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
 
-**Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, discuss with user before proceeding)
+**Plan quality score: X.XX / 1.00** (threshold: 0.75 — if below, route the next step through `AskUserQuestion` per Universal Rule 1, with options to polish, reject-and-replan, or proceed despite the low score)
 
 **Polish red flags** (independent of score — surface these to the user alongside the score when any apply):
 - **Oscillation** — polish rounds keep flipping between two approaches. Signal: the taste question is unresolved; pick one, commit the trade-off in the plan, and stop polishing.
