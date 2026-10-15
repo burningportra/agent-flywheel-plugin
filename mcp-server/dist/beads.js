@@ -348,14 +348,14 @@ export async function readBeads(exec, cwd) {
     return beads;
 }
 /**
- * Reads ready beads (unblocked) via `br ready --json`.
+ * Reads every ready bead (unblocked) via `br ready --limit 0 --json`.
  */
 export async function readyBeads(exec, cwd) {
-    const result = await brExecJson(exec, ["ready", "--json"], { timeout: 10000, cwd });
+    const result = await brExecJson(exec, ["ready", "--limit", "0", "--json"], { timeout: 10000, cwd });
     if (!result.ok)
         return [];
     const data = result.value;
-    // br ready --json returns a bare array, br list --json returns {issues: [...]}
+    // br ready JSON returns a bare array; br list JSON may return {issues: [...]}.
     const raw = Array.isArray(data) ? data : data?.issues ?? [];
     return raw.map(parseBead).filter((b) => b !== null);
 }

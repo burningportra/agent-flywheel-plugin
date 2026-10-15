@@ -11,6 +11,7 @@ import { readCheckpoint } from '../checkpoint.js';
 import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
 import { countCommitsSinceLastBatchReview, shouldTriggerBatchReview } from '../commit-batch.js';
+import { filterBeadsForProgram, formatBeadProgramWarnings } from './bead-program.js';
 const log = createLogger('advance-wave');
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 5_000;
@@ -204,6 +205,9 @@ export async function runAdvanceWave(ctx, args) {
             hint: 'Check that br CLI is installed and operational, then retry.',
         });
     }
+    const scopedFrontier = filterBeadsForProgram(ready, state.beadProgramScope);
+    ready = scopedFrontier.beads;
+    const programWarnings = formatBeadProgramWarnings(scopedFrontier.warnings);
     if (ready.length === 0) {
         const outcome = {
             verification,
@@ -212,7 +216,7 @@ export async function runAdvanceWave(ctx, args) {
             needsEvidence,
             convergence: convergenceRec,
         };
-        return okResult(state.phase, 'Wave verified. Queue drained — no more beads to dispatch.', outcome);
+        return okResult(state.phase, `Wave verified. Queue drained — no more beads to dispatch.${programWarnings}`, outcome);
     }
     // Step 3: determine wave size from composition tier
     const composition = recommendComposition(ready.length);
@@ -244,6 +248,8 @@ export async function runAdvanceWave(ctx, args) {
     const lines = [
         `Wave verified (${verification.verified.length}/${args.closedBeadIds.length} closed).`,
     ];
+    if (programWarnings)
+        lines.push(programWarnings.trim());
     if (needsEvidence) {
         if (verification.missingEvidence.length > 0) {
             lines.push(`⚠️  ${verification.missingEvidence.length} bead(s) advanced without completion attestation (Stage 1 warn-only — set FW_ATTESTATION_REQUIRED=1 to block).`);

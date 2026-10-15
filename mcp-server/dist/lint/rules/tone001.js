@@ -82,7 +82,7 @@ function universalRuleRanges(doc) {
     }
     return ranges;
 }
-function proseFrom(doc) {
+export function proseFrom(doc) {
     const codeRanges = doc.fences
         .map((f) => ({
         start: f.span.start.offset ?? 0,

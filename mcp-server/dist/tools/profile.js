@@ -5,6 +5,7 @@ import { createLogger } from '../logger.js';
 import { runOpeningCeremony } from '../opening-ceremony.js';
 import { VERSION } from '../version.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
+import { goalBeadProgramLabel } from './bead-program.js';
 const log = createLogger('profile');
 /**
  * flywheel_profile — Scan the current repo and build a profile.
@@ -86,8 +87,15 @@ export async function runProfile(ctx, args) {
     state.coordinationBackend = coordinationBackend;
     state.coordinationStrategy = coordinationStrategy;
     state.coordinationMode ??= 'worktree';
-    if (args.goal)
+    if (args.goal) {
         state.selectedGoal = args.goal;
+        state.beadProgramScope = {
+            kind: 'unresolved',
+            label: goalBeadProgramLabel(args.goal),
+        };
+        state.activeBeadIds = [];
+        state.currentBeadId = null;
+    }
     state.phase = 'discovering';
     saveState(state);
     // ── Foundation gaps ───────────────────────────────────────────

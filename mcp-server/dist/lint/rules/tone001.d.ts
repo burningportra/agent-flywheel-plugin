@@ -1,4 +1,4 @@
-import type { Rule, RuleContext } from "../types.js";
+import type { ParsedDocument, Rule, RuleContext } from "../types.js";
 /**
  * TONE001 — per-file count of all-caps directive tokens and quota phrases in
  * flywheel skill prose. The rule is a ratchet: a count equal to or lower than
@@ -28,5 +28,6 @@ export interface ToneBaselineFile {
     counts: Record<string, number>;
 }
 export declare function countToneTokens(prose: string): number;
+export declare function proseFrom(doc: ParsedDocument): string;
 export declare const tone001: Rule;
 //# sourceMappingURL=tone001.d.ts.map

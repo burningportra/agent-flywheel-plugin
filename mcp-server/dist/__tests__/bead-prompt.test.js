@@ -22,6 +22,11 @@ describe('buildBeadCreationPrompt', () => {
         expect(prompt).toContain('br close <id> --reason');
         expect(prompt).toMatch(/open\|in_progress\|deferred\|closed/);
     });
+    it('requires the collision-resistant goal-program label on every bead', () => {
+        const prompt = buildBeadCreationPrompt({ goal: 'Add rate limiting' });
+        expect(prompt).toContain('--labels "flywheel-goal:add-rate-limiting:57d0156d"');
+        expect(prompt).toContain('including epics, implementation beads, test beads, and follow-up beads');
+    });
     it('includes the plan path and preview when provided', () => {
         const prompt = buildBeadCreationPrompt({
             goal: 'test',

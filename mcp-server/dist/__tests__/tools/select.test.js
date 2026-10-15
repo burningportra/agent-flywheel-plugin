@@ -38,6 +38,23 @@ describe('runSelect', () => {
         await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Add rate limiting' });
         expect(state.selectedGoal).toBe('Add rate limiting');
     });
+    it('starts a new unresolved bead program and clears stale active ids', async () => {
+        const { ctx, state } = makeCtx({
+            activeBeadIds: ['old-program-bead'],
+            currentBeadId: 'old-program-bead',
+            beadProgramScope: {
+                kind: 'tagged',
+                label: 'flywheel-goal:old-program:deadbeef',
+            },
+        });
+        await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Goal A' });
+        expect(state.beadProgramScope).toEqual({
+            kind: 'unresolved',
+            label: 'flywheel-goal:goal-a:ccba1a8c',
+        });
+        expect(state.activeBeadIds).toEqual([]);
+        expect(state.currentBeadId).toBeNull();
+    });
     it('trims whitespace from goal', async () => {
         const { ctx, state } = makeCtx();
         await runSelect(ctx, { cwd: '/fake/cwd', goal: '  Add rate limiting  ' });

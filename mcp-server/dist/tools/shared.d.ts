@@ -14,10 +14,7 @@ export declare function computeConvergenceScore(polishChanges: number[], outputS
  * Skips node_modules and dot-directories. Returns null if nothing matched.
  */
 export declare function newestMtime(root: string, filter?: (name: string) => boolean): number | null;
-/**
- * Slugify a goal string to a filesystem-safe identifier.
- */
-export declare function slugifyGoal(goal: string): string;
+export { slugifyGoal } from './bead-program.js';
 /**
  * Format a repo profile into a readable summary string for prompts.
  */

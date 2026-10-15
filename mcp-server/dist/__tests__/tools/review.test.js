@@ -83,7 +83,7 @@ function brUpdateCall(beadId, status) {
 function brReadyCall(beads) {
     return {
         cmd: 'br',
-        args: ['ready', '--json'],
+        args: ['ready', '--limit', '0', '--json'],
         result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
     };
 }
@@ -236,6 +236,35 @@ describe('runReview', () => {
         expect(result.content[0].text).toContain('implement and commit it, then call');
         expect(JSON.stringify(result).split('C3_SINGLE_BEAD_DESCRIPTION')).toHaveLength(2);
     });
+    it('does not advance review into another goal program', async () => {
+        const labelA = 'flywheel-goal:goal-a:ccba1a8c';
+        const completed = makeBead({ labels: [labelA] });
+        const nextA = makeBead({ id: 'goal-a-next', labels: [labelA] });
+        const nextB = makeBead({
+            id: 'goal-b-next',
+            labels: ['flywheel-goal:goal-b:9406de47'],
+        });
+        const { ctx } = makeCtx({ beadProgramScope: { kind: 'tagged', label: labelA } }, [
+            brShowCall(completed),
+            brUpdateCall(completed.id, 'closed'),
+            brReadyCall([nextB, nextA]),
+            brUpdateCall(nextA.id, 'in_progress'),
+        ]);
+        const exec = vi.fn(ctx.exec);
+        ctx.exec = exec;
+        const result = await runReview(ctx, {
+            cwd: '/fake/cwd',
+            beadId: completed.id,
+            action: 'looks-good',
+        });
+        expect(result.structuredContent).toMatchObject({
+            data: {
+                strategy: 'single_bead',
+                nextBeadIds: [nextA.id],
+            },
+        });
+        expect(exec).not.toHaveBeenCalledWith('br', ['update', nextB.id, '--status', 'in_progress'], expect.anything());
+    });
     // ── Parent auto-close ──────────────────────────────────────
     describe('parent auto-close', () => {
         it('auto-closes parent when all siblings done', async () => {
@@ -286,7 +315,7 @@ describe('runReview', () => {
         const { ctx } = makeCtx({}, [
             brShowCall(bead),
             brUpdateCall('test-bead-1', 'closed'),
-            { cmd: 'br', args: ['ready', '--json'], result: { code: 0, stdout: 'not-valid-json{', stderr: '' } },
+            { cmd: 'br', args: ['ready', '--limit', '0', '--json'], result: { code: 0, stdout: 'not-valid-json{', stderr: '' } },
         ]);
         const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'looks-good' });
         expect(result.isError).toBe(true);

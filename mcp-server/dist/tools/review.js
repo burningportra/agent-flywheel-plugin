@@ -7,6 +7,7 @@ import { makeOkToolResult } from './shared.js';
 import { buildFreshEyesPrompt } from '../gates.js';
 import { synthesizeBeadsFromFindings, rollbackSynthesizedBeads } from '../commit-batch.js';
 import { readMemory, appendMemory } from '../memory.js';
+import { filterBeadsForProgram, formatBeadProgramWarnings } from './bead-program.js';
 const log = createLogger('review');
 // ─── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────────────
 //
@@ -603,16 +604,19 @@ function needsAttentionFallback(ctx, shaRange, verdictPath, rawVerdict, reason) 
 async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
     const { exec, cwd, state, saveState, signal } = ctx;
     // Get next ready beads
-    const brReadyResult = await exec('br', ['ready', '--json'], { cwd, timeout: 8000, signal });
+    const brReadyResult = await exec('br', ['ready', '--limit', '0', '--json'], { cwd, timeout: 8000, signal });
     let ready = [];
     if (brReadyResult.code === 0) {
         try {
             ready = JSON.parse(brReadyResult.stdout);
         }
         catch {
-            return errorResult(state.phase, 'parse_failure', 'br ready produced malformed JSON — fall back to manual bead selection.', { command: 'br ready --json', stdout: brReadyResult.stdout.slice(0, 200) }, 'Run `br ready --json` manually to inspect the output; upgrade br CLI if the JSON shape drifted.');
+            return errorResult(state.phase, 'parse_failure', 'br ready produced malformed JSON — fall back to manual bead selection.', { command: 'br ready --limit 0 --json', stdout: brReadyResult.stdout.slice(0, 200) }, 'Run `br ready --limit 0 --json` manually to inspect the output; upgrade br CLI if the JSON shape drifted.');
         }
     }
+    const scopedFrontier = filterBeadsForProgram(ready, state.beadProgramScope);
+    ready = scopedFrontier.beads;
+    const programWarnings = formatBeadProgramWarnings(scopedFrontier.warnings);
     // Filter out already-completed beads
     const completed = new Set(Object.entries(state.beadResults ?? {})
         .filter(([, r]) => r.status === 'success')
@@ -624,7 +628,7 @@ async function nextBeadOrGates(ctx, completedBeadId, completedTitle, status) {
         state.iterationRound = 0;
         state.currentGateIndex = 0;
         saveState(state);
-        return okResult('iterating', `**${status}: Bead ${completedBeadId} (${completedTitle}).**
+        return okResult('iterating', `**${status}: Bead ${completedBeadId} (${completedTitle}).**${programWarnings}
 
 All beads complete! Entering review gates.
 
@@ -643,7 +647,7 @@ All beads complete! Entering review gates.
         state.retryCount = 0;
         state.phase = 'implementing';
         saveState(state);
-        return okResult('implementing', `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready. Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`, {
+        return okResult('implementing', `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready.${programWarnings} Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`, {
             kind: 'review_tasks',
             strategy: 'single_bead',
             completedBeadId,
@@ -662,7 +666,7 @@ All beads complete! Entering review gates.
         cwd,
         task: `Implement bead ${bead.id}: ${bead.title}\n\n${bead.description}\n\nAfter implementing, commit and report your summary.`,
     }));
-    return okResult('implementing', `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.
+    return okResult('implementing', `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.${programWarnings}
 
 **NEXT: Spawn ${ready.length} parallel agents from structuredContent.data.agentConfigs, then call \`flywheel_review\` for each when done.**`, {
         kind: 'review_tasks',

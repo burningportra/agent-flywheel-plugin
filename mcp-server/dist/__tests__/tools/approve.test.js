@@ -68,12 +68,12 @@ function makeExecCalls(beads = [makeBead()], readyBeads) {
     return [
         {
             cmd: 'br',
-            args: ['list', '--json'],
+            args: ['list', '--all', '--limit', '0', '--json'],
             result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
         },
         {
             cmd: 'br',
-            args: ['ready', '--json'],
+            args: ['ready', '--limit', '0', '--json'],
             result: { code: 0, stdout: JSON.stringify(readyBeads ?? beads), stderr: '' },
         },
         // update calls for marking beads as in_progress
@@ -122,7 +122,7 @@ describe('runApprove', () => {
     });
     it('returns error when br list fails', async () => {
         const { ctx } = makeCtx({}, [
-            { cmd: 'br', args: ['list', '--json'], result: { code: 1, stdout: '', stderr: 'br not found' } },
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 1, stdout: '', stderr: 'br not found' } },
         ]);
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
         expect(result.isError).toBe(true);
@@ -140,7 +140,7 @@ describe('runApprove', () => {
                     message: expect.stringContaining('Error reading beads'),
                     retryable: true,
                     details: {
-                        command: 'br list --json',
+                        command: 'br list --all --limit 0 --json',
                         stderr: 'br not found',
                     },
                 },
@@ -149,7 +149,7 @@ describe('runApprove', () => {
     });
     it('returns error when br list returns invalid JSON', async () => {
         const { ctx } = makeCtx({}, [
-            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: 'not json', stderr: '' } },
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: 'not json', stderr: '' } },
         ]);
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
         expect(result.isError).toBe(true);
@@ -158,7 +158,7 @@ describe('runApprove', () => {
     it('returns guidance when no open beads found', async () => {
         const closedBead = makeBead({ status: 'closed' });
         const { ctx } = makeCtx({}, [
-            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify([closedBead]), stderr: '' } },
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify([closedBead]), stderr: '' } },
         ]);
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
         expect(result.content[0].text).toContain('No open beads found');
@@ -248,7 +248,7 @@ describe('runApprove', () => {
             writeFileSync(join(cwd, 'plan.md'), '# Request cache\nImplement request caching and invalidation.\n\n# Metrics\nRecord cache hit and miss metrics.');
             const { ctx } = makeCtx({ planDocument: 'plan.md' }, [{
                     cmd: 'br',
-                    args: ['list', '--json'],
+                    args: ['list', '--all', '--limit', '0', '--json'],
                     result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
                 }], cwd);
             const result = await runApprove(ctx, { cwd, action: 'polish' });
@@ -330,6 +330,85 @@ describe('runApprove', () => {
                 ],
             },
         });
+    });
+    it('does not claim ready beads from another goal program', async () => {
+        const goalALabel = 'flywheel-goal:goal-a:ccba1a8c';
+        const goalBLabel = 'flywheel-goal:goal-b:9406de47';
+        const goalAReady = makeBead({
+            id: 'goal-a-ready',
+            title: 'Goal A ready',
+            description: 'Implement goal A.\nHOW: src/goal-a.ts',
+            labels: [goalALabel],
+        });
+        const goalABlocked = makeBead({
+            id: 'goal-a-blocked',
+            title: 'Goal A blocked',
+            description: 'Implement blocked goal A work.\nHOW: src/goal-a-blocked.ts',
+            labels: [goalALabel],
+        });
+        const goalBReady = makeBead({
+            id: 'goal-b-ready',
+            title: 'Goal B ready',
+            description: 'Implement goal B.\nHOW: src/goal-b.ts',
+            labels: [goalBLabel],
+        });
+        const goalBBlocked = makeBead({
+            id: 'goal-b-blocked',
+            title: 'Goal B blocked',
+            description: 'Implement blocked goal B work.\nHOW: src/goal-b-blocked.ts',
+            labels: [goalBLabel],
+        });
+        const allBeads = [goalAReady, goalABlocked, goalBReady, goalBBlocked];
+        const { ctx, state } = makeCtx({ selectedGoal: 'Goal A' }, [
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify(allBeads), stderr: '' } },
+            { cmd: 'br', args: ['ready', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify([goalBReady, goalAReady]), stderr: '' } },
+            { cmd: 'br', args: ['update', goalBReady.id, '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
+            { cmd: 'br', args: ['update', goalAReady.id, '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
+        ]);
+        const exec = vi.fn(ctx.exec);
+        ctx.exec = exec;
+        const result = await runApprove(ctx, {
+            cwd: '/fake/cwd',
+            action: 'start',
+            coordinatorName: 'WindyBasin',
+        });
+        const data = result.structuredContent.data;
+        expect(state.activeBeadIds).toEqual([goalAReady.id, goalABlocked.id]);
+        expect(state.currentBeadId).toBe(goalAReady.id);
+        expect(data.readyBeads).toEqual([
+            expect.objectContaining({ id: goalAReady.id }),
+        ]);
+        expect(exec).toHaveBeenCalledWith('br', ['update', goalAReady.id, '--status', 'in_progress'], expect.anything());
+        expect(exec).not.toHaveBeenCalledWith('br', ['update', goalBReady.id, '--status', 'in_progress'], expect.anything());
+    });
+    it('keeps legacy untagged behavior with an ownership warning', async () => {
+        const bead = makeBead({ id: 'legacy-ready', labels: ['bug'] });
+        const { ctx, state } = makeCtx({ selectedGoal: 'Legacy goal' }, makeExecCalls([bead]));
+        const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+        expect(state.beadProgramScope).toEqual({
+            kind: 'legacy',
+            label: 'flywheel-goal:legacy-goal:022a4d11',
+        });
+        expect(state.activeBeadIds).toEqual([bead.id]);
+        expect(result.content[0].text).toContain('using legacy repository-wide scope');
+        expect(result.content[0].text).toContain('Ownership across goals cannot be verified');
+    });
+    it('refuses repository-wide fallback when only another tagged program exists', async () => {
+        const foreign = makeBead({
+            id: 'goal-b-ready',
+            labels: ['flywheel-goal:goal-b:9406de47'],
+        });
+        const { ctx, state } = makeCtx({ selectedGoal: 'Goal A' }, [{
+                cmd: 'br',
+                args: ['list', '--all', '--limit', '0', '--json'],
+                result: { code: 0, stdout: JSON.stringify([foreign]), stderr: '' },
+            }]);
+        const exec = vi.fn(ctx.exec);
+        ctx.exec = exec;
+        const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+        expect(state.activeBeadIds).toEqual([]);
+        expect(result.content[0].text).toContain('repository-wide fallback is disabled');
+        expect(exec).not.toHaveBeenCalledWith('br', ['update', foreign.id, '--status', 'in_progress'], expect.anything());
     });
     it('resets beadResults and beadReviews on start', async () => {
         const bead = makeBead();
@@ -493,15 +572,15 @@ describe('runApprove', () => {
         });
         expect(exec).not.toHaveBeenCalledWith('br', ['update', bead.id, '--status', 'in_progress'], expect.anything());
     });
-    it('falls back to first 3 beads when br ready fails', async () => {
+    it('does not dispatch dependency-unknown beads when br ready fails', async () => {
         const beads = [
             makeBead({ id: 'bead-1', title: 'First' }),
             makeBead({ id: 'bead-2', title: 'Second' }),
             makeBead({ id: 'bead-3', title: 'Third' }),
         ];
         const execCalls = [
-            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
-            { cmd: 'br', args: ['ready', '--json'], result: { code: 1, stdout: '', stderr: 'br ready failed' } },
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
+            { cmd: 'br', args: ['ready', '--limit', '0', '--json'], result: { code: 1, stdout: '', stderr: 'br ready failed' } },
             ...beads.map(b => ({
                 cmd: 'br',
                 args: ['update', b.id, '--status', 'in_progress'],
@@ -509,11 +588,15 @@ describe('runApprove', () => {
             })),
         ];
         const { ctx, state } = makeCtx({}, execCalls);
+        const exec = vi.fn(ctx.exec);
+        ctx.exec = exec;
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
-        expect(state.phase).toBe('implementing');
+        expect(state.phase).toBe('awaiting_bead_approval');
         expect(result.content[0].text).toContain('Beads approved');
-        // Should have used the fallback (first 3 beads)
-        expect(result.content[0].text).toContain('bead-1');
+        expect(result.content[0].text).toContain('no ready beads found');
+        for (const bead of beads) {
+            expect(exec).not.toHaveBeenCalledWith('br', ['update', bead.id, '--status', 'in_progress'], expect.anything());
+        }
     });
     it('includes bead quality score in output on start', async () => {
         const bead = makeBead();
@@ -861,8 +944,8 @@ Current beads:
             makeBead({ id: 'bead-3', title: 'Third task' }),
         ];
         const execCalls = [
-            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
-            { cmd: 'br', args: ['ready', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
+            { cmd: 'br', args: ['ready', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify(beads), stderr: '' } },
             // bead-1 succeeds
             { cmd: 'br', args: ['update', 'bead-1', '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
             // bead-2 fails
@@ -884,8 +967,8 @@ Current beads:
         _resetForTest();
         const bead = makeBead();
         const execCalls = [
-            { cmd: 'br', args: ['list', '--json'], result: { code: 0, stdout: JSON.stringify([bead]), stderr: '' } },
-            { cmd: 'br', args: ['ready', '--json'], result: { code: 0, stdout: JSON.stringify([bead]), stderr: '' } },
+            { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify([bead]), stderr: '' } },
+            { cmd: 'br', args: ['ready', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify([bead]), stderr: '' } },
             { cmd: 'br', args: ['update', bead.id, '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
         ];
         // Use a specific cwd so the mutex key is deterministic
@@ -1012,13 +1095,21 @@ describe('runApprove — action=remediate', () => {
         ];
         // Use a permissive matcher: the title is deterministic but description
         // is long; use a lenient mock that matches on cmd + first 4 args.
-        const exec = async (cmd, args) => {
+        const exec = vi.fn(async (cmd, args) => {
             if (cmd === 'br' && args[0] === 'create') {
                 return { code: 0, stdout: 'br-remediate-1', stderr: '' };
             }
             return { code: 1, stdout: '', stderr: 'not mocked' };
-        };
-        const state = makeState({ selectedGoal: 'Outcome grading', phase: 'reviewing', iterationRound: 0 });
+        });
+        const state = makeState({
+            selectedGoal: 'Outcome grading',
+            phase: 'reviewing',
+            iterationRound: 0,
+            beadProgramScope: {
+                kind: 'tagged',
+                label: 'flywheel-goal:outcome-grading:feedface',
+            },
+        });
         const ctx = {
             exec: exec,
             cwd: '/fake/cwd',
@@ -1038,6 +1129,10 @@ describe('runApprove — action=remediate', () => {
         expect(sc.data.criterionId).toBe('c2');
         expect(sc.data.iterationRound).toBe(1);
         expect(sc.data.title).toContain('Outcome remediation c2');
+        expect(exec).toHaveBeenCalledWith('br', expect.arrayContaining([
+            '--labels',
+            'flywheel-goal:outcome-grading:feedface',
+        ]), expect.anything());
         void calls;
     });
     it('returns invalid_input when remediation payload is omitted', async () => {

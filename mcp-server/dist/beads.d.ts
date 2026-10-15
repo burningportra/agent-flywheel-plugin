@@ -89,7 +89,7 @@ export declare function bvPlan(exec: ExecFn, cwd: string): Promise<string | null
  */
 export declare function readBeads(exec: ExecFn, cwd: string): Promise<Bead[]>;
 /**
- * Reads ready beads (unblocked) via `br ready --json`.
+ * Reads every ready bead (unblocked) via `br ready --limit 0 --json`.
  */
 export declare function readyBeads(exec: ExecFn, cwd: string): Promise<Bead[]>;
 /**
