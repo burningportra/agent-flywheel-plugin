@@ -11,6 +11,7 @@ import type {
   AdaptedPrompt,
   BeadDispatchContext,
 } from './codex-prompt.js';
+import { buildPreCompletionQualityGate } from './completion-attestation-prompt.js';
 
 export type { AdaptedPrompt, BeadDispatchContext };
 
@@ -84,6 +85,8 @@ export function adaptPromptForClaude(
     '## STEP 4 — RELEASE + REPORT',
     '- release_file_reservations.',
     `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} done' (target ${completionLength}).`,
+    '',
+    buildPreCompletionQualityGate(bead),
   ].join('\n');
 
   return {

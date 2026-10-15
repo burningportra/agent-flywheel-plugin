@@ -16,6 +16,7 @@ import type {
   AdaptedPrompt,
   BeadDispatchContext,
 } from './codex-prompt.js';
+import { buildPreCompletionQualityGate } from './completion-attestation-prompt.js';
 
 export type { AdaptedPrompt, BeadDispatchContext };
 
@@ -95,6 +96,8 @@ export function adaptPromptForGemini(
     '## STEP 4 — RELEASE + REPORT',
     '- release_file_reservations.',
     `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} done' with ${completionLength}.`,
+    '',
+    buildPreCompletionQualityGate(bead),
     '',
     '## COMPLETION REPORT (produce verbatim, then STOP):',
     '```yaml',
