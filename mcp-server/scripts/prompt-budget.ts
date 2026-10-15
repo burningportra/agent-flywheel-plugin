@@ -511,11 +511,15 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
   const RealDate = Date;
   class FixedDate extends Date {
     constructor(value?: string | number | Date) {
-      let normalized: string | number;
-      if (value === undefined) normalized = FIXTURE_TIMESTAMP;
-      else if (value instanceof Date) normalized = value.valueOf();
-      else normalized = value;
-      super(normalized);
+      if (value === undefined) {
+        super(FIXTURE_TIMESTAMP);
+        return;
+      }
+      if (value instanceof Date) {
+        super(value.valueOf());
+        return;
+      }
+      super(value);
     }
 
     static override now(): number {
