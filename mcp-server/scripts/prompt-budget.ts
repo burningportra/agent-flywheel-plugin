@@ -127,6 +127,7 @@ const THRESHOLD_PERCENT = 10;
 const FIXTURE_GOAL = "Improve cache behavior";
 const FIXTURE_SLUG = "improve-cache-behavior";
 const FIXTURE_DATE = "2026-10-15";
+const FIXTURE_TIMESTAMP = Date.parse(`${FIXTURE_DATE}T12:00:00.000Z`);
 
 const SKILL_FILES = [
   "skills/start/SKILL.md",
@@ -499,9 +500,20 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
   const fixtureCwd = mkdtempSync(path.join(tmpdir(), "prompt-budget-fixture-"));
   const originalPath = process.env.PATH;
   const emptyPath = mkdtempSync(path.join(tmpdir(), "prompt-budget-empty-path-"));
+  const RealDate = Date;
+  class FixedDate extends Date {
+    constructor(value?: string | number | Date) {
+      super(value === undefined ? FIXTURE_TIMESTAMP : value instanceof Date ? value.valueOf() : value);
+    }
+
+    static override now(): number {
+      return FIXTURE_TIMESTAMP;
+    }
+  }
 
   try {
     process.env.PATH = emptyPath;
+    globalThis.Date = FixedDate as unknown as DateConstructor;
     modules.resetCassDetection();
     const brainstormDir = path.join(fixtureCwd, "docs", "brainstorms");
     mkdirSync(brainstormDir, { recursive: true });
@@ -627,6 +639,7 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
       measureText("gate.fresh-eyes", "gate", "gates.ts#buildFreshEyesPrompt", freshEyes),
     );
   } finally {
+    globalThis.Date = RealDate;
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;
     modules.resetCassDetection();
