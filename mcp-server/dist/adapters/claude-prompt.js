@@ -6,6 +6,7 @@
  * Claude panes when model diversity is enabled. Kept as its own file so
  * the three providers expose a symmetric interface.
  */
+import { buildPreCompletionQualityGate } from './completion-attestation-prompt.js';
 export function adaptPromptForClaude(bead) {
     const thinkingDirective = bead.complexity === 'complex'
         ? 'Think carefully and step-by-step before writing code; this bead is harder than it looks.'
@@ -65,6 +66,8 @@ export function adaptPromptForClaude(bead) {
         '## STEP 4 — RELEASE + REPORT',
         '- release_file_reservations.',
         `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} done' (target ${completionLength}).`,
+        '',
+        buildPreCompletionQualityGate(bead),
     ].join('\n');
     return {
         provider: 'claude',

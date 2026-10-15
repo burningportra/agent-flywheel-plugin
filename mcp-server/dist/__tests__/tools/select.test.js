@@ -116,8 +116,10 @@ describe('runSelect', () => {
         const { ctx } = makeCtx();
         const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Build API' });
         const text = result.content[0].text;
-        expect(text).toContain('Bead Creation Instructions');
+        expect(text).toContain('Bead creation rules');
         expect(text).toContain('br create');
+        expect(text).toContain('br dep add <downstream> <upstream>');
+        expect(text).not.toContain('--depends-on');
     });
     it('works without a repoProfile on state', async () => {
         const { ctx } = makeCtx();

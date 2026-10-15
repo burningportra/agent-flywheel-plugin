@@ -11,6 +11,7 @@
  * The interface mirrors `codex-prompt.ts` exactly so the dispatch layer
  * is a switch on `provider`, nothing more.
  */
+import { buildPreCompletionQualityGate } from './completion-attestation-prompt.js';
 export function adaptPromptForGemini(bead) {
     const thinkingDirective = bead.complexity === 'complex'
         ? 'This bead is harder than it looks — plan before editing.'
@@ -76,6 +77,8 @@ export function adaptPromptForGemini(bead) {
         '## STEP 4 — RELEASE + REPORT',
         '- release_file_reservations.',
         `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} done' with ${completionLength}.`,
+        '',
+        buildPreCompletionQualityGate(bead),
         '',
         '## COMPLETION REPORT (produce verbatim, then STOP):',
         '```yaml',

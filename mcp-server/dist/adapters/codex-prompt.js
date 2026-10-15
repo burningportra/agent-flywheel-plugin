@@ -23,6 +23,7 @@
  * downstream bead `1qn` (codex-rescue handoff). DO NOT rename these
  * exports without coordinating — the contract is load-bearing.
  */
+import { buildPreCompletionQualityGate } from './completion-attestation-prompt.js';
 /** Build the Codex-specific structured-output footer. */
 function codexCompletionFooter(bead) {
     return [
@@ -108,6 +109,8 @@ export function adaptPromptForCodex(bead) {
         '### STEP 4 — RELEASE + REPORT',
         '- release_file_reservations.',
         `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} done' (${completionLength}).`,
+        '',
+        buildPreCompletionQualityGate(bead),
         '',
         codexCompletionFooter(bead),
     ].join('\n');

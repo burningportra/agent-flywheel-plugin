@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFlywheelErrorResult } from '../errors.js';
+import { buildBeadCreationPrompt } from './bead-prompt.js';
 export function formatModelRef(model) {
     return model.provider ? `${model.provider}/${model.id}` : model.id;
 }
@@ -185,28 +186,11 @@ export function formatRepoProfile(profile) {
  * Build the bead creation prompt given a goal and repo context.
  */
 export function beadCreationPrompt(goal, repoContext, constraints) {
-    const constraintSection = constraints.length > 0
-        ? `\n\n## Constraints\n${constraints.map(c => `- ${c}`).join('\n')}`
-        : '';
-    return `## Goal\n${goal}${constraintSection}\n\n## Repository Context\n${repoContext}
-
-## Bead Creation Instructions
-
-Create a set of implementation beads using the \`br\` CLI. Each bead represents one focused unit of work.
-
-### Rules
-1. Use \`br create --title "..." --description "..." --priority <0-4> --type task\`
-2. Add dependencies with \`br dep add <bead-id> --depends-on <other-id>\`
-3. Each bead must have:
-   - **WHAT**: Concrete implementation steps
-   - **WHY**: Business or technical rationale
-   - **HOW**: Specific files to create/modify
-4. Scope beads to single concerns — no mega-beads
-5. Order by dependency: foundation beads before feature beads
-6. Use descriptive titles (verb phrases work well: "Add rate limiting to /api/submit")
-
-### After creating beads
-Call \`flywheel_approve_beads\` to review and approve the bead graph before implementation begins.`;
+    return buildBeadCreationPrompt({
+        goal,
+        repoContext,
+        constraints,
+    });
 }
 const VERB_PREFIXES = [
     'add', 'create', 'fix', 'update', 'remove', 'implement', 'refactor',
