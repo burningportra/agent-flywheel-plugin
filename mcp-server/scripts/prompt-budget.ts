@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -295,6 +296,49 @@ function buildReport(
       byGroup,
     },
   };
+}
+
+function parseReport(raw: string, label: string): PromptBudgetReport {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON`, { cause: error });
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  const report = parsed as Partial<PromptBudgetReport>;
+  if (
+    report.version !== 1
+    || typeof report.gitHead !== "string"
+    || !Array.isArray(report.entries)
+    || report.thresholdPercent !== 10
+    || !report.totals
+  ) {
+    throw new Error(`${label} does not match prompt-budget schema version 1`);
+  }
+  for (const entry of report.entries) {
+    if (
+      !entry
+      || typeof entry.id !== "string"
+      || !GROUPS.includes(entry.group)
+      || typeof entry.source !== "string"
+      || !Number.isInteger(entry.chars)
+      || entry.chars < 0
+      || !Number.isInteger(entry.estimatedTokens)
+      || entry.estimatedTokens < 0
+    ) {
+      throw new Error(`${label} contains an invalid budget entry`);
+    }
+  }
+  return report as PromptBudgetReport;
+}
+
+function writeReport(filePath: string, report: PromptBudgetReport): void {
+  const temporaryPath = `${filePath}.tmp-${process.pid}`;
+  writeFileSync(temporaryPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  renameSync(temporaryPath, filePath);
 }
 
 async function loadRuntimeModules(): Promise<RuntimeModules> {
@@ -628,7 +672,7 @@ function measureCommittedHead(repoRoot: string): PromptBudgetReport {
       maxBuffer: 50 * 1024 * 1024,
       env: { ...process.env, PROMPT_BUDGET_WORKER: "1" },
     });
-    const report = JSON.parse(output) as PromptBudgetReport;
+    const report = parseReport(output, "committed-head worker output");
     return { ...report, sourceMode: "committed-head" };
   } finally {
     if (path.basename(cloneRoot).startsWith("prompt-budget-head-")) {
@@ -701,7 +745,7 @@ async function main(): Promise<void> {
     if (!existsSync(baselinePath)) {
       throw new Error(`baseline not found at ${baselinePath}; run prompt-budget first`);
     }
-    const baseline = JSON.parse(readUtf8(baselinePath)) as PromptBudgetReport;
+    const baseline = parseReport(readUtf8(baselinePath), BASELINE_PATH);
     const current = await collectPromptBudget(
       options.root,
       gitHead(options.root),
@@ -726,7 +770,7 @@ async function main(): Promise<void> {
   printTable(report);
   if (!existsSync(baselinePath) || options.write) {
     mkdirSync(path.dirname(baselinePath), { recursive: true });
-    writeFileSync(baselinePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    writeReport(baselinePath, report);
     process.stdout.write(`prompt-budget: wrote ${BASELINE_PATH}\n`);
   } else {
     process.stdout.write(`prompt-budget: baseline already exists at ${BASELINE_PATH}; use --write to replace it\n`);
