@@ -2,9 +2,6 @@ import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
-export function formatModelRef(model) {
-    return model.provider ? `${model.provider}/${model.id}` : model.id;
-}
 export function makeChoiceOption(id, label, options = {}) {
     return {
         id,
@@ -36,16 +33,6 @@ export function makeOkToolResult(tool, phase, text, data) {
 }
 export function makeToolError(tool, phase, code, message, options = {}) {
     return makeFlywheelErrorResult(tool, phase, { code, message, ...options });
-}
-/**
- * Pick execution mode: single-branch (shared checkout) or worktree (isolated checkouts).
- */
-export function resolveExecutionMode(coordinationMode, hasAgentMail) {
-    if (coordinationMode === 'single-branch')
-        return 'single-branch';
-    if (coordinationMode === 'worktree')
-        return 'worktree';
-    return hasAgentMail ? 'single-branch' : 'worktree';
 }
 /**
  * Convergence score computation from polish change history.
@@ -124,14 +111,6 @@ export function newestMtime(root, filter = () => true) {
     }
     return max;
 }
-/** Default deep plan model assignments. */
-export const DEEP_PLAN_MODELS = {
-    correctness: 'claude-opus-4-7',
-    robustness: 'claude-sonnet-4-6',
-    ergonomics: 'claude-sonnet-4-6',
-    synthesis: 'claude-opus-4-7',
-};
-export const SWARM_STAGGER_DELAY_MS = 30_000;
 /**
  * Slugify a goal string to a filesystem-safe identifier.
  */
@@ -259,40 +238,5 @@ export function formatBeadQualityScore(q) {
         lines.push(`   Weak beads: ${q.weakBeads.slice(0, 3).join(' | ')}`);
     }
     return lines.join('\n');
-}
-/**
- * Build implementer instructions for a single bead.
- */
-export function implementerInstructions(bead, profile, prevResults, cassMemory, episodic) {
-    const prevSummary = prevResults.length > 0
-        ? `\n\n## Prior bead results\n${prevResults.slice(-3).map(r => `- ${r.beadId}: ${r.status} — ${r.summary.slice(0, 100)}`).join('\n')}`
-        : '';
-    const memSection = cassMemory
-        ? `\n\n## CASS memory (relevant rules)\n${cassMemory.slice(0, 500)}`
-        : '';
-    const episodicSection = episodic
-        ? `\n\n## Prior session context\n${episodic.slice(0, 500)}`
-        : '';
-    return `## Implement Bead: ${bead.id}
-
-### ${bead.title}
-
-${bead.description}
-
----
-
-**Repo:** ${profile.name || cwd_from_profile(profile)} | **Languages:** ${profile.languages.join(', ')}
-${prevSummary}${memSection}${episodicSection}
-
-## Instructions
-1. Read the bead description carefully — it specifies WHAT, WHY, and HOW
-2. Implement all changes described
-3. Run tests if applicable
-4. Do a fresh-eyes review of your changes
-5. Commit: \`git add <files> && git commit -m "bead ${bead.id}: ${bead.title.slice(0, 60)}"\`
-6. Call \`flywheel_review\` with beadId="${bead.id}" and your summary`;
-}
-function cwd_from_profile(profile) {
-    return profile.name || 'project';
 }
 //# sourceMappingURL=shared.js.map

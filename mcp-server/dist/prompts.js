@@ -1,5 +1,4 @@
 import { formatTemplatesForPrompt } from "./bead-templates.js";
-import { synthesizerTemplateHintGuidance } from "./deep-plan.js";
 // ─── Workflow Roadmap ───────────────────────────────────────
 const WORKFLOW_PHASES = [
     { key: "profiling", label: "Scan" },
@@ -282,8 +281,6 @@ Notice: every placeholder is resolved and the final text is fully expanded - the
 
 If no template fits, write a custom bead normally and omit \`Template: <id>\`. Final beads must not say \`[Use template: ...]\`, \`see template\`, or leave unresolved \`{{placeholderName}}\` markers behind.
 
-${synthesizerTemplateHintGuidance()}
-
 Verify with \`br list\` and \`br dep cycles\` (must show no cycles).
 
 Use ultrathink.`;
@@ -365,8 +362,6 @@ ${formatTemplatesForPrompt()}
 The plan is your primary source. Use templates only to accelerate structure, not replace plan details.
 Templates are optional: if one fits, expand it with plan-specific details and include a machine-readable \`Template: <id>\` line in the final \`br create\` body (for example, \`Template: add-api-endpoint\`); if none fit, write a custom bead normally and omit that line.
 Do not emit final beads that say \`[Use template: ...]\`, raw template IDs outside the \`Template: <id>\` metadata line, \`see template\`, or unresolved \`{{placeholderName}}\` markers.
-
-${synthesizerTemplateHintGuidance()}
 
 Verify with \`br list\` and \`br dep cycles\` (must show no cycles).
 

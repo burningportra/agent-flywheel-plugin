@@ -425,21 +425,33 @@ describe('runReview', () => {
             });
             expect(result.content[0].text).toContain('Gate passed');
         });
-        it('completes flywheel after 2 consecutive clean rounds', async () => {
-            const { ctx, state } = makeCtx({ currentGateIndex: 0, consecutiveCleanRounds: 1 });
-            const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
+        it('walks every guided gate before completing the flywheel', async () => {
+            const { ctx, state } = makeCtx({ currentGateIndex: 0, consecutiveCleanRounds: 0 });
+            const gatePrompts = [];
+            const firstGate = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'hit-me' });
+            gatePrompts.push(firstGate.content[0].text);
+            for (let gate = 1; gate < 5; gate += 1) {
+                const nextGate = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
+                expect(state.phase).not.toBe('complete');
+                gatePrompts.push(nextGate.content[0].text);
+            }
+            for (let gate = 1; gate <= 5; gate += 1) {
+                expect(gatePrompts.join('\n')).toContain(`Gate ${gate}`);
+            }
+            const completion = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
             expect(state.phase).toBe('complete');
-            expect(result.structuredContent).toMatchObject({
+            expect(state.consecutiveCleanRounds).toBe(5);
+            expect(completion.structuredContent).toMatchObject({
                 tool: 'flywheel_review',
                 version: 1,
                 status: 'ok',
                 phase: 'complete',
                 data: {
                     kind: 'flywheel_complete',
-                    consecutiveCleanRounds: 2,
+                    consecutiveCleanRounds: 5,
                 },
             });
-            expect(result.content[0].text).toContain('Flywheel Complete');
+            expect(completion.content[0].text).toContain('Flywheel Complete');
         });
         it('resets clean streak on hit-me (issue found)', async () => {
             const { ctx, state } = makeCtx({ currentGateIndex: 0, consecutiveCleanRounds: 1 });
@@ -664,6 +676,44 @@ describe('runReview', () => {
             vi.mocked(rollbackSynthesizedBeads).mockResolvedValue({ deleted: [], closed: [], failed: [] });
             vi.mocked(appendMemory).mockReturnValue(true);
             vi.mocked(readMemory).mockReturnValue('');
+        });
+        it('dispatches one reviewer prompt with the exact verdict file as its findings channel', async () => {
+            const { ctx } = makeCtx({}, [
+                {
+                    cmd: 'git',
+                    args: ['diff', '--name-only', SHA_RANGE],
+                    result: { code: 0, stdout: 'src/handler.ts\nsrc/handler.test.ts\n', stderr: '' },
+                },
+            ]);
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: '',
+                action: 'batch_review',
+                shaRange: SHA_RANGE,
+            });
+            expect(result.isError).toBeUndefined();
+            const text = result.content[0].text;
+            const structured = result.structuredContent;
+            const { prompt, verdictPath } = structured.data;
+            expect(structured.data.kind).toBe('batch_review_dispatch');
+            expect(structured.data.changedFiles).toEqual(['src/handler.ts', 'src/handler.test.ts']);
+            expect(verdictPath).toBe('/fake/cwd/.pi-flywheel/batch-reviews/abc123..def456.json');
+            expect(prompt).toContain(`\`${verdictPath}\``);
+            expect(prompt).toContain('The server reads only this file.');
+            expect(prompt).not.toContain('append a JSON object');
+            expect(prompt).not.toContain('spawn fresh reviewers');
+            expect(prompt).not.toContain('list_window_identities');
+            expect(prompt).not.toContain('ntm --robot-send');
+            expect(prompt.match(/Use ultrathink\./g)).toHaveLength(1);
+            expect(text).toContain(`## Reviewer prompt\n\n${prompt}`);
+            expect(text.split(prompt)).toHaveLength(2);
+            expect(text).toContain('ntm --robot-send');
+            expect(text).toContain('not `ntm send`');
+            expect(text).toContain('Do not tear down responsive panes.');
+            expect(text).toContain('The tender daemon is already stopped.');
+            expect(text).toContain('One responsive pane reviews one bead.');
+            expect(text).toContain('Agent(subagent_type="general-purpose")');
+            expect(text).toContain(verdictPath);
         });
         it('blocking verdict → synthesized_beads_pending with 3 findings (mixed severities) and finding-to-bead mapping', async () => {
             const findings = [

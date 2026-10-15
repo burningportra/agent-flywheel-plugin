@@ -229,16 +229,6 @@ Plan loaded (${content.length} chars, ${content.split('\n').length} lines).`, 'a
         if (trimmed.length === 0) {
             return errorResult('planning', 'empty_plan', 'planContent is empty or whitespace.', undefined, 'Generate plan content first, then pass it via planContent or write to disk and pass planFile.');
         }
-        if (trimmed.includes('(No planner outputs provided.)')) {
-            return makeFlywheelErrorResult('flywheel_plan', 'planning', {
-                code: 'deep_plan_all_failed',
-                message: 'Deep plan failed: all perspective planners timed out or produced no output.',
-                hint: 'Retry with mode=standard as fallback.',
-            });
-        }
-        if (trimmed.startsWith('(AGENT')) {
-            return errorResult('planning', 'empty_plan', `planContent is an agent failure sentinel: ${trimmed.slice(0, 80)}`, { sentinelPrefix: '(AGENT' }, 'The upstream planner agent failed — retry flywheel_plan with mode=standard or spawn a fresh planning agent.');
-        }
         const planDir = join(cwd, 'docs', 'plans');
         const relativePath = `docs/plans/${new Date().toISOString().slice(0, 10)}-${planSlug}-synthesized.md`;
         const planFilePath = join(planDir, relativePath.split('/').pop());

@@ -26,6 +26,7 @@ import { runSynthesizeRubric } from './tools/synthesize-rubric.js';
 import { runGradeOutcome } from './tools/grade-outcome.js';
 import { runCapabilitiesWith } from './tools/capabilities.js';
 import { runRobotDocs, ROBOT_DOCS_SECTIONS } from './tools/robot-docs.js';
+import { runRescue } from './tools/rescue.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -325,6 +326,40 @@ const PRIMARY_TOOLS = [
         },
     },
     {
+        name: 'flywheel_rescue',
+        description: 'Build a Codex rescue packet for a stalled plan, implementation, or review phase; materialize the phase artifact when needed; render a dispatch-ready Codex prompt; and store the canonical rescue event in CASS. Returns { packet, codexPrompt, memoryLine }.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                phase: {
+                    type: 'string',
+                    enum: ['plan', 'impl', 'review'],
+                    description: 'The stalled flywheel phase to rescue',
+                },
+                beadId: {
+                    type: 'string',
+                    description: 'Optional bead id for implementation or review rescue; falls back to state.currentBeadId',
+                },
+                errorEnvelope: {
+                    type: 'object',
+                    description: 'Optional FlywheelToolError-shaped object. code and hint are copied into the rescue packet.',
+                    properties: {
+                        code: { type: 'string', description: 'FlywheelErrorCode from the stalled operation' },
+                        message: { type: 'string', description: 'Error message from the stalled operation' },
+                        hint: { type: 'string', description: 'Actionable hint copied verbatim into the packet' },
+                    },
+                    required: ['code'],
+                },
+                notes: {
+                    type: 'string',
+                    description: 'Optional proposed next step or phase-specific context for the rescue agent',
+                },
+            },
+            required: ['cwd', 'phase'],
+        },
+    },
+    {
         name: 'flywheel_doctor',
         description: 'Run an 11-check health sweep of the flywheel environment: MCP connectivity, agent-mail liveness, required/optional CLIs (br/bv/ntm/cm), node version, git status, dist drift, orphaned worktrees, and checkpoint validity. Read-only — never mutates checkpoint or state. Returns a DoctorReport with per-check severity (green/yellow/red).',
         inputSchema: {
@@ -333,6 +368,25 @@ const PRIMARY_TOOLS = [
                 cwd: { type: 'string', description: 'Project working directory (absolute path)' },
             },
             required: ['cwd'],
+        },
+    },
+    {
+        name: 'flywheel_emit_codex',
+        description: 'Emit the Claude Code plugin skills as a Codex-native bundle under a target directory inside cwd. Writes AGENTS.md plus .codex/skills/<name>.md without modifying the source skills.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                targetDir: {
+                    type: 'string',
+                    description: 'Destination directory inside cwd, relative or absolute',
+                },
+                pluginRoot: {
+                    type: 'string',
+                    description: 'Optional plugin source root. Must be inside cwd or match CLAUDE_PLUGIN_ROOT.',
+                },
+            },
+            required: ['cwd', 'targetDir'],
         },
     },
     {
@@ -527,7 +581,7 @@ const DEPRECATED_ALIAS_TOOLS = PRIMARY_TOOLS.map((tool) => {
     };
 });
 export const TOOLS = [...PRIMARY_TOOLS, ...DEPRECATED_ALIAS_TOOLS];
-const DEFAULT_RUNNERS = {
+const PRIMARY_RUNNERS = {
     flywheel_profile: runProfile,
     flywheel_discover: runDiscover,
     flywheel_select: runSelect,
@@ -539,45 +593,15 @@ const DEFAULT_RUNNERS = {
     flywheel_advance_wave: runAdvanceWave,
     flywheel_memory: runMemory,
     flywheel_doctor: runDoctor,
+    flywheel_emit_codex: runEmitCodex,
     flywheel_get_skill: runGetSkill,
     flywheel_observe: runObserve,
-    // Deprecated orch_* aliases — dispatch to the same runners. Removed in v4.0.
-    orch_profile: runProfile,
-    orch_discover: runDiscover,
-    orch_select: runSelect,
-    orch_plan: runPlan,
-    orch_approve_beads: runApprove,
-    orch_review: runReview,
-    orch_verify_beads: runVerifyBeads,
-    orch_compliance_audit: runComplianceAudit,
-    orch_advance_wave: runAdvanceWave,
-    orch_memory: runMemory,
-    orch_get_skill: runGetSkill,
-    orch_observe: runObserve,
-};
-/**
- * Extension runners — tools added by beads that don't (or can't) widen
- * `FlywheelToolName` in types.ts. Keyed by raw string so the registration
- * doesn't require touching the shared union.
- *
- * bead `agent-flywheel-plugin-zbx` — `flywheel_emit_codex`.
- * bead `claude-orchestrator-2tl` (T8) — `flywheel_remediate` + `orch_remediate` alias.
- */
-const EXTENSION_RUNNERS = {
-    flywheel_emit_codex: runEmitCodex,
+    flywheel_rescue: runRescue,
     flywheel_remediate: async (ctx, args) => {
         const parsed = RemediateInputSchema.parse(args);
         return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
     },
-    orch_remediate: async (ctx, args) => {
-        const parsed = RemediateInputSchema.parse(args);
-        return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
-    },
     flywheel_calibrate: async (ctx, args) => {
-        const parsed = CalibrateInputSchema.parse({ ...args, cwd: ctx.cwd });
-        return runCalibrate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
-    },
-    orch_calibrate: async (ctx, args) => {
         const parsed = CalibrateInputSchema.parse({ ...args, cwd: ctx.cwd });
         return runCalibrate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
     },
@@ -592,10 +616,18 @@ const EXTENSION_RUNNERS = {
     flywheel_grade_outcome: async (ctx, args) => runGradeOutcome(ctx, args),
     // R-001 (agent-ergonomics audit pass 2) — capabilities surface.
     flywheel_capabilities: runCapabilitiesWith(TOOLS),
-    orch_capabilities: runCapabilitiesWith(TOOLS),
     // R-002 (agent-ergonomics audit pass 2) — paste-ready agent handbook.
     flywheel_robot_docs: runRobotDocs,
-    orch_robot_docs: runRobotDocs,
+};
+function buildDeprecatedAliasRunners(primaryRunners) {
+    return Object.fromEntries(Object.entries(primaryRunners).map(([name, runner]) => [
+        name.replace(/^flywheel_/, 'orch_'),
+        runner,
+    ]));
+}
+const REGISTERED_RUNNERS = {
+    ...PRIMARY_RUNNERS,
+    ...buildDeprecatedAliasRunners(PRIMARY_RUNNERS),
 };
 function isKnownToolName(name) {
     return TOOLS.some((tool) => tool.name === name);
@@ -764,14 +796,9 @@ export function _resetOrchDeprecationLedger() {
 }
 export function createCallToolHandler(dependencies) {
     const runners = {
-        ...DEFAULT_RUNNERS,
+        ...REGISTERED_RUNNERS,
         ...dependencies.runners,
     };
-    // Extension tools (bead `agent-flywheel-plugin-zbx`): merged via a wider
-    // string-keyed map so we can dispatch tools whose names aren't part of the
-    // `FlywheelToolName` union. Runtime safety is still enforced by
-    // `isKnownToolName`, which checks the TOOLS array.
-    const extensionRunners = { ...EXTENSION_RUNNERS };
     return async (request) => {
         const { name, arguments: args } = request.params;
         const normalizedArgs = (args ?? {});
@@ -808,7 +835,7 @@ export function createCallToolHandler(dependencies) {
             signal: ac.signal,
         };
         try {
-            const runner = runners[name] ?? extensionRunners[name];
+            const runner = runners[name];
             if (!runner) {
                 return {
                     content: [{ type: 'text', text: `No runner registered for tool: ${name}` }],

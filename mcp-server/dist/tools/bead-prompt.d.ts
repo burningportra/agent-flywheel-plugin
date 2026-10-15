@@ -5,7 +5,6 @@ export interface BeadCreationPromptOpts {
     planPath?: string;
     planPreview?: string;
     provenance?: string;
-    templateLibrary?: string;
     nextAction?: string;
 }
 export declare function buildBeadCreationPrompt(opts: BeadCreationPromptOpts): string;

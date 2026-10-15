@@ -452,8 +452,8 @@ async function handleBatchReview(ctx, args) {
                 memoryContext = `\n\n## Prior Session Learnings\n${mem}\n`;
         }
         catch { /* CASS unavailable — proceed without */ }
-        const callbackHint = `\n\nWrite your verdict JSON to \`${verdictPath}\` (parent dir already exists). ` +
-            `Then notify the coordinator (Agent Mail subject \`[batch-review] ${shaRange} verdict ready\`, ` +
+        const callbackHint = `\n\nAfter writing the verdict file, notify the coordinator ` +
+            `(Agent Mail subject \`[batch-review] ${shaRange} verdict ready\`, ` +
             `or pane reply if dispatched via NTM) so it can call \`flywheel_review\` with ` +
             `\`action="batch_review"\` and \`shaRange="${shaRange}"\` again to read and branch on the verdict.`;
         const prompt = buildFreshEyesPrompt({
@@ -463,16 +463,22 @@ async function handleBatchReview(ctx, args) {
             callbackHint,
             regressionHint: '',
             shaRange,
+            findingsPath: verdictPath,
             emitStructuredFindings: true,
         });
-        const text = `## Batch Review Dispatch — ${shaRange}\n\n` +
+        const text = `## Batch review dispatch - ${shaRange}\n\n` +
             `**Verdict file (reviewer writes here):** \`${verdictPath}\`\n` +
             `**Changed files:** ${changedFiles.length}\n\n` +
-            `**Coordinator: dispatch the prompt below.**\n` +
-            `- Primary path: NTM \`--robot-send\` to the implementor pane (warm context, lowest latency).\n` +
-            `- Fallback: \`Agent(subagent_type="general-purpose")\` with the prompt as the task description.\n\n` +
-            `When the reviewer writes its verdict JSON, call \`flywheel_review\` with \`action="batch_review"\`, \`shaRange="${shaRange}"\` again to read and branch.\n\n` +
-            `---\n\n${prompt}`;
+            `## Coordinator routing\n\n` +
+            `The tender daemon is already stopped. Do not restart it.\n` +
+            `Do not tear down responsive panes. Use \`list_window_identities\` and \`ntm --robot-tail\` to identify them.\n` +
+            `One responsive pane reviews one bead. Partition the changed files by bead before dispatch.\n` +
+            `Use \`ntm --robot-send\`, not \`ntm send\`, to send the reviewer prompt below to each implementor pane.\n` +
+            `The same prompt is available in \`structuredContent.data.prompt\` for programmatic consumers.\n` +
+            `If an implementor pane is unavailable, use \`Agent(subagent_type="general-purpose")\` with the reviewer prompt as its task.\n\n` +
+            `When the reviewer writes \`${verdictPath}\`, call \`flywheel_review\` with ` +
+            `\`action="batch_review"\` and \`shaRange="${shaRange}"\` again to read and branch.\n\n` +
+            `## Reviewer prompt\n\n${prompt}`;
         return okResult(state.phase, text, {
             kind: 'batch_review_dispatch',
             shaRange,
@@ -707,19 +713,19 @@ async function runGates(ctx, action) {
         `### Gate 4: Documentation\nAre new features/APIs documented? Do AGENTS.md, README need updates?`,
         `### Gate 5: Integration sanity\nDo a quick end-to-end smoke test if possible. Does the feature work as described in the goal?`,
     ];
-    // action="looks-good": gate passed — advance gate index and increment clean counter
+    // action="looks-good": gate passed — advance gate index and increment clean-gate counter
     if (action === 'looks-good') {
         const gateIndex = (state.currentGateIndex ?? 0) % gateChecks.length;
         const nextGateIndex = (gateIndex + 1) % gateChecks.length;
         state.currentGateIndex = nextGateIndex;
         state.consecutiveCleanRounds = (state.consecutiveCleanRounds ?? 0) + 1;
         const consecutiveClean = state.consecutiveCleanRounds;
-        if (consecutiveClean >= 2) {
+        if (consecutiveClean >= gateChecks.length) {
             state.phase = 'complete';
             saveState(state);
             return okResult('complete', `## Flywheel Complete
 
-All gates passed for ${consecutiveClean} consecutive rounds. The implementation is done.
+All ${gateChecks.length} guided review gates passed in one clean circuit. The implementation is done.
 
 **Summary:** All beads closed, all review gates clean.
 
@@ -731,7 +737,7 @@ Run \`/agent-flywheel:flywheel-status\` for a final report.`, {
         }
         saveState(state);
         const nextGate = gateChecks[nextGateIndex];
-        return okResult(state.phase, `Gate passed. Moving to next gate (${consecutiveClean}/2 clean rounds needed to finish).
+        return okResult(state.phase, `Gate passed. Moving to next gate (${consecutiveClean}/${gateChecks.length} clean gates needed to finish).
 
 ## Next Review Gate
 

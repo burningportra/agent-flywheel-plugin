@@ -1,9 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { makeExec } from './exec.js';
 import { clearState, loadState, saveState } from './state.js';
-import type { McpToolResult, FlywheelToolName, ToolContext } from './types.js';
+import type { McpToolResult, ToolContext } from './types.js';
 type ToolRunner = (ctx: ToolContext, args: any) => Promise<McpToolResult>;
-type ToolRunnerMap = Partial<Record<FlywheelToolName, ToolRunner>>;
+type ToolRunnerMap = Record<string, ToolRunner>;
 interface ToolValidationError {
     message: string;
     field?: string;
@@ -58,6 +58,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -186,6 +191,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -236,6 +246,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -303,6 +318,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -406,6 +426,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -470,6 +495,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -524,6 +554,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -592,6 +627,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -649,6 +689,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -713,6 +758,91 @@ export declare const TOOLS: ({
             skipEnv?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+            planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
+            section?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            phase: {
+                type: string;
+                enum: string[];
+                description: string;
+            };
+            beadId: {
+                type: string;
+                description: string;
+            };
+            errorEnvelope: {
+                type: string;
+                description: string;
+                properties: {
+                    code: {
+                        type: string;
+                        description: string;
+                    };
+                    message: {
+                        type: string;
+                        description: string;
+                    };
+                    hint: {
+                        type: string;
+                        description: string;
+                    };
+                };
+                required: string[];
+            };
+            notes: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            ambition?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -760,6 +890,69 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+            planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
+            section?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            targetDir: {
+                type: string;
+                description: string;
+            };
+            pluginRoot: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            ambition?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            action?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -812,6 +1005,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
@@ -865,6 +1063,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             checkName?: undefined;
             autoConfirm?: undefined;
@@ -926,6 +1129,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             planSlug?: undefined;
@@ -975,6 +1183,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -1052,6 +1265,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -1103,6 +1321,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -1155,6 +1378,11 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;

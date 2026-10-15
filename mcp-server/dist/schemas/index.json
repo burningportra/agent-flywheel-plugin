@@ -3,8 +3,8 @@
   "$id": "https://agent-flywheel.dev/schemas/index.json",
   "title": "flywheel input-schema manifest",
   "generated_by": "mcp-server/scripts/emit-schemas.ts",
-  "tool_count": 40,
-  "sha256": "5ef73c29a25d7867123ce18bf71c84b62c7e4656d8d8695ac252ec3f1343e84f",
+  "tool_count": 44,
+  "sha256": "d91f8e75768d1ff1144c3a233a127617f45dfa07a382531f7de3224e0ce22b71",
   "schemas": [
     {
       "tool": "flywheel_advance_wave",
@@ -39,6 +39,10 @@
       "path": "schemas/inputs/flywheel_doctor.json"
     },
     {
+      "tool": "flywheel_emit_codex",
+      "path": "schemas/inputs/flywheel_emit_codex.json"
+    },
+    {
       "tool": "flywheel_get_skill",
       "path": "schemas/inputs/flywheel_get_skill.json"
     },
@@ -65,6 +69,10 @@
     {
       "tool": "flywheel_remediate",
       "path": "schemas/inputs/flywheel_remediate.json"
+    },
+    {
+      "tool": "flywheel_rescue",
+      "path": "schemas/inputs/flywheel_rescue.json"
     },
     {
       "tool": "flywheel_review",
@@ -119,6 +127,10 @@
       "path": "schemas/inputs/orch_doctor.json"
     },
     {
+      "tool": "orch_emit_codex",
+      "path": "schemas/inputs/orch_emit_codex.json"
+    },
+    {
       "tool": "orch_get_skill",
       "path": "schemas/inputs/orch_get_skill.json"
     },
@@ -145,6 +157,10 @@
     {
       "tool": "orch_remediate",
       "path": "schemas/inputs/orch_remediate.json"
+    },
+    {
+      "tool": "orch_rescue",
+      "path": "schemas/inputs/orch_rescue.json"
     },
     {
       "tool": "orch_review",

@@ -1,3 +1,8 @@
+import { listTemplates } from '../bead-templates.js';
+function formatBuiltInTemplateIds() {
+    const ids = [...new Set(listTemplates().map((template) => template.id))].sort();
+    return ids.map((id) => `- ${id}`).join('\n');
+}
 export function buildBeadCreationPrompt(opts) {
     const sections = [];
     sections.push(`## Goal\n${opts.goal}`);
@@ -36,11 +41,9 @@ Each bead description must include:
 - **WHY**: business or technical rationale
 - **HOW**: specific files to create or modify (a \`### Files:\` section listing each path)
 - **Acceptance criteria** as a checklist (\`- [ ] ...\`)`);
-    if (opts.templateLibrary) {
-        sections.push(`## Template Library\n${opts.templateLibrary}
+    sections.push(`## Template Library\n${formatBuiltInTemplateIds()}
 
 Templates are optional shortcuts for common bead shapes, not requirements. If a template fits, include a machine-readable \`Template: <id>\` line near the top of the final bead description so \`flywheel_calibrate\` can aggregate per-template effort. If no template fits, omit the line.`);
-    }
     if (opts.provenance) {
         sections.push(`## Provenance\n${opts.provenance}`);
     }

@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, extname } from 'node:path';
 import { buildBeadCreationPrompt, containsForbiddenDependsOnFlag } from '../tools/bead-prompt.js';
 import { beadCreationPrompt } from '../tools/shared.js';
+import { listTemplates } from '../bead-templates.js';
 describe('buildBeadCreationPrompt', () => {
     it('renders the positional br dep add form and never emits --depends-on', () => {
         const prompt = buildBeadCreationPrompt({
@@ -38,14 +39,15 @@ describe('buildBeadCreationPrompt', () => {
         expect(prompt).toContain('## Provenance');
         expect(prompt).toContain('820/1000');
     });
-    it('includes a Template Library section with the Template: <id> hook (B2)', () => {
-        const prompt = buildBeadCreationPrompt({
-            goal: 'test',
-            templateLibrary: '- add-api-endpoint — new HTTP endpoint',
-        });
+    it('lists every built-in template id and the Template: <id> hook without caller injection', () => {
+        const prompt = buildBeadCreationPrompt({ goal: 'test' });
+        const templateIds = [...new Set(listTemplates().map((template) => template.id))];
         expect(prompt).toContain('## Template Library');
         expect(prompt).toContain('Template: <id>');
         expect(prompt).toContain('flywheel_calibrate');
+        for (const id of templateIds) {
+            expect(prompt).toContain(`- ${id}`);
+        }
     });
     it('includes constraints when supplied', () => {
         const prompt = buildBeadCreationPrompt({

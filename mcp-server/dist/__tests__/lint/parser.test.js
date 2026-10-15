@@ -188,6 +188,25 @@ nested
         expect(findings[0].severity).toBe("error");
         expect(findings[0].file).toBe("unclosed.md");
     });
+    it("fences inside list items and blockquotes do NOT emit SKILL-010 (indented/prefixed closers)", async () => {
+        const src = readFixture("skill010-indented-fence.md");
+        const doc = await parse(src, "skill010-indented-fence.md");
+        const findings = doc.parserFindings.filter((f) => f.ruleId === "SKILL-010");
+        expect(findings).toEqual([]);
+        // Both fences should parse — one inside a list item (6-space indent) and one inside a blockquote.
+        expect(doc.fences.length).toBeGreaterThanOrEqual(2);
+        expect(doc.fences.every((f) => !f.unclosed)).toBe(true);
+    });
+    it("AskUserQuestion written inside a blockquote parses options correctly (not 0 options)", async () => {
+        const src = readFixture("auq-in-blockquote.md");
+        const doc = await parse(src, "auq-in-blockquote.md");
+        expect(doc.askUserQuestionCalls).toHaveLength(1);
+        const call = doc.askUserQuestionCalls[0];
+        expect(call.parseError).toBe(false);
+        expect(call.questions).toHaveLength(1);
+        expect(call.questions[0].header).toBe("Pick");
+        expect(call.questions[0].options).toHaveLength(3);
+    });
     it("CRLF input produces same findings as LF", async () => {
         const lf = readFixture("crlf.md");
         const crlf = lf.replace(/\n/g, "\r\n");

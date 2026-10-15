@@ -1,17 +1,9 @@
-import type { McpToolResult, FlywheelStructuredError, FlywheelToolError, FlywheelToolName, FlywheelPhase, FlywheelState, ToolChoiceOption, ToolNextStep, FlywheelErrorCode } from '../types.js';
-export declare function formatModelRef(model: {
-    provider?: string;
-    id: string;
-}): string;
+import type { McpToolResult, FlywheelStructuredError, FlywheelToolError, FlywheelToolName, FlywheelPhase, ToolChoiceOption, ToolNextStep, FlywheelErrorCode } from '../types.js';
 export declare function makeChoiceOption(id: string, label: string, options?: Omit<ToolChoiceOption, 'id' | 'label'>): ToolChoiceOption;
 export declare function makeNextToolStep(type: ToolNextStep['type'], message: string, options?: Omit<ToolNextStep, 'type' | 'message'>): ToolNextStep;
 export declare function makeToolResult<TStructured>(text: string, structuredContent: TStructured): McpToolResult<TStructured>;
 export declare function makeOkToolResult<TData>(tool: FlywheelToolName, phase: FlywheelPhase | string, text: string, data: TData): McpToolResult;
 export declare function makeToolError(tool: FlywheelToolName, phase: FlywheelPhase, code: FlywheelErrorCode, message: string, options?: Omit<FlywheelToolError, 'code' | 'message' | 'tool' | 'phase' | 'timestamp'>): McpToolResult<FlywheelStructuredError>;
-/**
- * Pick execution mode: single-branch (shared checkout) or worktree (isolated checkouts).
- */
-export declare function resolveExecutionMode(coordinationMode: FlywheelState['coordinationMode'], hasAgentMail: boolean): 'worktree' | 'single-branch';
 /**
  * Convergence score computation from polish change history.
  * Returns a 0-1 score where 1 = fully converged (no more changes).
@@ -23,14 +15,6 @@ export declare function pickRefinementModel(round: number): string;
  * Skips node_modules and dot-directories. Returns null if nothing matched.
  */
 export declare function newestMtime(root: string, filter?: (name: string) => boolean): number | null;
-/** Default deep plan model assignments. */
-export declare const DEEP_PLAN_MODELS: {
-    readonly correctness: "claude-opus-4-7";
-    readonly robustness: "claude-sonnet-4-6";
-    readonly ergonomics: "claude-sonnet-4-6";
-    readonly synthesis: "claude-opus-4-7";
-};
-export declare const SWARM_STAGGER_DELAY_MS = 30000;
 /**
  * Slugify a goal string to a filesystem-safe identifier.
  */
@@ -61,8 +45,4 @@ export declare function computeBeadQualityScore(beads: import('../types.js').Bea
  * Format a BeadQualityScore for display.
  */
 export declare function formatBeadQualityScore(q: BeadQualityScore): string;
-/**
- * Build implementer instructions for a single bead.
- */
-export declare function implementerInstructions(bead: import('../types.js').Bead, profile: import('../types.js').RepoProfile, prevResults: import('../types.js').BeadResult[], cassMemory?: string, episodic?: string): string;
 //# sourceMappingURL=shared.d.ts.map

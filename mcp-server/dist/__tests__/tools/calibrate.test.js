@@ -174,6 +174,42 @@ describe('tools/calibrate — runCalibrate', () => {
             sampleCount: 1,
         });
     });
+    it('reports separate template rows for two templated descriptions plus one untemplated bead', async () => {
+        const cwd = makeCwd();
+        const beads = [
+            {
+                id: 'endpoint-bead',
+                title: 'Add endpoint',
+                status: 'closed',
+                description: 'Template: add-api-endpoint\n\nImplement the endpoint.',
+                created_at: CREATED_5D,
+                closed_at: closedTs(CREATED_5D, 90 * 60_000),
+            },
+            {
+                id: 'docs-bead',
+                title: 'Document endpoint',
+                status: 'closed',
+                description: 'Template: add-documentation\n\nDocument the endpoint.',
+                created_at: CREATED_5D,
+                closed_at: closedTs(CREATED_5D, 30 * 60_000),
+            },
+            {
+                id: 'custom-bead',
+                title: 'Custom cleanup',
+                status: 'closed',
+                description: 'Clean up the custom path without a template.',
+                created_at: CREATED_5D,
+                closed_at: closedTs(CREATED_5D, 45 * 60_000),
+            },
+        ];
+        const exec = makeExecFn([makeBrStub(beads), gitNoMatchStub]);
+        const report = await runCalibrate({ cwd, sinceDays: 90 }, exec, new AbortController().signal);
+        expect(report.rows).toMatchObject([
+            { templateId: 'add-api-endpoint', sampleCount: 1, estimatedEffort: 'M' },
+            { templateId: 'add-documentation', sampleCount: 1, estimatedEffort: 'S' },
+        ]);
+        expect(report.untemplated.count).toBe(1);
+    });
     it('proxy_started = false when git returns a timestamp', async () => {
         const cwd = makeCwd();
         const bead = makeTemplatedBead('git-bead-0', 'add-api-endpoint', CREATED_5D, 60 * 60_000);
