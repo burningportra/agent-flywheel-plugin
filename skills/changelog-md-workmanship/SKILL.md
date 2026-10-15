@@ -406,11 +406,7 @@ scripts/cluster-history.py --repo . --format markdown
 
 ## Self-Validation
 
-Validate the skill itself:
-
-```bash
-./scripts/validate-skill.py .claude/skills/changelog-md-workmanship/
-```
+This repository does not bundle a general skill-validation script. Maintainers use the host's skill validator for this directory.
 
 Trigger tests: [SELF-TEST.md](SELF-TEST.md)
 
