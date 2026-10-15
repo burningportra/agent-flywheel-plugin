@@ -89,11 +89,19 @@ const BRAINSTORM_SCOPE_ANCHOR: Record<PlanAmbition, string> = {
   ambitious: "The ambition charter below supersedes this scope anchor: treat the smallest version as the floor, delivered first, and the charter's stretch target as the goal.",
 };
 
+function markdownFenceFor(content: string): string {
+  const longestRun = (content.match(/`+/g) ?? [])
+    .reduce((longest, run) => Math.max(longest, run.length), 0);
+  return '`'.repeat(Math.max(3, longestRun + 1));
+}
+
 function formatBrainstormSection(brainstorm: PlannerArtifact, ambition: PlanAmbition): string {
-  return `\n## Phase 0.5 Brainstorm (read FIRST)\n\nSource: \`${brainstorm.path}\` — pressure-test outcome from Phase 0.5 of the planning skill. ${BRAINSTORM_SCOPE_ANCHOR[ambition]}\n\n\`\`\`markdown\n${brainstorm.content.trim()}\n\`\`\`\n`;
+  const fence = markdownFenceFor(brainstorm.content);
+  return `\n## Phase 0.5 Brainstorm (read FIRST)\n\nSource: \`${brainstorm.path}\` — pressure-test outcome from Phase 0.5 of the planning skill. ${BRAINSTORM_SCOPE_ANCHOR[ambition]}\n\n${fence}markdown\n${brainstorm.content.trim()}\n${fence}\n`;
 }
 
 function formatCharterSection(charter: PlannerArtifact): string {
+  const fence = markdownFenceFor(charter.content);
   return `
 ## Ambition mode (read FIRST)
 
@@ -101,9 +109,9 @@ The user chose an ambitious plan. The charter below sets the target rung, the st
 
 Source: \`${charter.path}\`
 
-\`\`\`markdown
+${fence}markdown
 ${charter.content.trim()}
-\`\`\`
+${fence}
 
 ### Ambitious plan requirements
 

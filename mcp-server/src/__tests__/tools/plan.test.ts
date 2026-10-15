@@ -474,9 +474,36 @@ describe('runPlan', () => {
       expect(text).toContain('## Phase 0.5 Brainstorm');
       expect(text).toContain('docs/brainstorms/add-caching-layer-2026-04-23.md');
       expect(text).toContain('cache the hot path only');
+      expect(text).toContain([
+        '',
+        '## Phase 0.5 Brainstorm (read FIRST)',
+        '',
+        'Source: `docs/brainstorms/add-caching-layer-2026-04-23.md` — pressure-test outcome from Phase 0.5 of the planning skill. Anchor scope to the smallest version; reserve the 10x version as a "future direction" appendix, not a v1 requirement.',
+        '',
+        '```markdown',
+        '# Brainstorm',
+        '',
+        'Framing: cache the hot path only.',
+        '```',
+        '',
+      ].join('\n'));
 
       const structured = result.structuredContent as { data: { brainstormDocument?: string } };
       expect(structured.data.brainstormDocument).toBe('docs/brainstorms/add-caching-layer-2026-04-23.md');
+    });
+
+    it('uses an outer fence longer than every backtick run in the brainstorm', async () => {
+      const brainstorm = '# Brainstorm\n\n`````ts\nconst cache = new Map();\n`````';
+      writeBrainstorm('add-caching-layer', '2026-04-23', brainstorm);
+
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+
+      expect(result.content[0].text).toContain([
+        '``````markdown',
+        brainstorm,
+        '``````',
+      ].join('\n'));
     });
 
     it('standard mode omits brainstorm section when no artifact exists', async () => {
@@ -643,6 +670,22 @@ describe('runPlan', () => {
       expect(data.ambition).toBe('ambitious');
       expect(data.ambitionDocument).toBe(CHARTER_PATH);
       expect(data.brainstormDocument).toBe(BRAINSTORM_PATH);
+    });
+
+    it('keeps a fenced block intact inside a longer charter fence', async () => {
+      const charter = '# Charter\n\n```yaml\nstretch: 10x\n```\n\nOutside judge: replay benchmark.';
+      writeArtifact(CHARTER_PATH, charter);
+
+      const { ctx } = makeCtx({}, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard', ambition: 'ambitious' });
+
+      expect(result.content[0].text).toContain([
+        '````markdown',
+        charter,
+        '````',
+        '',
+        '### Ambitious plan requirements',
+      ].join('\n'));
     });
 
     it('ambitious without a charter returns missing_prerequisite and leaves state untouched', async () => {
