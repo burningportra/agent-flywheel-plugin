@@ -210,7 +210,9 @@ Before presenting the choice, briefly frame the Three Reasoning Spaces to help t
 >
 > Deep planning front-loads effort where corrections are cheapest.
 
-Ask both questions in one call. The `questions` array below carries two entries: **Plan mode** first with 4 options, then **Ambition** with 2 options. Each option label names only its own dimension — folding Ambition into a Plan-mode label (e.g. a 4-option Plan mode where the labels read "Deep plan, ambitious" / "Standard plan" / "Duel plan" / "Deep plan, standard ambition") drops the Ambition selection the ambitious path later reads from `state`.
+Step 5 is **two separate AskUserQuestion calls**, in order. The first asks Plan mode; the second, after the user answers the first, asks Ambition. They are split so option labels never need to cross-produce the two dimensions ("Deep plan, ambitious" and similar collapsed shapes drop the Ambition dimension downstream).
+
+### Step 5a — Plan mode (first call)
 
 ```
 AskUserQuestion(questions: [
@@ -224,7 +226,16 @@ AskUserQuestion(questions: [
       { label: "planning-workflow", description: "Invoke /planning-workflow — 4-5 sequential Codex review rounds via NTM + optional multi-model blending. Highest quality for major new features" }
     ],
     multiSelect: false
-  },
+  }
+])
+```
+
+### Step 5b — Ambition (second call, fires after the user answers 5a)
+
+The ambitious path downstream reads Ambition from `state`; omit this call and the ambitious path cannot fire. Make this call before interpreting the user's Plan-mode answer.
+
+```
+AskUserQuestion(questions: [
   {
     question: "How ambitious should the plan be?",
     header: "Ambition",
@@ -236,8 +247,6 @@ AskUserQuestion(questions: [
   }
 ])
 ```
-
-If the response comes back without an `Ambition` header, or with cross-producted Plan-mode labels, re-emit the call in the shape above — one `questions` array, two entries, option labels scoped to one dimension each.
 
 A second opinion from other models on the finished plan (formerly "Triangulated plan") is the **Triangulate** option in the Step 5.6 refinement menu, and it works for every plan mode.
 
