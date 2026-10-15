@@ -11,6 +11,9 @@
 
 import type { DoctorArgs, DoctorReport, McpToolResult, ToolContext } from '../types.js';
 import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js';
+import { isFirstRun } from '../first-run.js';
+import { renderPreflightBanner } from '../preflight.js';
+import { parseBrList } from '../br-parser.js';
 import { makeToolResult } from './shared.js';
 import { runDoctorChecks } from './doctor.js';
 
@@ -68,8 +71,68 @@ type DoctorStructuredContent = {
   data: {
     kind: 'doctor_report';
     report: DoctorReport;
+    preflightBanner: string | null;
+    firstRun: boolean;
   };
 };
+
+const FIRST_RUN_PROBE_TIMEOUT_MS = 5000;
+
+async function listBeadsForFirstRun(ctx: ToolContext): Promise<unknown[]> {
+  const result = await ctx.exec(
+    'br',
+    ['list', '--all', '--limit', '1', '--json'],
+    {
+      cwd: ctx.cwd,
+      timeout: FIRST_RUN_PROBE_TIMEOUT_MS,
+      signal: ctx.signal,
+    },
+  );
+  if (result.code !== 0) {
+    throw new Error(`br list failed: ${result.stderr}`);
+  }
+  return parseBrList(result.stdout).rows;
+}
+
+async function searchCassForFirstRun(ctx: ToolContext): Promise<unknown[]> {
+  const result = await ctx.exec(
+    'cass',
+    [
+      'search',
+      '',
+      '--workspace',
+      ctx.cwd,
+      '--limit',
+      '1',
+      '--fields',
+      'minimal',
+      '--json',
+    ],
+    {
+      cwd: ctx.cwd,
+      timeout: FIRST_RUN_PROBE_TIMEOUT_MS,
+      signal: ctx.signal,
+    },
+  );
+  if (result.code !== 0) {
+    throw new Error(`cass search failed: ${result.stderr}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch (err: unknown) {
+    throw new Error(`cass search returned invalid JSON: ${errMsg(err)}`);
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !Array.isArray((parsed as { hits?: unknown }).hits)
+  ) {
+    throw new Error('cass search output is missing hits[]');
+  }
+  return (parsed as { hits: unknown[] }).hits;
+}
 
 /**
  * flywheel_doctor tool handler.
@@ -82,7 +145,13 @@ export async function runDoctor(
 ): Promise<McpToolResult> {
   try {
     void args;
+    const firstRun = await isFirstRun({
+      cwd: ctx.cwd,
+      brList: () => listBeadsForFirstRun(ctx),
+      cassSearch: () => searchCassForFirstRun(ctx),
+    });
     const report = await runDoctorChecks(ctx.cwd, ctx.signal);
+    const preflightBanner = renderPreflightBanner(report);
     const structured: DoctorStructuredContent = {
       tool: 'flywheel_doctor',
       version: 1,
@@ -91,9 +160,15 @@ export async function runDoctor(
       data: {
         kind: 'doctor_report',
         report,
+        preflightBanner,
+        firstRun,
       },
     };
-    return makeToolResult(renderDoctorReportText(report), structured);
+    const reportText = renderDoctorReportText(report);
+    const text = preflightBanner === null
+      ? reportText
+      : `${reportText}\n\n${preflightBanner}`;
+    return makeToolResult(text, structured);
   } catch (err: unknown) {
     // runDoctorChecks itself is designed not to throw, but defensively handle
     // unexpected failures (e.g. bad cwd argument) at the tool boundary.

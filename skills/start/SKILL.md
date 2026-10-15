@@ -45,9 +45,18 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 ## Step 0: Opening Ceremony
 
+### 0a. Detect version
+
+Prefer `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json` if the env var is set — that's the canonical plugin root. Otherwise, find it under the plugins cache. The install path is `.../agent-flywheel/agent-flywheel/<VERSION>/mcp-server/package.json`, so use a pattern that matches the interposed version directory and pick the most-recently-modified match:
+```bash
+{ [ -n "$CLAUDE_PLUGIN_ROOT" ] && cat "$CLAUDE_PLUGIN_ROOT/mcp-server/package.json"; } \
+  || ls -t ~/.claude/plugins/cache/agent-flywheel/agent-flywheel/*/mcp-server/package.json 2>/dev/null | head -1 | xargs cat 2>/dev/null
+```
+Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name). If no version can be resolved, render the banner with `v?` rather than inventing a number.
+
 ### 0.banner — SHOW THIS FIRST, ALWAYS
 
-**Before any tool calls, before any other reads, print the banner.** This is the first visible output of the skill. Use the version from `mcp-server/package.json` (resolve `CLAUDE_PLUGIN_ROOT` or use the find command in Step 0a; default to `unknown` if unreadable — never substitute a stale hardcoded version).
+**Resolve `VERSION` first, then print the banner.** Step 0a is the only work before this first visible output. Use `v?` when resolution failed; never print a stale hardcoded version.
 
 ```
 ░▒▓ CLAUDE // AGENT-FLYWHEEL v<VERSION> ▓▒░
@@ -141,18 +150,11 @@ AskUserQuestion(questions: [{
 
 **Anti-double-interview rule:** after Grill with docs approves, do **not** offer Full brainstorm or re-enter Goal framing mode in the same cycle. Phase 0.5 is the only remaining pressure-test, and it auto-skips on a complete grill brainstorm.
 
-### 0a. Detect version
-
-Prefer `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json` if the env var is set — that's the canonical plugin root. Otherwise, find it under the plugins cache. The install path is `.../agent-flywheel/agent-flywheel/<VERSION>/mcp-server/package.json`, so use a pattern that matches the interposed version directory and pick the most-recently-modified match:
-```bash
-{ [ -n "$CLAUDE_PLUGIN_ROOT" ] && cat "$CLAUDE_PLUGIN_ROOT/mcp-server/package.json"; } \
-  || ls -t ~/.claude/plugins/cache/agent-flywheel/agent-flywheel/*/mcp-server/package.json 2>/dev/null | head -1 | xargs cat 2>/dev/null
-```
-Read it and extract the version. Also read the project name from `package.json` in cwd (or use the directory name). If no version can be resolved, render the banner with `v?` rather than inventing a number.
-
 ### 0b. Detect state
 
-Gather context silently (do NOT display raw output yet). Run checks 1-8 in parallel where possible:
+Gather context silently (do NOT display raw output yet). Call `flywheel_doctor` with `cwd` before any other MCP tool. From a successful result, cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. If the call fails outright, set `DOCTOR_REPORT = null`, `PREFLIGHT_BANNER = null`, and `IS_FIRST_RUN = false`; doctor is advisory, and suppressing the tutorial is safer when first-run state is unknown.
+
+After the doctor bootstrap, run checks 1-7 in parallel where possible:
 
 1. **MCP tools**: Call `flywheel_profile` directly with `cwd` — if the call succeeds, MCP is available (cache the result to avoid a redundant call in Step 2). If the tool is not found or errors, set `MCP_DEGRADED = true`. Do NOT use `ToolSearch` — MCP tools may be deferred and unavailable to ToolSearch at startup.
 2. **Existing session**: Read `.pi-flywheel/checkpoint.json` if it exists. Note phase and goal.
@@ -178,9 +180,7 @@ Gather context silently (do NOT display raw output yet). Run checks 1-8 in paral
 
    Never set `NTM_AVAILABLE = true` based on `which ntm` alone — the spawn step downstream will silently fail.
 
-8. **Doctor smoke check**: Call `flywheel_doctor` with `cwd`. Cache the returned `DoctorReport` as `DOCTOR_REPORT` for use in the welcome banner (step 0c). If the call fails outright (MCP tool missing, tool error), set `DOCTOR_REPORT = null` and proceed — doctor is advisory, not blocking. If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the banner will mark the session warning-state and surface every check whose severity is yellow or red (yellow gets a `⚠` glyph, red gets `✗`); the user is not blocked, but they should consider running `/agent-flywheel:flywheel-doctor` before continuing.
-
-9. **First-run detection (T5.1)**: Call `isFirstRun({ cwd, brList, cassSearch })` (exported from `mcp-server/src/first-run.ts`). Wire `brList` to `br list --json` and `cassSearch` to `cm search --json`. Cache the boolean as `IS_FIRST_RUN`. True only when **all five** signals are absent: no `.pi-flywheel/checkpoint.json`, no beads, no `docs/plans/*.md`, no `.pi-orchestrator/`, no CASS entries for this cwd. The tutorial-bead offer in Step 0d depends on this; if any signal fires, suppress the tutorial and route to the appropriate session-resume / open-beads menu instead.
+If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the welcome banner marks the warning state and surfaces every yellow or red check. `IS_FIRST_RUN` is true only when all five server-side signals are absent: no checkpoint, beads, plan markdown, legacy orchestrator state, or project-scoped CASS history.
 
 ### 0c. Display the welcome banner
 
@@ -201,7 +201,7 @@ Display a single cohesive welcome message. Example:
 
 If beads is zero, show `Beads: none yet`. If MCP tools are unavailable, show `MCP: not configured` in the banner.
 
-Also append a `Doctor:` line to the banner using `DOCTOR_REPORT.overall` (from step 0b check 8):
+Also append a `Doctor:` line to the banner using `DOCTOR_REPORT.overall` from the Step 0b doctor bootstrap:
 
 - `green` → `Doctor: green ✓`
 - `yellow` → `Doctor: yellow ⚠`
@@ -219,9 +219,9 @@ If `DOCTOR_REPORT.overall === "red"` OR `DOCTOR_REPORT.overall === "yellow"`, un
 
 #### Pre-flight issue surfacing (T4.1)
 
-Call `renderPreflightBanner(DOCTOR_REPORT)` (exported from `mcp-server/src/preflight.ts`). It returns `null` when none of the 6 critical checks (`br_binary`, `bv_binary`, `cm_binary`, `agent_mail_liveness`, `mcp_connectivity`, `projects_base_misconfig`) is non-green — in that case skip this gate entirely.
+Print `PREFLIGHT_BANNER` exactly once above the menu. When it is `null`, none of the 6 critical checks (`br_binary`, `bv_binary`, `cm_binary`, `agent_mail_liveness`, `mcp_connectivity`, `projects_base_misconfig`) is non-green, so skip this gate entirely.
 
-When it returns a string, print the block above the menu and then surface the AskUserQuestion gate so the operator can route to setup, continue with degraded features, or inspect the details before deciding:
+When `PREFLIGHT_BANNER` is a string, print the block above the menu and then surface the AskUserQuestion gate so the operator can route to setup, continue with degraded features, or inspect the details before deciding:
 
 ```
 AskUserQuestion(questions: [{
