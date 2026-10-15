@@ -1,8 +1,8 @@
 # Simplify Pass — `/agent-flywheel:start` → "Simplify pass" (a.k.a. Deslop pass)
 
-**What this is:** the canonical engine here is `/simplify-and-refactor-code-isomorphically`. Every one of the four modes below (Single-pass / Single + fresh-eyes / 5-Pi swarm / Iterative 10x) ultimately invokes that skill — what changes between modes is the orchestration around it (number of agents, fresh-eyes review gates, iteration count). The "deslop" framing this file ships with adds the discipline layer (baseline capture, ledger, isomorphism cards) that makes the skill safe to apply at scale; the menu label "Simplify pass" surfaces the skill's actual name so users searching for it find this path.
+**What this is:** the canonical engine is `/simplify-and-refactor-code-isomorphically`. Each mode below invokes that skill — modes differ in orchestration (number of agents, review gates, iteration count). This file adds the discipline layer (baseline capture, ledger, isomorphism cards) that makes the skill safe to apply at scale.
 
-**When to use:** the user invoked `/agent-flywheel:start` and picked **"Simplify pass"** (or the legacy label "Deslop pass") from the Step 0d/0e menu — they want to apply `/simplify-and-refactor-code-isomorphically` to the project as a proof-obligated, isomorphism-preserving refactor pass. This is meaningful on any repo (with or without open beads) and is the canonical "reduce AI-junk without changing behavior" workflow.
+**When to use:** the user picked "Simplify pass" (or legacy "Deslop pass") from Step 0d/0e — they want `/simplify-and-refactor-code-isomorphically` applied as a proof-obligated, isomorphism-preserving refactor pass. Meaningful on any repo (with or without open beads).
 
 **How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Cod swarm — codex-heavy mode is the deslop signature and an explicit override of the v3.17.0 canonical cc:cod:gem 1:1:1; the substitution ladder gmi→cod→pi→cc applies when Codex is unavailable on the host, per AGENTS.md NTM pane priority / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
 
@@ -37,10 +37,10 @@ Route on the answer:
 
 ## Step 2: Single-pass invocation (verbatim prompt)
 
-> ❯ First read ALL of the [AGENTS.md](http://AGENTS.md) file and [README.md](http://README.md) file super carefully and understand ALL of both! Then use your code investigation agent mode to fully understand the code and technical architecture and purpose of the project. Then, I want you to meticulously and exhaustively apply the /simplify-and-refactor-code-isomorphically skill to the project.
+> ❯ Read the plugin's own `$CLAUDE_PLUGIN_ROOT/AGENTS.md` and the project's `README.md` end-to-end. Then use your code investigation agent mode to understand the code, the technical architecture, and the project's purpose. Then apply the /simplify-and-refactor-code-isomorphically skill.
 
 Concretely:
-1. `Read` AGENTS.md (root) end-to-end.
+1. `Read` the plugin's own `$CLAUDE_PLUGIN_ROOT/AGENTS.md` end-to-end (the project's own `AGENTS.md`, if any, is a separate file).
 2. `Read` README.md (root) end-to-end.
 3. Spawn an Explore subagent (or use the Explore tool) to map architecture + technical purpose. Capture findings.
 4. Invoke the skill via the `Skill` tool: `Skill(skill: "simplify-and-refactor-code-isomorphically")`.
@@ -54,7 +54,7 @@ The skill itself owns the proof-of-isomorphism discipline; the flywheel's only j
 
 After §2 returns, dispatch this exact prompt (also via `Skill` if it's a registered skill, or as the next user-style message in the same turn):
 
-> ❯ Great, now I want you to carefully read over all of the new code you just wrote and other existing code you just modified with "fresh eyes" looking super carefully for any obvious bugs, errors, problems, issues, confusion, etc. Carefully fix anything you uncover. Did you actually verify that everything was preserved according to the skill?
+> ❯ Re-read every file you just wrote or modified with fresh eyes. Look for bugs, missed invariants, and anything that reads as confused. Fix what you find. Did you verify everything was preserved according to the skill?
 
 The fresh-eyes review is the second-half of the proof obligation — the skill scores its own changes, but a clean re-read catches semantic regressions the candidate-scorer may have missed.
 
@@ -111,8 +111,8 @@ ntm --robot-send="$SESSION" --panes=<N> --type=cod --msg='## STEP 0 — AGENT MA
 Invoke /simplify-and-refactor-code-isomorphically scoped to <area-assignment>/. Follow the skill verbatim — baseline, duplication map, candidates, isomorphism cards, narrow edits, ledger. Do NOT touch files outside your reserved area; coordinate via Agent Mail if you need to.
 
 ## STEP 2 — VALIDATE (project-level build mutex — see Step 4d)
-scripts/build-mutex.sh rch build  # waits for sibling agents
-scripts/build-mutex.sh rch test
+"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch build  # waits for sibling agents
+"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch test
 Both must pass. If a test that passed at baseline now fails, your edit broke isomorphism — REVERT, do not commit.
 
 ## STEP 3 — COMMIT (one lever per commit — skill rule)
@@ -131,13 +131,13 @@ sleep 30   # stagger
 
 ### 4d. Project-level build mutex (anti-thundering-herd)
 
-Five Codex agents finishing edits simultaneously and all running `rch build` at once will saturate disk + CPU and cause spurious failures. Enforce serialization via the portable wrapper:
+Five Codex agents finishing edits simultaneously and all running `rch build` at once will saturate disk + CPU and cause spurious failures. Enforce serialization via the portable wrapper, which the coordinator expands and bakes into every pane prompt's STEP 2 (above). The wrapper lives inside the plugin, so pane prompts receive the plugin-rooted path, not a repo-relative one:
 
 ```bash
-scripts/build-mutex.sh rch build
+"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch build
 ```
 
-Bake `scripts/build-mutex.sh` into every per-pane prompt's STEP 2 (above). The wrapper uses an atomic `mkdir` lock under `.pi-flywheel/` and does not require the Linux-only `flock` binary. If a pane waits >5 min on the lock, escalate via `/slb` two-person approval before killing.
+The coordinator substitutes `$CLAUDE_PLUGIN_ROOT` in the `--msg` string before sending so the pane sees an absolute path. The wrapper uses an atomic `mkdir` lock under `.pi-flywheel/` and does not need the Linux-only `flock` binary. If a pane waits >5 min on the lock, escalate via `/slb` two-person approval before killing.
 
 ### 4e. Supervision (looper default; ntm controller alternative)
 
@@ -175,33 +175,6 @@ Skill(skill: "repeatedly-apply-skill", args: "10 times: simplify-and-refactor-co
 ```
 
 The wrapper handles the loop, fresh-eyes review interleaving, and termination. Before the first pass, run D1's NTM readiness procedure, register the coordinator with Agent Mail, and capture the §4a baseline. Skip the deslop swarm lane, disk, daemon, bead-snapshot, and looper steps.
-
----
-
-## Operator decoder (apply while executing the chosen mode)
-
-| Phrase in user's documentation | Concrete action |
-|--------------------------------|-----------------|
-| "isomorphism cards" | The skill's per-candidate proof-table covering ordering, errors, logs, metrics, side effects, async cancellation, hook identity, serialization, lifecycle. Required before any edit lands. |
-| "baseline" | Recorded in §4a **Baseline capture** before any edits. Without it the skill cannot prove preservation. |
-| "ledger" | The skill's per-pass record of accepted/rejected candidates + isomorphism-card outcomes. Lives in the project's `.simplify-ledger/` (the skill creates it). Read this AFTER each pass to drive the controller fresh-eyes review. |
-| "one lever per commit" | Each accepted candidate = one commit. Do NOT batch. The skill enforces this; the swarm-mode prompt repeats it. |
-| "no rewrites, no sed, no drive-by fixes" | Mechanical edits only — `Edit` tool one location at a time. If a candidate requires a rewrite, the skill's risk-scorer should reject it. |
-| "deletion without explicit permission" | The skill never deletes files autonomously; it surfaces deletion candidates for the operator to confirm. Surface via `AskUserQuestion`. |
-| "pathology catalog" | The skill ships a list of AI-junk patterns (defensive branches for impossible inputs, duplicated wrappers, _v2 files, orphaned helpers, stale types, comments-as-task-plans). It scans for these automatically. |
-| "5+ Codex instances on a 5-min /loop" | Implemented in §4 as 5 Codex panes on a 5-min `/loop`. Codex-heavy is the deslop signature (per-pane prompts are codex-tuned) and is an explicit override of the v3.17.0 canonical cc:cod:gem 1:1:1; the substitution ladder (gmi→cod→pi→cc, per AGENTS.md NTM pane priority) kicks in only when Codex is unavailable on the host. Pane count + looper interval are verbatim either way. |
-| "Claude Code as final fresh eyes" | Implemented in §4f (controller fresh-eyes between looper ticks). |
-
----
-
-## Pre-conditions checklist (TL;DR — applies to ALL modes)
-
-1. AGENTS.md + README.md read end-to-end ✓
-2. Code investigation done (Explore agent OR direct read) ✓
-3. Baseline captured to `.pi-flywheel/deslop-baseline-<sha>.json` (tests green, LOC, warnings) ✓
-4. Skill installed at `~/.claude/skills/simplify-and-refactor-code-isomorphically` (verified by `Skill` tool — failure surfaces a clear "not installed" error) ✓
-5. **Swarm mode only:** NTM ready, codex CLI present, tender-daemon spawned, build mutex configured ✓
-6. **Iterative mode only:** `/repeatedly-apply-skill` installed at `~/.claude/skills/repeatedly-apply-skill` ✓
 
 ---
 

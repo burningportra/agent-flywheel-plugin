@@ -91,6 +91,16 @@ export interface TenderDaemonState {
   knownMessageIds: number[];
   paneStates: Record<string, string>;
   robotState: string | null;
+  /** Consecutive empty-wave ticks observed. Reset to 0 the moment any
+   * open/ready/in_progress bead reappears. Only incremented when a snapshot
+   * carries `beadCounts` with all three fields === 0. */
+  emptyTickCount?: number;
+}
+
+export interface BeadCounts {
+  open: number;
+  ready: number;
+  inProgress: number;
 }
 
 export interface TenderDaemonPollSnapshot {
@@ -99,6 +109,11 @@ export interface TenderDaemonPollSnapshot {
   messages: TenderDaemonMessage[];
   paneStates: Record<string, string>;
   robotState: string | null;
+  /** Optional bead counts. When present and all three are 0, the daemon
+   * treats the tick as an "empty wave" and emits `queue_drained` with an
+   * incrementing tick count. Snapshots that omit this field leave the
+   * counter untouched (older callers stay backward-compatible). */
+  beadCounts?: BeadCounts;
 }
 
 export type TenderDaemonEvent =
@@ -110,6 +125,15 @@ export type TenderDaemonEvent =
       newMessages: number;
       paneCount: number;
       robotState: string | null;
+    }
+  | {
+      kind: "queue_drained";
+      ts: string;
+      pollTs: number;
+      session: string;
+      /** 1-indexed count of consecutive empty-wave ticks, including this one. */
+      emptyTickCount: number;
+      beadCounts: BeadCounts;
     }
   | {
       kind: "message_received";
@@ -336,6 +360,33 @@ export function runTenderDaemonOnce(
     }
   }
 
+  // Empty-wave counter — only ticks when the snapshot carries bead counts and
+  // all three are 0. Any non-zero resets the counter so a reappearing bead
+  // never leaves stale drain state behind. Backward-compatible with callers
+  // that don't provide `beadCounts` (the counter sits at its previous value
+  // and no `queue_drained` event fires).
+  const prevEmptyTicks = Number.isFinite(prevState.emptyTickCount ?? NaN)
+    ? Math.max(0, prevState.emptyTickCount ?? 0)
+    : 0;
+  let nextEmptyTicks = prevEmptyTicks;
+  if (snapshot.beadCounts) {
+    const { open, ready, inProgress } = snapshot.beadCounts;
+    const drained = open === 0 && ready === 0 && inProgress === 0;
+    if (drained) {
+      nextEmptyTicks = prevEmptyTicks + 1;
+      events.push({
+        kind: "queue_drained",
+        ts,
+        pollTs,
+        session: snapshot.session,
+        emptyTickCount: nextEmptyTicks,
+        beadCounts: { open, ready, inProgress },
+      });
+    } else {
+      nextEmptyTicks = 0;
+    }
+  }
+
   return {
     events,
     nextState: {
@@ -344,6 +395,7 @@ export function runTenderDaemonOnce(
       knownMessageIds: [...knownMessageIds],
       paneStates: nextPaneStates,
       robotState: nextRobotState,
+      emptyTickCount: nextEmptyTicks,
     },
   };
 }
