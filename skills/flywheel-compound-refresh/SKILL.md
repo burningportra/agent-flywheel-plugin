@@ -24,7 +24,7 @@ The `docs/solutions/` store accumulates monotonically. Without periodic pruning 
 
 3. **Run the scorer.** Use the `flywheel_memory` MCP tool with `operation: "refresh_learnings"`. The tool reads every `docs/solutions/**/*.md` (skipping `_archive/`), parses frontmatter via the schema in `mcp-server/src/solution-doc-schema.ts`, groups by `(problem_type, component)`, and returns a `RefreshReport` with per-group decisions.
 
-   If the MCP tool is unavailable in the current harness, use a small Node ESM wrapper that imports `refreshLearnings` from `"$CLAUDE_PLUGIN_ROOT/mcp-server/dist/refresh-learnings.js"`. The installed plugin ships the compiled module and runtime dependencies, but it does not ship the `tsx` development binary. Prefer the MCP path so error envelopes flow through the standard `hint` channel (bead 478 contract).
+   If the MCP tool is unavailable in the current harness, report that the refresh is unavailable and stop. The installed plugin does not ship the `tsx` development binary, and `refresh-learnings.ts` has no CLI entry point, so a direct source invocation cannot run the sweep.
 
 4. **Run rename detection (optional but recommended).** Before classifying anything as stale, for each unique `frontmatter.component` value, run:
    ```
