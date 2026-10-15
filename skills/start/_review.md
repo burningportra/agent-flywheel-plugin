@@ -191,47 +191,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**On "Hand off to Codex"** — assemble the artifact, build the packet, dispatch via the codex-prompt adapter (consumer-only — do NOT edit `mcp-server/src/adapters/codex-prompt.ts`):
-
-```ts
-import { buildRescuePacket, renderRescuePromptForCodex, formatRescueEventForMemory }
-  from '../mcp-server/dist/codex-handoff.js';
-
-// 1. Concatenate every available review file + the bead's full diff.
-//    Whatever reviewers actually delivered, plus git diff, is the artifact.
-const artifactPath = `.pi-flywheel/rescue/review-${beadId}-${Date.now()}.md`;
-const consolidated = [
-  '# Review artifact for Codex tie-breaker',
-  ...reviewFilesOnDisk.map((p) => `\n## ${p}\n\n${fs.readFileSync(p, 'utf8')}`),
-  `\n## git diff\n\n\`\`\`diff\n${await execStr('git', ['diff', baseSha, 'HEAD'])}\n\`\`\``,
-].join('\n');
-fs.writeFileSync(artifactPath, consolidated);
-
-const packet = buildRescuePacket({
-  phase: 'review',
-  goal: `Reconcile reviewer disagreement on bead ${beadId}`,
-  artifact_path: artifactPath,
-  error_code: lastError.code,
-  hint: lastError.hint ?? '',             // VERBATIM from bead 478 hint contract
-  recent_tool_calls: state.recentToolCalls.slice(-10),
-  proposed_next_step: 'Read the consolidated review notes; deliver one verdict (accept / request change) with a one-paragraph rationale and any blocking concerns.',
-});
-
-const adapted = renderRescuePromptForCodex(packet, {
-  coordinatorName: '<your-agent-mail-name>',
-  projectKey: process.env.NTM_PROJECT,
-  rescueAgentName: '<adjective+noun from agent-names pool>',
-});
-
-// 2. Dispatch /codex:rescue --wait so the rescue blocks Step 9 progression.
-//    Codex panes need 2 trailing newlines (AdaptedPrompt.trailingNewlines).
-```
-
-**Persist the rescue event to CASS** for the doctor's `rescues_last_30d` synthesis row:
-
-```
-flywheel_memory(operation: "store", content: formatRescueEventForMemory(packet))
-```
+**On "Hand off to Codex"** — call `flywheel_rescue({ cwd, phase: 'review', beadId, errorEnvelope })` and pass its `codexPrompt` field to the codex-rescue skill (`/codex:rescue --wait` so the rescue blocks Step 9). Store the returned `memoryLine` via `flywheel_memory(operation: "store", content: memoryLine)` so the doctor's `rescues_last_30d` row sees it. `errorEnvelope` is the `structuredContent.data.error` object from the last failing `flywheel_review` call; the server assembles the review artifact and reviewer-notes payload from disk.
 
 **On Codex completion:**
 
