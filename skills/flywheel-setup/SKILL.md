@@ -88,36 +88,7 @@ Run `ntm --version` via Bash.
   - On consent: `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/ntm/main/install.sh" | bash`
   - On refusal: print the install command and continue.
 
-**After ntm is installed, verify it's usable for THIS project.** Installation alone is not enough — `ntm spawn <name>` resolves to `projects_base/<name>` and fails (or lands in the wrong cwd) if the current project isn't reachable under `projects_base`. The flywheel's planning/impl phases will silently fall back to `Agent()` without this check.
-
-```bash
-NTM_BASE=$(ntm config show 2>/dev/null | awk -F'"' '/^projects_base/ {print $2}')
-PROJECT_BASENAME=$(basename "$PWD")
-echo "ntm projects_base: $NTM_BASE"
-echo "current project:   $PROJECT_BASENAME"
-[ -d "$NTM_BASE/$PROJECT_BASENAME" ] && echo "OK: $NTM_BASE/$PROJECT_BASENAME exists" || echo "MISSING: $NTM_BASE/$PROJECT_BASENAME"
-```
-
-If `MISSING`, ask the user how to resolve:
-
-```
-AskUserQuestion(questions: [{
-  question: "ntm is installed but projects_base=<NTM_BASE> doesn't contain <PROJECT_BASENAME>. How should I configure it?",
-  header: "ntm setup",
-  options: [
-    { label: "Symlink project under projects_base", description: "ln -s $PWD $NTM_BASE/$PROJECT_BASENAME — keeps ntm's default base, adds this project to it (Recommended)" },
-    { label: "Change projects_base to current parent", description: "ntm config set projects_base $(dirname $PWD) — affects all future ntm sessions" },
-    { label: "Skip ntm configuration", description: "Flywheel will use Agent() fallback for parallel work" }
-  ],
-  multiSelect: false
-}])
-```
-
-- **Symlink**: `ln -s "$PWD" "$NTM_BASE/$PROJECT_BASENAME"` (fail softly if it already exists).
-- **Change base**: `ntm config set projects_base "$(dirname "$PWD")"` — warn the user this affects every project ntm manages.
-- **Skip**: continue without blocking.
-
-After any fix, re-run the directory check to confirm `$NTM_BASE/$PROJECT_BASENAME` now resolves.
+After ntm is installed, call `flywheel_doctor({ cwd })` and inspect `projects_base_misconfig`. For a non-green result, show its hint and ask before calling `flywheel_remediate({ checkName: "projects_base_misconfig", mode: "execute", autoConfirm: true })`. Re-run the doctor check after remediation.
 
 ### 7. dcg (Destructive Command Guard)
 
@@ -184,7 +155,7 @@ Check these silently via `<tool> --version` and report in the health checklist. 
 
 ### 10. Register agent
 
-Call `register_agent` via `agent-mail` MCP tool with `project_key` set to the current working directory and `agent_name: "Orchestrator"`.
+Call `macro_start_session` with `human_key` set to the current working directory, `program: "claude-code"`, and the current model. Report the adjective-noun identity it returns.
 
 ---
 
@@ -225,7 +196,7 @@ If ANY Required item failed: *"Do not run `/start` until all Required items pass
 
 Setup ends by running the doctor sweep automatically — the user shouldn't have to ask "did that actually work?" Adopts context-mode pattern E (research doc §4-E, bead `claude-orchestrator-3jv`).
 
-If step 11 reported all Required items passing, **immediately invoke** the `mcp__plugin_agent-flywheel_agent-flywheel__flywheel_doctor` MCP tool with `cwd` set to the current working directory. Render the returned `DoctorReport` inline.
+If step 11 reported every required item passing, call `flywheel_doctor({ cwd })` and render its report.
 
 Behavior rules:
 - If `criticalFails > 0` (red rows): print the failing rows prominently and recommend re-running `/flywheel-setup` for items still flagged, or following each row's `hint` for ones setup can't fix.
