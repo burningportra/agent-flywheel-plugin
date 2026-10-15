@@ -159,7 +159,7 @@ success criteria is checked.
 | `flywheel_rescue` MCP tool (B7)                                   | Implemented (`1f9df0f`) + AGENTS.md entry below |
 | "Skip rubric" action persisted on checkpoint (B6)                 | Implemented (`39b80b7`) + AGENTS.md entry below |
 | `flywheel_select` returns `goalSlug` (B15)                        | Implemented (`49f12ac`), consumer skills updated (`3c29ed2`) |
-| Doctor/observe preflight banner (B8)                              | Implemented (`55c8d7b`), surfaced in server response |
+| Doctor preflight banner + first-run flag (B8)                     | Implemented (`55c8d7b`) in `flywheel_doctor` (`data.preflightBanner`, `data.firstRun`); `flywheel_observe` unchanged |
 | Wave-2+ implementer prompt asks for attestation (B14)             | Implemented (server builds it; AGENTS.md § "Completion Evidence Attestation" is the single source) |
 | Server-owned bead-creation audit (D7)                             | Implemented (`358d073`) |
 | `npm run lint:skill:update-tone-baseline` (TONE, bead `1d6`)      | Implemented (`e1e85c9`); docs/skill-style.md:25 now true |
