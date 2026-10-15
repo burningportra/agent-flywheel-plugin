@@ -67,7 +67,7 @@ function makeCtx(
     beadReviewPassCounts: {},
     ...stateOverrides,
   });
-  const exec = createMockExec(execCalls);
+  const exec = createMockExec([...execCalls, brListAllCall([])]);
   const saved: FlywheelState[] = [];
   const ctx = {
     exec,
@@ -107,6 +107,14 @@ function brListCall(beads: Bead[]): ExecCall {
   return {
     cmd: 'br',
     args: ['list', '--json'],
+    result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
+  };
+}
+
+function brListAllCall(beads: Bead[]): ExecCall {
+  return {
+    cmd: 'br',
+    args: ['list', '--all', '--limit', '0', '--json'],
     result: { code: 0, stdout: JSON.stringify(beads), stderr: '' },
   };
 }
@@ -315,6 +323,43 @@ describe('runReview', () => {
         nextBeadIds: [nextA.id],
       },
     });
+    expect(exec).not.toHaveBeenCalledWith(
+      'br',
+      ['update', nextB.id, '--status', 'in_progress'],
+      expect.anything(),
+    );
+  });
+
+  it('does not let a legacy checkpoint advance into a newly tagged foreign program', async () => {
+    const labelA = 'flywheel-goal:goal-a:ccba1a8c';
+    const completed = makeBead();
+    const nextB = makeBead({
+      id: 'goal-b-next',
+      labels: ['flywheel-goal:goal-b:9406de47'],
+    });
+    const { ctx, state } = makeCtx(
+      { beadProgramScope: { kind: 'legacy', label: labelA } },
+      [
+        brShowCall(completed),
+        brUpdateCall(completed.id, 'closed'),
+        brReadyCall([nextB]),
+        brListAllCall([makeBead({ status: 'closed' }), nextB]),
+      ],
+    );
+    const exec = vi.fn(ctx.exec);
+    ctx.exec = exec;
+
+    const result = await runReview(ctx, {
+      cwd: '/fake/cwd',
+      beadId: completed.id,
+      action: 'looks-good',
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      phase: 'iterating',
+      data: { kind: 'review_gate' },
+    });
+    expect(state.beadProgramScope).toEqual({ kind: 'tagged', label: labelA });
     expect(exec).not.toHaveBeenCalledWith(
       'br',
       ['update', nextB.id, '--status', 'in_progress'],

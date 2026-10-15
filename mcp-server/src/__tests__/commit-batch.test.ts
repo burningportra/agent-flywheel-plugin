@@ -309,9 +309,10 @@ describe("synthesizeBeadsFromFindings", () => {
   });
 
   it("passes auto-batch-review label and severity through to bead body", async () => {
+    const programLabel = "flywheel-goal:goal-a:ccba1a8c";
     execHandler = (_cmd, args) => {
-      expect(args).toContain("--labels");
-      expect(args).toContain("auto-batch-review");
+      const labelsIdx = args.indexOf("--labels");
+      expect(args[labelsIdx + 1]).toBe(`auto-batch-review,${programLabel}`);
       const titleIdx = args.indexOf("--title");
       expect(args[titleIdx + 1]).toBe("Fix bug");
       const descIdx = args.indexOf("--description");
@@ -321,7 +322,9 @@ describe("synthesizeBeadsFromFindings", () => {
       expect(body).toContain("src/x.ts");
       return "wonderful-bhaskara-3e2f85-zzz\n";
     };
-    const state = baseState();
+    const state = baseState({
+      beadProgramScope: { kind: "tagged", label: programLabel },
+    });
     await synthesizeBeadsFromFindings(
       "/repo",
       state,

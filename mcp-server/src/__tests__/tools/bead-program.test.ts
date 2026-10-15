@@ -86,6 +86,7 @@ describe('goal bead program identity', () => {
     const candidates = [
       bead('a-ready', [labelA]),
       bead('b-ready', [goalBeadProgramLabel('Goal B')]),
+      bead('legacy-ready', ['bug']),
     ];
 
     expect(filterBeadsForProgram(
@@ -95,6 +96,8 @@ describe('goal bead program identity', () => {
     expect(filterBeadsForProgram(
       candidates,
       { kind: 'legacy', label: labelA },
-    ).beads.map(({ id }) => id)).toEqual(['a-ready', 'b-ready']);
+    ).beads.map(({ id }) => id)).toEqual(['legacy-ready']);
+    expect(filterBeadsForProgram(candidates, undefined).beads.map(({ id }) => id))
+      .toEqual(['legacy-ready']);
   });
 });

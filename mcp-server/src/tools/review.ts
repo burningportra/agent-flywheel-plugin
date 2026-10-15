@@ -9,7 +9,12 @@ import { makeOkToolResult } from './shared.js';
 import { buildFreshEyesPrompt } from '../gates.js';
 import { synthesizeBeadsFromFindings, rollbackSynthesizedBeads } from '../commit-batch.js';
 import { readMemory, appendMemory } from '../memory.js';
-import { filterBeadsForProgram, formatBeadProgramWarnings } from './bead-program.js';
+import {
+  filterBeadsForProgram,
+  formatBeadProgramWarnings,
+  goalBeadProgramLabel,
+  resolveDispatchBeadProgramScope,
+} from './bead-program.js';
 
 const log = createLogger('review');
 
@@ -819,9 +824,43 @@ async function nextBeadOrGates(
     }
   }
 
+  const programWarnings: string[] = [];
+  if (ready.length > 0) {
+    const expectedLabel = state.beadProgramScope?.label ??
+      (state.selectedGoal ? goalBeadProgramLabel(state.selectedGoal) : undefined);
+    if (!expectedLabel) {
+      return errorResult(
+        state.phase,
+        'missing_prerequisite',
+        'Cannot select the next bead because no selected goal or goal-program scope is recorded.',
+        undefined,
+        'Call flywheel_select, then flywheel_approve_beads, before continuing review.',
+      );
+    }
+    const resolvedProgram = await resolveDispatchBeadProgramScope(
+      exec,
+      cwd,
+      state.beadProgramScope,
+      expectedLabel,
+      signal,
+    );
+    if (!resolvedProgram.ok) {
+      return errorResult(
+        state.phase,
+        resolvedProgram.code,
+        resolvedProgram.message,
+        resolvedProgram.details,
+        'Run `br list --all --limit 0 --json` manually, fix the CLI or JSON error, then retry.',
+      );
+    }
+    state.beadProgramScope = resolvedProgram.scope;
+    programWarnings.push(...resolvedProgram.warnings);
+  }
+
   const scopedFrontier = filterBeadsForProgram(ready, state.beadProgramScope);
   ready = scopedFrontier.beads;
-  const programWarnings = formatBeadProgramWarnings(scopedFrontier.warnings);
+  programWarnings.push(...scopedFrontier.warnings);
+  const formattedProgramWarnings = formatBeadProgramWarnings([...new Set(programWarnings)]);
 
   // Filter out already-completed beads
   const completed = new Set(
@@ -840,7 +879,7 @@ async function nextBeadOrGates(
 
     return okResult(
       'iterating',
-      `**${status}: Bead ${completedBeadId} (${completedTitle}).**${programWarnings}
+      `**${status}: Bead ${completedBeadId} (${completedTitle}).**${formattedProgramWarnings}
 
 All beads complete! Entering review gates.
 
@@ -865,7 +904,7 @@ All beads complete! Entering review gates.
 
     return okResult(
       'implementing',
-      `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready.${programWarnings} Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`,
+      `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready.${formattedProgramWarnings} Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`,
       {
         kind: 'review_tasks',
         strategy: 'single_bead',
@@ -891,7 +930,7 @@ All beads complete! Entering review gates.
 
   return okResult(
     'implementing',
-    `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.${programWarnings}
+    `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.${formattedProgramWarnings}
 
 **NEXT: Spawn ${ready.length} parallel agents from structuredContent.data.agentConfigs, then call \`flywheel_review\` for each when done.**`,
     {

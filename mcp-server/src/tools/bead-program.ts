@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import type { ExecFn } from '../exec.js';
+import { parseBrList } from '../parsers.js';
 import type { Bead, BeadProgramScope } from '../types.js';
 
 export const FLYWHEEL_GOAL_LABEL_PREFIX = 'flywheel-goal:';
@@ -9,6 +11,19 @@ export interface ResolvedBeadProgram {
   beads: Bead[];
   warnings: string[];
 }
+
+export type DispatchBeadProgramResolution =
+  | {
+      ok: true;
+      scope: Extract<BeadProgramScope, { kind: 'tagged' | 'legacy' }>;
+      warnings: string[];
+    }
+  | {
+      ok: false;
+      code: 'cli_failure' | 'parse_failure';
+      message: string;
+      details: Record<string, unknown>;
+    };
 
 export function slugifyGoal(goal: string): string {
   return goal
@@ -81,15 +96,63 @@ export function resolveBeadProgram(
   };
 }
 
+export async function resolveDispatchBeadProgramScope(
+  exec: ExecFn,
+  cwd: string,
+  scope: BeadProgramScope | undefined,
+  expectedLabel: string,
+  signal?: AbortSignal,
+): Promise<DispatchBeadProgramResolution> {
+  if (scope?.kind === 'tagged') {
+    return { ok: true, scope, warnings: [] };
+  }
+
+  const args = ['list', '--all', '--limit', '0', '--json'];
+  const result = await exec('br', args, { cwd, timeout: 10_000, signal });
+  if (result.code !== 0) {
+    return {
+      ok: false,
+      code: 'cli_failure',
+      message: `Could not refresh goal-program ownership before dispatch: ${result.stderr}`,
+      details: { command: `br ${args.join(' ')}`, stderr: result.stderr },
+    };
+  }
+
+  const parsed = parseBrList(result.stdout);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      code: 'parse_failure',
+      message: `Could not parse goal-program ownership before dispatch: ${parsed.error}`,
+      details: { command: `br ${args.join(' ')}`, parseError: parsed.error },
+    };
+  }
+
+  const program = resolveBeadProgram(parsed.data, expectedLabel);
+  return {
+    ok: true,
+    scope: program.scope,
+    warnings: program.warnings,
+  };
+}
+
 export function filterBeadsForProgram(
   beads: readonly Bead[],
   scope: BeadProgramScope | undefined,
 ): { beads: Bead[]; warnings: string[] } {
   if (!scope || scope.kind === 'legacy') {
+    const tagged = beads.filter((bead) =>
+      bead.labels?.some(isFlywheelGoalLabel) ?? false,
+    );
     return {
-      beads: [...beads],
+      beads: beads.filter((bead) =>
+        !(bead.labels?.some(isFlywheelGoalLabel) ?? false),
+      ),
       warnings: [
-        `Goal-program scope is ${scope?.kind ?? 'missing'}; using legacy repository-wide ready frontier.`,
+        `Goal-program scope is ${scope?.kind ?? 'missing'}; using the legacy repository-wide ready frontier for untagged beads only.`,
+        ...(tagged.length > 0
+          ? [`Excluded ${tagged.length} tagged ready bead(s) discovered after legacy scope resolution: ${tagged.map((bead) => bead.id).join(', ')}.`]
+          : []),
       ],
     };
   }

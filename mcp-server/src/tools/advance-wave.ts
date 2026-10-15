@@ -19,7 +19,12 @@ import {
 } from './convergence-tool.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
 import { countCommitsSinceLastBatchReview, shouldTriggerBatchReview } from '../commit-batch.js';
-import { filterBeadsForProgram, formatBeadProgramWarnings } from './bead-program.js';
+import {
+  filterBeadsForProgram,
+  formatBeadProgramWarnings,
+  goalBeadProgramLabel,
+  resolveDispatchBeadProgramScope,
+} from './bead-program.js';
 
 const log = createLogger('advance-wave');
 const execFileAsync = promisify(execFile);
@@ -152,7 +157,7 @@ export async function runAdvanceWave(
   ctx: ToolContext,
   args: AdvanceWaveArgs,
 ): Promise<McpToolResult> {
-  const { exec, cwd, state, signal } = ctx;
+  const { exec, cwd, state, saveState, signal } = ctx;
 
   if (!Array.isArray(args.closedBeadIds) || args.closedBeadIds.length === 0) {
     return makeToolError(
@@ -310,9 +315,52 @@ export async function runAdvanceWave(
       },
     );
   }
+  const programWarnings: string[] = [];
+  if (ready.length > 0) {
+    const expectedLabel = state.beadProgramScope?.label ??
+      (state.selectedGoal ? goalBeadProgramLabel(state.selectedGoal) : undefined);
+    if (!expectedLabel) {
+      return makeToolError(
+        'flywheel_advance_wave',
+        state.phase,
+        'missing_prerequisite',
+        'Cannot dispatch the next wave because no selected goal or goal-program scope is recorded.',
+        { hint: 'Call flywheel_select, then flywheel_approve_beads, before advancing a wave.' },
+      );
+    }
+    const resolvedProgram = await resolveDispatchBeadProgramScope(
+      exec,
+      cwd,
+      state.beadProgramScope,
+      expectedLabel,
+      signal,
+    );
+    if (!resolvedProgram.ok) {
+      return makeToolError(
+        'flywheel_advance_wave',
+        state.phase,
+        resolvedProgram.code,
+        resolvedProgram.message,
+        {
+          details: resolvedProgram.details,
+          hint: 'Run `br list --all --limit 0 --json` manually, fix the CLI or JSON error, then retry.',
+        },
+      );
+    }
+    if (
+      state.beadProgramScope?.kind !== resolvedProgram.scope.kind ||
+      state.beadProgramScope.label !== resolvedProgram.scope.label
+    ) {
+      state.beadProgramScope = resolvedProgram.scope;
+      saveState(state);
+    }
+    programWarnings.push(...resolvedProgram.warnings);
+  }
+
   const scopedFrontier = filterBeadsForProgram(ready, state.beadProgramScope);
   ready = scopedFrontier.beads;
-  const programWarnings = formatBeadProgramWarnings(scopedFrontier.warnings);
+  programWarnings.push(...scopedFrontier.warnings);
+  const formattedProgramWarnings = formatBeadProgramWarnings([...new Set(programWarnings)]);
 
   if (ready.length === 0) {
     const outcome: AdvanceWaveOutcome = {
@@ -324,7 +372,7 @@ export async function runAdvanceWave(
     };
     return okResult(
       state.phase,
-      `Wave verified. Queue drained — no more beads to dispatch.${programWarnings}`,
+      `Wave verified. Queue drained — no more beads to dispatch.${formattedProgramWarnings}`,
       outcome,
     );
   }
@@ -368,7 +416,7 @@ export async function runAdvanceWave(
   const lines = [
     `Wave verified (${verification.verified.length}/${args.closedBeadIds.length} closed).`,
   ];
-  if (programWarnings) lines.push(programWarnings.trim());
+  if (formattedProgramWarnings) lines.push(formattedProgramWarnings.trim());
   if (needsEvidence) {
     if (verification.missingEvidence.length > 0) {
       lines.push(`⚠️  ${verification.missingEvidence.length} bead(s) advanced without completion attestation (Stage 1 warn-only — set FW_ATTESTATION_REQUIRED=1 to block).`);
