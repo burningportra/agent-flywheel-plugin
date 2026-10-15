@@ -694,7 +694,7 @@ Current beads:
           lineCount: 2,
           sizeAssessment: 'too_short',
           planRefinementRound: 1,
-          refinementModel: 'claude-opus-4-7',
+          refinementModel: 'opus',
         },
       });
     });

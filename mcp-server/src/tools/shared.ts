@@ -108,18 +108,6 @@ export function computeConvergenceScore(
   return Math.min(1, base * 0.65 + trend + sizeBonus + decreasingBonus);
 }
 
-/** Model rotation list for refinement rounds (prevents taste convergence). */
-const REFINEMENT_MODELS = [
-  'claude-opus-4-7',
-  'claude-sonnet-4-6',
-  'claude-opus-4-7',
-  'claude-sonnet-4-6',
-];
-
-export function pickRefinementModel(round: number): string {
-  return REFINEMENT_MODELS[round % REFINEMENT_MODELS.length];
-}
-
 /**
  * Walk a directory and return the newest mtime (ms) across matching files.
  * Skips node_modules and dot-directories. Returns null if nothing matched.

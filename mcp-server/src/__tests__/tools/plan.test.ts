@@ -391,7 +391,7 @@ describe('runPlan', () => {
       },
     });
     const structured = result.structuredContent as { data: { planAgents: unknown[] } };
-    expect(structured.data.planAgents.length).toBeGreaterThanOrEqual(3);
+    expect(structured.data.planAgents).toHaveLength(3);
   });
 
   it('includes correctness, robustness, and ergonomics perspectives in deep mode', async () => {
@@ -399,12 +399,77 @@ describe('runPlan', () => {
 
     const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
 
-    const structured = result.structuredContent as { data: { kind: string; planAgents: Array<{ perspective: string }> } };
+    const structured = result.structuredContent as {
+      data: {
+        kind: string;
+        synthesisModel: string;
+        planAgents: Array<{
+          runner: string;
+          perspective: string;
+          model?: string;
+          subagent_type?: string;
+        }>;
+      };
+    };
     expect(structured.data.kind).toBe('deep_plan_spawn');
-    const perspectives = structured.data.planAgents.map(a => a.perspective);
-    expect(perspectives).toContain('correctness');
-    expect(perspectives).toContain('robustness');
-    expect(perspectives).toContain('ergonomics');
+    expect(structured.data.synthesisModel).toBe('opus');
+    expect(structured.data.planAgents).toEqual([
+      expect.objectContaining({ runner: 'agent-model', perspective: 'correctness', model: 'opus' }),
+      expect.objectContaining({ runner: 'agent-subagent', perspective: 'robustness', subagent_type: 'codex:codex-rescue' }),
+      expect.objectContaining({ runner: 'agent-model', perspective: 'ergonomics', model: 'sonnet' }),
+    ]);
+  });
+
+  it('adds a fresh-perspective NTM gmi planner when the Gemini CLI signal is healthy', async () => {
+    const { ctx } = makeCtx();
+    const exec = createMockExec([
+      { cmd: 'which', args: ['gemini'], result: { code: 0, stdout: '/usr/local/bin/gemini\n', stderr: '' } },
+    ]);
+
+    const result = await runPlan({ ...ctx, exec }, { cwd: '/fake/cwd', mode: 'deep' });
+
+    const structured = result.structuredContent as {
+      data: {
+        instructions: string;
+        planAgents: Array<Record<string, unknown> & { perspective: string }>;
+      };
+    };
+    expect(structured.data.planAgents).toHaveLength(4);
+    const freshPerspective = structured.data.planAgents.find(
+      (agent) => agent.perspective === 'fresh-perspective',
+    );
+    expect(freshPerspective).toEqual(expect.objectContaining({
+      runner: 'ntm-gmi',
+      provider: 'gemini',
+      paneType: 'gmi',
+    }));
+    expect(freshPerspective).not.toHaveProperty('model');
+    expect(freshPerspective).not.toHaveProperty('subagent_type');
+    expect(structured.data.instructions).toContain('ntm --robot-send');
+    expect(structured.data.instructions).toContain('--type=gmi');
+  });
+
+  it('passes cwd, signal, and a bounded timeout to the Gemini capability probe', async () => {
+    const { ctx } = makeCtx();
+    const signal = new AbortController().signal;
+    const exec = vi.fn(createMockExec());
+
+    await runPlan({ ...ctx, exec, signal }, { cwd: '/fake/cwd', mode: 'deep' });
+
+    expect(exec).toHaveBeenCalledWith('which', ['gemini'], {
+      timeout: 1500,
+      cwd: '/fake/cwd',
+      signal,
+    });
+  });
+
+  it('does not probe implementation CLIs outside deep mode', async () => {
+    const { ctx } = makeCtx();
+    const exec = vi.fn(createMockExec());
+
+    await runPlan({ ...ctx, exec }, { cwd: '/fake/cwd', mode: 'standard' });
+
+    expect(exec).not.toHaveBeenCalledWith('which', expect.anything(), expect.anything());
   });
 
   it('sets phase to planning in deep mode', async () => {

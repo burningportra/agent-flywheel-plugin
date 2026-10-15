@@ -781,7 +781,7 @@ describe('isCodexIncompatibleModel', () => {
   it('passes app-server-compatible models through', () => {
     expect(isCodexIncompatibleModel('o3')).toBe(false);
     expect(isCodexIncompatibleModel('gpt-4o')).toBe(false);
-    expect(isCodexIncompatibleModel('claude-sonnet-4-6')).toBe(false);
+    expect(isCodexIncompatibleModel('claude-sonnet-5-5')).toBe(false);
   });
 });
 

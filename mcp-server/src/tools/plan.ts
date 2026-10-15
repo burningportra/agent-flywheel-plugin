@@ -2,7 +2,11 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatS
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, PlanAmbition, PlanArgs } from '../types.js';
 import { makeOkToolResult, slugifyGoal } from './shared.js';
-import { getDeepPlanModels } from '../model-detection.js';
+import {
+  getDeepPlanModels,
+  isGeminiPlannerCliAvailable,
+  type AgentModelAlias,
+} from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
@@ -14,6 +18,27 @@ import { normalizeText } from '../utils/text-normalize.js';
 import { markdownFenceFor } from '../utils/markdown-fence.js';
 
 const CODEX_SUBAGENT_TYPE = 'codex:codex-rescue' as const;
+
+type PlanAgent =
+  | {
+    runner: 'agent-model';
+    model: AgentModelAlias;
+    perspective: 'correctness' | 'ergonomics';
+    task: string;
+  }
+  | {
+    runner: 'agent-subagent';
+    subagent_type: typeof CODEX_SUBAGENT_TYPE;
+    perspective: 'robustness';
+    task: string;
+  }
+  | {
+    runner: 'ntm-gmi';
+    provider: 'gemini';
+    paneType: 'gmi';
+    perspective: 'fresh-perspective';
+    task: string;
+  };
 
 type PlannerArtifact = { path: string; content: string };
 
@@ -163,7 +188,7 @@ function errorResult(
  * requirements, into whichever generator the mode picks. planFile/planContent registration ignores it.
  */
 export async function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpToolResult> {
-  const { state, saveState, cwd } = ctx;
+  const { state, saveState, cwd, exec, signal } = ctx;
 
   if (!state.selectedGoal) {
     return errorResult(
@@ -502,10 +527,12 @@ Focus deeply on your assigned perspective lens.
 
 Use ultrathink.`;
 
-  const dynamicModels = getDeepPlanModels();
+  const geminiAvailable = await isGeminiPlannerCliAvailable(exec, { cwd, signal });
+  const dynamicModels = getDeepPlanModels({ geminiAvailable });
 
-  const planAgents: Array<{ model?: string; subagent_type?: string; perspective: string; task: string }> = [
+  const planAgents: PlanAgent[] = [
     {
+      runner: 'agent-model',
       model: dynamicModels.correctness,
       perspective: 'correctness',
       task: `${basePrompt}
@@ -515,6 +542,7 @@ Focus on: type safety, edge cases, error handling, validation, data integrity, i
 Ask: What can go wrong? What are the failure modes? Are the interfaces correct?`,
     },
     {
+      runner: 'agent-subagent',
       subagent_type: CODEX_SUBAGENT_TYPE,
       perspective: 'robustness',
       task: `${basePrompt}
@@ -524,6 +552,7 @@ Focus on: performance, scalability, retry logic, timeouts, graceful degradation,
 Ask: What happens under load? What are the operational concerns? How does it fail gracefully?`,
     },
     {
+      runner: 'agent-model',
       model: dynamicModels.ergonomics,
       perspective: 'ergonomics',
       task: `${basePrompt}
@@ -534,10 +563,10 @@ Ask: Is it easy to use correctly? Hard to misuse? Does it follow existing patter
     },
   ];
 
-  // Add optional 4th Gemini planner when Google model is available
+  // Add the optional fourth planner when the Gemini CLI is installed for NTM routing.
   if (dynamicModels.freshPerspective) {
     planAgents.push({
-      model: dynamicModels.freshPerspective,
+      ...dynamicModels.freshPerspective,
       perspective: 'fresh-perspective',
       task: `${basePrompt}
 
@@ -553,6 +582,10 @@ Question every architectural choice: is there a simpler way? A more standard app
     ? '\n\nAmbition mode: the synthesized plan keeps the charter\'s target rung, stretch target, and floor-first phase order. Where plans disagree on how far to climb, keep the more ambitious path that still has an outside judge and a fallback. Do not average ambition down.'
     : '';
 
+  const geminiDispatch = dynamicModels.freshPerspective
+    ? ' The fresh-perspective entry uses runner="ntm-gmi": start or reuse an NTM Gemini pane and send its task with `ntm --robot-send="$SESSION" --panes=<gmi-pane> --type=gmi --msg="<task>"`. Do not pass it to Agent as a model. If that optional pane reports an authentication or model error, continue with the three Agent-routed plans and report the missing perspective.'
+    : '';
+
   const payload = {
     kind: 'deep_plan_spawn',
     mode: 'deep',
@@ -562,7 +595,8 @@ Question every architectural choice: is there a simpler way? A more standard app
     ambition: inputs.ambition,
     ambitionDocument,
     planAgents,
-    instructions: `Spawn these ${planAgents.length} planning agents in parallel using TeamCreate + Agent with run_in_background: true. Each agent must bootstrap Agent Mail (macro_start_session) and write their plan to docs/plans/<date>-<perspective>.md, then send the file path via send_message. After all complete, spawn a synthesis agent to read the ${planAgents.length} files and write the synthesized plan to docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+    synthesisModel: dynamicModels.synthesis,
+    instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true.${geminiDispatch} Each planner must bootstrap Agent Mail (macro_start_session), write to docs/plans/<date>-<perspective>.md, and send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
     synthesisPrompt: `Use ultrathink.
 
 ## Best-of-All-Worlds Synthesis
@@ -592,6 +626,7 @@ The synthesis must be BETTER than any individual plan, not a lowest-common-denom
         ambition: payload.ambition,
         ambitionDocument: payload.ambitionDocument,
         planAgents,
+        synthesisModel: payload.synthesisModel,
         instructions: payload.instructions,
         synthesisPrompt: payload.synthesisPrompt,
       }, null, 2),

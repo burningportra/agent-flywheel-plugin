@@ -4,7 +4,6 @@ import {
   computeConvergenceScore,
   computeBeadQualityScore,
   formatBeadQualityScore,
-  pickRefinementModel,
   makeChoiceOption,
   makeNextToolStep,
   makeToolError,
@@ -184,26 +183,6 @@ describe('formatBeadQualityScore', () => {
     // Should contain filled and empty bar segments
     expect(output).toContain('█');
     expect(output).toContain('░');
-  });
-});
-
-// ─── pickRefinementModel ───────────────────────────────────────
-
-describe('pickRefinementModel', () => {
-  it('rotates through models deterministically', () => {
-    const m0 = pickRefinementModel(0);
-    const m1 = pickRefinementModel(1);
-    expect(m0).not.toBe(m1);
-  });
-
-  it('cycles back to first model after full rotation', () => {
-    expect(pickRefinementModel(0)).toBe(pickRefinementModel(4));
-  });
-
-  it('always returns a string', () => {
-    for (let i = 0; i < 8; i++) {
-      expect(typeof pickRefinementModel(i)).toBe('string');
-    }
   });
 });
 

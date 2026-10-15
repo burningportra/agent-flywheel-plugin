@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, Bead, ApproveArgs, ApproveStopReason, FlywheelPhase, ToolNextStep, HotspotMatrix } from '../types.js';
-import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
+import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult } from './shared.js';
+import { getRefinementModel } from '../model-detection.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
@@ -508,7 +509,7 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
     state.planRefinementRound = planRound + 1;
     saveState(state);
 
-    const refinementModel = pickRefinementModel(planRound);
+    const refinementModel = getRefinementModel(planRound);
     return makeApproveResult(
       `**NEXT: Refine the plan (round ${planRound + 1}) using model \`${refinementModel}\`.**\n\nRead the plan at \`${planPath}\`, critique it, and improve it. Focus on:\n- Missing implementation details\n- Underspecified acceptance criteria\n- Gaps in testing strategy\n- Edge cases not covered\n\nAfter improving, save the updated plan back to \`${planPath}\`, then call \`flywheel_approve_beads\` again.\n\nAlternatively, use \`action: "git-diff-review"\` for a git-diff style review cycle that proposes targeted changes with rationale.\n\n${sizeGate}`,
       state.phase,
@@ -833,7 +834,7 @@ function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boo
   state.phase = 'refining_beads';
   saveState(state);
 
-  const model = pickRefinementModel(round);
+  const model = getRefinementModel(round);
   const compactList = beads.map(b => `• ${b.id}: ${b.title}`).join('\n');
   const sharedData = {
     kind: 'bead_refinement_requested',
@@ -977,7 +978,7 @@ Current beads:\n${compactList}`,
     state.phase = 'refining_beads';
     saveState(state);
 
-    const altModel = pickRefinementModel(round + 1);
+    const altModel = getRefinementModel(round + 1);
     return {
       content: [{
         type: 'text',
