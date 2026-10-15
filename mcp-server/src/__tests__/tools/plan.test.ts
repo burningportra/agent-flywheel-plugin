@@ -447,6 +447,9 @@ describe('runPlan', () => {
     expect(freshPerspective).not.toHaveProperty('subagent_type');
     expect(structured.data.instructions).toContain('ntm --robot-send');
     expect(structured.data.instructions).toContain('--type=gmi');
+    expect(structured.data.instructions).toContain('am macros start-session');
+    expect(structured.data.instructions).toContain('--program gemini-cli');
+    expect(structured.data.instructions).toContain('am mail send');
   });
 
   it('passes cwd, signal, and a bounded timeout to the Gemini capability probe', async () => {

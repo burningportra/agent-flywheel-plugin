@@ -583,7 +583,7 @@ Question every architectural choice: is there a simpler way? A more standard app
     : '';
 
   const geminiDispatch = dynamicModels.freshPerspective
-    ? ' The fresh-perspective entry uses runner="ntm-gmi": start or reuse an NTM Gemini pane and send its task with `ntm --robot-send="$SESSION" --panes=<gmi-pane> --type=gmi --msg="<task>"`. Do not pass it to Agent as a model. If that optional pane reports an authentication or model error, continue with the three Agent-routed plans and report the missing perspective.'
+    ? ` The fresh-perspective entry uses runner="ntm-gmi": start or reuse an NTM Gemini pane and send its task with \`ntm --robot-send="$SESSION" --panes=<gmi-pane> --type=gmi --msg="<task>"\`. Gemini panes have no MCP tools, so bootstrap with \`am macros start-session --project "${cwd}" --program gemini-cli --model "<gemini-model>" --task "fresh-perspective planning"\` and return the artifact path with \`am mail send --project "${cwd}" --from "<agent-name>" --to "<coordinator>" --subject "[plan] fresh-perspective delivered" --body "<path>"\`. Do not pass it to Agent as a model. If that optional pane reports an authentication or model error, continue with the three Agent-routed plans and report the missing perspective.`
     : '';
 
   const payload = {
@@ -596,7 +596,7 @@ Question every architectural choice: is there a simpler way? A more standard app
     ambitionDocument,
     planAgents,
     synthesisModel: dynamicModels.synthesis,
-    instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true.${geminiDispatch} Each planner must bootstrap Agent Mail (macro_start_session), write to docs/plans/<date>-<perspective>.md, and send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+    instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true and bootstrap Agent Mail with macro_start_session.${geminiDispatch} Every planner writes to docs/plans/<date>-<perspective>.md. Agent-routed planners send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
     synthesisPrompt: `Use ultrathink.
 
 ## Best-of-All-Worlds Synthesis
