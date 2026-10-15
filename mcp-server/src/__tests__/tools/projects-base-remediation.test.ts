@@ -52,7 +52,9 @@ describe('remediateProjectsBase (T6.1)', () => {
     const expectedTarget = join(ntmBase, basename(cwdDir));
     expect(result.executed).toBe(false);
     expect(result.target).toBe(expectedTarget);
-    expect(result.command).toBe(`ln -s "${cwdDir}" "${expectedTarget}"`);
+    expect(result.command).toBe(
+      `ln -s "${realpathSync(cwdDir)}" "${expectedTarget}"`,
+    );
     expect(existsSync(expectedTarget)).toBe(false);
   });
 
@@ -164,6 +166,42 @@ describe('projectsBaseMisconfigHandler (T6.1 registry shape)', () => {
       );
       expect(await projectsBaseMisconfigHandler.verifyProbe(ctx)).toBe(false);
       expect(realpathSync(target)).toBe(realpathSync(otherRepo));
+    } finally {
+      rmSync(localScratch, { recursive: true, force: true });
+    }
+  });
+
+  it('links the Git root when invoked from a subdirectory and verifies green', async () => {
+    const localScratch = mkdtempSync(join(tmpdir(), 'fw-t61-subdir-'));
+    try {
+      const project = join(localScratch, 'my-project');
+      const nestedCwd = join(project, 'mcp-server');
+      const base = join(localScratch, 'ntm-base');
+      const target = join(base, basename(project));
+      mkdirSync(join(project, '.git'), { recursive: true });
+      mkdirSync(nestedCwd);
+      mkdirSync(base);
+      const ctx: HandlerCtx = {
+        cwd: nestedCwd,
+        signal: new AbortController().signal,
+        exec: async (cmd, args) => cmd === 'ntm' && args[0] === 'config'
+          ? {
+              code: 0,
+              stdout: `projects_base = "${base}"\n`,
+              stderr: '',
+            }
+          : { code: 1, stdout: '', stderr: 'unexpected command' },
+      };
+
+      const plan = await projectsBaseMisconfigHandler.buildPlan(ctx);
+      expect(plan.steps).toEqual([
+        `ln -s "${realpathSync(project)}" "${target}"`,
+      ]);
+      await expect(projectsBaseMisconfigHandler.execute(ctx)).resolves.toMatchObject({
+        stepsRun: 1,
+      });
+      expect(realpathSync(target)).toBe(realpathSync(project));
+      expect(await projectsBaseMisconfigHandler.verifyProbe(ctx)).toBe(true);
     } finally {
       rmSync(localScratch, { recursive: true, force: true });
     }

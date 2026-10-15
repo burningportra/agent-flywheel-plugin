@@ -34,6 +34,7 @@ export type RemediateProjectsBaseResult = {
   command: string;
   executed: boolean;
   changed: boolean;
+  source: string;
   target: string;
 };
 
@@ -46,21 +47,22 @@ export async function remediateProjectsBase(
   opts: RemediateProjectsBaseInput,
 ): Promise<RemediateProjectsBaseResult> {
   const targetState = await classifyNtmProjectTarget(opts.cwd, opts.ntmBase);
-  const command = symlinkCommand(opts.cwd, targetState.target);
+  const source = targetState.root;
+  const command = symlinkCommand(source, targetState.target);
   if (opts.mode === 'skip') {
-    return { command, executed: false, changed: false, target: targetState.target };
+    return { command, executed: false, changed: false, source, target: targetState.target };
   }
   if (targetState.kind === 'collision') {
     throw new Error(collisionMessage(targetState));
   }
   if (opts.mode === 'dry-run') {
-    return { command, executed: false, changed: false, target: targetState.target };
+    return { command, executed: false, changed: false, source, target: targetState.target };
   }
   if (targetState.kind === 'matching') {
-    return { command, executed: true, changed: false, target: targetState.target };
+    return { command, executed: true, changed: false, source, target: targetState.target };
   }
-  await symlink(opts.cwd, targetState.target);
-  return { command, executed: true, changed: true, target: targetState.target };
+  await symlink(source, targetState.target);
+  return { command, executed: true, changed: true, source, target: targetState.target };
 }
 
 function symlinkCommand(source: string, target: string): string {
@@ -125,7 +127,7 @@ export const projectsBaseMisconfigHandler: RemediationHandler = {
     }
     return {
       description: `Symlink ${target.root} → ${target.target} so ntm spawn resolves correctly.`,
-      steps: [symlinkCommand(ctx.cwd, target.target)],
+      steps: [symlinkCommand(target.root, target.target)],
       mutating: true,
       reversible: true,
     };
@@ -136,7 +138,7 @@ export const projectsBaseMisconfigHandler: RemediationHandler = {
     if (ntmBase === null) {
       return { stepsRun: 0, stderr: 'ntm config show did not return a projects_base; nothing to symlink.' };
     }
-    const { changed, executed, target } = await remediateProjectsBase({
+    const { changed, executed, source, target } = await remediateProjectsBase({
       cwd: ctx.cwd,
       ntmBase,
       mode: 'execute',
@@ -144,9 +146,9 @@ export const projectsBaseMisconfigHandler: RemediationHandler = {
     return {
       stepsRun: changed ? 1 : 0,
       stdout: changed
-        ? `Symlinked ${ctx.cwd} → ${target}`
+        ? `Symlinked ${source} → ${target}`
         : executed
-          ? `projects_base target already resolves to ${ctx.cwd}`
+          ? `projects_base target already resolves to ${source}`
           : undefined,
     };
   },

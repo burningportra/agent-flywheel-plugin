@@ -40,7 +40,9 @@ describe('remediateProjectsBase (T6.1) — pure helper', () => {
       const cwd = join(tmp, 'proj');
       mkdirSync(cwd);
       const result = await remediateProjectsBase({ cwd, ntmBase, mode: 'dry-run' });
-      expect(result.command).toBe(`ln -s "${cwd}" "${ntmBase}/proj"`);
+      expect(result.command).toBe(
+        `ln -s "${realpathSync(cwd)}" "${ntmBase}/proj"`,
+      );
       expect(result.executed).toBe(false);
       expect(existsSync(result.target)).toBe(false);
     } finally {
