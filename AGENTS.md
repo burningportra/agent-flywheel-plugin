@@ -64,6 +64,7 @@ The repository is the **source of truth for the Claude Code plugin**. The OpenCo
 ## Key File Paths
 
 - `mcp-server/src/` — TypeScript source (edit here)
+- `mcp-server/src/model-detection.ts` — shared model tables and provider-aware planner selection; one-caller prompt text lives with its consuming tool
 - `mcp-server/dist/` — compiled output (never edit)
 - `.pi-flywheel/` — runtime state directory
 - `skills/` — skill `.md` files injected into agent system prompts
