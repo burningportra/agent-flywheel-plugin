@@ -18,7 +18,7 @@ When `DOCTOR_REPORT.ntm.reason === "collision"`, keep the occupied target unchan
     header: "NTM collide",
     options: [
       { label: "Fall back to Agent() (Recommended)", description: "Run this wave without NTM and leave the other repository mapping intact" },
-      { label: "Run setup", description: "Open /agent-flywheel:flywheel-setup for safe projects_base guidance" },
+      { label: "Run setup", description: "Open /flywheel-setup for safe projects_base guidance" },
       { label: "Stop and inspect", description: "Pause before spawning so the conflicting path can be resolved manually" }
     ],
     multiSelect: false
@@ -26,7 +26,7 @@ When `DOCTOR_REPORT.ntm.reason === "collision"`, keep the occupied target unchan
   ```
 
 - **Fall back to Agent()** → keep `NTM_AVAILABLE=false` and continue through the existing fallback branch.
-- **Run setup** → invoke `/agent-flywheel:flywheel-setup`, then rerun this readiness procedure from step 1.
+- **Run setup** → invoke `/flywheel-setup`, then rerun this readiness procedure from step 1.
 - **Stop and inspect** → stop before spawning and print `target` plus `resolvedTarget` from `DOCTOR_REPORT.ntm`.
 
 The remediation handler refuses regular files, directories for another repository, wrong-target symlinks, and dangling symlinks. Never unlink or overwrite the occupied target.
