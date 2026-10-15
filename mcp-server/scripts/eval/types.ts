@@ -30,6 +30,8 @@ export type ScenarioResult = {
   tool_use_count: number;
   artifact_path: string;
   duration_ms: number;
+  worktree?: string;
+  brainstorm_path?: string;
 };
 
 export type BaselineReport = {
