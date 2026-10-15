@@ -207,7 +207,11 @@ describe('runReview', () => {
     });
     it('moves to next bead when more beads are ready', async () => {
         const bead = makeBead();
-        const nextBead = makeBead({ id: 'test-bead-2', title: 'Second task' });
+        const nextBead = makeBead({
+            id: 'test-bead-2',
+            title: 'Second task',
+            description: 'C3_SINGLE_BEAD_DESCRIPTION',
+        });
         const { ctx, state } = makeCtx({}, [
             brShowCall(bead),
             brUpdateCall('test-bead-1', 'closed'),
@@ -229,6 +233,8 @@ describe('runReview', () => {
             },
         });
         expect(result.content[0].text).toContain('test-bead-2');
+        expect(result.content[0].text).toContain('implement and commit it, then call');
+        expect(JSON.stringify(result).split('C3_SINGLE_BEAD_DESCRIPTION')).toHaveLength(2);
     });
     // ── Parent auto-close ──────────────────────────────────────
     describe('parent auto-close', () => {
@@ -300,8 +306,16 @@ describe('runReview', () => {
     it('spawns parallel agents when multiple beads are ready', async () => {
         const bead = makeBead();
         const nextBeads = [
-            makeBead({ id: 'test-bead-2', title: 'Second task' }),
-            makeBead({ id: 'test-bead-3', title: 'Third task' }),
+            makeBead({
+                id: 'test-bead-2',
+                title: 'Second task',
+                description: 'C3_PARALLEL_BEAD_TWO_DESCRIPTION',
+            }),
+            makeBead({
+                id: 'test-bead-3',
+                title: 'Third task',
+                description: 'C3_PARALLEL_BEAD_THREE_DESCRIPTION',
+            }),
         ];
         const { ctx } = makeCtx({}, [
             brShowCall(bead),
@@ -325,6 +339,8 @@ describe('runReview', () => {
         });
         expect(text).toContain('2 beads now ready');
         expect(text).toContain('Spawn 2 parallel agents');
+        expect(JSON.stringify(result).split('C3_PARALLEL_BEAD_TWO_DESCRIPTION')).toHaveLength(2);
+        expect(JSON.stringify(result).split('C3_PARALLEL_BEAD_THREE_DESCRIPTION')).toHaveLength(2);
     });
     // ── action=hit-me ────────────────────────────────────────────
     it('returns agent task specs on hit-me', async () => {
@@ -343,7 +359,35 @@ describe('runReview', () => {
             },
         });
         const structured = result.structuredContent;
+        expect(structured.data.reviewerBrief).toContain('Review bead test-bead-1');
         expect(structured.data.agentTasks).toHaveLength(5);
+    });
+    it('returns one shared reviewer brief, short lenses, and a compact text receipt', async () => {
+        const description = 'C3_UNIQUE_DESCRIPTION\n\nsrc/feature.ts';
+        const bead = makeBead({ description });
+        const { ctx } = makeCtx({}, [brShowCall(bead)]);
+        const result = await runReview(ctx, {
+            cwd: '/fake/cwd',
+            beadId: 'test-bead-1',
+            action: 'hit-me',
+        });
+        const structured = result.structuredContent;
+        expect(result.content[0].text).toBe('Prepared 5 review tasks for test-bead-1 (interactive). Use structuredContent.data.reviewerBrief with each agentTasks[].task, then follow structuredContent.data.instructions.');
+        expect(structured.data.reviewerBrief).toContain(description);
+        expect(structured.data.reviewerBrief).toContain('src/feature.ts');
+        expect(structured.data.reviewerBrief).toContain('cwd: /fake/cwd');
+        expect(structured.data.instructions).toContain('reviewerBrief');
+        expect(structured.data.instructions).toContain('agentTasks[].task');
+        expect(JSON.stringify(structured.data).split('C3_UNIQUE_DESCRIPTION')).toHaveLength(2);
+        const adversarial = structured.data.agentTasks.find((agentTask) => agentTask.perspective === 'adversarial');
+        expect(adversarial?.task).toContain('/ubs-workflow');
+        expect(adversarial?.task).toContain('/gdb-for-debugging');
+        expect(adversarial?.task).toContain('stack trace');
+        for (const agentTask of structured.data.agentTasks) {
+            expect(agentTask.task).not.toContain('C3_UNIQUE_DESCRIPTION');
+            expect(agentTask.task).not.toContain('cwd: /fake/cwd');
+            expect(agentTask.task.split('\n')).toHaveLength(1);
+        }
     });
     it('includes all review perspectives in hit-me agents', async () => {
         const bead = makeBead();
@@ -352,11 +396,13 @@ describe('runReview', () => {
         const structured = result.structuredContent;
         expect(structured.data.kind).toBe('review_tasks');
         const perspectives = structured.data.agentTasks.map(a => a.perspective);
-        expect(perspectives).toContain('fresh-eyes');
-        expect(perspectives).toContain('adversarial');
-        expect(perspectives).toContain('ergonomics');
-        expect(perspectives).toContain('reality-check');
-        expect(perspectives).toContain('exploration');
+        expect(perspectives).toEqual([
+            'fresh-eyes',
+            'adversarial',
+            'ergonomics',
+            'reality-check',
+            'exploration',
+        ]);
     });
     it('sets beadHitMeTriggered on hit-me', async () => {
         const bead = makeBead();
@@ -372,9 +418,8 @@ describe('runReview', () => {
         const { ctx } = makeCtx({}, [brShowCall(bead)]);
         const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
         const structured = result.structuredContent;
-        // At least one agent task should mention the files
-        const allTaskText = structured.data.agentTasks.map(a => a.task).join(' ');
-        expect(allTaskText).toContain('src/feature.ts');
+        expect(structured.data.reviewerBrief).toContain('src/feature.ts');
+        expect(structured.data.reviewerBrief).toContain('src/feature.test.ts');
     });
     // ── action=skip ──────────────────────────────────────────────
     it('marks bead as blocked/skipped on skip', async () => {
@@ -532,9 +577,9 @@ describe('runReview', () => {
             expect(structured.data.kind).toBe('review_tasks');
             expect(structured.data.postClose).toBe(true);
             expect(structured.data.agentTasks).toHaveLength(5);
-            // postClose note should be prepended to each agent task body
+            expect(structured.data.reviewerBrief).toContain('already closed by the impl agent');
             for (const task of structured.data.agentTasks) {
-                expect(task.task).toContain('already closed by the impl agent');
+                expect(task.task).not.toContain('already closed by the impl agent');
             }
             expect(structured.data.instructions).toContain('post-close audit');
         });
@@ -544,9 +589,7 @@ describe('runReview', () => {
             const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
             const structured = result.structuredContent;
             expect(structured.data.postClose).toBe(false);
-            for (const task of structured.data.agentTasks) {
-                expect(task.task).not.toContain('already closed by the impl agent');
-            }
+            expect(structured.data.reviewerBrief).not.toContain('already closed by the impl agent');
         });
         it('hit-me on closed bead with empty description does not crash', async () => {
             // Regression: extractFilesFromBead must guard empty/missing description.
@@ -561,19 +604,17 @@ describe('runReview', () => {
     });
     // ── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────
     describe('hit-me — review mode matrix', () => {
-        it('defaults to interactive mode and surfaces no preamble in agent prompts', async () => {
+        it('defaults to interactive mode and surfaces no preamble in the shared brief', async () => {
             const bead = makeBead();
             const { ctx } = makeCtx({}, [brShowCall(bead)]);
             const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: 'test-bead-1', action: 'hit-me' });
             const structured = result.structuredContent;
             expect(structured.data.mode).toBe('interactive');
-            for (const task of structured.data.agentTasks) {
-                expect(task.task).not.toContain('Review mode: autofix');
-                expect(task.task).not.toContain('Review mode: report-only');
-                expect(task.task).not.toContain('Review mode: headless');
-            }
+            expect(structured.data.reviewerBrief).not.toContain('Review mode: autofix');
+            expect(structured.data.reviewerBrief).not.toContain('Review mode: report-only');
+            expect(structured.data.reviewerBrief).not.toContain('Review mode: headless');
         });
-        it('report-only mode injects the report-only preamble into every agent task', async () => {
+        it('report-only mode injects the report-only preamble into the shared brief', async () => {
             const bead = makeBead();
             const { ctx } = makeCtx({}, [brShowCall(bead)]);
             const result = await runReview(ctx, {
@@ -584,10 +625,8 @@ describe('runReview', () => {
             });
             const structured = result.structuredContent;
             expect(structured.data.mode).toBe('report-only');
-            for (const task of structured.data.agentTasks) {
-                expect(task.task).toContain('Review mode: report-only');
-                expect(task.task).toContain('docs/reviews/');
-            }
+            expect(structured.data.reviewerBrief).toContain('Review mode: report-only');
+            expect(structured.data.reviewerBrief).toContain('docs/reviews/');
         });
         it('headless mode injects the JSON-on-stdout preamble', async () => {
             const bead = makeBead();
@@ -602,9 +641,10 @@ describe('runReview', () => {
             const structured = result.structuredContent;
             expect(structured.data.mode).toBe('headless');
             expect(structured.data.parallelSafe).toBe(true);
-            for (const task of structured.data.agentTasks) {
-                expect(task.task).toContain('Review mode: headless');
-            }
+            expect(structured.data.instructions).toContain('action="report"');
+            expect(structured.data.instructions).toContain('findingCount');
+            expect(structured.data.instructions).toContain('crashed');
+            expect(structured.data.reviewerBrief).toContain('Review mode: headless');
         });
         it('autofix downgrades to interactive when the working tree is dirty', async () => {
             const bead = makeBead();
@@ -639,8 +679,115 @@ describe('runReview', () => {
             const structured = result.structuredContent;
             expect(structured.data.mode).toBe('autofix');
             expect(structured.data.modeGateWarning).toBeUndefined();
-            for (const task of structured.data.agentTasks) {
-                expect(task.task).toContain('Review mode: autofix');
+            expect(structured.data.reviewerBrief).toContain('Review mode: autofix');
+        });
+    });
+    describe('headless report completion', () => {
+        it('returns exitCode 1 when reviewers report findings', async () => {
+            const { ctx } = makeCtx();
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'report',
+                mode: 'headless',
+                findingCount: 3,
+            });
+            expect(result.isError).toBe(true);
+            expect(result.structuredContent).toMatchObject({
+                status: 'error',
+                data: {
+                    kind: 'error',
+                    error: {
+                        code: 'review_headless_findings',
+                        retryable: false,
+                        hint: expect.stringContaining('action="report"'),
+                        details: {
+                            beadId: 'test-bead-1',
+                            findingCount: 3,
+                            crashed: false,
+                            exitCode: 1,
+                        },
+                    },
+                },
+            });
+        });
+        it('returns exitCode 2 when a reviewer crashed', async () => {
+            const { ctx } = makeCtx();
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'report',
+                mode: 'headless',
+                findingCount: 0,
+                crashed: true,
+            });
+            expect(result.isError).toBe(true);
+            expect(result.structuredContent).toMatchObject({
+                status: 'error',
+                data: {
+                    error: {
+                        code: 'review_headless_findings',
+                        details: {
+                            findingCount: 0,
+                            crashed: true,
+                            exitCode: 2,
+                        },
+                    },
+                },
+            });
+        });
+        it('returns an ok exitCode 0 result when the report is clean', async () => {
+            const { ctx } = makeCtx();
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'report',
+                mode: 'headless',
+                findingCount: 0,
+            });
+            expect(result.isError).toBeUndefined();
+            expect(result.structuredContent).toMatchObject({
+                status: 'ok',
+                data: {
+                    kind: 'review_headless_report',
+                    beadId: 'test-bead-1',
+                    mode: 'headless',
+                    findingCount: 0,
+                    crashed: false,
+                    exitCode: 0,
+                },
+            });
+        });
+        it('rejects report completion outside headless mode', async () => {
+            const { ctx } = makeCtx();
+            const result = await runReview(ctx, {
+                cwd: '/fake/cwd',
+                beadId: 'test-bead-1',
+                action: 'report',
+                mode: 'interactive',
+                findingCount: 1,
+            });
+            expect(result.isError).toBe(true);
+            expect(result.structuredContent).toMatchObject({
+                status: 'error',
+                data: { error: { code: 'invalid_input' } },
+            });
+        });
+        it('rejects a missing, negative, or fractional findingCount', async () => {
+            for (const findingCount of [undefined, -1, 1.5]) {
+                const { ctx } = makeCtx();
+                const result = await runReview(ctx, {
+                    cwd: '/fake/cwd',
+                    beadId: 'test-bead-1',
+                    action: 'report',
+                    mode: 'headless',
+                    findingCount,
+                });
+                expect(result.isError).toBe(true);
+                expect(result.structuredContent).toMatchObject({
+                    status: 'error',
+                    data: { error: { code: 'invalid_input' } },
+                });
             }
         });
     });

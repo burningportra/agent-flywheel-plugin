@@ -77,8 +77,8 @@ describe('routeModel', () => {
     it('returns expected models for default tiers', () => {
         const bead = makeBead({ title: 'Fix typo in docs', description: 'readme fix', priority: 3 });
         const route = routeModel(bead);
-        expect(route.implementation).toBeTruthy();
-        expect(route.review).toBeTruthy();
+        expect(route.implementation).toBe('anthropic/claude-haiku-4-5');
+        expect(route.review).toBe('anthropic/claude-sonnet-4-6');
         expect(route.complexity).toBe('simple');
     });
     it('uses custom tiers when all keys are provided', () => {
@@ -128,9 +128,20 @@ describe('routeModel', () => {
         });
         const route = routeModel(bead);
         expect(route.complexity).toBe('medium');
-        expect(route.implementation).toBeTruthy();
-        expect(route.review).toBeTruthy();
+        expect(route.implementation).toBe('anthropic/claude-opus-4-7');
+        expect(route.review).toBe('anthropic/claude-sonnet-4-6');
         expect(route.reason).toBeTruthy();
+    });
+    it('uses the strongest model for both sides of a complex route', () => {
+        const bead = makeBead({
+            title: 'Major authentication refactor',
+            description: '### Files:\nsrc/a.ts, src/b.ts, src/c.ts, src/d.ts, src/e.ts, src/f.ts\n\nsecurity migration with breaking changes',
+            priority: 0,
+        });
+        const route = routeModel(bead);
+        expect(route.complexity).toBe('complex');
+        expect(route.implementation).toBe('anthropic/claude-opus-4-7');
+        expect(route.review).toBe('anthropic/claude-opus-4-7');
     });
 });
 // ─── routeBeads ─────────────────────────────────────────────────

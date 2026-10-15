@@ -164,11 +164,12 @@ export function formatRepoProfile(profile) {
 /**
  * Build the bead creation prompt given a goal and repo context.
  */
-export function beadCreationPrompt(goal, repoContext, constraints) {
+export function beadCreationPrompt(goal, repoContext, constraints, provenance) {
     return buildBeadCreationPrompt({
         goal,
         repoContext,
         constraints,
+        provenance,
     });
 }
 const VERB_PREFIXES = [

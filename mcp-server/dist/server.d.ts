@@ -47,6 +47,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -70,6 +72,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -180,6 +183,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -203,6 +208,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -235,6 +241,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -258,6 +266,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -307,6 +316,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -330,6 +341,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -415,6 +427,8 @@ export declare const TOOLS: ({
             source?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -438,6 +452,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -469,6 +484,16 @@ export declare const TOOLS: ({
                 description: string;
             };
             parallelSafe: {
+                type: string;
+                default: boolean;
+                description: string;
+            };
+            findingCount: {
+                type: string;
+                minimum: number;
+                description: string;
+            };
+            crashed: {
                 type: string;
                 default: boolean;
                 description: string;
@@ -507,6 +532,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -544,6 +570,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
             skipEnv?: undefined;
@@ -566,6 +594,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -620,6 +649,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             closedBeadIds?: undefined;
             maxNextWave?: undefined;
             query?: undefined;
@@ -639,6 +670,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -680,6 +712,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -701,6 +735,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -752,6 +787,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -770,6 +807,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -830,6 +868,8 @@ export declare const TOOLS: ({
             until_convergence_score?: undefined;
             max_rounds?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -850,6 +890,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -879,6 +920,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -902,6 +945,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -939,6 +983,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -960,6 +1006,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -994,6 +1041,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -1016,6 +1065,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -1052,6 +1102,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -1074,6 +1126,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -1118,6 +1171,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -1139,6 +1194,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -1172,6 +1228,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -1194,6 +1252,7 @@ export declare const TOOLS: ({
             autoConfirm?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -1241,6 +1300,10 @@ export declare const TOOLS: ({
                 type: string;
                 description: string;
             };
+            reason: {
+                type: string;
+                description: string;
+            };
             goal?: undefined;
             ideas?: undefined;
             mode?: undefined;
@@ -1254,6 +1317,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -1310,6 +1375,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -1332,6 +1399,7 @@ export declare const TOOLS: ({
             autoConfirm?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
             section?: undefined;
         };
         required: string[];
@@ -1367,6 +1435,8 @@ export declare const TOOLS: ({
             max_rounds?: undefined;
             beadId?: undefined;
             parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
             beadIds?: undefined;
             threshold?: undefined;
             parallelism?: undefined;
@@ -1390,6 +1460,7 @@ export declare const TOOLS: ({
             planSlug?: undefined;
             planPath?: undefined;
             editIntent?: undefined;
+            reason?: undefined;
         };
         required: string[];
     };

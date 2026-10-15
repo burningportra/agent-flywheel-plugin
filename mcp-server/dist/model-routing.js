@@ -9,7 +9,7 @@
  * to enforce the Flywheel's "different models have different tastes
  * and blind spots" principle.
  */
-import { MODEL_ROUTING_TIERS } from "./prompts.js";
+import { MODEL_ROUTING_TIERS } from "./model-detection.js";
 const DEFAULT_TIERS = {
     simple: {
         implementation: MODEL_ROUTING_TIERS.simple.implementation,

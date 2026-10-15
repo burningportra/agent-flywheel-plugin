@@ -9,6 +9,9 @@
  * write any file. It does not call `saveState` / `clearState`.
  */
 import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js';
+import { isFirstRun } from '../first-run.js';
+import { renderPreflightBanner } from '../preflight.js';
+import { parseBrList } from '../br-parser.js';
 import { makeToolResult } from './shared.js';
 import { runDoctorChecks } from './doctor.js';
 // ─── Rendering ────────────────────────────────────────────────────────────
@@ -50,6 +53,51 @@ export function renderDoctorReportText(report) {
     }
     return out.join('\n');
 }
+const FIRST_RUN_PROBE_TIMEOUT_MS = 5000;
+async function listBeadsForFirstRun(ctx) {
+    const result = await ctx.exec('br', ['list', '--all', '--limit', '1', '--json'], {
+        cwd: ctx.cwd,
+        timeout: FIRST_RUN_PROBE_TIMEOUT_MS,
+        signal: ctx.signal,
+    });
+    if (result.code !== 0) {
+        throw new Error(`br list failed: ${result.stderr}`);
+    }
+    return parseBrList(result.stdout).rows;
+}
+async function searchCassForFirstRun(ctx) {
+    const result = await ctx.exec('cass', [
+        'search',
+        '',
+        '--workspace',
+        ctx.cwd,
+        '--limit',
+        '1',
+        '--fields',
+        'minimal',
+        '--json',
+    ], {
+        cwd: ctx.cwd,
+        timeout: FIRST_RUN_PROBE_TIMEOUT_MS,
+        signal: ctx.signal,
+    });
+    if (result.code !== 0) {
+        throw new Error(`cass search failed: ${result.stderr}`);
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(result.stdout);
+    }
+    catch (err) {
+        throw new Error(`cass search returned invalid JSON: ${errMsg(err)}`);
+    }
+    if (typeof parsed !== 'object' ||
+        parsed === null ||
+        !Array.isArray(parsed.hits)) {
+        throw new Error('cass search output is missing hits[]');
+    }
+    return parsed.hits;
+}
 /**
  * flywheel_doctor tool handler.
  *
@@ -58,7 +106,13 @@ export function renderDoctorReportText(report) {
 export async function runDoctor(ctx, args) {
     try {
         void args;
+        const firstRun = await isFirstRun({
+            cwd: ctx.cwd,
+            brList: () => listBeadsForFirstRun(ctx),
+            cassSearch: () => searchCassForFirstRun(ctx),
+        });
         const report = await runDoctorChecks(ctx.cwd, ctx.signal);
+        const preflightBanner = renderPreflightBanner(report);
         const structured = {
             tool: 'flywheel_doctor',
             version: 1,
@@ -67,9 +121,15 @@ export async function runDoctor(ctx, args) {
             data: {
                 kind: 'doctor_report',
                 report,
+                preflightBanner,
+                firstRun,
             },
         };
-        return makeToolResult(renderDoctorReportText(report), structured);
+        const reportText = renderDoctorReportText(report);
+        const text = preflightBanner === null
+            ? reportText
+            : `${reportText}\n\n${preflightBanner}`;
+        return makeToolResult(text, structured);
     }
     catch (err) {
         // runDoctorChecks itself is designed not to throw, but defensively handle

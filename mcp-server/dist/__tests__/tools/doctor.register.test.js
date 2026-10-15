@@ -14,6 +14,8 @@ import { join } from 'node:path';
 import { TOOLS, createCallToolHandler } from '../../server.js';
 import { DoctorReportSchema, createInitialState } from '../../types.js';
 import { runDoctor, renderDoctorReportText } from '../../tools/doctor-tool.js';
+import { renderPreflightBanner } from '../../preflight.js';
+import { computeStateHash } from '../../checkpoint.js';
 // Mock writeCheckpoint to assert the doctor tool never mutates checkpoint state.
 vi.mock('../../checkpoint.js', async () => {
     const actual = await vi.importActual('../../checkpoint.js');
@@ -36,6 +38,17 @@ function cleanup(dir) {
         /* ignore */
     }
 }
+function writeValidCheckpoint(cwd) {
+    const state = createInitialState();
+    mkdirSync(join(cwd, '.pi-flywheel'), { recursive: true });
+    writeFileSync(join(cwd, '.pi-flywheel', 'checkpoint.json'), JSON.stringify({
+        schemaVersion: 1,
+        writtenAt: new Date().toISOString(),
+        flywheelVersion: 'test',
+        state,
+        stateHash: computeStateHash(state),
+    }));
+}
 describe('I4 — flywheel_doctor tool registration', () => {
     it('appears in TOOLS introspection list with required cwd schema', () => {
         const tool = TOOLS.find((t) => t.name === 'flywheel_doctor');
@@ -53,8 +66,17 @@ describe('I4 — flywheel_doctor tool registration', () => {
     it('runDoctor handler returns a valid DoctorReport envelope', async () => {
         const cwd = makeTmpCwd();
         try {
+            const exec = vi.fn(async (cmd) => {
+                if (cmd === 'br') {
+                    return { code: 0, stdout: '{"issues":[]}', stderr: '' };
+                }
+                if (cmd === 'cass') {
+                    return { code: 0, stdout: '{"hits":[]}', stderr: '' };
+                }
+                return { code: 1, stdout: '', stderr: 'unexpected command' };
+            });
             const ctx = {
-                exec: async () => ({ code: 1, stdout: '', stderr: 'not mocked' }),
+                exec,
                 cwd,
                 state: createInitialState(),
                 saveState: () => { },
@@ -74,8 +96,70 @@ describe('I4 — flywheel_doctor tool registration', () => {
             // The structured report must validate against DoctorReportSchema.
             const parsed = DoctorReportSchema.safeParse(sc.data.report);
             expect(parsed.success).toBe(true);
+            expect(sc.data.preflightBanner).toBe(renderPreflightBanner(sc.data.report));
+            expect(sc.data.firstRun).toBe(true);
+            expect(exec).toHaveBeenCalledWith('br', ['list', '--all', '--limit', '1', '--json'], { cwd, timeout: 5000, signal: undefined });
+            expect(exec).toHaveBeenCalledWith('cass', [
+                'search',
+                '',
+                '--workspace',
+                cwd,
+                '--limit',
+                '1',
+                '--fields',
+                'minimal',
+                '--json',
+            ], { cwd, timeout: 5000, signal: undefined });
             // Text render should include the overall glyph header.
             expect(result.content[0].text).toMatch(/flywheel doctor — overall:/);
+            if (sc.data.preflightBanner !== null) {
+                expect(result.content[0].text).toContain(sc.data.preflightBanner);
+            }
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('returns firstRun:false after a checkpoint exists', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            writeValidCheckpoint(cwd);
+            const ctx = {
+                exec: async () => ({ code: 1, stdout: '', stderr: 'not mocked' }),
+                cwd,
+                state: createInitialState(),
+                saveState: () => { },
+                clearState: () => { },
+                signal: undefined,
+            };
+            const result = await runDoctor(ctx, { cwd });
+            const sc = result.structuredContent;
+            expect(sc.data.firstRun).toBe(false);
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('returns firstRun:false when CASS has project history', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const ctx = {
+                exec: async (cmd) => cmd === 'cass'
+                    ? {
+                        code: 0,
+                        stdout: '{"hits":[{"source_path":"session.jsonl"}]}',
+                        stderr: '',
+                    }
+                    : { code: 0, stdout: '{"issues":[]}', stderr: '' },
+                cwd,
+                state: createInitialState(),
+                saveState: () => { },
+                clearState: () => { },
+                signal: undefined,
+            };
+            const result = await runDoctor(ctx, { cwd });
+            const sc = result.structuredContent;
+            expect(sc.data.firstRun).toBe(false);
         }
         finally {
             cleanup(cwd);

@@ -120,6 +120,39 @@ describe('runSelect', () => {
         expect(text).toContain('br create');
         expect(text).toContain('br dep add <downstream> <upstream>');
         expect(text).not.toContain('--depends-on');
+        expect(text).not.toContain('## Provenance');
+    });
+    it('includes the selected duel idea provenance in the direct-to-beads prompt', async () => {
+        const { ctx } = makeCtx({
+            candidateIdeas: [{
+                    id: 'durable-provenance',
+                    title: 'Durable provenance',
+                    description: 'Carry duel evidence into implementation.',
+                    category: 'reliability',
+                    effort: 'medium',
+                    impact: 'high',
+                    rationale: 'Reviewers need the adversarial context.',
+                    tier: 'top',
+                    provenance: {
+                        source: 'duel',
+                        runAt: '2026-10-15T14:22:00Z',
+                        agentScores: { cc: 880, cod: 910 },
+                        contested: false,
+                        survivingCritique: 'The goal still needs a rollback path.',
+                    },
+                }],
+        });
+        const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Durable provenance' });
+        const text = result.content[0].text;
+        expect(text).toContain('## Provenance');
+        expect(text).toContain('- **Agent scores:** cc=880, cod=910, gmi=<0-1000 or n/a>');
+        expect(text).toContain('The goal still needs a rollback path.');
+    });
+    it('clears a stale plan source before rendering a new selection', async () => {
+        const { ctx, state } = makeCtx({ planSource: 'duel', candidateIdeas: [] });
+        const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Ordinary task' });
+        expect(state.planSource).toBeUndefined();
+        expect(result.content[0].text).not.toContain('## Provenance');
     });
     it('works without a repoProfile on state', async () => {
         const { ctx } = makeCtx();
@@ -167,6 +200,7 @@ describe('runSelect', () => {
             data: {
                 kind: 'goal_selected',
                 goal: 'Add tests',
+                goalSlug: 'add-tests',
                 constraints: ['must be backward compatible'],
                 workflowOptions: ['plan-first', 'deep-plan', 'direct-to-beads'],
                 hasRepoProfile: true,
@@ -208,6 +242,36 @@ describe('runSelect', () => {
             expect(state.outcomeGradingSkipped).toBeUndefined();
             expect(state.outcomeGradingHistory).toBeUndefined();
             expect(state.cycleEndTestOutput).toBeUndefined();
+        });
+    });
+    describe('goalSlug in response (B15)', () => {
+        it('returns goalSlug equal to slugifyGoal(goal) in structuredContent.data', async () => {
+            const { ctx } = makeCtx();
+            const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Add Rate Limiting!' });
+            const data = result.structuredContent.data;
+            expect(data.goalSlug).toBe('add-rate-limiting');
+        });
+        it('mentions the goalSlug in the human-readable text so skills can read it inline', async () => {
+            const { ctx } = makeCtx();
+            const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Add rate limiting' });
+            const text = result.content[0].text;
+            expect(text).toContain('`add-rate-limiting`');
+            expect(text).toMatch(/goal slug/i);
+        });
+        it('cuts a long goal to 60 characters', async () => {
+            const { ctx } = makeCtx();
+            const longGoal = 'Add a comprehensive rate-limiting layer that handles bursty traffic and per-tenant throttling with Redis-backed sliding windows';
+            const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: longGoal });
+            const data = result.structuredContent.data;
+            expect(data.goalSlug).toBeDefined();
+            expect(data.goalSlug.length).toBeLessThanOrEqual(60);
+            expect(data.goalSlug).toBe('add-a-comprehensive-rate-limiting-layer-that-handles-bursty-');
+        });
+        it("falls back to 'plan' for an all-symbol goal", async () => {
+            const { ctx } = makeCtx();
+            const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: '!!!---???' });
+            const data = result.structuredContent.data;
+            expect(data.goalSlug).toBe('plan');
         });
     });
     it('returns structuredContent for invalid goal errors', async () => {

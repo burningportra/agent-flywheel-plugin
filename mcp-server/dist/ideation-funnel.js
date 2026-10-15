@@ -17,7 +17,6 @@
 // ─── Repo Profile Formatting ─────────────────────────────────
 /**
  * Format a RepoProfile (and optional ScanResult) into a prompt-injectable string.
- * Inlined here since prompts.ts is not ported to this project.
  */
 function formatRepoProfile(profile, scanResult) {
     const lines = [

@@ -21,6 +21,15 @@ beforeAll(() => {
     skillBody = readFileSync(SKILL_PATH, "utf8");
 });
 describe("Step 0c yellow doctor surfacing (claude-orchestrator-6bxt)", () => {
+    it("consumes server-owned preflight and first-run fields", () => {
+        expect(skillBody).toMatch(/data\.report.*`DOCTOR_REPORT`.*data\.preflightBanner.*`PREFLIGHT_BANNER`.*data\.firstRun.*`IS_FIRST_RUN`/s);
+        expect(skillBody).not.toMatch(/Call `isFirstRun\(/);
+        expect(skillBody).not.toMatch(/Call `renderPreflightBanner\(/);
+    });
+    it("resolves the version before printing the opening banner", () => {
+        expect(skillBody).not.toMatch(/Before any tool calls, before any other reads, print the banner/);
+        expect(skillBody).toMatch(/Resolve `VERSION` first, then print the banner/);
+    });
     it("trigger condition mentions both red and yellow overalls", () => {
         // The exact match string. If anyone reverts to red-only, this fails loudly.
         expect(skillBody).toMatch(/`DOCTOR_REPORT\.overall === "red"` OR `DOCTOR_REPORT\.overall === "yellow"`/);

@@ -193,7 +193,7 @@ const PRIMARY_TOOLS = [
     },
     {
         name: 'flywheel_review',
-        description: "Submit bead implementation for review. action=hit-me spawns parallel review agents (returns agent task specs for Claude Code to spawn). action=looks-good marks bead done and advances. action=skip defers the bead. Use beadId=__gates__ for guided review gates after all beads are done. mode dispatches the same reviewers into four shapes (interactive/autofix/report-only/headless) per bead agent-flywheel-plugin-f0j.",
+        description: "Submit bead implementation for review. action=hit-me spawns parallel review agents (returns agent task specs for Claude Code to spawn). action=looks-good marks bead done and advances. action=skip defers the bead. action=report completes a headless review with a CI exit signal. Use beadId=__gates__ for guided review gates after all beads are done. mode dispatches the same reviewers into four shapes (interactive/autofix/report-only/headless) per bead agent-flywheel-plugin-f0j.",
         inputSchema: {
             type: 'object',
             properties: {
@@ -204,8 +204,8 @@ const PRIMARY_TOOLS = [
                 },
                 action: {
                     type: 'string',
-                    enum: ['hit-me', 'looks-good', 'skip'],
-                    description: 'hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead',
+                    enum: ['hit-me', 'looks-good', 'skip', 'report'],
+                    description: 'hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead, report=submit an aggregated headless result',
                 },
                 mode: {
                     type: 'string',
@@ -217,6 +217,16 @@ const PRIMARY_TOOLS = [
                     type: 'boolean',
                     default: false,
                     description: 'Caller asserts reviewers can run in parallel without racing on the same files. Advisory flag only — does not disable the autofix gate.',
+                },
+                findingCount: {
+                    type: 'integer',
+                    minimum: 0,
+                    description: 'Aggregated number of findings. Required when action=report and mode=headless.',
+                },
+                crashed: {
+                    type: 'boolean',
+                    default: false,
+                    description: 'Set true when at least one headless reviewer crashed. Used only with action=report.',
                 },
             },
             required: ['cwd', 'beadId', 'action'],
@@ -484,7 +494,7 @@ const PRIMARY_TOOLS = [
     // ─── v3.13.0 outcome-grading tools (T9 / claude-orchestrator-zbe) ───
     {
         name: 'flywheel_synthesize_rubric',
-        description: 'Synthesize / validate / edit / regenerate the cycle-level outcome rubric at .pi-flywheel/plans/<slug>/rubric.md. Called from skills/start/_planning.md Step 5.6 after the plan-ready gate fires. Discriminator on success: kind ∈ { rubric_synthesized, rubric_preserved (cache hit on edited/user source), rubric_edited (action=edit), rubric_validated (action=validate) }. Errors surface FlywheelErrorCode envelopes (rubric_synth_invalid, rubric_missing, invalid_input).',
+        description: 'Synthesize / validate / edit / regenerate the cycle-level outcome rubric at .pi-flywheel/plans/<slug>/rubric.md, or persist a one-cycle grading skip. Called from skills/start/_planning.md Step 5.6 after the plan-ready gate fires. Discriminator on success: kind ∈ { rubric_synthesized, rubric_preserved (cache hit on edited/user source), rubric_edited (action=edit), rubric_validated (action=validate), rubric_skipped (action=skip) }. Errors surface FlywheelErrorCode envelopes (rubric_synth_invalid, rubric_missing, invalid_input, internal_error on skip persistence failure).',
         inputSchema: {
             type: 'object',
             properties: {
@@ -499,9 +509,9 @@ const PRIMARY_TOOLS = [
                 },
                 action: {
                     type: 'string',
-                    enum: ['synthesize', 'validate', 'edit', 'regenerate'],
+                    enum: ['synthesize', 'validate', 'edit', 'regenerate', 'skip'],
                     default: 'synthesize',
-                    description: 'synthesize=spawn synthesizer (cache + edited-source guard); validate=parse current rubric.md; edit=apply editIntent; regenerate=force=true synth (overrides edited-source guard).',
+                    description: 'synthesize=spawn synthesizer (cache + edited-source guard); validate=parse current rubric.md; edit=apply editIntent; regenerate=force=true synth (overrides edited-source guard); skip=persist outcomeGradingSkipped for this cycle.',
                 },
                 editIntent: {
                     type: 'object',
@@ -515,6 +525,10 @@ const PRIMARY_TOOLS = [
                 force: {
                     type: 'boolean',
                     description: 'Bypass the planContentSha cache and the edited-source guard. Equivalent to action=regenerate.',
+                },
+                reason: {
+                    type: 'string',
+                    description: 'Optional non-empty reason returned with action=skip. The persisted state remains a cycle-wide boolean.',
                 },
             },
             required: ['cwd'],

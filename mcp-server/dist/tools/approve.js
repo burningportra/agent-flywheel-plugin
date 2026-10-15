@@ -4,13 +4,27 @@ import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScor
 import { buildBeadCreationPrompt } from './bead-prompt.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
-import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
 import { computeHotspotMatrix } from '../plan-simulation.js';
 import { createLogger } from '../logger.js';
 import { normalizeText } from '../utils/text-normalize.js';
+import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
 const log = createLogger('approve');
+function planGitDiffReviewPrompt(planText) {
+    return `Carefully review this entire plan for me and come up with your best revisions in terms of better architecture, new features, changed features, etc. to make it better, more robust/reliable, more performant, more compelling/useful, etc. For each proposed change, give me your detailed analysis and rationale/justification for why it would make the project better along with the git-diff style change versus the original plan shown below:
+
+${planText}`;
+}
+function planIntegrationPrompt(planText, revisions) {
+    return `OK, now integrate these revisions to the markdown plan in-place; use ultrathink and be meticulous. At the end, you can tell me which changes you wholeheartedly agree with, which you somewhat agree with, and which you disagree with:
+
+## Original Plan
+${planText}
+
+## Proposed Revisions
+${revisions}`;
+}
 let _lastBeadSnapshot;
 function descFingerprint(desc) {
     return `${desc.length}:${desc.slice(0, 50)}`;
@@ -372,7 +386,7 @@ async function handlePlanApproval(ctx, args) {
     state.phase = 'creating_beads';
     state.planRefinementRound = 0;
     saveState(state);
-    const beadPrompt = buildPlanToBeadsPrompt(plan, state.selectedGoal, planPath);
+    const beadPrompt = buildPlanToBeadsPrompt(plan, state.selectedGoal, planPath, state);
     return makeApproveResult(`**Plan approved!** (${lineCount} lines)${sizeGate}\n\n**NEXT: Create beads from the plan using \`br create\` and \`br dep add\`, then call \`flywheel_approve_beads\` with action="start" to launch implementation.**\n\n---\n\n${beadPrompt}`, state.phase, 'plan', {
         kind: 'plan_approved',
         planDocument: planPath,
@@ -382,12 +396,14 @@ async function handlePlanApproval(ctx, args) {
         readyForBeadCreation: true,
     }, makeNextToolStep('run_cli', 'Create beads from the approved plan with br create / br dep add, then return to flywheel_approve_beads action="start".'));
 }
-function buildPlanToBeadsPrompt(plan, goal, planPath) {
+function buildPlanToBeadsPrompt(plan, goal, planPath, state) {
     const preview = plan.slice(0, 2000) + (plan.length > 2000 ? '\n...(read full plan from file)' : '');
+    const provenance = resolveDuelProvenanceInstructions(state, { path: planPath, content: plan });
     return buildBeadCreationPrompt({
         goal,
         planPath,
         planPreview: preview,
+        provenance,
         nextAction: `After creating all beads, call \`flywheel_approve_beads\` with action="start" to review and launch.`,
     });
 }
@@ -661,11 +677,18 @@ function handleAdvanced(ctx, beads, round, advancedAction, matrix) {
     if (advancedAction === 'blunder-hunt') {
         state.phase = 'refining_beads';
         saveState(state);
-        const passes = [1, 2, 3, 4, 5].map(i => `### Blunder Hunt Pass ${i}\nRead all beads via \`br list --json\`. Look for: incomplete descriptions, missing files, circular dependencies, wrong priorities, vague acceptance criteria. Fix anything suspicious.`).join('\n\n');
         return {
             content: [{
                     type: 'text',
-                    text: `**NEXT: Run 5 blunder hunt passes, then call \`flywheel_approve_beads\` again.**\n\n${passes}\n\ncd ${cwd}\n\nCurrent beads:\n${compactList}`,
+                    text: `**NEXT: Run the pass below and repeat until a pass finds nothing new (at most 5 passes), then call \`flywheel_approve_beads\` again.**
+
+### Blunder Hunt Pass
+Read all beads via \`br list --json\`. Look for: incomplete descriptions, missing files, circular dependencies, wrong priorities, vague acceptance criteria. Fix anything suspicious.
+
+cd ${cwd}
+
+Current beads:
+${compactList}`,
                 }],
         };
     }

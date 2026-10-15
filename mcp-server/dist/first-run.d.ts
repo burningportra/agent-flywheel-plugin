@@ -14,8 +14,9 @@
  *   5. CASS returned ≥1 entry for this cwd (`cassSearch().length > 0`)
  *
  * `brList` and `cassSearch` are injected so tests can run hermetically
- * without spawning the real CLIs; production callers should pass thin
- * wrappers around `br list --json` and `cm search --json`.
+ * without spawning the real CLIs; production callers should pass bounded
+ * wrappers around `br list --all --limit 1 --json` and project-scoped
+ * `cass search "" --limit 1 --fields minimal --json`.
  */
 export type IsFirstRunOpts = {
     cwd: string;

@@ -1,4 +1,4 @@
-import { SWARM_MODELS } from "./prompts.js";
+import { SWARM_MODELS } from "./model-detection.js";
 // ─── Agent Composition ──────────────────────────────────────
 /** Recommend agent composition based on open bead count. */
 export function recommendComposition(openBeadCount) {

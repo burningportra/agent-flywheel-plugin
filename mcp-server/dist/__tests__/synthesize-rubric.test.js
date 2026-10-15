@@ -10,6 +10,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runSynthesizeRubric } from '../tools/synthesize-rubric.js';
+import { runGradeOutcome } from '../tools/grade-outcome.js';
+import { loadState, saveState } from '../state.js';
 import { DEFAULT_HINTS, DEFAULT_RETRYABLE } from '../errors.js';
 const SAMPLE_RUBRIC = `---
 version: 1
@@ -143,6 +145,124 @@ describe('flywheel_synthesize_rubric tool wrapper', () => {
         expect(result.isError).toBe(true);
         const sc = result.structuredContent;
         expect(sc.data.error.code).toBe('invalid_input');
+    });
+    it('persists action=skip and a reloaded grader returns grading_skipped', async () => {
+        const state = makeBaseState({
+            outcomeRubricPath: '.pi-flywheel/plans/existing/rubric.md',
+        });
+        const exec = vi.fn(async () => ({
+            code: 1,
+            stdout: '',
+            stderr: 'must not run',
+        }));
+        const ctx = {
+            exec,
+            cwd: dir,
+            state,
+            saveState: (nextState) => saveState(dir, nextState),
+            clearState: () => { },
+        };
+        const skipResult = await runSynthesizeRubric(ctx, {
+            cwd: dir,
+            action: 'skip',
+            planSlug: 'tool-test-slug',
+            reason: 'operator chose to defer outcome grading',
+        });
+        expect(skipResult).toMatchObject({
+            structuredContent: {
+                tool: 'flywheel_synthesize_rubric',
+                version: 1,
+                status: 'ok',
+                data: {
+                    kind: 'rubric_skipped',
+                    planSlug: 'tool-test-slug',
+                    reason: 'operator chose to defer outcome grading',
+                },
+            },
+        });
+        expect(state.outcomeGradingSkipped).toBe(true);
+        expect(state.outcomeRubricPath).toBe('.pi-flywheel/plans/existing/rubric.md');
+        const reloaded = loadState(dir);
+        expect(reloaded.outcomeGradingSkipped).toBe(true);
+        const gradeResult = await runGradeOutcome({ ...ctx, state: reloaded }, { cwd: dir });
+        expect(gradeResult).toMatchObject({
+            structuredContent: {
+                data: {
+                    kind: 'grading_skipped',
+                    reason: 'operator-skipped-at-plan-approve',
+                },
+            },
+        });
+        expect(exec).not.toHaveBeenCalled();
+    });
+    it('waits for skip persistence before changing live state or returning success', async () => {
+        const { ctx, state } = makeCtx(dir);
+        let finishSave;
+        const saveFinished = new Promise((resolve) => {
+            finishSave = resolve;
+        });
+        ctx.saveState = () => saveFinished;
+        let settled = false;
+        const pending = runSynthesizeRubric(ctx, {
+            cwd: dir,
+            action: 'skip',
+        }).finally(() => {
+            settled = true;
+        });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(state.outcomeGradingSkipped).toBeUndefined();
+        finishSave?.(true);
+        const result = await pending;
+        expect(state.outcomeGradingSkipped).toBe(true);
+        expect(result).toMatchObject({
+            structuredContent: {
+                data: {
+                    kind: 'rubric_skipped',
+                    reason: 'operator-skipped-at-plan-approve',
+                },
+            },
+        });
+    });
+    it.each([
+        ['returns false', async () => false],
+        ['throws', async () => { throw new Error('disk unavailable'); }],
+    ])('does not leak the skip flag when saveState %s', async (_label, persist) => {
+        const { ctx, state } = makeCtx(dir);
+        ctx.saveState = persist;
+        const result = await runSynthesizeRubric(ctx, {
+            cwd: dir,
+            action: 'skip',
+        });
+        expect(result).toMatchObject({
+            isError: true,
+            structuredContent: {
+                data: {
+                    error: {
+                        code: 'internal_error',
+                    },
+                },
+            },
+        });
+        expect(result.content[0]?.text).toContain('persist');
+        expect(state.outcomeGradingSkipped).toBeUndefined();
+    });
+    it('rejects an unknown action', async () => {
+        const { ctx } = makeCtx(dir);
+        const result = await runSynthesizeRubric(ctx, {
+            cwd: dir,
+            action: 'archive',
+        });
+        expect(result).toMatchObject({
+            isError: true,
+            structuredContent: {
+                data: {
+                    error: {
+                        code: 'invalid_input',
+                    },
+                },
+            },
+        });
     });
 });
 //# sourceMappingURL=synthesize-rubric.test.js.map

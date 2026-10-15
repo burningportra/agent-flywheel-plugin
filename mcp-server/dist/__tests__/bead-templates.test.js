@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { expandTemplate, getTemplateById, listTemplates, listBeadTemplates, TEMPLATE_INTEGRITY_WARNINGS, formatTemplatesForPrompt, } from "../bead-templates.js";
+import { expandTemplate, getTemplateById, listTemplates, listBeadTemplates, TEMPLATE_INTEGRITY_WARNINGS, } from "../bead-templates.js";
 // Helper: a minimal valid input for each I8 template so render-correctness
 // tests are readable in one place. Extra per-template placeholders live with
 // the test that needs them.
@@ -20,7 +20,7 @@ describe("bead-templates — module-load integrity", () => {
         expect(unique.size).toBe(tuples.length);
     });
     it("listBeadTemplates is an alias for listTemplates", () => {
-        // Stable ordering is important for snapshot consumers (prompts.ts).
+        // Stable ordering is important for prompt consumers.
         const a = listBeadTemplates().map((t) => `${t.id}@${t.version}`);
         const b = listTemplates().map((t) => `${t.id}@${t.version}`);
         expect(a).toEqual(b);
@@ -41,12 +41,6 @@ describe("bead-templates — module-load integrity", () => {
     it("every template declares >= 1 placeholder", () => {
         for (const t of listTemplates()) {
             expect(t.placeholders.length).toBeGreaterThan(0);
-        }
-    });
-    it("formatTemplatesForPrompt mentions each (id, version) tuple", () => {
-        const rendered = formatTemplatesForPrompt();
-        for (const t of listTemplates()) {
-            expect(rendered).toContain(`${t.id}@${t.version}`);
         }
     });
 });

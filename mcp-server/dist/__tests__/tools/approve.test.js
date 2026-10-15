@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMockExec, makeState } from '../helpers/mocks.js';
@@ -386,11 +386,24 @@ describe('runApprove', () => {
             },
         });
     });
-    it('handles blunder-hunt advancedAction', async () => {
+    it('renders one repeat-until-clean blunder-hunt pass', async () => {
         const { ctx, state } = makeCtx();
         const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'advanced', advancedAction: 'blunder-hunt' });
         expect(state.phase).toBe('refining_beads');
-        expect(result.content[0].text).toContain('Blunder Hunt');
+        expect(result).toEqual({
+            content: [{
+                    type: 'text',
+                    text: `**NEXT: Run the pass below and repeat until a pass finds nothing new (at most 5 passes), then call \`flywheel_approve_beads\` again.**
+
+### Blunder Hunt Pass
+Read all beads via \`br list --json\`. Look for: incomplete descriptions, missing files, circular dependencies, wrong priorities, vague acceptance criteria. Fix anything suspicious.
+
+cd /fake/cwd
+
+Current beads:
+• bead-1: Add tests`,
+                }],
+        });
     });
     it('handles dedup advancedAction', async () => {
         const { ctx, state } = makeCtx();
@@ -457,6 +470,37 @@ describe('runApprove', () => {
         });
         afterEach(() => {
             rmSync(tmpDir, { recursive: true, force: true });
+        });
+        function writePlanFixture(name) {
+            const relativePath = `docs/plans/${name}`;
+            mkdirSync(join(tmpDir, 'docs', 'plans'), { recursive: true });
+            writeFileSync(join(tmpDir, relativePath), readFileSync(join(__dirname, '..', 'fixtures', name), 'utf8'), 'utf8');
+            return relativePath;
+        }
+        it('injects parsed duel provenance into the plan-to-beads prompt', async () => {
+            const planDocument = writePlanFixture('duel-report-valid.md');
+            const { ctx } = makeCtx({ phase: 'awaiting_plan_approval', planDocument, planSource: 'duel' }, [], tmpDir);
+            const result = await runApprove(ctx, { cwd: tmpDir, action: 'start' });
+            const text = result.content[0].text;
+            expect(text).toContain('## Provenance');
+            expect(text).toContain('- **Agent scores:** cc=self, cod=920, gmi=860');
+            expect(text).toContain('- **Contested:** false');
+        });
+        it('omits provenance for a non-duel plan', async () => {
+            const planDocument = writePlanFixture('duel-report-valid.md');
+            const { ctx } = makeCtx({ phase: 'awaiting_plan_approval', planDocument, planSource: 'standard' }, [], tmpDir);
+            const result = await runApprove(ctx, { cwd: tmpDir, action: 'start' });
+            expect(result.content[0].text).not.toContain('## Provenance');
+        });
+        it('uses placeholders instead of throwing when a duel report is malformed', async () => {
+            const planDocument = writePlanFixture('duel-report-malformed.md');
+            const { ctx } = makeCtx({ phase: 'awaiting_plan_approval', planDocument, planSource: 'duel' }, [], tmpDir);
+            const result = await runApprove(ctx, { cwd: tmpDir, action: 'start' });
+            const text = result.content[0].text;
+            expect(result.isError).toBeUndefined();
+            expect(text).toContain('## Provenance');
+            expect(text).toContain('cc=<0-1000 or n/a>');
+            expect(text).toContain(`Read missing provenance values from \`${planDocument}\``);
         });
         it('approves plan and transitions to creating_beads', async () => {
             const planContent = Array(120).fill('plan line').join('\n');
@@ -534,6 +578,11 @@ describe('runApprove', () => {
             expect(state.phase).toBe('planning');
             expect(state.planRefinementRound).toBe(1);
             expect(result.content[0].text).toContain('Git-diff review');
+            expect(result.content[0].text).toContain('Carefully review this entire plan for me');
+            expect(result.content[0].text).toContain('# Plan\nSome content here');
+            expect(result.content[0].text).toContain('OK, now integrate these revisions to the markdown plan in-place');
+            expect(result.content[0].text).toContain('## Original Plan\n<original plan from plan.md>');
+            expect(result.content[0].text).toContain('## Proposed Revisions\n<reviewer proposed revisions>');
             expect(result.structuredContent).toEqual({
                 tool: 'flywheel_approve_beads',
                 version: 1,

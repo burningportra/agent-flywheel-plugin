@@ -126,7 +126,8 @@ These commands cannot be undone; bare invocation is gated.
 For MCP tools that mutate state, every one accepts a discriminator that
 forces an explicit decision: flywheel_remediate(mode='dry_run'|'execute'),
 flywheel_review(mode='interactive'|'autofix'|'report-only'|'headless'),
-flywheel_synthesize_rubric(action='synthesize'|'validate'|'edit'|'regenerate').
+flywheel_synthesize_rubric(action='synthesize'|'validate'|'edit'|'regenerate'|'skip').
+The 'skip' action persists the current cycle's outcome-grading skip before returning.
 Default to dry_run / interactive / validate; only escalate after reading
 the proposed change.
 `.trim(),

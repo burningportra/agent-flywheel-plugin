@@ -11,11 +11,11 @@ const log = createLogger('review');
 // ─── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────────────
 //
 // Mode routing is skill-level — we do NOT introduce new MCP tools. The
-// reviewer personas are reused verbatim; `mode` only changes the agent
-// prompt preamble and the post-synthesis action (apply-diffs-and-commit
-// vs write-docs vs emit-exit-code vs ask-per-finding).
+// Reviewer lenses stay stable; `mode` changes the shared brief and the
+// post-synthesis action (apply-diffs-and-commit vs write-docs vs
+// emit-exit-code vs ask-per-finding).
 export const AUTOFIX_GATE_HINT = 'Autofix refuses when the tree is dirty or the doctor is not green. Stash/commit local changes, run `flywheel_doctor`, then retry — or fall back to mode="interactive".';
-export const HEADLESS_EXIT_HINT = 'Headless mode returns error code "review_headless_findings" with details.findingCount when reviewers surface non-zero issues. CI wrappers should branch on structuredContent?.data?.error?.code and use details.exitCode (1 = findings, 2 = reviewer crash).';
+export const HEADLESS_EXIT_HINT = 'Complete headless mode with action="report", findingCount, and crashed. CI wrappers should treat a clean result as exit 0, or branch on error code "review_headless_findings" and use details.exitCode (1 = findings, 2 = reviewer crash).';
 function modePreamble(mode, beadId) {
     switch (mode) {
         case 'autofix':
@@ -23,7 +23,7 @@ function modePreamble(mode, beadId) {
         case 'report-only':
             return `**Review mode: report-only.** Do NOT edit code. Write your full findings to \`docs/reviews/${beadId}-<perspective>-<YYYY-MM-DD>.md\` and exit. The coordinator aggregates reports — no interactive prompts.\n\n`;
         case 'headless':
-            return `**Review mode: headless (CI).** Do NOT edit code and do NOT write markdown reports. Emit a compact machine-readable JSON summary on stdout: \`{ "beadId": "${beadId}", "perspective": "<your-perspective>", "findings": [{ "severity": "error|warn|info", "file": "...", "line": 0, "message": "..." }] }\`. The coordinator aggregates exit codes (0 = clean, 1 = findings, 2 = reviewer crash).\n\n`;
+            return `**Review mode: headless (CI).** Do NOT edit code and do NOT write markdown reports. Emit a compact machine-readable JSON summary on stdout: \`{ "beadId": "${beadId}", "perspective": "<your-perspective>", "findings": [{ "severity": "error|warn|info", "file": "...", "line": 0, "message": "..." }] }\`. The coordinator aggregates the findings and submits the CI exit signal.\n\n`;
         case 'interactive':
         default:
             return '';
@@ -69,6 +69,32 @@ function errorResult(phase, code, message, details, hint) {
         ...(details ? { details } : {}),
     });
 }
+function handleHeadlessReport(ctx, args) {
+    const { state } = ctx;
+    if (args.mode !== 'headless') {
+        return errorResult(state.phase, 'invalid_input', 'action="report" is only valid with mode="headless".', { action: args.action, mode: args.mode ?? 'interactive' }, 'Pass mode="headless", findingCount, and crashed when submitting the aggregated CI review result.');
+    }
+    const findingCount = args.findingCount;
+    if (typeof findingCount !== 'number' || !Number.isInteger(findingCount) || findingCount < 0) {
+        return errorResult(state.phase, 'invalid_input', 'Headless review findingCount must be a non-negative integer.', { findingCount }, 'Count the findings emitted by every headless reviewer, then pass their non-negative integer total.');
+    }
+    const crashed = args.crashed ?? false;
+    const exitCode = crashed ? 2 : findingCount > 0 ? 1 : 0;
+    const report = {
+        kind: 'review_headless_report',
+        beadId: args.beadId,
+        mode: 'headless',
+        findingCount,
+        crashed,
+        exitCode,
+    };
+    if (exitCode === 0) {
+        return okResult(state.phase, `Headless review is clean for bead ${args.beadId}. CI exit code: 0.`, report);
+    }
+    return errorResult(state.phase, 'review_headless_findings', crashed
+        ? `A headless reviewer crashed for bead ${args.beadId}.`
+        : `Headless review found ${findingCount} issue${findingCount === 1 ? '' : 's'} for bead ${args.beadId}.`, report, HEADLESS_EXIT_HINT);
+}
 function parseBrShowBead(raw) {
     try {
         const parsed = JSON.parse(raw);
@@ -102,6 +128,7 @@ function looksLikeBead(value) {
  * action="hit-me"    — Return parallel review agent task specs for CC to spawn
  * action="looks-good"— Mark bead done, advance to next or enter gates
  * action="skip"      — Skip this bead (mark deferred), move to next
+ * action="report"    — Complete headless review with an aggregated CI signal
  */
 export async function runReview(ctx, args) {
     const { exec, cwd, state, saveState, signal } = ctx;
@@ -115,6 +142,9 @@ export async function runReview(ctx, args) {
         return errorResult('reviewing', 'invalid_input', 'Error: beadId is required.', undefined, 'Pass beadId from `br list`, or use `__gates__` / `__regress_to_plan__` / `__regress_to_beads__` / `__regress_to_implement__` sentinels.');
     }
     const beadId = args.beadId;
+    if (args.action === 'report') {
+        return handleHeadlessReport(ctx, args);
+    }
     // ── Resolve review mode + autofix gating (bead agent-flywheel-plugin-f0j) ─
     // `mode` is advisory on `looks-good`/`skip` (those paths don't spawn
     // reviewers) but drives the hit-me dispatch. Autofix is gated behind a
@@ -270,94 +300,57 @@ export async function runReview(ctx, args) {
         const prevSummary = prevResults.length > 0
             ? prevResults.slice(-3).map(r => `- ${r.beadId}: ${r.status}`).join('\n')
             : '(none yet)';
+        const reviewerBrief = `${modeNote}${postCloseNote}Review bead ${beadId}: ${bead.title}
+
+Description:
+${bead.description.slice(0, 500)}
+
+Files: ${fileList}
+Goal: ${goal}
+Prior results:
+${prevSummary}
+cwd: ${cwd}
+
+Use the assigned lens. Follow the selected review mode. Report concrete findings and any changes.`;
         const agentTasks = [
             {
                 name: `FreshEyes-${beadId}-r${round}`,
                 perspective: 'fresh-eyes',
-                task: `${modeNote}${postCloseNote}Fresh-eyes code reviewer. You have NEVER seen this code before.
-
-**Bead:** ${beadId} — ${bead.title}
-**Files to review:** ${fileList}
-**Description:** ${bead.description.slice(0, 500)}
-**cwd:** ${cwd}
-
-Find blunders, bugs, errors, oversights. Be harsh but constructive. Fix issues directly using code tools.
-
-Report what you found and what you fixed.`,
+                task: 'Fresh eyes: inspect the changed code for concrete bugs, oversights, and missing tests; fix real issues and report findings and fixes.',
             },
             {
                 name: `Adversary-${beadId}-r${round}`,
                 perspective: 'adversarial',
-                task: `${modeNote}${postCloseNote}Adversarial code reviewer. Your job is to break this implementation.
-
-**Bead:** ${beadId} — ${bead.title}
-**Files to review:** ${fileList}
-**cwd:** ${cwd}
-
-**Mandatory first step**: invoke \`/ubs-workflow\` on the changed files to run the Ultimate Bug Scanner comprehensive review. Its findings are your baseline before manual attack.
-
-Then go further: trigger edge cases, find security holes, construct inputs that cause failures.
-Fix any real vulnerabilities or bugs directly.
-
-If your review surfaces a crash, hang, or memory issue in compiled code, invoke \`/gdb-for-debugging\` to reproduce it under a debugger and capture a stack trace in the report.
-
-Report your attack attempts and findings.`,
+                task: 'Adversarial: run /ubs-workflow, attack edge cases and security, and fix real bugs; for compiled-code crashes, hangs, or memory issues, reproduce with /gdb-for-debugging and include a stack trace.',
             },
             {
                 name: `Ergonomics-${beadId}-r${round}`,
                 perspective: 'ergonomics',
-                task: `${modeNote}${postCloseNote}Ergonomics reviewer. Focus on usability and developer experience.
-
-**Bead:** ${beadId} — ${bead.title}
-**Files to review:** ${fileList}
-**cwd:** ${cwd}
-
-If you came in fresh with zero context, would you understand this code?
-Check: naming, comments, API design, error messages, type annotations.
-Fix anything confusing or unclear directly.
-
-Report improvements made.`,
+                task: 'Ergonomics: check naming, comments, APIs, errors, and types for a zero-context maintainer; fix confusing code and report changes.',
             },
             {
                 name: `RealityCheck-${beadId}-r${round}`,
                 perspective: 'reality-check',
-                task: `${modeNote}${postCloseNote}Reality checker. Verify the implementation actually achieves the goal.
-
-**Goal:** ${goal}
-**Bead:** ${beadId} — ${bead.title}
-**Prior results:** ${prevSummary}
-**Files:** ${fileList}
-**cwd:** ${cwd}
-
-Check: Does this actually solve the bead's stated goal? Are there gaps between intent and implementation?
-Do NOT edit code — just report your findings.`,
+                task: 'Reality check: verify the implementation achieves the bead and overall goal; do not edit code, only report gaps.',
             },
             {
                 name: `Explorer-${beadId}-r${round}`,
                 perspective: 'exploration',
-                task: `${modeNote}${postCloseNote}Code explorer. Randomly explore the codebase to find related issues.
-
-**Bead:** ${beadId} — ${bead.title}
-**cwd:** ${cwd}
-
-Pick 3 random files related to the bead's area and read them. Look for:
-- Inconsistencies with the new implementation
-- Patterns broken by the changes
-- Tests that should exist but don't
-
-Report what you found. Fix obvious issues directly.`,
+                task: 'Exploration: inspect three related files for broken patterns, inconsistencies, and missing tests; fix obvious real issues and report them.',
             },
         ];
-        const baseInstructions = `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`flywheel_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
+        const composeInstructions = 'For each agent, use reviewerBrief + "\\n\\n" + agentTasks[].task as its complete prompt. Spawn all 5 review agents in parallel.';
+        const baseInstructions = `After all reviewers finish, synthesize their findings and apply fixes. Then call \`flywheel_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
         const modeInstructions = {
             autofix: `Review mode=autofix: each reviewer applies and commits its fixes directly. After all 5 finish, verify the tree is green and call \`flywheel_review\` with action="looks-good" — do NOT AskUserQuestion per finding.`,
             'report-only': `Review mode=report-only: reviewers write findings to docs/reviews/<perspective>-<date>.md and DO NOT edit code. After synthesizing, call \`flywheel_review\` with action="looks-good" to close the bead or action="hit-me" again if reports surfaced blockers.`,
-            headless: `Review mode=headless (CI): reviewers emit JSON-on-stdout only. The coordinator MUST aggregate finding counts and treat a non-zero count as review_headless_findings (CI exit code 1). Do NOT AskUserQuestion — this mode is for non-interactive shells.`,
+            headless: `Review mode=headless (CI): reviewers emit JSON-on-stdout only. The coordinator aggregates finding counts, then calls \`flywheel_review\` with action="report", mode="headless", beadId, findingCount, and crashed. Branch on exit code 0 for clean, 1 for findings, or 2 for a reviewer crash. Do NOT AskUserQuestion — this mode is for non-interactive shells.`,
             interactive: baseInstructions,
         };
+        const modeInstruction = modeInstructions[effectiveMode];
         const instructions = postClose
-            ? `Bead ${beadId} is already closed; this is a post-close audit. ${modeInstructions[effectiveMode]} For looks-good, the bead stays closed (idempotent).`
-            : modeInstructions[effectiveMode];
+            ? `${composeInstructions} Bead ${beadId} is already closed; this is a post-close audit. ${modeInstruction} For looks-good, the bead stays closed (idempotent).`
+            : `${composeInstructions} ${modeInstruction}`;
         const payload = {
             kind: 'review_tasks',
             strategy: 'hit_me',
@@ -368,24 +361,14 @@ Report what you found. Fix obvious issues directly.`,
             requestedMode,
             parallelSafe,
             ...(modeGateWarning ? { modeGateWarning } : {}),
+            reviewerBrief,
             agentTasks,
             files,
             instructions,
         };
-        return okResult(state.phase, JSON.stringify({
-            action: 'spawn-agents',
-            beadId,
-            round,
-            postClose,
-            mode: effectiveMode,
-            requestedMode,
-            parallelSafe,
-            ...(modeGateWarning ? { modeGateWarning } : {}),
-            agentTasks,
-            instructions,
-        }, null, 2), payload);
+        return okResult(state.phase, `Prepared 5 review tasks for ${beadId} (${effectiveMode}). Use structuredContent.data.reviewerBrief with each agentTasks[].task, then follow structuredContent.data.instructions.`, payload);
     }
-    return errorResult(state.phase, 'unsupported_action', `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip, batch_review`, { beadId, action: args.action }, 'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer), "batch_review" (T4 fresh-eyes auto-trigger over a sha range).');
+    return errorResult(state.phase, 'unsupported_action', `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip, batch_review, report`, { beadId, action: args.action }, 'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer), "batch_review" (T4 fresh-eyes auto-trigger over a sha range), or "report" (headless completion).');
 }
 // ── action="batch_review" handler (T4) ─────────────────────────
 //
@@ -660,17 +643,7 @@ All beads complete! Entering review gates.
         state.retryCount = 0;
         state.phase = 'implementing';
         saveState(state);
-        return okResult('implementing', `**${status}: Bead ${completedBeadId}.** Moving to bead ${nextBead.id}.
-
-**NEXT: Implement bead ${nextBead.id} (${nextBead.title}), then call \`flywheel_review\` when done.**
-
----
-
-## Bead ${nextBead.id}: ${nextBead.title}
-
-${nextBead.description}
-
-After implementing, commit and call \`flywheel_review\` with beadId="${nextBead.id}".`, {
+        return okResult('implementing', `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready. Read structuredContent.data.beads[0], implement and commit it, then call \`flywheel_review\` with beadId="${nextBead.id}".`, {
             kind: 'review_tasks',
             strategy: 'single_bead',
             completedBeadId,
@@ -691,16 +664,11 @@ After implementing, commit and call \`flywheel_review\` with beadId="${nextBead.
     }));
     return okResult('implementing', `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.
 
-**NEXT: Spawn ${ready.length} parallel agents, then call \`flywheel_review\` for each when done.**
-
-\`\`\`json
-${JSON.stringify({ agents: agentConfigs }, null, 2)}
-\`\`\``, {
+**NEXT: Spawn ${ready.length} parallel agents from structuredContent.data.agentConfigs, then call \`flywheel_review\` for each when done.**`, {
         kind: 'review_tasks',
         strategy: 'parallel_beads',
         completedBeadId,
         nextBeadIds: ready.map(bead => bead.id),
-        beads: ready,
         agentConfigs,
     });
 }

@@ -31,6 +31,19 @@ describe('buildBeadCreationPrompt', () => {
         expect(prompt).toContain('docs/plans/demo.md');
         expect(prompt).toContain('Plan step 1');
     });
+    it('uses an outer fence longer than every backtick run in the plan preview', () => {
+        const preview = '# Plan\n\n````ts\nconst value = 1;\n````';
+        const prompt = buildBeadCreationPrompt({
+            goal: 'test',
+            planPath: 'docs/plans/demo.md',
+            planPreview: preview,
+        });
+        expect(prompt).toContain([
+            '`````markdown',
+            preview,
+            '`````',
+        ].join('\n'));
+    });
     it('includes a Provenance section when provided (B3 hook)', () => {
         const prompt = buildBeadCreationPrompt({
             goal: 'test',

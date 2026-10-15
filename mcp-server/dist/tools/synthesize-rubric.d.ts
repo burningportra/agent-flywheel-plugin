@@ -1,13 +1,14 @@
 /**
  * `flywheel_synthesize_rubric` MCP tool wrapper (T7 / claude-orchestrator-3g9).
  *
- * Calls `synthesizeRubric()` from `outcome-grading.ts` and packages the
- * result into the `version: 1` MCP envelope. Discriminator `kind`:
+ * Routes rubric actions through `synthesizeRubric()` and handles the
+ * cycle-level skip state locally. Discriminator `kind`:
  *
  *   - `rubric_synthesized` — fresh synth (auto, regenerate, or initial run)
  *   - `rubric_preserved`   — existing edited/user rubric was kept (cache hit)
  *   - `rubric_edited`      — operator edit applied via `action: 'edit'`
  *   - `rubric_validated`   — `action: 'validate'` returned the current rubric
+ *   - `rubric_skipped`     — operator disabled outcome grading for this cycle
  *
  * Errors flow through `makeFlywheelErrorResult` so the SKILL.md
  * orchestrator branches on `data.error.code` (FlywheelErrorCode).
@@ -23,6 +24,7 @@ export declare const SynthesizeRubricInputSchema: z.ZodObject<{
         synthesize: "synthesize";
         edit: "edit";
         regenerate: "regenerate";
+        skip: "skip";
     }>>>;
     editIntent: z.ZodOptional<z.ZodObject<{
         kind: z.ZodEnum<{
@@ -34,6 +36,7 @@ export declare const SynthesizeRubricInputSchema: z.ZodObject<{
         text: z.ZodString;
     }, z.core.$strip>>;
     force: z.ZodOptional<z.ZodBoolean>;
+    reason: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export type SynthesizeRubricInput = z.infer<typeof SynthesizeRubricInputSchema>;
 export declare function runSynthesizeRubric(ctx: ToolContext, rawArgs: unknown): Promise<McpToolResult>;

@@ -9,7 +9,6 @@ export declare function listBeadTemplates(): BeadTemplate[];
  * When `version` is omitted, returns the highest-versioned entry for `id`.
  */
 export declare function getTemplateById(templateId: string, version?: number): BeadTemplate | undefined;
-export declare function formatTemplatesForPrompt(): string;
 /**
  * Expand a bead template into its rendered markdown body.
  *

@@ -32,6 +32,27 @@ export interface DetectedModels {
     /** Optional 4th planning perspective using Google/Gemini model; null if unavailable */
     freshPerspectiveModel: string | null;
 }
+/** Models used by the swarm launcher. */
+export declare const SWARM_MODELS: {
+    readonly opus: "anthropic/claude-opus-4-7";
+    readonly codex: "codex";
+    readonly haiku: "anthropic/claude-haiku-4-5";
+};
+/** Models used by cost-aware model routing tiers. */
+export declare const MODEL_ROUTING_TIERS: {
+    readonly simple: {
+        readonly implementation: "anthropic/claude-haiku-4-5";
+        readonly review: "anthropic/claude-sonnet-4-6";
+    };
+    readonly medium: {
+        readonly implementation: "anthropic/claude-opus-4-7";
+        readonly review: "anthropic/claude-sonnet-4-6";
+    };
+    readonly complex: {
+        readonly implementation: "anthropic/claude-opus-4-7";
+        readonly review: "anthropic/claude-opus-4-7";
+    };
+};
 /**
  * Detect available model providers from a list of model IDs.
  * In MCP context, the caller can pass available model IDs from the runtime.

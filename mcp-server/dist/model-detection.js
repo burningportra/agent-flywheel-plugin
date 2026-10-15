@@ -5,6 +5,27 @@
  * extension context provides. Instead, we use hardcoded fallback model lists
  * and rely on the caller to pass detected models if available.
  */
+/** Models used by the swarm launcher. */
+export const SWARM_MODELS = {
+    opus: "anthropic/claude-opus-4-7",
+    codex: "codex",
+    haiku: "anthropic/claude-haiku-4-5",
+};
+/** Models used by cost-aware model routing tiers. */
+export const MODEL_ROUTING_TIERS = {
+    simple: {
+        implementation: "anthropic/claude-haiku-4-5",
+        review: "anthropic/claude-sonnet-4-6",
+    },
+    medium: {
+        implementation: "anthropic/claude-opus-4-7",
+        review: "anthropic/claude-sonnet-4-6",
+    },
+    complex: {
+        implementation: "anthropic/claude-opus-4-7",
+        review: "anthropic/claude-opus-4-7",
+    },
+};
 /**
  * Model preferences by provider, ordered by capability.
  * These are the "best" models from each provider for planning tasks.

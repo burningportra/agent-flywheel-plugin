@@ -633,11 +633,15 @@ export type ReviewMode = "autofix" | "report-only" | "headless" | "interactive";
 export interface ReviewArgs {
     cwd: string;
     beadId: string;
-    action: "hit-me" | "looks-good" | "skip" | "batch_review";
+    action: "hit-me" | "looks-good" | "skip" | "batch_review" | "report";
     /** Review-mode matrix (default "interactive"). */
     mode?: ReviewMode;
     /** Hint that reviewers can run in parallel without stepping on each other. */
     parallelSafe?: boolean;
+    /** Aggregated finding count for action="report" in headless mode. */
+    findingCount?: number;
+    /** True when at least one headless reviewer crashed before producing findings. */
+    crashed?: boolean;
     /** Sha range `<from-sha>..<to-sha>` for action="batch_review" (T4 — fresh-eyes
      *  auto-trigger). Required when action="batch_review"; ignored otherwise. */
     shaRange?: string;

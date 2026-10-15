@@ -26,7 +26,7 @@ export declare function formatRepoProfile(profile: import('../types.js').RepoPro
 /**
  * Build the bead creation prompt given a goal and repo context.
  */
-export declare function beadCreationPrompt(goal: string, repoContext: string, constraints: string[]): string;
+export declare function beadCreationPrompt(goal: string, repoContext: string, constraints: string[], provenance?: string): string;
 export interface BeadQualityScore {
     /** 0-1 composite score. */
     score: number;
