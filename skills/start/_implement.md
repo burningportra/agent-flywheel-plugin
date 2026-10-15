@@ -137,7 +137,7 @@ For wave one, `flywheel_approve_beads(action="start")` returns the complete assi
 
 **Rate-limit management** — if any impl agent reports a rate-limit error (429, "usage limit reached", etc.), invoke `/caam` to switch that model's account. `caam activate <model> <backup-account>` takes <100ms and keeps the wave moving. Don't kill and restart the agent; the wrapper just re-authenticates the current session.
 
-**Structured error branching for monitoring/tool failures.** When a flywheel tool or monitor wrapper returns a structured error, branch on `result.structuredContent?.data?.error?.code` (typed `FlywheelErrorCode`) instead of parsing `error.message` strings:
+**Monitoring error codes.** Follow SKILL.md Universal Rule 4. Phase-specific recovery:
 
 ```ts
 const code = monitorResult.structuredContent?.data?.error?.code;
