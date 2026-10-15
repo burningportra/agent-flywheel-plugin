@@ -412,7 +412,7 @@ describe('structured contract and state coherence', () => {
         kind: 'error',
         error: {
           code: 'unsupported_action',
-          message: 'Unknown action: ship-it. Valid: hit-me, looks-good, skip, batch_review',
+          message: 'Unknown action: ship-it. Valid: hit-me, looks-good, skip, batch_review, report',
           details: {
             beadId: bead.id,
             action: 'ship-it',
