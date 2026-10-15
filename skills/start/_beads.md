@@ -36,21 +36,7 @@ Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create t
    - **Contested:** <true|false> — true means the agents disagreed >300 pts on cross-score; the user explicitly accepted the contested winner.
    ```
 
-   Pull the values from `idea.provenance` (for discovery-sourced beads) or from the parsed `DUELING_WIZARDS_REPORT.md` synthesis section (for plan-sourced beads). When the duel report is at `docs/plans/<date>-<slug>-duel.md` or `docs/duels/<phase>-<slug>-<date>.md`, scan the "Consensus winners" / "Contested decisions" / "Steelman" sections for the right values; never invent scores. Heredoc form (escape backticks where needed):
-
-   ```bash
-   br create --title "<title>" --type task --priority 2 --description "$(cat <<'EOF'
-   <body>
-
-   ## Provenance
-   - Source: dueling-wizards (mode=architecture, run=2026-04-28T14:22Z)
-   - Agent scores: cc=920, cod=860, gmi=n/a
-   - Strongest surviving critique: "<one-line>"
-   - Steelman summary: "<one-line, or omit the line>"
-   - Contested: false
-   EOF
-   )"
-   ```
+   Pull the values from `idea.provenance` (discovery) or the parsed `DUELING_WIZARDS_REPORT.md` synthesis (plan). Read the matching Consensus winners, Contested decisions, and Steelman entries; never invent scores.
 
 2. **Auto-generate test beads:** If a bead's acceptance criteria include testing requirements (unit tests, e2e tests, integration tests), create a companion test bead that depends on the implementation bead:
    ```
@@ -58,55 +44,13 @@ Beads are **NOT** auto-created by `flywheel_plan`. The coordinator must create t
    br dep add <test-bead-id> <impl-bead-id>
    ```
 
-3. After all beads are created, add dependency edges:
-   ```
-   br dep add <downstream-bead-id> <upstream-bead-id>
-   ```
-   > **Syntax note:** Arguments are positional — `<downstream>` depends on `<upstream>`. The `--depends-on` flag does NOT exist. If the command fails, verify you are passing two positional IDs with no flags.
+3. After all beads are created, add dependency edges with the positional form in the command table: downstream first, upstream second.
 
 4. Verify with `br list` — confirm all beads and dependencies look correct.
 
 > **WARNING:** Use `br list` for all read-only bead inspection. Never call `flywheel_approve_beads` just to preview beads — it is NOT read-only and advances internal state counters regardless of the action used.
 
-5. **Beads created — run coverage + dedup checks before Step 6.**
-
-6. **Plan-Bead coverage check (MANDATORY).** Parse `##`/`###` section headers from `state.planDocument`. For each section, search the bead list for any bead whose title or description references that section's topic. Build a coverage report: `<section> -> <bead-ids or NONE>`.
-
-   Present:
-   ```
-   AskUserQuestion(questions: [{
-     question: "Plan-Bead coverage: <X>/<Y> sections covered. <missing section list if any>. What next?",
-     header: "Coverage",
-     options: [
-       { label: "All covered", description: "Every plan section has at least one bead — proceed to dedup" },
-       { label: "Create catch-up beads", description: "Generate beads for the missing section(s) before proceeding (Recommended)" },
-       { label: "Sections out of scope", description: "Mark missing sections as deferred in plan; proceed" }
-     ],
-     multiSelect: false
-   }])
-   ```
-   - "Create catch-up beads" -> run `br create` per missing section with a stub description the user refines, then re-run this check.
-   - "Sections out of scope" -> append a `## Deferred` block to the plan listing the dropped sections, then proceed.
-
-7. **Deduplication sweep (MANDATORY).** Scan bead titles + descriptions for overlap: two beads touching the same files with similar intent, or near-duplicate titles. Build a `<duplicate-pair -> suggested-merge>` report.
-
-   Present:
-   ```
-   AskUserQuestion(questions: [{
-     question: "Dedup scan: <N> overlap pair(s) found: <list>. How to resolve?",
-     header: "Dedup",
-     options: [
-       { label: "Merge all", description: "Combine each pair into the canonical richer bead; carry over dependencies" },
-       { label: "Review per-pair", description: "Go through each pair; list which to merge / keep in Other" },
-       { label: "None found", description: "No real overlaps — proceed to Step 6 (Recommended when scan is empty)" },
-       { label: "Keep separate", description: "Pairs are distinct; add a one-line rationale to each bead's description explaining the distinction" }
-     ],
-     multiSelect: false
-   }])
-   ```
-   On merge, use `br update` to extend the canonical bead's description + `br dep add` to carry over edges, then `br close <duplicate-id> --reason "merged into <canonical>"`.
-
-8. **Proceed to Step 6** once coverage is acknowledged and dedup is resolved.
+5. Proceed to Step 6. Do not parse the plan or rescan bead text here: the approval response returns the canonical coverage and duplicate audit in `structuredContent.data.creationAudit`.
 
 ## Step 6: Review and approve beads
 
@@ -132,20 +76,7 @@ AskUserQuestion(questions: [{
 - "Polish" -> call `flywheel_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
 - "Reject" -> call `flywheel_approve_beads` with `action: "reject"`, return to Step 3
 
-If the user asks "what's the quality score?" before choosing to start, call `flywheel_approve_beads` with `action: "start"` immediately — this is the only way to surface the score. Present it, then route the next step through `AskUserQuestion` (per Universal Rule 1):
-
-```
-AskUserQuestion(questions: [{
-  question: "Quality score surfaced. Proceed to implementation?",
-  header: "Score review",
-  options: [
-    { label: "Start implementation", description: "Proceed to Step 7 and dispatch the first wave" },
-    { label: "Polish beads first",   description: "Call flywheel_approve_beads action=\"polish\" to tighten the bead set" },
-    { label: "Reject and replan",    description: "Call flywheel_approve_beads action=\"reject\" and return to Step 3" }
-  ],
-  multiSelect: false
-}])
-```
+If the user asks for the quality score before choosing, call `flywheel_approve_beads(action="start")`; it is the only response that includes the launch score. Still require the launch-confirmation gate below before dispatching Step 7.
 
 **Structured error branching (mandatory).** For `flywheel_approve_beads` failures, branch on `result.structuredContent?.data?.error?.code` (typed as `FlywheelErrorCode`) and never parse `error.message` text:
 
@@ -155,6 +86,13 @@ if (code === "missing_prerequisite") await bootstrapGoalThenRetry();
 if (code === "unsupported_action") return returnToStep6Menu();
 if (code === "already_closed") return continueToNextBeadOrGate();
 ```
+
+When a successful bead-approval response includes `structuredContent.data.creationAudit`, resolve it before following `nextStep`:
+
+1. **Coverage.** Report `planCoverage.coveredSections / planCoverage.totalSections`, plus the headings in `uncoveredSections` and `weakMappings`. If either list is non-empty, use `AskUserQuestion` with **Create catch-up beads (Recommended)**, **Sections out of scope**, and **Proceed as-is**. Create one catch-up bead per missing section, or append the deferred headings to the plan, then call `flywheel_approve_beads(action="polish")` to refresh the audit. If `planCoverage` is `null`, say that the plan document was unavailable; never invent coverage.
+2. **Duplicates.** Report each `duplicateCandidates` pair with its `reasons`, `sharedFiles`, and suggested `canonicalBeadId`. If any exist, use `AskUserQuestion` with **Merge all**, **Review per-pair**, and **Keep separate**. A merge extends the canonical description with `br update`, carries dependencies with `br dep add`, and closes the duplicate with `br close <duplicate-id> --reason "merged into <canonical>"`; then refresh via `action="polish"`. If the array is empty, proceed without a dedup question.
+
+Do not recompute either audit from plan headings, titles, descriptions, or file lists. The server owns those heuristics.
 
 After calling `flywheel_approve_beads` with `action: "start"`, display **both** the convergence/quality score and a summary table:
 
@@ -170,7 +108,7 @@ After calling `flywheel_approve_beads` with `action: "start"`, display **both** 
 
 Populate **Wave** from the bead's dependency wave assignment, **Effort** from the plan's effort estimate, and **Risk Flags** from any warnings or risk notes in the plan output. This gives the user visibility into what is about to be implemented and in what order.
 
-**Hotspot matrix (I5).** `flywheel_approve_beads(action: "start")` attaches a `hotspotMatrix` field to `structuredContent.data` — the deterministic shared-write analysis from `plan-simulation.ts`. When `matrix.recommendation === "coordinator-serial"` or `matrix.maxContention >= 2`, the tool also emits a `present_choices` nextStep with the 4-option menu described below. Surface the matrix to the user before showing the launch menu:
+**Hotspot matrix (I5).** `flywheel_approve_beads(action: "start")` attaches the deterministic shared-write analysis at `structuredContent.data.matrix`. Render only `med` and `high` rows, then show its recommendation and confidence. Skip the block when no such rows exist.
 
 ```
 Shared-write hotspot analysis:
@@ -180,70 +118,11 @@ Shared-write hotspot analysis:
 Recommendation: <matrix.recommendation>  (confidence: <matrix.confidence>)
 ```
 
-Only render rows with `severity` of `med` or `high` (the `low` rows are noise). If the matrix is empty or no row is med/high, skip this block entirely — proceed straight to the regular launch menu.
+**Server-owned choices.** When `structuredContent.nextStep.type === "present_choices"`, pass its `message` and `options` to `AskUserQuestion` verbatim, preserving every option `id`, `label`, `tool`, and `args`. Invoke the selected option's `tool` with its `args`; do not reconstruct the hotspot or refinement menu in prose. A hotspot `present_choices` response is the launch-confirmation gate, so do not add another launch menu.
 
-**When the hotspot matrix recommends `coordinator-serial` or contention is med/high, use the 4-option launch menu** instead of the regular 3-option launch menu below. The `present_choices` nextStep from `approve.ts` already carries the exact option IDs — render them as:
+When the response has no `present_choices`, branch on `data.quality.score` for the second mandatory gate:
 
-```
-AskUserQuestion(questions: [{
-  question: "Shared-file contention detected across ready beads. How do you want to launch?",
-  header: "Launch mode",
-  options: [
-    { label: "Coordinator-serial", description: "One bead at a time through the coordinator — contention-safe (Recommended)" },
-    { label: "Swarm anyway", description: "Parallel agents — accept contention risk" },
-    { label: "Polish beads", description: "Return to Step 6 to refine beads and remove overlap" },
-    { label: "Reject", description: "Discard these beads and return to Step 3" }
-  ],
-  multiSelect: false
-}])
-```
-
-Route the choice:
-- **"Coordinator-serial"** → set `state.launchMode = "coordinator-serial"` (approve.ts records this on the structuredContent data), then proceed to Step 7. Step 7 must spawn ONE agent that iterates through every ready bead sequentially — not N parallel agents. If the user also acted on a `flywheel_approve_beads` choice, the tool's nextStep records `approve-beads-coordinator-serial` as the selected option; use that as the source of truth.
-- **"Swarm anyway"** → proceed to Step 7 as normal (N parallel agents). Note in your end-of-turn summary that the user accepted contention risk.
-- **"Polish beads"** → call `flywheel_approve_beads` with `action: "polish"` and re-enter Step 6.
-- **"Reject"** → call `flywheel_approve_beads` with `action: "reject"` and return to Step 3.
-
-**Branch on the quality score** — if `score < 0.75`, use the low-quality menu instead of the regular launch menu (do NOT launch silently).
-
-**Low quality (`score < 0.75`):**
-
-```
-AskUserQuestion(questions: [{
-  question: "Quality score: <X.XX>/1.00 — below the 0.75 threshold. <weak-bead-summary>. How should I proceed?",
-  header: "Low quality",
-  options: [
-    { label: "Polish beads", description: "Run another bead refinement round (Recommended)" },
-    { label: "Back to plan", description: "Return to Step 5.6 to refine the plan itself" },
-    { label: "Launch anyway", description: "Proceed despite low score — accept the risk (note in end-of-turn summary)" },
-    { label: "Reject", description: "Discard these beads and start over with a different goal" }
-  ],
-  multiSelect: false
-}])
-```
+- **Low quality (`score < 0.75`).** Ask with header **Low quality** and options **Polish beads (Recommended)**, **Back to plan**, **Launch anyway**, and **Reject**. Polish calls `action="polish"`; Back to plan returns to Step 5.6; Launch proceeds to Step 7 and records the accepted risk; Reject calls `action="reject"` and returns to Step 3.
+- **Acceptable quality (`score >= 0.75`).** Ask with header **Launch** and options **Launch (Recommended)**, **Polish more**, and **Back to plan**. Launch proceeds to Step 7 and reads `_implement.md`; Polish calls `action="polish"`; Back to plan returns to Step 5.6.
 
 > **Cosmetic-lint exception**: if ≥ 50% of the weak-bead reasons are lint cosmetic flags (e.g., "title not a verb phrase" on wave-prefix beads like `R1:`, `T13:`, `D12:`), surface them to the user as "cosmetic only" in `<weak-bead-summary>` and pre-recommend "Launch anyway". Title-format lint on wave-prefix beads is a known false-positive — do not force a polish round over it. Reserve polish rounds for substantive weakness (vague acceptance criteria, missing WHY, oversized scope).
-
-- "Polish beads" -> call `flywheel_approve_beads` with `action: "polish"`, return to Step 6.
-- "Back to plan" -> return to Step 5.6 plan-ready gate menu.
-- "Launch anyway" -> proceed to Step 7 (note the user accepted the risk in your end-of-turn summary).
-- "Reject" -> call `flywheel_approve_beads` with `action: "reject"`, return to Step 3.
-
-**Acceptable quality (`score >= 0.75`):**
-
-```
-AskUserQuestion(questions: [{
-  question: "Quality score: <X.XX>/1.00. Ready to launch implementation?",
-  header: "Launch",
-  options: [
-    { label: "Launch", description: "Start implementing <N> beads with agents (Recommended)" },
-    { label: "Polish more", description: "Run another refinement round on the beads" },
-    { label: "Back to plan", description: "Return to plan refinement before implementing" }
-  ],
-  multiSelect: false
-}])
-```
-
-- **"Launch"** -> proceed to Step 7 (read `_implement.md`)
-- **"Polish more"** -> call `flywheel_approve_beads` with `action: "polish"`, then return to Step 6
-- **"Back to plan"** -> return to the Step 5.6 plan-ready gate menu

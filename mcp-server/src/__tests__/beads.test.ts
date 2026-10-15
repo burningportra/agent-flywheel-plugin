@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isValidBeadId,
   findNonStandardIds,
+  auditBeadCreation,
   auditPlanToBeads,
   extractArtifacts,
   getBeadsSummary,
@@ -133,6 +134,99 @@ describe('auditPlanToBeads', () => {
     if (perfSection && perfSection.matches.length > 0) {
       expect(result.weakMappings.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ─── auditBeadCreation ────────────────────────────────────────
+
+describe('auditBeadCreation', () => {
+  it('returns plan coverage counts and near-duplicate titles', () => {
+    const plan = `# Request cache\nImplement request caching and invalidation.\n\n# Metrics\nRecord cache hit and miss metrics.`;
+    const beads = [
+      makeBead({
+        id: 'cache-1',
+        title: 'Add request cache',
+        description: 'Implement request caching, invalidation, and eviction behavior.',
+      }),
+      makeBead({
+        id: 'cache-2',
+        title: 'Implement request cache',
+        description: 'Implement request caching.',
+      }),
+      makeBead({
+        id: 'metrics-1',
+        title: 'Record cache metrics',
+        description: 'Record cache hit and miss metrics.',
+      }),
+    ];
+
+    const result = auditBeadCreation(plan, beads);
+
+    expect(result.planCoverage).toMatchObject({
+      totalSections: 2,
+      coveredSections: 2,
+      uncoveredSections: [],
+      weakMappings: [],
+    });
+    expect(result.duplicateCandidates).toEqual([
+      {
+        beadIds: ['cache-1', 'cache-2'],
+        canonicalBeadId: 'cache-1',
+        duplicateBeadId: 'cache-2',
+        reasons: ['near-duplicate-title'],
+        sharedFiles: [],
+      },
+    ]);
+  });
+
+  it('requires similar intent before shared files count as duplicates', () => {
+    const beads = [
+      makeBead({
+        id: 'cache-1',
+        title: 'Implement cache invalidation',
+        description: 'Implement request cache invalidation.\n\n### Files:\n  src/cache.ts',
+      }),
+      makeBead({
+        id: 'cache-2',
+        title: 'Fix cache invalidation',
+        description: 'Fix request cache invalidation behavior.\n\n### Files:\n  src/cache.ts',
+      }),
+      makeBead({
+        id: 'docs-1',
+        title: 'Document cache settings',
+        description: 'Document cache configuration for operators.\n\n### Files:\n  src/cache.ts',
+      }),
+    ];
+
+    expect(auditBeadCreation(undefined, beads)).toEqual({
+      planCoverage: null,
+      duplicateCandidates: [
+        {
+          beadIds: ['cache-1', 'cache-2'],
+          canonicalBeadId: 'cache-2',
+          duplicateBeadId: 'cache-1',
+          reasons: ['near-duplicate-title', 'shared-files-similar-intent'],
+          sharedFiles: ['src/cache.ts'],
+        },
+      ],
+    });
+  });
+
+  it('does not merge an implementation bead with its companion test bead', () => {
+    const beads = [
+      makeBead({
+        id: 'cache-1',
+        title: 'Add request cache',
+        description: 'Implement request caching.\n\n### Files:\n  src/cache.ts',
+      }),
+      makeBead({
+        id: 'cache-test-1',
+        title: 'Test: Add request cache',
+        description: 'Test request caching.\n\n### Files:\n  src/cache.ts',
+      }),
+    ];
+
+    expect(auditBeadCreation(undefined, beads).duplicateCandidates).toEqual([]);
   });
 });
 

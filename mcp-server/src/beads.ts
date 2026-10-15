@@ -85,6 +85,26 @@ export interface PlanToBeadAudit {
   weakMappings: PlanAuditSection[];
 }
 
+export type BeadDuplicateReason =
+  | "near-duplicate-title"
+  | "shared-files-similar-intent";
+
+export interface BeadDuplicateCandidate {
+  beadIds: [string, string];
+  canonicalBeadId: string;
+  duplicateBeadId: string;
+  reasons: BeadDuplicateReason[];
+  sharedFiles: string[];
+}
+
+export interface BeadCreationAudit {
+  planCoverage: (PlanToBeadAudit & {
+    totalSections: number;
+    coveredSections: number;
+  }) | null;
+  duplicateCandidates: BeadDuplicateCandidate[];
+}
+
 function tokenizePlanAudit(text: string): string[] {
   return Array.from(
     new Set(
@@ -153,6 +173,98 @@ export function auditPlanToBeads(plan: string, beads: Bead[]): PlanToBeadAudit {
   const uncoveredSections = sections.filter((section) => section.matches.length === 0);
   const weakMappings = sections.filter((section) => section.matches.length > 0 && section.matches[0].score < 0.35);
   return { sections, uncoveredSections, weakMappings };
+}
+
+// ─── Bead Creation Audit ───────────────────────────────────────
+
+function tokenSimilarity(left: string, right: string): number {
+  const leftTokens = new Set(tokenizePlanAudit(left));
+  const rightTokens = new Set(tokenizePlanAudit(right));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+
+  let intersection = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) intersection++;
+  }
+  return intersection / (leftTokens.size + rightTokens.size - intersection);
+}
+
+function titleContainment(left: string, right: string): number {
+  const leftTokens = new Set(tokenizePlanAudit(left));
+  const rightTokens = new Set(tokenizePlanAudit(right));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+
+  let intersection = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) intersection++;
+  }
+  return intersection / Math.min(leftTokens.size, rightTokens.size);
+}
+
+function chooseCanonicalBead(left: Bead, right: Bead): [string, string] {
+  if (left.description.length !== right.description.length) {
+    return left.description.length > right.description.length
+      ? [left.id, right.id]
+      : [right.id, left.id];
+  }
+  return left.id.localeCompare(right.id) <= 0
+    ? [left.id, right.id]
+    : [right.id, left.id];
+}
+
+/**
+ * Audits a newly-created bead set once, so every caller uses the same
+ * coverage and duplicate heuristics instead of reimplementing them in prose.
+ */
+export function auditBeadCreation(plan: string | undefined, beads: Bead[]): BeadCreationAudit {
+  const planCoverage = plan === undefined
+    ? null
+    : (() => {
+        const audit = auditPlanToBeads(plan, beads);
+        return {
+          ...audit,
+          totalSections: audit.sections.length,
+          coveredSections: audit.sections.length - audit.uncoveredSections.length,
+        };
+      })();
+
+  const duplicateCandidates: BeadDuplicateCandidate[] = [];
+  for (let leftIndex = 0; leftIndex < beads.length; leftIndex++) {
+    const left = beads[leftIndex];
+    const leftArtifacts = new Set(extractArtifacts(left));
+    for (let rightIndex = leftIndex + 1; rightIndex < beads.length; rightIndex++) {
+      const right = beads[rightIndex];
+      const oneIsACompanionTest = /^test\s*:/i.test(left.title) !== /^test\s*:/i.test(right.title);
+      if (oneIsACompanionTest) continue;
+
+      const sharedFiles = extractArtifacts(right)
+        .filter((path) => leftArtifacts.has(path))
+        .sort();
+      const reasons: BeadDuplicateReason[] = [];
+
+      if (titleContainment(left.title, right.title) >= 0.75) {
+        reasons.push("near-duplicate-title");
+      }
+      if (
+        sharedFiles.length > 0 &&
+        tokenSimilarity(`${left.title}\n${left.description}`, `${right.title}\n${right.description}`) >= 0.6
+      ) {
+        reasons.push("shared-files-similar-intent");
+      }
+      if (reasons.length === 0) continue;
+
+      const [canonicalBeadId, duplicateBeadId] = chooseCanonicalBead(left, right);
+      duplicateCandidates.push({
+        beadIds: [left.id, right.id],
+        canonicalBeadId,
+        duplicateBeadId,
+        reasons,
+        sharedFiles,
+      });
+    }
+  }
+
+  return { planCoverage, duplicateCandidates };
 }
 
 // ─── bv (beads-viewer) Integration ────────────────────────────

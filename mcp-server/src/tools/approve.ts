@@ -4,7 +4,7 @@ import type { ToolContext, McpToolResult, Bead, ApproveArgs, ApproveStopReason, 
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult } from './shared.js';
 import { getRefinementModel } from '../model-detection.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
-import { makeFlywheelErrorResult } from '../errors.js';
+import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { withCassContext } from '../feedback.js';
 import { parseBrList } from '../parsers.js';
@@ -12,6 +12,7 @@ import { computeHotspotMatrix, type HotspotInputBead } from '../plan-simulation.
 import { createLogger } from '../logger.js';
 import { normalizeText } from '../utils/text-normalize.js';
 import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
+import { auditBeadCreation } from '../beads.js';
 
 const log = createLogger('approve');
 
@@ -137,16 +138,36 @@ function getSizeAssessment(lineCount: number): SizeAssessment {
   return 'detailed';
 }
 
+function readPlanForCreationAudit(cwd: string, planPath: string | undefined): string | undefined {
+  if (!planPath) return undefined;
+  const absolutePlanPath = planPath.startsWith('/') ? planPath : join(cwd, planPath);
+  if (!existsSync(absolutePlanPath)) return undefined;
+
+  try {
+    return normalizeText(readFileSync(absolutePlanPath, 'utf8'));
+  } catch (error: unknown) {
+    log.warn('Unable to read plan for bead creation audit', {
+      planPath,
+      error: errMsg(error),
+    });
+    return undefined;
+  }
+}
+
 function getBeadApprovalData(
-  state: ToolContext['state'],
+  ctx: Pick<ToolContext, 'cwd' | 'state'>,
   beads: Bead[],
   score: number | undefined,
   matrix?: HotspotMatrix,
 ): Record<string, unknown> {
+  const { cwd, state } = ctx;
+  const plan = readPlanForCreationAudit(cwd, state.planDocument);
+
   return {
     activeBeadIds: [...(state.activeBeadIds ?? [])],
     convergence: getConvergenceData(state, score),
     quality: getQualityData(beads),
+    creationAudit: auditBeadCreation(plan, beads),
     ...(matrix ? { matrix } : {}),
   };
 }
@@ -618,7 +639,7 @@ async function handleStart(
         readyCount: 0,
         currentBeadId: undefined,
         readyBeads: [],
-        ...getBeadApprovalData(state, beads, convergenceScore, matrix),
+        ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
         readiness: {
           blocked: true,
           message: 'No ready beads found after approval.',
@@ -725,7 +746,7 @@ ${beadList}`,
           launchInstruction: 'implement',
           agentName: undefined,
         }],
-        ...getBeadApprovalData(state, beads, convergenceScore, matrix),
+        ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
       },
       makeNextToolStep('call_tool', 'Implement the ready bead, then call flywheel_review with its summary.', {
         tool: 'flywheel_review',
@@ -823,7 +844,7 @@ ${beadList}`,
         launchInstruction: 'spawn-agent',
         agentName: `bead-${bead.id}`,
       })),
-      ...getBeadApprovalData(state, beads, convergenceScore, matrix),
+      ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
     },
     nextStep,
   );
@@ -840,7 +861,7 @@ function handlePolish(ctx: ToolContext, beads: Bead[], round: number, fresh: boo
     kind: 'bead_refinement_requested',
     action: 'polish',
     refinementMode: fresh ? 'fresh-agent' : 'same-agent',
-    ...getBeadApprovalData(state, beads, state.polishConvergenceScore, matrix),
+    ...getBeadApprovalData(ctx, beads, state.polishConvergenceScore, matrix),
     advancedActions: [...ADVANCED_ACTIONS],
   };
 
@@ -1019,7 +1040,7 @@ Current beads:\n${compactList}`,
         kind: 'bead_refinement_requested',
         action: 'advanced',
         refinementMode: 'graph-fix',
-        ...getBeadApprovalData(state, beads, state.polishConvergenceScore, matrix),
+        ...getBeadApprovalData(ctx, beads, state.polishConvergenceScore, matrix),
         advancedActions: [...ADVANCED_ACTIONS],
       },
       makeNextToolStep('run_cli', 'Diagnose and repair bead dependencies with br dep commands, then return to flywheel_approve_beads.')
