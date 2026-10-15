@@ -144,7 +144,7 @@ br is the local task tracker. Tasks are stored in .beads/ JSONL files.
 - \`br update <id> --status in_progress\` — claim a bead
 - \`br update <id> --status closed\` — complete a bead
 - \`br create --title "..." --description "..."\` — create a bead
-- \`br dep add <id> <depends-on-id>\` — add dependency
+- \`br dep add <downstream> <upstream>\` — add dependency (positional)
 - \`br sync --flush-only\` — export to JSONL before committing
 - \`br dep cycles\` — verify no dependency cycles
 

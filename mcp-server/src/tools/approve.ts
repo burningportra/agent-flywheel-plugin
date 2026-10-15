@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, Bead, ApproveArgs, ApproveStopReason, FlywheelPhase, ToolNextStep, HotspotMatrix, TemplateExpansionInput } from '../types.js';
 import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScore, makeChoiceOption, makeNextToolStep, makeToolResult, pickRefinementModel } from './shared.js';
+import { buildBeadCreationPrompt } from './bead-prompt.js';
 import { makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { planGitDiffReviewPrompt, planIntegrationPrompt } from '../prompts.js';
@@ -686,28 +687,13 @@ async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<
 }
 
 function buildPlanToBeadsPrompt(plan: string, goal: string, planPath: string): string {
-  // Show the first 2000 chars of the plan as context
-  const preview = plan.slice(0, 2000);
-  return `## Create Beads from Approved Plan
-
-**Goal:** ${goal}
-**Plan artifact:** \`${planPath}\`
-
-Read the full plan from \`${planPath}\`, then create one bead per implementation phase or logical unit.
-
-### Bead creation rules
-1. Each bead = one focused unit of work (1-4 hours)
-2. \`br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority 2 --type task\`
-3. Add dependencies: \`br dep add <id> --depends-on <other-id>\`
-4. Bead description must specify exact files to create/modify
-5. No mega-beads — split anything >4 hours
-
-### Plan preview (first 2000 chars)
-\`\`\`
-${preview}${plan.length > 2000 ? '\n...(read full plan from file)' : ''}
-\`\`\`
-
-After creating all beads, call \`flywheel_approve_beads\` with action="start" to review and launch.`;
+  const preview = plan.slice(0, 2000) + (plan.length > 2000 ? '\n...(read full plan from file)' : '');
+  return buildBeadCreationPrompt({
+    goal,
+    planPath,
+    planPreview: preview,
+    nextAction: `After creating all beads, call \`flywheel_approve_beads\` with action="start" to review and launch.`,
+  });
 }
 
 async function handleStart(
@@ -1102,7 +1088,7 @@ Check all open beads for overlap or redundancy:
 1. \`br list --json\` — read all beads
 2. For each pair of similar beads: merge the weaker one into the stronger
 3. Close duplicates: \`br update <id> --status closed\`
-4. Transfer dependencies: \`br dep add <survivor> --depends-on <deps-of-closed>\`
+4. Transfer dependencies: \`br dep add <survivor> <deps-of-closed>\` (positional: downstream first, then upstream)
 
 Report what was merged. Then call \`flywheel_approve_beads\`.
 
