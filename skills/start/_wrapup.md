@@ -51,115 +51,28 @@ The gate is one round-trip on the happy path (the user picks "Skip" and proceeds
 flywheel_grade_outcome({ cwd })
 ```
 
-The tool short-circuits to `kind: "grading_skipped"` when `state.outcomeGradingSkipped === true`. Otherwise it spawns the decorrelated grader (codex primary, fresh-CC fallback), parses the verdict against `GraderVerdictSchemaV1`, persists `.pi-flywheel/plans/<slug>/grading/iteration-<N>.json`, and appends to `state.outcomeGradingHistory`. Iteration-cap coercion is server-side: a grader that returns `needs_revision` at `iteration >= state.maxOutcomeIterations` is force-coerced to `max_iterations_reached` before the response leaves the tool.
+Print `result.content[0].text` verbatim once. The server text owns the verdict summary, failing-criteria table, persistence status, grader fallback notice, diff-truncation notice, and failed-verdict explanation. Use `structuredContent` only for the decisions below.
 
-### 2. Branch on `result.structuredContent.data.kind`
+### 2. Branch on `result.structuredContent.data`
 
-#### 2a — `kind: "grading_skipped"` → print verbatim Skipped Notice and continue
-
-```text
-Outcome grading skipped for this cycle by operator choice at plan approval.
-```
-
-(No question. Continue to the existing Step 9.5 wrap-up question below.)
-
-#### 2b — `kind: "grader_verdict"` (or `"grading_capped"`) → print verdict surface and branch
-
-Compute the verdict-table once via the server-side helper:
-
-```ts
-import { renderVerdictTable } from '../../mcp-server/dist/outcome-grading.js';
-const table = renderVerdictTable(verdict);
-```
-
-Print the verbatim §"Step 9.5 — Verdict Surface" lines (substituting `<N>`, `<max>`, `<U>`, `<P>`, `<codex|claude>`, `<durationMs>`, slug, and `<table>` from the verdict):
-
-```text
-Outcome grade: <verdict.status> @ iter <N>/<max> (<U> unmet, <P> partial)
-Grader: <codex|claude> in <durationMs>ms
-Verdict file: .pi-flywheel/plans/<slug>/grading/iteration-<N>.json
-
-<table>
-```
-
-If `verdict.modelUsed === 'claude'` AND `verdict.details?.fallbackReason === 'codex_unavailable'`, print the verbatim Codex-fallback disclosure:
-
-```text
-Grader notice: Codex unavailable (<doctor status>); used a fresh Claude grader instead.
-```
-
-If `verdict.details?.diffTruncated === true`, print the verbatim truncation disclosure:
-
-```text
-Grader notice: cycle diff exceeded 30K chars; grader saw 15K start + 15K end + file list. Verdict confidence may be reduced.
-```
+- `kind: "grading_skipped"` → continue to Step 9.5 without a question.
+- `kind: "grader_verdict" | "grading_capped" | "grading_persistence_failed"` → bind `data.verdict` as `verdict`, then branch on `verdict.status` below. The in-memory verdict remains authoritative when persistence failed.
+- Error envelope → use the recovery question below.
 
 Branch on `verdict.status`:
 
 - **`satisfied`** → continue to the existing Step 9.5 wrap-up question. The cycle met the rubric.
-- **`needs_revision` AND `iteration < state.maxOutcomeIterations`** → surface the verbatim §"Verdict Surface (needs_revision)" question:
-  ```
-  AskUserQuestion(questions: [{
-    question: "Outcome grading found <U> unmet and <P> partial criteria at iteration <N>/<max>. What next?",
-    header: "Verdict",
-    options: [
-      { label: "Iterate", description: "Create remediation beads from the failing criteria and return to implementation (Recommended)." },
-      { label: "Accept anyway", description: "Continue wrap-up despite the unmet criteria; the verdict remains recorded." },
-      { label: "Abort", description: "Stop the cycle before commit review or wrap-up." }
-    ],
-    multiSelect: false
-  }])
-  ```
-  Route per choice (see step 3 below).
-- **`needs_revision` AND `iteration >= state.maxOutcomeIterations`** (defensive — should never fire because the tool coerces to `max_iterations_reached` server-side) → fall through to the `max_iterations_reached` branch.
-- **`max_iterations_reached`** → surface the verbatim §"Verdict Surface (max_iterations_reached)" question (Iterate is NOT an option):
-  ```
-  AskUserQuestion(questions: [{
-    question: "Outcome grading still has <U> unmet and <P> partial criteria after <N>/<max> iterations. What next?",
-    header: "Verdict",
-    options: [
-      { label: "Accept anyway", description: "Continue wrap-up with the final failing verdict recorded." },
-      { label: "Abort", description: "Stop the cycle before commit review or wrap-up." }
-    ],
-    multiSelect: false
-  }])
-  ```
-- **`failed`** → print `verdict.explanation` inline, then surface a 1-option `AskUserQuestion` with Abort + hint "Edit rubric.md by hand and re-run flywheel_grade_outcome with force=true once the rubric is correct." Do NOT proceed to commit review.
+- **`needs_revision` below the iteration cap** → call `AskUserQuestion` with header `Verdict` and the counts from the tool result. Offer `Iterate` (create remediation beads and return to implementation, recommended), `Accept anyway` (continue with the verdict recorded), and `Abort` (stop before commit review).
+- **`max_iterations_reached`** → call the same `Verdict` question with only `Accept anyway` and `Abort`. Never offer `Iterate`. Treat an uncoerced `needs_revision` at the cap the same way.
+- **`failed`** → call a one-option `Verdict` question with `Abort`. The tool text already explains the failure; tell the operator to edit `rubric.md` and retry `flywheel_grade_outcome({ force: true })`.
 
-#### 2c — `kind: "grading_persistence_failed"` → warn and continue with verdict-aware branches
+#### 2c — Error envelope (`code: "grader_timeout" | "grader_unavailable" | "verdict_invalid"`) → recovery question
 
-The verdict was computed but the iteration file could not be written (ENOSPC / EROFS). Print:
-
-```text
-Warning: Outcome grade computed but could not be persisted to disk.
-Reason: <verdict.details.persistenceError | "ENOSPC">
-Verdict shown in-line; not saved to .pi-flywheel/plans/<slug>/grading/iteration-<N>.json.
-```
-
-Then branch on `verdict.status` exactly as in 2b — the in-memory verdict is still load-bearing for the user's decision.
-
-#### 2d — Error envelope (`code: "grader_timeout" | "grader_unavailable" | "verdict_invalid"`) → recovery surface
-
-Surface the verbatim §"Timeout Surface" question:
-
-```
-AskUserQuestion(questions: [{
-  question: "Outcome grading timed out before a verdict was saved. What next?",
-  header: "Recover",
-  options: [
-    { label: "Retry grading", description: "Run the grader again with the same rubric and artifact range (Recommended)." },
-    { label: "Accept without grade", description: "Continue wrap-up and record grading as timed out." },
-    { label: "Abort", description: "Stop the cycle before commit review or wrap-up." }
-  ],
-  multiSelect: false
-}])
-```
-
-For `grader_unavailable` and `verdict_invalid`, adapt the question text to the `data.error.hint` from the envelope but keep the same 3-option recovery shape.
+Call `AskUserQuestion` with header `Recover`. Offer `Retry grading` (recommended), `Accept without grade`, and `Abort`. Use `data.error.hint` as the question context for `grader_unavailable` and `verdict_invalid`.
 
 ### 3. On "Iterate" — create remediation beads and route back to Step 6
 
-For each `verdict.perCriterion` entry where `c.status !== 'met'`, look up the criterion's full description from `.pi-flywheel/plans/<slug>/rubric.md` (the verdict carries only `criterionId`), then call:
+For each `verdict.perCriterion` entry where `c.status !== 'met'`, read its full description from `.pi-flywheel/plans/<slug>/rubric.md`, then call once:
 
 ```
 flywheel_approve_beads({
@@ -177,9 +90,7 @@ flywheel_approve_beads({
 })
 ```
 
-This creates exactly **one** bead per failing criterion (gaps fold into the Acceptance Criteria section, not 1 bead per gap — bound the work, follow E8). The tool also bumps `state.iterationRound`. After all remediation beads are created, return to Step 6 (implementation) so the swarm closes them; once they're closed, re-run wrap-up which fires this gate again at iteration N+1.
-
-If the iteration cap is then reached on the next pass, the server-side coercion forces `max_iterations_reached` and the menu drops the Iterate option — so the loop is bounded.
+Create one bead per failing criterion, not per gap. After all calls, return to Step 6. The tool increments `state.iterationRound`, and the server enforces the iteration cap on the next wrap-up pass.
 
 ## Step 9.5: Wrap-up — commit, version bump, rebuild
 
@@ -229,18 +140,7 @@ Before committing anything, update these files to reflect what shipped:
 
 Only update sections that are actually affected by this session's changes. Do not rewrite unchanged sections.
 
-**De-slopify all user-facing docs before committing.** README / CHANGELOG / public-facing docs must strip these AI-tell signatures:
-
-- Emdash overuse (use commas / periods / semicolons instead).
-- "It's not X, it's Y" contrast structure.
-- "Here's why" / "Here's the thing" clickbait leads.
-- "Let's dive in" / "buckle up" forced enthusiasm.
-- "At its core..." / "fundamentally..." pseudo-profound openers.
-- "It's worth noting..." / "it's important to remember..." unnecessary hedges.
-- "Game-changer" / "powerful" / "seamless" / "robust" filler adjectives.
-- Three-item list tricolons in every paragraph.
-
-Invoke `/docs-de-slopify` on the changed doc files — it runs the canonical de-slop sweep. Technical docs (AGENTS.md, internal specs) are exempt — the rule targets user-facing prose.
+Invoke `/docs-de-slopify` once on the changed user-facing docs before committing. Technical docs such as AGENTS.md and internal specs are exempt.
 
 **CHANGELOG rebuild** — if `CHANGELOG.md` exists or the project is published, invoke `/changelog-md-workmanship` to rebuild the changelog from git tags, issues, and PR titles. This is cleaner than manually appending and catches commits that were missed.
 
@@ -477,16 +377,7 @@ Actions:
 
 1. **Delete the checkpoint:** `rm -f .pi-flywheel/checkpoint.json` (Bash). Without this, the next cycle inherits the prior `selectedGoal` / `activeBeadIds` / `phase` and the new "Resume session" drift check fires unnecessarily.
 2. **Verify no impl agents remain.** Run `TaskList`; if any impl-* tasks are still listed, retire and force-stop them per the Step 9 pause checklist before continuing.
-3. **Drain active teams (MANDATORY — prevents team leaks across sessions).** For each team this session created in `~/.claude/teams/`:
-   ```bash
-   # Trim team config to team-lead only (in-process agents don't respond to shutdown_request)
-   jq '.members = [.members[] | select(.name == "team-lead")]' \
-     ~/.claude/teams/<team-name>/config.json \
-     > ~/.claude/teams/<team-name>/config.json.tmp \
-     && mv ~/.claude/teams/<team-name>/config.json.tmp \
-        ~/.claude/teams/<team-name>/config.json
-   ```
-   Then call `TeamDelete` for each. Verify `ls ~/.claude/teams/` returns no teams from this session. **Prior sessions' orphaned teams should also be swept here — `coolant-solver`-style leaks accumulate otherwise.**
+3. **Drain active teams.** List the teams created by this session. Add an older team only after `TaskList` and the live agent state confirm that nothing owns it. If the list is non-empty, run `mcp-server/scripts/team-drain.sh <team-name>...`. The script prepares only those configs and prints one team name per line. Call `TeamDelete` for each printed name, then verify that none of the named teams remains under `~/.claude/teams/`.
 4. **Confirm clean tree:** run `git status -s`. If uncommitted changes exist, present:
    ```
    AskUserQuestion(questions: [{
@@ -503,4 +394,4 @@ Actions:
    Route per choice; never silently proceed past a dirty tree without acknowledgment.
 5. Proceed to Step 2.
 
-> **"Done for now" also triggers team-drain.** Step 12's "Done for now" end-state should run the same team-drain as sub-step 3 above before returning control to the user — otherwise teams leak across Claude Code sessions (the runtime does NOT gc them on session exit).
+> **"Done for now" also triggers team-drain.** Run sub-step 3 before returning control to the user.

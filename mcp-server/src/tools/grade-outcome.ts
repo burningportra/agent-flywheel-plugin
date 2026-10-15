@@ -19,7 +19,10 @@ import { z } from 'zod';
 import { FlywheelError, makeFlywheelErrorResult, errMsg } from '../errors.js';
 import {
   gradeOutcome,
+  getMaxOutcomeIterations,
   isGradeSkipped,
+  planSlugFromIdentifier,
+  renderVerdictTable,
   type GraderVerdict,
   type GradeOutcomeArgs,
 } from '../outcome-grading.js';
@@ -58,10 +61,43 @@ function classifyVerdictKind(verdict: GraderVerdict): GradeVerdictKind {
   return 'grader_verdict';
 }
 
-function summariseVerdict(verdict: GraderVerdict): string {
+export function renderGradeOutcomeText(
+  verdict: GraderVerdict,
+  planSlug: string,
+  maxIterations: number,
+): string {
   const unmet = verdict.perCriterion.filter((c) => c.status === 'unmet').length;
   const partial = verdict.perCriterion.filter((c) => c.status === 'partial').length;
-  return `Outcome grade: ${verdict.status} @ iter ${verdict.iteration} (${unmet} unmet, ${partial} partial). Grader: ${verdict.modelUsed} in ${verdict.durationMs}ms.`;
+  const verdictPath = `.pi-flywheel/plans/${planSlug}/grading/iteration-${verdict.iteration}.json`;
+  const lines = [
+    `Outcome grade: ${verdict.status} @ iter ${verdict.iteration}/${maxIterations} (${unmet} unmet, ${partial} partial)`,
+    `Grader: ${verdict.modelUsed} in ${verdict.durationMs}ms`,
+  ];
+
+  if (verdict.persistence === 'failed') {
+    lines.push(
+      'Warning: Outcome grade computed but could not be persisted to disk.',
+      'Reason: storage is full, quota-limited, or read-only.',
+      `Verdict shown inline; not saved to ${verdictPath}.`,
+    );
+  } else {
+    lines.push(`Verdict file: ${verdictPath}`);
+  }
+
+  lines.push('', renderVerdictTable(verdict));
+  if (verdict.modelUsed === 'claude' && verdict.details?.fallbackReason === 'codex_unavailable') {
+    lines.push('', 'Grader notice: Codex unavailable; used a fresh Claude grader instead.');
+  }
+  if (verdict.details?.diffTruncated === true) {
+    lines.push(
+      '',
+      'Grader notice: cycle diff exceeded 30K chars; grader saw 15K start + 15K end + file list. Verdict confidence may be reduced.',
+    );
+  }
+  if (verdict.status === 'failed') {
+    lines.push('', `Explanation: ${verdict.explanation}`);
+  }
+  return lines.join('\n');
 }
 
 export async function runGradeOutcome(
@@ -105,7 +141,18 @@ export async function runGradeOutcome(
     }
     const verdict = result;
     const kind = classifyVerdictKind(verdict);
-    const summary = summariseVerdict(verdict);
+    const rubricIdentifier = args.planSlug ?? ctx.state.outcomeRubricPath;
+    if (rubricIdentifier === undefined) {
+      return makeFlywheelErrorResult('flywheel_grade_outcome' as never, ctx.state.phase, {
+        code: 'internal_error',
+        message: 'flywheel_grade_outcome completed without a rubric identifier',
+      });
+    }
+    const summary = renderGradeOutcomeText(
+      verdict,
+      planSlugFromIdentifier(rubricIdentifier),
+      getMaxOutcomeIterations(ctx.state),
+    );
     const structured: GradeStructured = {
       tool: 'flywheel_grade_outcome',
       version: 1,
