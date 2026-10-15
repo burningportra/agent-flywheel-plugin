@@ -77,7 +77,7 @@ AskUserQuestion(questions: [{
 
 After all three answers land, write a brainstorm artifact to disk so `flywheel_plan` (both standard and deep) can read it back as planner context.
 
-1. Compute `<goal-slug>` from the currently selected goal (same slugify rule used elsewhere — lowercase, hyphens, strip non-alphanumerics).
+1. Read `<goal-slug>` as `data.goalSlug` from the most recent `flywheel_select` response — it's also quoted in that response's text under **Goal slug**. Use the server's value verbatim; do not re-derive it in the skill. `flywheel_plan` looks the brainstorm up by exact slug match, so a locally-recomputed slug that drops the 60-char cut or the all-symbol fallback silently loses the file.
 2. Compute `<date>` as `YYYY-MM-DD` from today.
 3. Write the file to `docs/brainstorms/<goal-slug>-<date>.md` using the **Write** tool (not bash heredoc) with this shape:
 
@@ -277,7 +277,7 @@ AskUserQuestion(questions: [
 ])
 ```
 
-3. **Write the charter** with the Write tool to `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>-ambition.md`, using the user's picks and this template:
+3. **Write the charter** with the Write tool to `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>-ambition.md`, where `<goal-slug>` is `data.goalSlug` from the last `flywheel_select` response (same value quoted in that response's **Goal slug** line — use it verbatim). Use the user's picks and this template:
 
 ```markdown
 # Ambition charter — <goal title>
