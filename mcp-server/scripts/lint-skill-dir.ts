@@ -199,9 +199,9 @@ async function main(): Promise<number> {
   const pane = (await import(`${lintBase}/rules/pane001.js`)) as unknown as { pane001: unknown };
   const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001];
 
-  // repoRoot = parent of this script's mcp-server/
+  // repoRoot = parent of this script's mcp-server/ (scripts/ -> mcp-server/ -> repo)
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const mcpServerRoot = path.resolve(here, "..", "..");
+  const mcpServerRoot = path.resolve(here, "..");
   const repoRoot = path.resolve(mcpServerRoot, "..");
 
   const dirAbs = path.resolve(process.cwd(), opts.dir);
@@ -223,6 +223,10 @@ async function main(): Promise<number> {
   const allFindings: Finding[] = [];
   const perFileSources = new Map<string, string>();
 
+  // Dedupe key — rules that scan cross-cutting repo files (RESERVE001, PANE001)
+  // emit the same global findings on every per-file lint pass; without dedupe
+  // the baseline collects N copies.
+  const seen = new Set<string>();
   for (const file of files) {
     let raw: string;
     try {
@@ -239,7 +243,12 @@ async function main(): Promise<number> {
       rules,
       ruleContextExtras: { registry, source, repoRoot },
     });
-    allFindings.push(...result.findings);
+    for (const f of result.findings) {
+      const key = `${f.ruleId}|${f.file}|${f.line}|${f.column}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      allFindings.push(f);
+    }
   }
 
   if (opts.updateBaseline) {
@@ -286,6 +295,23 @@ async function main(): Promise<number> {
     } catch (e) {
       process.stderr.write(`lint-skill-dir: failed to load baseline ${opts.baseline}: ${String(e)}\n`);
       return 4;
+    }
+    // Reject baseline entries with empty reasons — a baseline is "fix later, not
+    // forgotten", and an unexplained entry is indistinguishable from a mistake.
+    // The error prints the offenders so a reviewer can patch them in one pass.
+    const bfTyped = bf as { entries?: Array<{ ruleId: string; file: string; line: number; reason?: string }> } | null;
+    const emptyReason = (bfTyped?.entries ?? []).filter((e) => !e.reason || e.reason.trim().length < 10);
+    if (emptyReason.length > 0) {
+      process.stderr.write(
+        `lint-skill-dir: ${emptyReason.length} baseline entries have empty or trivially-short reasons (< 10 chars) — every entry needs a one-line justification:\n`,
+      );
+      for (const e of emptyReason.slice(0, 10)) {
+        process.stderr.write(`  ${e.ruleId} ${e.file}:${e.line} reason=${JSON.stringify(e.reason ?? "")}\n`);
+      }
+      if (emptyReason.length > 10) {
+        process.stderr.write(`  ... and ${emptyReason.length - 10} more\n`);
+      }
+      return 3;
     }
     const byFile = new Map<string, Finding[]>();
     for (const f of allFindings) {
