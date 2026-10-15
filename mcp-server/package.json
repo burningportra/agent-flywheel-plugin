@@ -11,6 +11,7 @@
     "verify:error-meta": "node scripts/verify-error-meta.mjs",
     "bead-viewer": "node dist/scripts/bead-viewer.js",
     "dead-code": "node scripts/reachability.mjs",
+    "prompt-budget": "tsx scripts/prompt-budget.ts",
     "dev": "tsc --watch",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
