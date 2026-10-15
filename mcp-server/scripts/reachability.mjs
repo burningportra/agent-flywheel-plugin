@@ -155,7 +155,12 @@ function discoverEntrypoints(root, knownFiles) {
 
   const packagePath = path.join(root, "package.json");
   if (existsSync(packagePath)) {
-    const manifest = JSON.parse(readFileSync(packagePath, "utf8"));
+    let manifest;
+    try {
+      manifest = JSON.parse(readFileSync(packagePath, "utf8"));
+    } catch (error) {
+      throw new Error(`invalid package manifest at ${packagePath}`, { cause: error });
+    }
     for (const command of Object.values(manifest.scripts ?? {})) {
       if (typeof command !== "string") continue;
       for (const token of commandPaths(command)) add(token);
