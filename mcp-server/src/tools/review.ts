@@ -907,7 +907,7 @@ async function runGates(ctx: ToolContext, action: 'hit-me' | 'looks-good' | 'ski
     `### Gate 5: Integration sanity\nDo a quick end-to-end smoke test if possible. Does the feature work as described in the goal?`,
   ];
 
-  // action="looks-good": gate passed — advance gate index and increment clean counter
+  // action="looks-good": gate passed — advance gate index and increment clean-gate counter
   if (action === 'looks-good') {
     const gateIndex = (state.currentGateIndex ?? 0) % gateChecks.length;
     const nextGateIndex = (gateIndex + 1) % gateChecks.length;
@@ -915,14 +915,14 @@ async function runGates(ctx: ToolContext, action: 'hit-me' | 'looks-good' | 'ski
     state.consecutiveCleanRounds = (state.consecutiveCleanRounds ?? 0) + 1;
     const consecutiveClean = state.consecutiveCleanRounds;
 
-    if (consecutiveClean >= 2) {
+    if (consecutiveClean >= gateChecks.length) {
       state.phase = 'complete';
       saveState(state);
       return okResult(
         'complete',
         `## Flywheel Complete
 
-All gates passed for ${consecutiveClean} consecutive rounds. The implementation is done.
+All ${gateChecks.length} guided review gates passed in one clean circuit. The implementation is done.
 
 **Summary:** All beads closed, all review gates clean.
 
@@ -939,7 +939,7 @@ Run \`/agent-flywheel:flywheel-status\` for a final report.`,
     const nextGate = gateChecks[nextGateIndex];
     return okResult(
       state.phase,
-      `Gate passed. Moving to next gate (${consecutiveClean}/2 clean rounds needed to finish).
+      `Gate passed. Moving to next gate (${consecutiveClean}/${gateChecks.length} clean gates needed to finish).
 
 ## Next Review Gate
 

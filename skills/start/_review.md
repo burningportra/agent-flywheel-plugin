@@ -238,6 +238,10 @@ flywheel_memory(operation: "store", content: formatRescueEventForMemory(packet))
 - Treat Codex's verdict as one more reviewer voice — but **weighted** as a tie-breaker. If Codex says "accept", call `flywheel_review` with `action: "looks-good"`. If Codex says "request change", surface the blocking concerns via `AskUserQuestion` so the user picks the next move (re-open the bead vs. accept with a follow-up bead).
 - If Codex itself stalls, fall back to "Abort phase" — accept the bead and write a CASS entry capturing the unresolved disagreement so future sessions can revisit.
 
+### Step 8.6: Guided completion gates
+
+When `flywheel_review` sends `beadId: "__gates__"` after the final bead, call it first with `action: "hit-me"`, perform the returned gate check, then call it with `action: "looks-good"` to advance or `action: "hit-me"` to repeat a failed gate. Continue until the tool returns `kind: "flywheel_complete"`. A clean circuit is five consecutive passed gates, so all five gate prompts must appear before completion; any failed gate resets that circuit.
+
 ## Step 9: Loop until complete
 
 > **Fixed in v2.10.1:** `flywheel_verify_beads` correctly unwraps the `br show --json` array shape via `unwrapBrShowValue()` in `mcp-server/src/beads.ts`. If you see `parse_failure` errors on a current install, you're on v2.9.x or older — rebuild via `cd mcp-server && npm run build`. The fallback procedure below remains valid for older installs and for cases where `br` emits an entirely new shape.

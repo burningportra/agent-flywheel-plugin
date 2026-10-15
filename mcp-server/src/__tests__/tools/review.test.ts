@@ -512,23 +512,38 @@ describe('runReview', () => {
       expect(result.content[0].text).toContain('Gate passed');
     });
 
-    it('completes flywheel after 2 consecutive clean rounds', async () => {
-      const { ctx, state } = makeCtx({ currentGateIndex: 0, consecutiveCleanRounds: 1 });
+    it('walks every guided gate before completing the flywheel', async () => {
+      const { ctx, state } = makeCtx({ currentGateIndex: 0, consecutiveCleanRounds: 0 });
+      const gatePrompts: string[] = [];
 
-      const result = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
+      const firstGate = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'hit-me' });
+      gatePrompts.push(firstGate.content[0].text);
+
+      for (let gate = 1; gate < 5; gate += 1) {
+        const nextGate = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
+        expect(state.phase).not.toBe('complete');
+        gatePrompts.push(nextGate.content[0].text);
+      }
+
+      for (let gate = 1; gate <= 5; gate += 1) {
+        expect(gatePrompts.join('\n')).toContain(`Gate ${gate}`);
+      }
+
+      const completion = await runReview(ctx, { cwd: '/fake/cwd', beadId: '__gates__', action: 'looks-good' });
 
       expect(state.phase).toBe('complete');
-      expect(result.structuredContent).toMatchObject({
+      expect(state.consecutiveCleanRounds).toBe(5);
+      expect(completion.structuredContent).toMatchObject({
         tool: 'flywheel_review',
         version: 1,
         status: 'ok',
         phase: 'complete',
         data: {
           kind: 'flywheel_complete',
-          consecutiveCleanRounds: 2,
+          consecutiveCleanRounds: 5,
         },
       });
-      expect(result.content[0].text).toContain('Flywheel Complete');
+      expect(completion.content[0].text).toContain('Flywheel Complete');
     });
 
     it('resets clean streak on hit-me (issue found)', async () => {
