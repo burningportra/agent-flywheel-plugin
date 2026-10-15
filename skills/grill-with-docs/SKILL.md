@@ -40,7 +40,7 @@ Expect these from the caller (orchestrator / start skill):
 |-------|--------|----------|
 | `RAW_GOAL` | USER_INPUT or "Set a goal" Other field | yes |
 | `CWD` | project root | yes |
-| `GOAL_SLUG` | slugify(raw goal) — lowercase, hyphens, strip non-alphanumerics, max 80 | derive if missing |
+| `GOAL_SLUG` | `data.goalSlug` from the last `flywheel_select` response (also quoted in that response's text) | yes — use the server's value verbatim; do not re-derive it in the skill |
 | `TODAY` | `YYYY-MM-DD` | derive if missing |
 
 ## Process

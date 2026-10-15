@@ -581,6 +581,34 @@ describe('runPlan', () => {
       }
     });
 
+    it('finds the brainstorm at the slug flywheel_select returns (long goal, 60-char cut)', async () => {
+      // B15: regression — before this bead, _planning.md told the orchestrator
+      // to re-derive the slug locally and some paraphrases dropped the 60-char
+      // cut. If the server returns one slug and the writer uses another, the
+      // brainstorm goes unread. Verify the server's slug is what flywheel_plan
+      // then matches against on disk.
+      const longGoal =
+        'Add a comprehensive rate-limiting layer that handles bursty traffic and per-tenant throttling with Redis-backed sliding windows';
+      // Hard-code the slug slugifyGoal() produces for this goal, so a drift in
+      // the shared helper fails both this test and the select-side slug tests
+      // instead of letting them stay in silent agreement.
+      const expectedSlug = 'add-a-comprehensive-rate-limiting-layer-that-handles-bursty-';
+      writeBrainstorm(expectedSlug, '2026-04-23', '# Brainstorm\n\nFraming: throttle only hot tenants.');
+
+      const { ctx } = makeCtx({ selectedGoal: longGoal }, tmpDir);
+      const result = await runPlan(ctx, { cwd: tmpDir, mode: 'standard' });
+
+      const text = result.content[0].text;
+      expect(text).toContain('## Phase 0.5 Brainstorm');
+      expect(text).toContain(`docs/brainstorms/${expectedSlug}-2026-04-23.md`);
+      expect(text).toContain('throttle only hot tenants');
+
+      const structured = result.structuredContent as { data: { brainstormDocument?: string } };
+      expect(structured.data.brainstormDocument).toBe(
+        `docs/brainstorms/${expectedSlug}-2026-04-23.md`,
+      );
+    });
+
     it('refuses brainstorm symlink that points outside cwd (security)', async () => {
       // Plant a symlink whose name matches the slug pattern, pointing at
       // an external file. statSync would follow it; lstatSync must reject.

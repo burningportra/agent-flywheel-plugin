@@ -259,6 +259,7 @@ describe('runSelect', () => {
       data: {
         kind: 'goal_selected',
         goal: 'Add tests',
+        goalSlug: 'add-tests',
         constraints: ['must be backward compatible'],
         workflowOptions: ['plan-first', 'deep-plan', 'direct-to-beads'],
         hasRepoProfile: true,
@@ -310,6 +311,51 @@ describe('runSelect', () => {
       expect(state.outcomeGradingSkipped).toBeUndefined();
       expect(state.outcomeGradingHistory).toBeUndefined();
       expect(state.cycleEndTestOutput).toBeUndefined();
+    });
+  });
+
+  describe('goalSlug in response (B15)', () => {
+    it('returns goalSlug equal to slugifyGoal(goal) in structuredContent.data', async () => {
+      const { ctx } = makeCtx();
+
+      const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Add Rate Limiting!' });
+
+      const data = (result.structuredContent as { data: { goalSlug?: string } }).data;
+      expect(data.goalSlug).toBe('add-rate-limiting');
+    });
+
+    it('mentions the goalSlug in the human-readable text so skills can read it inline', async () => {
+      const { ctx } = makeCtx();
+
+      const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: 'Add rate limiting' });
+
+      const text = result.content[0].text;
+      expect(text).toContain('`add-rate-limiting`');
+      expect(text).toMatch(/goal slug/i);
+    });
+
+    it('cuts a long goal to 60 characters', async () => {
+      const { ctx } = makeCtx();
+      const longGoal =
+        'Add a comprehensive rate-limiting layer that handles bursty traffic and per-tenant throttling with Redis-backed sliding windows';
+
+      const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: longGoal });
+
+      const data = (result.structuredContent as { data: { goalSlug?: string } }).data;
+      expect(data.goalSlug).toBeDefined();
+      expect(data.goalSlug!.length).toBeLessThanOrEqual(60);
+      expect(data.goalSlug).toBe(
+        'add-a-comprehensive-rate-limiting-layer-that-handles-bursty-',
+      );
+    });
+
+    it("falls back to 'plan' for an all-symbol goal", async () => {
+      const { ctx } = makeCtx();
+
+      const result = await runSelect(ctx, { cwd: '/fake/cwd', goal: '!!!---???' });
+
+      const data = (result.structuredContent as { data: { goalSlug?: string } }).data;
+      expect(data.goalSlug).toBe('plan');
     });
   });
 

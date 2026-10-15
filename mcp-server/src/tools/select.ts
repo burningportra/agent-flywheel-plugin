@@ -1,6 +1,6 @@
 import type { ToolContext, McpToolResult, SelectArgs } from '../types.js';
 import { createLogger } from '../logger.js';
-import { beadCreationPrompt, formatRepoProfile, makeChoiceOption, makeNextToolStep, makeToolError, makeToolResult } from './shared.js';
+import { beadCreationPrompt, formatRepoProfile, makeChoiceOption, makeNextToolStep, makeToolError, makeToolResult, slugifyGoal } from './shared.js';
 import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
 
 const log = createLogger('select');
@@ -32,6 +32,14 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
   state.constraints = state.constraints || [];
   state.planSource = undefined;
 
+  // Canonical goal slug. Returning it from the tool means skills consume one
+  // value instead of each re-implementing the slugify rule (lowercase, runs of
+  // non-alphanumerics -> '-', trim, cut to 60, fall back to 'plan'). flywheel_plan
+  // then looks up docs/brainstorms/<goalSlug>-*.md by exact match, so skills
+  // that would otherwise drop the 60-char cut or the fallback keep working for
+  // long or all-symbol goals.
+  const goalSlug = slugifyGoal(state.selectedGoal);
+
   // ── v3.13.0 outcome-grading: cycle boundary reset ──
   // Capture the git HEAD as the cycle-start SHA. The `gradeOutcome` 4-tier
   // recovery ladder (state → checkpoint.gitHead → git-log-by-time → HEAD~50)
@@ -53,7 +61,8 @@ export async function runSelect(ctx: ToolContext, args: SelectArgs): Promise<Mcp
     : '';
   const provenance = resolveDuelProvenanceInstructions(state);
 
-  const text = `**Goal selected:** "${state.selectedGoal}"${constraintsSummary}
+  const text = `**Goal selected:** "${state.selectedGoal}"
+**Goal slug (use this verbatim where a skill writes to \`docs/brainstorms/\` or \`docs/plans/\`):** \`${goalSlug}\`${constraintsSummary}
 
 **NEXT: Choose a workflow and call the appropriate tool:**
 
@@ -99,6 +108,7 @@ ${beadCreationPrompt(state.selectedGoal, repoContext, state.constraints, provena
     data: {
       kind: 'goal_selected' as const,
       goal: state.selectedGoal,
+      goalSlug,
       constraints: state.constraints,
       workflowOptions: ['plan-first', 'deep-plan', 'direct-to-beads'],
       hasRepoProfile: state.repoProfile !== undefined,
