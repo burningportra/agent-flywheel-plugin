@@ -12,6 +12,9 @@ vi.mock('../../memory.js', () => ({ readMemory: () => '' }));
 
 // ─── Helpers ──────────────────────────────────────────────────
 
+const PLAN_LENGTH_GUIDANCE =
+  'Make the plan as long as the goal needs, and specific enough that every bead is unambiguous.';
+
 const defaultCwd = mkdtempSync(join(tmpdir(), 'plan-default-'));
 
 afterAll(() => {
@@ -30,6 +33,14 @@ function makeCtx(stateOverrides: Partial<FlywheelState> = {}, cwd = defaultCwd) 
     clearState: () => {},
   };
   return { ctx, state, saved };
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error: unknown) {
+    throw new Error('expected flywheel_plan text content to be valid JSON', { cause: error });
+  }
 }
 
 // ─── Tests ────────────────────────────────────────────────────
@@ -68,6 +79,8 @@ describe('runPlan', () => {
     expect(text).toContain('Add caching layer');
     expect(text).toContain('Plan Document Requirements');
     expect(text).toContain('flywheel_approve_beads');
+    expect(text).toContain(PLAN_LENGTH_GUIDANCE);
+    expect(text).not.toMatch(/\d+-\d+ lines/);
   });
 
   it('sets phase to planning in standard mode', async () => {
@@ -400,6 +413,57 @@ describe('runPlan', () => {
     expect(structured.data.planAgents).toHaveLength(3);
   });
 
+  it('keeps the complete deep contract in structured data and derives a compact text receipt', async () => {
+    const { ctx } = makeCtx();
+
+    const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
+
+    const structured = result.structuredContent as {
+      data: {
+        kind: string;
+        mode: string;
+        goal: string;
+        constraints: string[];
+        brainstormDocument?: string;
+        ambition: string;
+        ambitionDocument?: string;
+        briefDocument: string;
+        planAgents: Array<{ task: string }>;
+        synthesisModel: string;
+        instructions: string;
+        synthesisPrompt: string;
+      };
+    };
+    const data = structured.data;
+    expect(Object.keys(data).sort()).toEqual([
+      'ambition',
+      'ambitionDocument',
+      'brainstormDocument',
+      'briefDocument',
+      'constraints',
+      'goal',
+      'instructions',
+      'kind',
+      'mode',
+      'planAgents',
+      'synthesisModel',
+      'synthesisPrompt',
+    ]);
+
+    const receipt = parseJson(result.content[0].text);
+    expect(receipt).toEqual({
+      action: 'spawn-plan-agents',
+      mode: data.mode,
+      ambition: data.ambition,
+      plannerCount: data.planAgents.length,
+      briefDocument: data.briefDocument,
+      next: 'Follow structuredContent.data.instructions, then call flywheel_plan with planFile.',
+    });
+    expect(result.content[0].text).not.toContain(data.planAgents[0].task);
+    expect(result.content[0].text).not.toContain(data.instructions);
+    expect(result.content[0].text).not.toContain(data.synthesisPrompt);
+  });
+
   it('includes correctness, robustness, and ergonomics perspectives in deep mode', async () => {
     const { ctx } = makeCtx();
 
@@ -441,6 +505,8 @@ describe('runPlan', () => {
       const brief = readFileSync(join(cwd, structured.data.briefDocument), 'utf8');
       expect(brief).toContain('**Goal:** Add caching layer');
       expect(brief).toContain('## Plan requirements');
+      expect(brief).toContain(PLAN_LENGTH_GUIDANCE);
+      expect(brief).not.toMatch(/\d+-\d+ lines/);
       expect(brief).not.toContain('Your perspective:');
       expect(brief).not.toContain('Use ultrathink.');
 
@@ -1012,9 +1078,14 @@ describe('runPlan', () => {
       expect(data.ambition).toBe('ambitious');
       expect(data.ambitionDocument).toBe(CHARTER_PATH);
 
-      const json = JSON.parse(result.content[0].text) as { ambition: string; ambitionDocument: string };
-      expect(json.ambition).toBe('ambitious');
-      expect(json.ambitionDocument).toBe(CHARTER_PATH);
+      expect(parseJson(result.content[0].text)).toEqual({
+        action: 'spawn-plan-agents',
+        mode: 'deep',
+        ambition: data.ambition,
+        plannerCount: data.planAgents.length,
+        briefDocument: data.briefDocument,
+        next: 'Follow structuredContent.data.instructions, then call flywheel_plan with planFile.',
+      });
     });
 
     it('duel ambitious tells the orchestrator to pre-seed both agents with the charter', async () => {

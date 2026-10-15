@@ -20,6 +20,8 @@ import { writeAtomic } from '../atomic-write.js';
 import { acquireBeadMutex, makeConcurrentWriteError, releaseBeadMutex } from '../mutex.js';
 
 const CODEX_SUBAGENT_TYPE = 'codex:codex-rescue' as const;
+const PLAN_LENGTH_GUIDANCE =
+  'Make the plan as long as the goal needs, and specific enough that every bead is unambiguous.';
 
 type PlanAgent =
   | {
@@ -421,7 +423,7 @@ ${ambitionRequirement}1. **Executive Summary** — What will be built and why
 6. **Acceptance Criteria** — Clear definition of done per phase
 7. **Risk & Mitigation** — Known unknowns and fallback strategies
 
-Target: 500-3000 lines. Be specific — vague plans produce vague beads.
+${PLAN_LENGTH_GUIDANCE}
 
 ### After generating the plan
 1. Save it to \`${planPath}\` using the Write tool or bash
@@ -523,7 +525,7 @@ Write a comprehensive implementation plan from your designated perspective. The 
 - Testing strategy
 - Acceptance criteria
 - Risk & mitigation
-- Target: 500-2000 lines of detailed content
+- ${PLAN_LENGTH_GUIDANCE}
 
 Focus deeply on your assigned perspective lens.`;
 
@@ -687,19 +689,17 @@ Then synthesize:
 The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.${synthesisAmbition}`,
   };
 
+  const compatibilityReceipt = {
+    action: 'spawn-plan-agents',
+    mode: payload.mode,
+    ambition: payload.ambition,
+    plannerCount: payload.planAgents.length,
+    briefDocument: payload.briefDocument,
+    next: 'Follow structuredContent.data.instructions, then call flywheel_plan with planFile.',
+  };
+
   return okResult(
-    JSON.stringify({
-        action: 'spawn-plan-agents',
-        goal,
-        constraints: state.constraints,
-        ambition: payload.ambition,
-        ambitionDocument: payload.ambitionDocument,
-        briefDocument: payload.briefDocument,
-        planAgents,
-        synthesisModel: payload.synthesisModel,
-        instructions: payload.instructions,
-        synthesisPrompt: payload.synthesisPrompt,
-      }, null, 2),
+    JSON.stringify(compatibilityReceipt, null, 2),
     'planning',
     payload
   );
