@@ -122,6 +122,11 @@ function availableCliCalls(gemini = true): ExecCall[] {
         ? { code: 0, stdout: '/bin/gemini\n', stderr: '' }
         : { code: 1, stdout: '', stderr: 'gemini not found' },
     },
+    {
+      cmd: 'which',
+      args: ['pi'],
+      result: { code: 1, stdout: '', stderr: 'pi not found' },
+    },
   ];
 }
 
@@ -232,7 +237,11 @@ describe('runAdvanceWave', () => {
       brReadyCall(nextBeads),
     ]);
 
-    const result = await runAdvanceWave(ctx, { cwd: '/fake/project', closedBeadIds: ['prev-1'] });
+    const result = await runAdvanceWave(ctx, {
+      cwd: '/fake/project',
+      closedBeadIds: ['prev-1'],
+      coordinatorName: 'WindyBasin',
+    });
 
     expect(result.isError).toBeUndefined();
     const data = (result.structuredContent as any).data;
@@ -313,19 +322,24 @@ describe('runAdvanceWave', () => {
     expect(data.nextWave.beadIds).toEqual(['ready-1']);
   });
 
-  it('prompt includes bead ID and project key', async () => {
+  it('prompt includes bead ID, absolute project root, and coordinator identity', async () => {
     const nextBeads = [makeBead({ id: 'prompt-1', title: 'Check prompt' })];
     const { ctx } = makeCtx({}, [
       brShowClosed('prev-1'),
       brReadyCall(nextBeads),
     ]);
 
-    const result = await runAdvanceWave(ctx, { cwd: '/fake/project', closedBeadIds: ['prev-1'] });
+    const result = await runAdvanceWave(ctx, {
+      cwd: '/fake/project',
+      closedBeadIds: ['prev-1'],
+      coordinatorName: 'WindyBasin',
+    });
 
     const data = (result.structuredContent as any).data;
     const prompt = data.nextWave.prompts[0].prompt;
     expect(prompt).toContain('prompt-1');
-    expect(prompt).toContain('project');
+    expect(prompt).toContain("human_key='/fake/project'");
+    expect(prompt).toContain("send_message to 'WindyBasin'");
   });
 
   it('keeps canonical lane shares for more beads than lanes', async () => {

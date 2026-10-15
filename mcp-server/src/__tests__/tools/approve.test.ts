@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createMockExec, makeState } from '../helpers/mocks.js';
 import type { FlywheelState, Bead } from '../../types.js';
 import type { ExecCall } from '../helpers/mocks.js';
+import { CompletionReportSchemaV1 } from '../../completion-report.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -19,6 +20,22 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
     labels: [],
     ...overrides,
   };
+}
+
+function parsePromptCompletionReport(prompt: string): unknown {
+  const json = prompt.match(
+    /## PRE-COMPLETION QUALITY GATE[\s\S]*?```json\n(?<json>[\s\S]*?)\n```/u,
+  )?.groups?.json;
+  if (!json) throw new Error('completion report JSON example missing from prompt');
+  const materialized = json
+    .replaceAll('<pane-name-or-omit>', 'impl-wave__cc_1')
+    .replaceAll('<repo-relative-path>', 'src/feature.ts')
+    .replaceAll('<short-sha>', 'abc1234')
+    .replaceAll('<repo-verify-command>', 'npx vitest run')
+    .replaceAll('<verify-summary>', 'all green')
+    .replaceAll('<self-review-summary>', 'no regressions found')
+    .replaceAll('<ISO-8601 timestamp>', '2026-10-15T14:00:00.000Z');
+  return CompletionReportSchemaV1.parse(JSON.parse(materialized));
 }
 
 function availableCliCalls(gemini = true): ExecCall[] {
@@ -40,11 +57,16 @@ function availableCliCalls(gemini = true): ExecCall[] {
         ? { code: 0, stdout: '/bin/gemini\n', stderr: '' }
         : { code: 1, stdout: '', stderr: 'gemini not found' },
     },
+    {
+      cmd: 'which',
+      args: ['pi'],
+      result: { code: 1, stdout: '', stderr: 'pi not found' },
+    },
   ];
 }
 
 function unavailableCliCalls(): ExecCall[] {
-  return ['claude', 'codex', 'gemini'].map((provider) => ({
+  return ['claude', 'codex', 'gemini', 'pi'].map((provider) => ({
     cmd: 'which',
     args: [provider],
     result: { code: 1, stdout: '', stderr: `${provider} not found` },
@@ -470,7 +492,11 @@ describe('runApprove', () => {
     }));
     const { ctx } = makeCtx({}, makeExecCalls(beads));
 
-    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+    const result = await runApprove(ctx, {
+      cwd: '/fake/cwd',
+      action: 'start',
+      coordinatorName: 'WindyBasin',
+    });
     const structured = result.structuredContent as { data: Record<string, unknown> };
     const data = structured.data as {
       lanes: Array<{ lane: string; beadIds: string[] }>;
@@ -495,6 +521,12 @@ describe('runApprove', () => {
       expect(prompt.prompt).toContain(`.pi-flywheel/completion/${prompt.beadId}.json`);
       expect(prompt.prompt).toContain(`"beadId": "${prompt.beadId}"`);
       expect(prompt.prompt).toContain(`"agentName": "${prompt.agentName}"`);
+      expect(prompt.prompt).toContain("send_message to 'WindyBasin'");
+      expect(prompt.prompt).not.toContain('AGENTS.md');
+      expect(parsePromptCompletionReport(prompt.prompt)).toMatchObject({
+        beadId: prompt.beadId,
+        agentName: prompt.agentName,
+      });
     }
   });
 

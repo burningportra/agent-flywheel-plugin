@@ -11,7 +11,7 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 
 0. **Invoke `/vibing-with-ntm`.** Use the `Skill` tool with `vibing-with-ntm`. Follow its guidance for session bootstrap (NTM project resolution, Agent Mail, beads claim) and pane-tending (looper cadence, stuck-pane ladder, completion polling). The rest of this command assumes its conventions are loaded.
 
-1. Call `flywheel_approve_beads(action="start")`. Read `data.lanes` and `data.prompts`, then assign `START_DATA = result.structuredContent.data`. It contains one grouped lane assignment and one server-built prompt per ready bead.
+1. Call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`. Read `data.lanes` and `data.prompts`, then assign `START_DATA = result.structuredContent.data`. It contains one grouped lane assignment and one server-built prompt per ready bead.
 
 2. If `START_DATA.readyCount === 0`, say "No beads are ready for implementation. Run /agent-flywheel:start to create a plan first."
 
@@ -21,9 +21,9 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    ```bash
    IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
    ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-     --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --stagger-mode=smart
+     --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --pi=<N_pi> --stagger-mode=smart
    ```
-   Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. With `--no-user`, pane indices start at 1 and follow spawn order `cc`, `cod`, then `gmi`. Address panes by numeric index. Use `--panes=N`. Singular `--pane=N` broadcasts to every pane, and combining a known index with `--type` can match nothing during startup.
+   Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. With `--no-user`, pane indices start at 1 and follow spawn order `cc`, `cod`, `gmi`, then fallback-only `pi`. Address panes by numeric index. Use `--panes=N`. Singular `--pane=N` broadcasts to every pane, and combining a known index with `--type` can match nothing during startup.
 
 5. Send every prompt unchanged to its assigned pane:
    ```bash

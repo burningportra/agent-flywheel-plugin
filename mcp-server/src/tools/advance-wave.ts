@@ -331,7 +331,7 @@ export async function runAdvanceWave(
     cwd,
     signal,
     beads: waveCandidates,
-    coordinatorName: 'Coordinator',
+    coordinatorName: args.coordinatorName ?? 'Coordinator',
   });
   if (dispatch.prompts.length !== waveCandidates.length) {
     return makeToolError(
@@ -341,7 +341,7 @@ export async function runAdvanceWave(
       'No implementation CLI is available for the next wave.',
       {
         details: { warnings: dispatch.warnings },
-        hint: 'Install at least one of claude, codex, or gemini, then retry flywheel_advance_wave.',
+        hint: 'Install at least one of claude, codex, gemini, or pi, then retry flywheel_advance_wave.',
       },
     );
   }

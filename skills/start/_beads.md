@@ -71,12 +71,12 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- "Start" -> call `flywheel_approve_beads` with `action: "start"`
-  > **Note:** If the plan was just registered via `flywheel_plan`, the first `flywheel_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `flywheel_approve_beads` with `action: "start"` a second time to get the quality score and launch.
+- "Start" -> call `flywheel_approve_beads` with `action: "start"` and `coordinatorName: "<current Agent Mail name>"`
+  > **Note:** If the plan was just registered via `flywheel_plan`, the first `flywheel_approve_beads` call may return "Create beads from plan" instructions instead of the quality score. In that case, create beads with `br create`, then call `flywheel_approve_beads` with the same coordinator name and `action: "start"` a second time to get the quality score and launch.
 - "Polish" -> call `flywheel_approve_beads` with `action: "polish"`, then use `br list` to show updated beads, loop
 - "Reject" -> call `flywheel_approve_beads` with `action: "reject"`, return to Step 3
 
-If the user asks for the quality score before choosing, call `flywheel_approve_beads(action="start")`; it is the only response that includes the launch score. Still require the launch-confirmation gate below before dispatching Step 7.
+If the user asks for the quality score before choosing, call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`; it is the only response that includes the launch score. Still require the launch-confirmation gate below before dispatching Step 7.
 
 **Approval error codes.** Follow SKILL.md Universal Rule 4. For `flywheel_approve_beads` recovery:
 

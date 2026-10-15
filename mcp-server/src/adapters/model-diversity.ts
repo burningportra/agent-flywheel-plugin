@@ -1,13 +1,14 @@
 /**
- * Swarm-agent model diversity — Claude : Codex : Gemini at 1:1:1 via NTM.
+ * Swarm-agent model diversity — Claude : Codex : Gemini at 1:1:1 via NTM,
+ * with Pi as the first non-primary fallback.
  *
  * Responsibilities:
- *   1. Detect CLI availability (`which claude codex gemini`).
+ *   1. Detect CLI availability (`which claude codex gemini pi`).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so
  *      the coordinator can report degraded-mode to the user.
- *   4. Provide per-bead prompt adaptation via the three adapters.
+ *   4. Provide per-bead prompt adaptation for every dispatch provider.
  *
  * The public surface is the primary consumer contract for downstream
  * bead `1qn` (codex-rescue handoff). Treat it as stable.
@@ -15,12 +16,12 @@
 
 import type { ExecFn } from '../exec.js';
 import { errMsg } from '../errors.js';
-import { adaptPromptForClaude } from './claude-prompt.js';
+import { adaptPromptForClaude, adaptPromptForPi } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
 import { adaptPromptForGemini } from './gemini-prompt.js';
 import type { AdaptedPrompt, BeadDispatchContext } from './codex-prompt.js';
 
-export type ModelProvider = 'claude' | 'codex' | 'gemini';
+export type ModelProvider = 'claude' | 'codex' | 'gemini' | 'pi';
 
 /** Per-provider availability signal. */
 export interface CliCapability {
@@ -36,6 +37,7 @@ export interface CapabilitiesMap {
   readonly claude: CliCapability;
   readonly codex: CliCapability;
   readonly gemini: CliCapability;
+  readonly pi: CliCapability;
 }
 
 /** One lane in the split result — a provider + the beads assigned to it. */
@@ -64,6 +66,7 @@ const PROVIDER_BINARIES: Record<ModelProvider, string> = {
   claude: 'claude',
   codex: 'codex',
   gemini: 'gemini',
+  pi: 'pi',
 };
 
 /**
@@ -107,40 +110,31 @@ export async function detectCliCapabilities(
     }
   };
 
-  const [claude, codex, gemini] = await Promise.all([
+  const [claude, codex, gemini, pi] = await Promise.all([
     probe('claude'),
     probe('codex'),
     probe('gemini'),
+    probe('pi'),
   ]);
-  return { claude, codex, gemini };
+  return { claude, codex, gemini, pi };
 }
 
 // ─── Ratio math + split ───────────────────────────────────────────────────
 
-/**
- * Priority order for remainder assignment when N % 3 != 0.
- *
- * Rationale:
- *   - Claude gets the first extra (it's the most reliable across bead
- *     shapes, so we'd rather bias toward it when we can't split evenly).
- *   - Codex gets the second extra (the user explicitly asked for codex
- *     parity and it handles TypeScript-heavy beads well).
- *   - Gemini gets the third (providing the second-perspective lane even
- *     when remainder = 0).
- *
- * Missing-provider transfers use the explicit fallback table below.
- */
-const REMAINDER_PRIORITY: readonly ModelProvider[] = Object.freeze([
+const PRIMARY_PROVIDERS = ['claude', 'codex', 'gemini'] as const;
+
+const ROUTING_PROVIDERS: readonly ModelProvider[] = Object.freeze([
   'claude',
   'codex',
   'gemini',
+  'pi',
 ]);
 
 const FALLBACK_PRIORITY = {
-  claude: ['codex', 'gemini'],
-  codex: ['claude', 'gemini'],
-  gemini: ['codex', 'claude'],
-} as const satisfies Record<ModelProvider, readonly ModelProvider[]>;
+  claude: ['codex', 'gemini', 'pi'],
+  codex: ['pi', 'claude', 'gemini'],
+  gemini: ['codex', 'pi', 'claude'],
+} as const satisfies Record<(typeof PRIMARY_PROVIDERS)[number], readonly ModelProvider[]>;
 
 /**
  * Split N beads into canonical Claude/Codex/Gemini shares, then transfer a
@@ -149,7 +143,7 @@ const FALLBACK_PRIORITY = {
  * Contract:
  *   - sum(lane.beadIds.length) == beadIds.length
  *   - lanes contain only providers with `available === true`
- *   - lane order is claude, codex, gemini (stable; skipped entries omit)
+ *   - lane order is claude, codex, gemini, pi (stable; skipped entries omit)
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
  */
@@ -158,7 +152,7 @@ export function splitBeadsByProvider(
   caps: CapabilitiesMap,
 ): DispatchPlan {
   const warnings: string[] = [];
-  const availableProviders: ModelProvider[] = REMAINDER_PRIORITY.filter(
+  const availableProviders: ModelProvider[] = ROUTING_PROVIDERS.filter(
     (p) => caps[p].available,
   );
 
@@ -166,34 +160,34 @@ export function splitBeadsByProvider(
     return {
       lanes: [],
       warnings: [
-        'no implementation CLI available (claude, codex, gemini all missing)',
+        'no implementation CLI available (claude, codex, gemini, pi all missing)',
       ],
       degraded: true,
       ratio: '0:0:0',
     };
   }
 
-  const missing = REMAINDER_PRIORITY.filter((p) => !caps[p].available);
+  const missing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available);
   const degraded = missing.length > 0;
   const n = beadIds.length;
   const preferredCounts = new Map<ModelProvider, number>();
-  const baseline = Math.floor(n / REMAINDER_PRIORITY.length);
-  for (const provider of REMAINDER_PRIORITY) {
+  const baseline = Math.floor(n / PRIMARY_PROVIDERS.length);
+  for (const provider of PRIMARY_PROVIDERS) {
     preferredCounts.set(provider, baseline);
   }
 
-  let remainder = n - baseline * REMAINDER_PRIORITY.length;
-  for (const p of REMAINDER_PRIORITY) {
+  let remainder = n - baseline * PRIMARY_PROVIDERS.length;
+  for (const p of PRIMARY_PROVIDERS) {
     if (remainder === 0) break;
     preferredCounts.set(p, (preferredCounts.get(p) ?? 0) + 1);
     remainder--;
   }
 
   const assigned = new Map<ModelProvider, string[]>(
-    REMAINDER_PRIORITY.map((provider) => [provider, []]),
+    ROUTING_PROVIDERS.map((provider) => [provider, []]),
   );
   let cursor = 0;
-  for (const preferred of REMAINDER_PRIORITY) {
+  for (const preferred of PRIMARY_PROVIDERS) {
     const count = preferredCounts.get(preferred) ?? 0;
     const ids = beadIds.slice(cursor, cursor + count);
     cursor += count;
@@ -214,12 +208,12 @@ export function splitBeadsByProvider(
   }
 
   const lanes: DispatchLane[] = [];
-  for (const provider of REMAINDER_PRIORITY) {
+  for (const provider of ROUTING_PROVIDERS) {
     const ids = assigned.get(provider) ?? [];
     if (ids.length > 0) lanes.push({ provider, beadIds: ids });
   }
 
-  const ratio = REMAINDER_PRIORITY.map(
+  const ratio = PRIMARY_PROVIDERS.map(
     (provider) => String(assigned.get(provider)?.length ?? 0),
   ).join(':');
 
@@ -231,7 +225,7 @@ export function splitBeadsByProvider(
 /**
  * Pick the right adapter for a provider. Centralised so the dispatch
  * loop can `adaptPromptFor(lane.provider, ctx)` without importing all
- * three modules.
+ * provider modules.
  */
 export function adaptPromptFor(
   provider: ModelProvider,
@@ -244,6 +238,8 @@ export function adaptPromptFor(
       return adaptPromptForCodex(ctx);
     case 'gemini':
       return adaptPromptForGemini(ctx);
+    case 'pi':
+      return adaptPromptForPi(ctx);
   }
 }
 
@@ -253,14 +249,15 @@ export function adaptPromptFor(
  *   Missing codex → "claude+gemini available; codex missing; ratio 1:0:1 achievable"
  */
 export function describeCapabilities(caps: CapabilitiesMap): string {
-  const avail = REMAINDER_PRIORITY.filter((p) => caps[p].available);
-  const miss = REMAINDER_PRIORITY.filter((p) => !caps[p].available);
-  const ratio = REMAINDER_PRIORITY.map((p) =>
+  const avail = PRIMARY_PROVIDERS.filter((p) => caps[p].available);
+  const miss = PRIMARY_PROVIDERS.filter((p) => !caps[p].available);
+  const ratio = PRIMARY_PROVIDERS.map((p) =>
     caps[p].available ? '1' : '0',
   ).join(':');
   const parts: string[] = [];
   parts.push(avail.length > 0 ? `${avail.join('+')} available` : 'no CLIs available');
   if (miss.length > 0) parts.push(`${miss.join('+')} missing`);
   parts.push(`ratio ${ratio} achievable`);
+  if (caps.pi.available) parts.push('pi fallback available');
   return parts.join('; ');
 }

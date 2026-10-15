@@ -32,10 +32,10 @@ function makeWhichExec(present: Record<string, string | false>): ExecFn {
 }
 
 function caps(
-  available: { claude?: boolean; codex?: boolean; gemini?: boolean } = {},
+  available: { claude?: boolean; codex?: boolean; gemini?: boolean; pi?: boolean } = {},
 ): CapabilitiesMap {
   const mk = (
-    p: 'claude' | 'codex' | 'gemini',
+    p: 'claude' | 'codex' | 'gemini' | 'pi',
     a: boolean,
   ): CapabilitiesMap[typeof p] =>
     a
@@ -45,22 +45,25 @@ function caps(
     claude: mk('claude', available.claude !== false),
     codex: mk('codex', available.codex !== false),
     gemini: mk('gemini', available.gemini !== false),
+    pi: mk('pi', available.pi === true),
   };
 }
 
 // ─── CLI detection ─────────────────────────────────────────────────────────
 
 describe('detectCliCapabilities', () => {
-  it('reports all three as available when which finds them', async () => {
+  it('reports primary CLIs and the Pi fallback when which finds them', async () => {
     const exec = makeWhichExec({
       claude: '/usr/local/bin/claude',
       codex: '/usr/local/bin/codex',
       gemini: '/usr/local/bin/gemini',
+      pi: '/usr/local/bin/pi',
     });
     const result = await detectCliCapabilities(exec);
     expect(result.claude.available).toBe(true);
     expect(result.codex.available).toBe(true);
     expect(result.gemini.available).toBe(true);
+    expect(result.pi.available).toBe(true);
     expect(result.claude.path).toBe('/usr/local/bin/claude');
   });
 
@@ -118,6 +121,22 @@ describe('splitBeadsByProvider', () => {
       'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to codex',
     ]);
     expect(plan.ratio).toBe('2:4:0');
+  });
+
+  it('missing Codex and Gemini reassigns both shares to Pi', () => {
+    const plan = splitBeadsByProvider(
+      ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'],
+      caps({ codex: false, gemini: false, pi: true }),
+    );
+
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2'] },
+      { provider: 'pi', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+    ]);
+    expect(plan.warnings).toEqual([
+      'codex CLI not available (codex not on PATH); reassigned 2 bead(s) to pi',
+      'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to pi',
+    ]);
   });
 
   it('3-bead wave with all CLIs present → 1 Claude + 1 Codex + 1 Gemini', () => {
@@ -237,6 +256,14 @@ describe('adaptPromptFor', () => {
     expect(out.prompt).toContain('# ROLE');
     expect(out.prompt).toContain('STOP');
     expect(out.prompt).toContain("program='gemini-cli'");
+  });
+
+  it('pi adapter emits the shared terminal-worker contract for an NTM Pi pane', () => {
+    const out = adaptPromptFor('pi', ctx);
+    expect(out.provider).toBe('pi');
+    expect(out.trailingNewlines).toBe(1);
+    expect(out.prompt).toContain("program='pi'");
+    expect(out.prompt).toContain("model='pi'");
   });
 });
 

@@ -53,7 +53,7 @@ export function buildPreCompletionQualityGate(
     '## PRE-COMPLETION QUALITY GATE',
     'Before sending the completion message, complete these steps in order and fix every issue you find:',
     '1. Invoke `/ubs-workflow` in changed-files mode, or run `ubs <changed-files>` when the skill is unavailable. Triage every finding and record fixes or justified deferrals.',
-    "2. Run the repo's verify commands from AGENTS.md for every surface you changed and record each exit code.",
+    "2. Run the repository's documented verify commands for every surface you changed and record each exit code.",
     '3. Perform a fresh-eyes self-review of your diff for regressions, unsafe assumptions, missing tests, and edge cases.',
     `4. After closing and verifying the bead and releasing reservations, write the completion attestation to the exact path \`${reportPath}\`.`,
     '',

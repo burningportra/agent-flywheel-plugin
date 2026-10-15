@@ -742,6 +742,8 @@ export interface PlanArgs {
 export interface ApproveArgs {
   cwd: string;
   action: "start" | "polish" | "reject" | "advanced" | "git-diff-review" | "remediate";
+  /** Agent Mail identity that receives wave-one start/done messages. */
+  coordinatorName?: string;
   advancedAction?: string;
   /** P2.4 / 2p5 — convergence threshold above which a polish call returns
    * stop_reason="convergence_reached" instead of scheduling another round.
@@ -814,7 +816,13 @@ export interface ReviewArgs {
   shaRange?: string;
 }
 export interface VerifyBeadsArgs { cwd: string; beadIds: string[] }
-export interface AdvanceWaveArgs { cwd: string; closedBeadIds: string[]; maxNextWave?: number }
+export interface AdvanceWaveArgs {
+  cwd: string;
+  closedBeadIds: string[];
+  maxNextWave?: number;
+  /** Agent Mail identity that receives next-wave start/done messages. */
+  coordinatorName?: string;
+}
 export interface MemoryArgs {
   cwd: string;
   query?: string;

@@ -184,6 +184,10 @@ const PRIMARY_TOOLS = [
           enum: ['start', 'polish', 'reject', 'advanced', 'git-diff-review', 'remediate'],
           description: 'start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle, remediate=create one bead from a failing outcome-grading criterion (T20).',
         },
+        coordinatorName: {
+          type: 'string',
+          description: 'Agent Mail identity that receives implementer start/done messages when action=start.',
+        },
         advancedAction: {
           type: 'string',
           enum: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
@@ -332,6 +336,10 @@ const PRIMARY_TOOLS = [
         maxNextWave: {
           type: 'number',
           description: 'Max beads in the next wave (defaults to composition tier from swarm.ts)',
+        },
+        coordinatorName: {
+          type: 'string',
+          description: 'Agent Mail identity that receives next-wave implementer start/done messages.',
         },
       },
       required: ['cwd', 'closedBeadIds'],

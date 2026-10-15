@@ -65,7 +65,7 @@ to catch up on every state change you missed.
 
 After every wave completes, instead of: verify-beads → read frontier → render prompts → dispatch (4-step manual dance), call:
 ```
-flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>])
+flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>], coordinatorName: "<current Agent Mail name>")
 ```
 Returns `{ verification, nextWave: { beadIds, lanes, prompts, complexity, warnings, degraded } | null, waveComplete }`. If `nextWave` is non-null, spawn from `nextWave.lanes` and send every prompt unchanged via `ntm --robot-send`. If `waveComplete: true` and `nextWave: null`, the queue is drained. Proceed to Step 8.
 
@@ -88,7 +88,7 @@ Stays inside cache TTL (270s), survives idle turns. Combine with the tender-daem
 2. Spawn tender-daemon as a single background process.
 3. Dispatch prompts via `ntm --robot-send` for first-wave dispatch; for subsequent idle-pane "next bead" picks, prefer `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` (it picks the next ready bead off the `bv` graph and registers the assignment in one call).
 4. Call `ScheduleWakeup(270s, …)` and end the turn.
-5. (Wakeup fires) — `tail .pi-flywheel/tender-events.log` → optionally `ntm work triage --by-track` for an operator-readable view of remaining work → call `flywheel_advance_wave(closedBeadIds)`.
+5. (Wakeup fires) — `tail .pi-flywheel/tender-events.log` → optionally `ntm work triage --by-track` for an operator-readable view of remaining work → call `flywheel_advance_wave(closedBeadIds, coordinatorName)`.
 6. Dispatch returned `nextWave.prompts` (or proceed to Step 8 if `waveComplete && nextWave === null`).
 7. `kill -TERM $tender_daemon_pid` when the queue drains.
 
@@ -183,7 +183,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
         header: "Codex config",
         options: [
           { label: "Apply fix and proceed (Recommended)", description: "Run: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}). Idempotent. Then spawn the swarm." },
-          { label: "Skip cod from swarm", description: "Re-shape lane sizes to redistribute codex share to claude+gemini. Loses Codex perspective." },
+          { label: "Abort and fix config", description: "Stop before spawning so the incompatible Codex configuration can be corrected without discarding the server-owned lane assignment." },
           { label: "Continue anyway", description: "Spawn cod panes despite known incompatibility — they will crash within seconds." }
         ],
         multiSelect: false
@@ -197,7 +197,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
         question: "Doctor flagged gemini_model_compat (configured gemini model is outside the documented allowlist). How to handle the gem lane?",
         header: "Gemini",
         options: [
-          { label: "Skip gem from swarm (Recommended)", description: "Re-shape lane sizes via substitution ladder (gmi→cod→pi→cc). Loses Gemini perspective but avoids spawn crash." },
+          { label: "Abort and fix config (Recommended)", description: "Stop before spawning so the Gemini configuration can be corrected without discarding the server-owned lane assignment." },
           { label: "Continue anyway", description: "Spawn gem panes despite known incompatibility — they will likely reject the configured model and exit." }
         ],
         multiSelect: false
@@ -208,14 +208,14 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    2. **Use the returned lane sizes.** For wave one, read `START_DATA.lanes`. Later waves use `nextWave.lanes`. Surface `data.dispatch.warnings` or `nextWave.warnings` before spawning.
 
-   3. **Spawn lanes via NTM** with one pane per returned bead. Set `N_cc`, `N_cod`, and `N_gmi` from the matching `START_DATA.lanes[].beadIds.length` values. Load `/ntm` and `/vibing-with-ntm` first.
+   3. **Spawn lanes via NTM** with one pane per returned bead. Set `N_cc`, `N_cod`, `N_gmi`, and `N_pi` from the matching `START_DATA.lanes[].beadIds.length` values. Load `/ntm` and `/vibing-with-ntm` first.
       ```bash
       SESSION="${NTM_PROJECT}--impl-<goal-slug>"
 
       # --no-user omits pane 0 entirely; lanes start at pane index 1.
       # --stagger-mode=smart prevents thundering-herd on simultaneous cold-boot.
       ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-        --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --stagger-mode=smart
+        --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --pi=<N_pi> --stagger-mode=smart
       ```
 
       **Pane addressing is numeric** — `cc-1` / `cod-1` / `gmi-1` style does NOT work. With `--no-user`, panes are laid out contiguously by spawn order:
@@ -225,12 +225,14 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
       | Claude  | `1` … `N_cc`                                              |
       | Codex   | `N_cc+1` … `N_cc+N_cod`                                   |
       | Gemini  | `N_cc+N_cod+1` … `N_cc+N_cod+N_gmi`                      |
+      | Pi      | `N_cc+N_cod+N_gmi+1` … `N_cc+N_cod+N_gmi+N_pi`           |
 
       Dispatch via `ntm --robot-send` (NOT `ntm send`). Plain `ntm send` aborts with `Continue anyway? [y/N]` when CASS dedup matches a similar past prompt — silent blocker in orchestrator loops (ntm skill gotcha #3). `--robot-send` is non-interactive by design:
       ```bash
       ntm --robot-send="$SESSION" --panes=1 --msg="<matching data.prompts[].prompt>"
       ntm --robot-send="$SESSION" --panes=$((N_cc+1)) --msg="<matching data.prompts[].prompt>"
       ntm --robot-send="$SESSION" --panes=$((N_cc+N_cod+1)) --msg="<matching data.prompts[].prompt>"
+      ntm --robot-send="$SESSION" --panes=$((N_cc+N_cod+N_gmi+1)) --msg="<matching data.prompts[].prompt>"
       ```
 
       Send every `START_DATA.prompts[]` record once, in array order, to a pane in its `lane`. Pane spawn uses `gmi`. NTM robot-send's provider filter is `gem`, though numeric `--panes` needs no `--type` filter.
@@ -253,7 +255,7 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    **Post-wave bridge — call `flywheel_advance_wave` (v3.6.0+).** When every bead in the wave is closed (via Agent Mail completion OR proactive close OR force-stop), do NOT manually re-render the next wave. One call:
    ```
-   flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>])
+   flywheel_advance_wave(cwd, closedBeadIds: [<wave-N bead IDs>], coordinatorName: "<current Agent Mail name>")
    ```
    - If `nextWave: null` and `waveComplete: true` → queue drained. `kill -TERM $tender_daemon_pid`, leave the tmux session alive (user may want to inspect panes), transition to Step 8.
    - If `nextWave.prompts` returned → spawn the counts in `nextWave.lanes` and dispatch every prompt unchanged via `ntm --robot-send` to fresh panes (or reuse idle ones via `--robot-restart-pane`), then `ScheduleWakeup(270s, …)` and end the turn. The daemon will keep logging while you're idle.
@@ -356,7 +358,7 @@ If you observe two beads committing the same `dist/` bytes, note it in the end-o
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | Multiple agents pick the same bead | Unsynced starts; not marking `in_progress` early | Stagger starts 30s; require `br update --status in_progress` + Agent Mail claim before any edit; audit file reservations |
-| Agent circles after compaction | Forgot the AGENTS.md contract | Nudge: `SendMessage(to: "<name>", message: "Re-read AGENTS.md so it's still fresh, then continue from your last Agent Mail message.")` — kill+restart only if it stays erratic |
+| Agent circles after compaction | Lost its dispatch contract | Nudge: `SendMessage(to: "<name>", message: "Re-read your server-issued implementer prompt, then continue from your last Agent Mail message.")` — kill+restart only if it stays erratic |
 | Bead sits `in_progress` too long | Crash / blocker / lost plot | Check Agent Mail thread for last report; if silent, implement directly as coordinator OR split the blocker into sub-beads with `br create` + `br dep add` |
 | Contradictory implementations across beads | Poor coordination / stale reservations | Audit `file_reservation_paths`; revise bead boundaries so two beads never edit the same file |
 | Much code, goal still far | Strategic drift | Run the "Come to Jesus" reality check in Step 9's Check-status option |

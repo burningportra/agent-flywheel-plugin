@@ -13,13 +13,16 @@ const unusedExec: ExecFn = async () => {
   throw new Error('capability probe should not run when capabilities are supplied');
 };
 
-function capabilities(gemini = true): CapabilitiesMap {
+function capabilities(gemini = true, pi = false): CapabilitiesMap {
   return {
     claude: { provider: 'claude', available: true, path: '/bin/claude' },
     codex: { provider: 'codex', available: true, path: '/bin/codex' },
     gemini: gemini
       ? { provider: 'gemini', available: true, path: '/bin/gemini' }
       : { provider: 'gemini', available: false, reason: 'not installed' },
+    pi: pi
+      ? { provider: 'pi', available: true, path: '/bin/pi' }
+      : { provider: 'pi', available: false, reason: 'not installed' },
   };
 }
 
@@ -60,6 +63,11 @@ function completionReportExample(prompt: string): unknown {
 }
 
 function assertCompletionGate(prompt: ImplementerPrompt): void {
+  expect(prompt.prompt).toContain("human_key='/workspace/project'");
+  expect(prompt.prompt).toContain(`agent_name='${prompt.agentName}'`);
+  expect(prompt.prompt).not.toContain('preferred_name=');
+  expect(prompt.prompt).toContain("send_message to 'WindyBasin'");
+  expect(prompt.prompt).not.toContain('AGENTS.md');
   expect(prompt.prompt).toContain('## PRE-COMPLETION QUALITY GATE');
   expect(prompt.prompt).toContain(`.pi-flywheel/completion/${prompt.beadId}.json`);
   const report = CompletionReportSchemaV1.parse(completionReportExample(prompt.prompt));
@@ -121,6 +129,30 @@ describe('buildImplementerDispatch', () => {
     expect(dispatch.warnings).toEqual([
       'gemini CLI not available (not installed); reassigned 2 bead(s) to codex',
     ]);
+  });
+
+  it('uses Pi when both non-Claude primary providers are unavailable', async () => {
+    const caps = capabilities(false, true);
+    const dispatch = await buildImplementerDispatch({
+      exec: unusedExec,
+      cwd: '/workspace/project',
+      beads: beads(6),
+      coordinatorName: 'WindyBasin',
+      capabilities: {
+        ...caps,
+        codex: { provider: 'codex', available: false, reason: 'not installed' },
+      },
+    });
+
+    expect(dispatch.lanes).toEqual([
+      { lane: 'cc', beadIds: ['bead-1', 'bead-2'] },
+      { lane: 'pi', beadIds: ['bead-3', 'bead-4', 'bead-5', 'bead-6'] },
+    ]);
+    expect(dispatch.prompts.map((prompt) => prompt.lane)).toEqual([
+      'cc', 'cc', 'pi', 'pi', 'pi', 'pi',
+    ]);
+    for (const prompt of dispatch.prompts) assertCompletionGate(prompt);
+    expect(dispatch.prompts[2]?.prompt).toContain("program='pi'");
   });
 
   it('returns an empty dispatch without probing capabilities when there are no beads', async () => {

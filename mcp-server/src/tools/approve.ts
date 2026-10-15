@@ -451,7 +451,15 @@ export async function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<M
 
   // action === 'start' — launch implementation. stop_reason is "manual_start"
   // because the polish loop was terminated by an explicit operator decision.
-  return handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix);
+  return handleStart(
+    ctx,
+    beads,
+    roundHeader,
+    beadList,
+    convergenceScore,
+    matrix,
+    args.coordinatorName ?? 'Coordinator',
+  );
 }
 
 async function handlePlanApproval(ctx: ToolContext, args: ApproveArgs): Promise<McpToolResult> {
@@ -595,6 +603,7 @@ async function handleStart(
   beadList: string,
   convergenceScore: number | undefined,
   matrix: HotspotMatrix,
+  coordinatorName: string,
 ): Promise<McpToolResult> {
   const { exec, cwd, state, saveState, signal } = ctx;
 
@@ -642,7 +651,7 @@ async function handleStart(
     cwd,
     signal,
     beads: ready,
-    coordinatorName: 'Coordinator',
+    coordinatorName,
   });
   if (dispatch.prompts.length !== ready.length) {
     return makeApproveError(
@@ -651,7 +660,7 @@ async function handleStart(
       'beads',
       'cli_not_available',
       { warnings: dispatch.warnings },
-      'Install at least one of claude, codex, or gemini, then retry flywheel_approve_beads.',
+      'Install at least one of claude, codex, gemini, or pi, then retry flywheel_approve_beads.',
     );
   }
 

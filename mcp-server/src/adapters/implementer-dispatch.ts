@@ -1,5 +1,3 @@
-import { basename } from 'node:path';
-
 import { allocateAgentNames } from './agent-names.js';
 import {
   adaptPromptFor,
@@ -13,7 +11,7 @@ import type { ExecFn } from '../exec.js';
 import type { Bead } from '../types.js';
 import type { BeadDispatchContext } from './codex-prompt.js';
 
-export type NtmImplementationLane = 'cc' | 'cod' | 'gmi';
+export type NtmImplementationLane = 'cc' | 'cod' | 'gmi' | 'pi';
 
 export interface ImplementerLane {
   readonly lane: NtmImplementationLane;
@@ -48,6 +46,7 @@ const NTM_LANE = {
   claude: 'cc',
   codex: 'cod',
   gemini: 'gmi',
+  pi: 'pi',
 } as const satisfies Record<ModelProvider, NtmImplementationLane>;
 
 function beadToDispatchContext(
@@ -115,7 +114,7 @@ export async function buildImplementerDispatch(
     for (const beadId of lane.beadIds) assignmentByBead.set(beadId, lane.provider);
   }
 
-  const projectKey = basename(args.cwd);
+  const projectKey = args.cwd;
   const agentNames = allocateAgentNames(args.beads.length, projectKey);
   const complexity: Record<string, BeadComplexity> = {};
   const prompts: ImplementerPrompt[] = args.beads.map((bead, index) => {

@@ -20,6 +20,7 @@ describe('server-owned wave-one implementer dispatch', () => {
 
     expect(content).toContain('data.lanes');
     expect(content).toContain('data.prompts');
+    expect(content).toContain('coordinatorName');
     expect(content).not.toContain('Follow AGENTS.md § "Pre-Completion Quality Gate"');
     expect(content).not.toContain('copy the gate text from AGENTS.md');
   });
@@ -28,7 +29,7 @@ describe('server-owned wave-one implementer dispatch', () => {
     const content = read('skills/start/_implement.md');
 
     expect(content).toContain('ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user');
-    expect(content).toContain('--cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --stagger-mode=smart');
+    expect(content).toContain('--cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --pi=<N_pi> --stagger-mode=smart');
     expect(content).toContain('Use `--panes=N`');
     expect(content).toContain('`--pane=N` (singular) is silently broadcast to ALL panes');
   });
