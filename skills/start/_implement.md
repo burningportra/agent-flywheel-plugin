@@ -273,71 +273,13 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
 
    **Monitor loop (MANDATORY — do NOT fire-and-forget).** NTM spawns agents asynchronously; a pane process can live while the agent inside it is idle, crashed, or skipping Agent Mail. You MUST actively monitor until every bead in the wave is closed or force-stopped.
 
-   ⚠ **Do NOT use `ntm status` / `ntm activity` / `ntm health` for monitoring.** They read cached timestamps and silently return stale signals (sometimes dated to the epoch / "56 years ago"), so panes appear dead while they're working (or vice versa). Use the `--robot-*` surfaces below — they sample live pane buffers and the provider's actual OAuth/quota state.
+   **Tend.** Follow the `/vibing-with-ntm` orchestrator decision tree for nudge escalation, stuck-pane ladder, rate-limit probe, context-handoff and convergence termination. The flywheel-specific facts the loop needs on top of that:
 
-   **Bootstrap once** (capture the event cursor):
-   ```bash
-   ntm --robot-snapshot --robot-format=toon      # note the returned `cursor`
-   ```
-
-   **Tend — event-driven, not timer-driven.** Block on the attention feed instead of polling every 60-90s; it wakes on real state changes (attention, action_required, mail_ack_required, rate_limited-cleared):
-   ```bash
-   ntm --robot-wait "$SESSION" \
-       --wait-until=attention,action_required,mail_ack_required \
-       --timeout=90s                               # returns sooner if an event fires
-   ```
-
-   **On each wake, read the live per-pane truth (run all 4 — inbox is mandatory, not optional):**
-
-   1. `ntm --robot-is-working="$SESSION"` — `working | idle | rate_limited | error | context_low`
-   2. `ntm --robot-agent-health="$SESSION"` — OAuth, quota, context-window, account state
-   3. `ntm --robot-tail="$SESSION" --panes=<N> --lines=50` — sample the actual pane buffer for any pane flagged idle/error
-   4. **Inbox poll (MANDATORY — this is how you observe agent progress):**
-      ```
-      fetch_inbox(project_key: cwd, agent_name: "<your-name>", include_bodies: false, status: "unread", limit: 50)
-      ```
-      Then for each new message:
-      - `mark_message_read(message_id: <id>)` — so the next poll shows only fresh traffic.
-      - If `subject` matches `[impl] <bead-id> done`, run `acknowledge_message(message_id: <id>)` and treat the bead as a candidate for proactive close (verify commit + acceptance, then `br update --status closed`).
-      - If `subject` matches `[impl] <bead-id> blocker`, fetch the body via `fetch_topic`, capture into CASS, and decide: nudge for clarification, reassign, or escalate per Step 9's gates.
-   5. `git log --oneline --grep="<bead-id>"` per in-flight bead — catches the "agent committed but forgot `br update`" failure mode (see Step 7's proactive-close rule).
-
-   **Tick log (MANDATORY — print this to the user every wake so they have proof of monitoring).** After running the 5 reads above, emit ONE compact line of plain text in the chat (NOT a tool result, actual user-facing output):
-
-   ```
-   tick #<N> @ <HH:MM:SS> — panes: <W working / I idle / R rate-limited> · inbox: <K new> [bead-x9q done by Coral, bead-y3r started by Onyx] · commits: <N since last tick>
-   ```
-
-   Skip ticks where nothing changed (don't spam), but emit at least one line every 3 ticks so the user can see the orchestrator is alive. If the inbox count is `0 new` for 3 consecutive ticks AND no panes are `working`, suspect Agent Mail breakage — call `health_check` on the agent-mail server before continuing the loop.
-
-   If the event cursor expires, re-run `ntm --robot-snapshot` and continue.
-
-   **Agent Mail usage verification.** Bootstrap in the prompt is not enough — confirm each pane's agent actually registered AND is messaging:
-   1. After 60s post-spawn, call `list_window_identities` (or `list_contacts`) and confirm a registered identity exists per pane you spawned. A missing identity means the agent skipped `macro_start_session`.
-   2. On any missing identity, nudge immediately (use `--robot-send` to dodge CASS dedup blocking):
-      ```bash
-      ntm --robot-send="$SESSION" --panes=<pane> --msg="Before any other work, run macro_start_session and send a 'started' message to <coordinator-name>. Do not skip Agent Mail bootstrap — the flywheel cannot track you otherwise."
-      ```
-   3. If the agent has an identity but hasn't sent a message in >2 min while its bead is still open, it's silently stuck. Treat as idle (escalation below).
-
-   **Nudge escalation per idle pane.** Cross-reference: this is the [orchestrator decision tree from `/vibing-with-ntm`](references/vibing-with-ntm/SKILL.md#orchestrator-decision-tree) — load that skill if you need full operator-card detail (OC-001 rate-limit probe, OC-003 stuck-pane ladder, OC-009 context handoff, OC-016 convergence termination).
-
-   "Idle" = `ntm --robot-is-working` reports `idle` for the pane OR no Agent Mail traffic in 2 min while bead is open. Treat `rate_limited` and `context_low` as separate recovery paths, NOT idle:
-   - `rate_limited` → probe reality first (`tmux send-keys -t "$SESSION":<pane> "ping" Enter; sleep 5; ntm --robot-tail="$SESSION" --panes=<pane> --lines=10`); if still limited, rotate via `/caam` or `ntm rotate "$SESSION" --all-limited`. Do not nudge.
-   - `context_low` → dispatch handoff-then-restart: save state via Agent Mail, then `ntm --robot-restart-pane="$SESSION" --panes=<N> --restart-bead=<bead-id>` on a fresh pane.
-
-   For a genuinely idle pane (use `--robot-send`, NOT `ntm send` — see CASS-dedup note above):
-   - Nudge 1: `ntm --robot-send="$SESSION" --panes=<pane> --msg="Status check — report progress on <bead-id> and any blockers via Agent Mail."`
-   - Nudge 2 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Still waiting on <bead-id>. If blocked, message <coordinator> with the blocker. If done, run 'br update <bead-id> --status closed'."`
-   - Nudge 3 (2 min later): `ntm --robot-send="$SESSION" --panes=<pane> --msg="Final nudge. Delivering now or I reassign/close on your behalf."`
-   - After 3 nudges AND identical `--robot-tail` output for ≥3 ticks, the pane is wedged (CLI likely hung on `/usage`, `/rate-limit-options`, or a confirm dialog). Climb the stuck-pane ladder instead of blind nudging:
-     1. `ntm --robot-health-restart-stuck="$SESSION" --stuck-threshold=10m --dry-run` — surfaces which panes are actually stuck.
-     2. `ntm --robot-smart-restart="$SESSION" --panes=<N> --prompt="<re-dispatch prompt>"` — graceful; refuses if pane is actually working.
-     3. `ntm --robot-smart-restart="$SESSION" --panes=<N> --hard-kill --prompt="..."` — when the CLI is wedged on a dialog.
-     4. `ntm --robot-restart-pane="$SESSION" --panes=<N> --restart-bead=<bead-id>` — nuclear (`tmux respawn-pane -k`); works even when the CLI refuses to cooperate.
-     Then apply Step 7's idle-agent escalation (verify commit on disk, close bead yourself if commit matches acceptance, otherwise reassign the bead).
-
-   ⚠ Do NOT use `ntm spawn impl-<goal-slug>` (bare purpose as session name). `ntm` resolves the session name as `projects_base/<session_name>`, and an `impl-<goal-slug>` directory won't exist, so the spawn either fails or lands in the wrong cwd. Always pass the project name as positional arg and the purpose as `--label`.
+   - Capture the cursor once with `ntm --robot-snapshot --robot-format=toon`, then block on `ntm --robot-wait "$SESSION" --wait-until=attention,action_required,mail_ack_required --timeout=90s`. On each wake, cross-reference `ntm --robot-is-working="$SESSION"` with your Agent Mail inbox (`fetch_inbox` + `mark_message_read` + `acknowledge_message` on `[impl] <bead-id> done` subjects), and run `git log --oneline --grep="<bead-id>"` per in-flight bead to catch the "agent committed but forgot `br update`" case.
+   - Never use `ntm status` / `ntm activity` / `ntm health` (they read cached timestamps and return stale signals — panes look dead while they're working, or vice versa), `ntm send` (hits the CASS-dedup prompt and silently aborts) or `ntm view` (not a flag). Use `--robot-is-working`, `--robot-agent-health`, `--robot-tail`, `--robot-send`.
+   - Print one tick line only when state changes — pane status, inbox count, commits-since-last-tick — so the user can see the orchestrator is alive without the scroll-spam of fixed-interval ticks.
+   - About 60 s after spawn, confirm each pane registered an Agent Mail identity (`list_window_identities` or `list_contacts`). A missing identity means the pane skipped `macro_start_session`; nudge it with `--robot-send` so the identity bootstraps.
+   - Session-name shape: pass the project as the positional arg and the purpose as `--label` (e.g. `ntm spawn "$NTM_PROJECT" --label impl-<goal-slug>`). A bare purpose as session name would resolve against `projects_base` and either fail or land in the wrong cwd.
 
    **Post-wave bridge — call `flywheel_advance_wave` (v3.6.0+).** When every bead in the wave is closed (via Agent Mail completion OR proactive close OR force-stop), do NOT manually re-render the next wave. One call:
    ```
