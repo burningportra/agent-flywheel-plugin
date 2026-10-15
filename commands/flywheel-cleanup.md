@@ -3,17 +3,20 @@ description: Clean up orphaned git worktrees from crashed or stopped sessions.
 argument-hint: ""
 ---
 
-**First action:** Run `git worktree list --porcelain` via Bash and diff the result against `.pi-flywheel/checkpoint.json` to identify orphaned worktrees before prompting the user.
+**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:flywheel-cleanup" })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:flywheel-cleanup` name as `skills/flywheel-cleanup/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model.
 
-Clean up orphaned git worktrees.
+# `/agent-flywheel:flywheel-cleanup` — thin pointer to the canonical skill
 
-1. Run `git worktree list --porcelain` via Bash to list all active worktrees.
-2. Compare against tracked worktrees in `.pi-flywheel/checkpoint.json` (if any).
-3. Identify orphaned worktrees: exist on disk but not tracked in checkpoint, or checkpoint is gone.
-4. For each orphan:
-   - Check for uncommitted changes: `git -C <path> status --short`
-   - If dirty, warn the user and ask whether to auto-commit before removing.
-   - If the user wants to auto-commit: run `git -C <path> add -A && git -C <path> commit -m "wip: orphaned worktree cleanup"`
-5. List what will be removed and ask for confirmation.
-6. For each confirmed orphan: `git worktree remove --force <path>` via Bash.
-7. Report: "Cleaned N worktrees (M with auto-committed changes)."
+Clean up orphaned git worktrees from crashed or stopped sessions.
+
+## Instructions
+
+1. Fetch the canonical skill body via the MCP tool:
+
+   ```
+   flywheel_get_skill({ name: "agent-flywheel:flywheel-cleanup" })
+   ```
+
+   Then follow the returned `body` with `$ARGUMENTS` as the skill's input.
+
+2. If `flywheel_get_skill` errors (bundle disabled via `FW_SKILL_BUNDLE=off`, MCP transport down, or skill missing from the bundle), fall back to reading `skills/flywheel-cleanup/SKILL.md` directly — degraded path, run `/agent-flywheel:flywheel-doctor` to triage.

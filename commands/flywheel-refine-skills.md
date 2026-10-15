@@ -3,69 +3,20 @@ description: Review and improve all loaded agent skills based on session pattern
 argument-hint: "[--yes | --dry-run | --skill <name>]   rewrites SKILL.md files; bare invocation prints safe-alts and exits"
 ---
 
-**First action:** Parse `$ARGUMENTS` for `--yes`, `--dry-run`, or `--skill <name>`.
+**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:flywheel-refine-skills" })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:flywheel-refine-skills` name as `skills/flywheel-refine-skills/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model.
 
-- If none of those flags are present (bare invocation), **stop and print this safe-alt block, then exit without acting**:
-  ```
-  /flywheel-refine-skills is destructive: it spawns analysis agents and
-  rewrites SKILL.md files in skills/. Skills are loaded into every
-  Claude Code session, so a regression here propagates project-wide.
+# `/agent-flywheel:flywheel-refine-skills` — thin pointer to the canonical skill
 
-  Safe alternatives:
-    /agent-flywheel:flywheel-refine-skill <name>   — refine a single skill in isolation
-    /flywheel-refine-skills --skill <name>         — same effect; explicit
-    /flywheel-refine-skills --dry-run              — analyze and write proposals
-                                                     to docs/skill-refine-*.md
-                                                     without touching SKILL.md
-  Re-run with --yes to proceed across ALL skills.
-  ```
-  Do NOT spawn agents, do NOT modify any SKILL.md. Return.
+Review and improve all loaded agent skills based on session patterns and feedback.
 
-- If `--dry-run`: run steps 1 through 7 below — analysis agents write proposals to `docs/skill-refine-<name>-proposed.md` — but **skip step 8 onward** (do not apply changes). Print the list of proposals and exit.
+## Instructions
 
-- If `--skill <name>`: route to `/agent-flywheel:flywheel-refine-skill <name>` (single-skill path) and exit.
+1. Fetch the canonical skill body via the MCP tool:
 
-- If `--yes`: proceed to step 1 and run the full sequence.
-
----
-
-Refine all agent skills.
-
-1. List all skills in the `skills/` directory.
-
-2. Search agent-mail history for skill-related patterns via `search_messages` with query "skill feedback" and "planning pattern".
-
-3. Read current bead completion data from `br list --json` (closed beads, review feedback).
-
-4. **Setup coordination:**
-   Bootstrap Agent Mail: `macro_start_session(human_key: cwd, program: "claude-code", model: your-model, task_description: "Refine all skills")`.
-   Create a team: `TeamCreate(team_name: "refine-skills")`.
-
-5. For each skill found, spawn an analysis agent with `run_in_background: true`:
    ```
-   Agent(
-     subagent_type: "general-purpose",
-     name: "skill-<name>",
-     team_name: "refine-skills",
-     run_in_background: true,
-     prompt: "
-       Bootstrap Agent Mail: macro_start_session(human_key: '<cwd>', program: 'claude-code', model: 'claude-sonnet-4-6', task_description: 'Refine skill: <name>')
-       Analyze: given these session patterns and bead outcomes, what improvements would make this skill more effective?
-       Write proposed changes to docs/skill-refine-<name>-proposed.md.
-       Send the file path to <your-coordinator-name> via send_message when done.
-     "
-   )
+   flywheel_get_skill({ name: "agent-flywheel:flywheel-refine-skills" })
    ```
-   Save each task ID for potential `TaskStop` use. Nudge idle agents individually by name.
 
-6. After all agents report, shutdown each individually:
-   `SendMessage(to: "skill-<name>", message: {"type": "shutdown_request", "reason": "Analysis complete."})`.
-   Do NOT broadcast to `"*"`.
+   Then follow the returned `body` with `$ARGUMENTS` as the skill's input. The skill's first action parses `$ARGUMENTS` for `--yes` / `--dry-run` / `--skill <name>` and prints the safe-alt block on a bare invocation — do not override that gate.
 
-7. Present findings per skill with proposed changes (read from the docs files agents wrote).
-
-8. Ask which skills to update.
-
-9. For each approved skill, apply changes to the SKILL.md file.
-
-10. Summarize: "Updated N skills with improvements."
+2. If `flywheel_get_skill` errors (bundle disabled via `FW_SKILL_BUNDLE=off`, MCP transport down, or skill missing from the bundle), fall back to reading `skills/flywheel-refine-skills/SKILL.md` directly — degraded path, run `/agent-flywheel:flywheel-doctor` to triage.

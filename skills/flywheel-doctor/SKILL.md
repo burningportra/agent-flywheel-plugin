@@ -7,6 +7,26 @@ Run a one-shot diagnostic sweep of the flywheel's toolchain and report each depe
 
 The underlying engine is the `flywheel_doctor` MCP tool — a bounded, cancellable, read-only check battery. This skill is the user-facing surface that triggers the tool and renders its `DoctorReport` envelope.
 
+**First action:** Parse `$ARGUMENTS` for `--json`. Call `flywheel_doctor({cwd: $(git rev-parse --show-toplevel)})` either way. If `--json`, print `structuredContent` (the full envelope) to stdout and exit (no interactive output). Otherwise parse `data.report.checks[]` for any non-green entries before printing the rendered `[OK]` / `[WARN]` / `[FAIL]` checklist.
+
+### `--json` output schema
+
+When invoked with `--json`, the skill emits to stdout exactly the `structuredContent` returned by `flywheel_doctor`. Pin contract version via `flywheel_capabilities` (`data.contract_version`).
+
+- Top-level: `{tool:"flywheel_doctor", version, status, phase, data}`
+- Status: `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
+- `data.report.checks[]`: `[{name, status:"ok"|"warn"|"fail", message, remediation?}]`
+
+### Duel-readiness
+
+`/flywheel-duel` and the duel rows in start's Discover/Plan/Review menus need ntm + ≥2 healthy CLIs. The doctor's existing checks already cover this together:
+
+- `ntm_binary` — ntm CLI present and runnable.
+- `claude_cli` / `codex_cli` / `gemini_cli` — per-CLI installation + auth state.
+- `swarm_model_ratio` — synthesis check reporting the achievable cc:cod:gmi ratio.
+
+If any two of `{claude_cli, codex_cli, gemini_cli}` are green AND `ntm_binary` is green, duels can run. If only one is green, the duel skill aborts in Phase 1 detection — fall back to single-agent paths (`/idea-wizard`, `mode=deep`, 5-agent fresh-eyes) until the other CLIs are healthy.
+
 ## When to invoke
 
 - **Onboarding a new session** — run once before `/start` to confirm every required tool resolves and MCP is registered. Catches missing binaries, dist drift, and Agent Mail down before any agent spawns.

@@ -3,35 +3,20 @@ description: One-shot diagnostic of every flywheel dependency. Reports MCP conne
 argument-hint: "[--json] [options]"
 ---
 
-**First action:** Parse `$ARGUMENTS` for `--json`. Call `flywheel_doctor({cwd: $(git rev-parse --show-toplevel)})` either way. If `--json`, print `structuredContent` (the full envelope) to stdout and exit. Otherwise parse `data.report.checks[]` for any non-green entries before printing the rendered `[OK]` / `[WARN]` / `[FAIL]` checklist.
+**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:flywheel-doctor" })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:flywheel-doctor` name as `skills/flywheel-doctor/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model.
 
-## --json output schema
+# `/agent-flywheel:flywheel-doctor` — thin pointer to the canonical skill
 
-When invoked with `--json`, this command emits to stdout exactly the
-`structuredContent` returned by `flywheel_doctor`. Pin contract version
-via `flywheel_capabilities` (`data.contract_version`).
+Diagnose every flywheel dependency and print each state with a single glyph per line. $ARGUMENTS
 
-Top-level: `{tool:"flywheel_doctor", version, status, phase, data}`
-Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
-`data.report.checks[]`: `[{name, status:"ok"|"warn"|"fail", message, remediation?}]`.
+## Instructions
 
+1. Fetch the canonical skill body via the MCP tool:
 
-**See also (triage chain):** `flywheel-doctor` is the **first** step — a read-only snapshot, always safe. If doctor reports problems, run `/flywheel-setup` next to apply fixes (install missing tools, register MCP, configure hooks). Run `/flywheel-healthcheck` periodically for a deeper codebase + bead-graph audit — not for setup problems.
+   ```
+   flywheel_get_skill({ name: "agent-flywheel:flywheel-doctor" })
+   ```
 
-Invoke the `flywheel-doctor` skill. $ARGUMENTS
+   Then follow the returned `body` with `$ARGUMENTS` as the skill's input. The skill parses `--json` for the machine-readable envelope and otherwise renders the `[OK]` / `[WARN]` / `[FAIL]` checklist, with duel-readiness synthesis included.
 
-Use the `Skill` tool to run the skill: `Skill(skill_name: "agent-flywheel:flywheel-doctor")`.
-
-The skill calls the `flywheel_doctor` MCP tool against the current working directory, renders the `DoctorReport` envelope as an `[OK]` / `[WARN]` / `[FAIL]` checklist, and prints the one-line remediation for each failing check.
-
-Run this before `/start` on a fresh clone, after `/flywheel-cleanup`, as a CI gate, or whenever toolchain drift is suspected. Doctor is read-only — it never mutates checkpoint state.
-
-## Duel-readiness
-
-`/flywheel-duel` and the duel rows in start's Discover/Plan/Review menus need ntm + ≥2 healthy CLIs. The doctor's existing checks already cover this together:
-
-- `ntm_binary` — ntm CLI present and runnable.
-- `claude_cli` / `codex_cli` / `gemini_cli` — per-CLI installation + auth state.
-- `swarm_model_ratio` — synthesis check reporting the achievable cc:cod:gmi ratio.
-
-If any two of `{claude_cli, codex_cli, gemini_cli}` are green AND `ntm_binary` is green, duels can run. If only one is green, the duel skill aborts in Phase 1 detection — fall back to single-agent paths (`/idea-wizard`, `mode=deep`, 5-agent fresh-eyes) until the other CLIs are healthy.
+2. If `flywheel_get_skill` errors (bundle disabled via `FW_SKILL_BUNDLE=off`, MCP transport down, or skill missing from the bundle), fall back to reading `skills/flywheel-doctor/SKILL.md` directly — degraded path. (Doctor itself is the triage tool for this failure, so if `flywheel_get_skill` is also down something is quite wrong — run `/agent-flywheel:flywheel-setup` next.)

@@ -3,41 +3,20 @@ description: Check if the codebase has drifted from the implementation plan.
 argument-hint: "[--json] [options]"
 ---
 
-**First action:** Parse `$ARGUMENTS` for `--json`. Run `br list --json` + `bv --json` + the plan-vs-code comparison either way. If `--json`, assemble a single JSON envelope `{tool:"flywheel_drift_check", version, status, phase, data:{plan_path, on_track[], stale[], blocked[], new_opportunities[]}}`, print it to stdout, and exit (do NOT prompt). Otherwise render the human-friendly drift report and prompt for the polish loop.
+**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:flywheel-drift-check" })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:flywheel-drift-check` name as `skills/flywheel-drift-check/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model.
 
-Run a strategic drift check. $ARGUMENTS
+# `/agent-flywheel:flywheel-drift-check` — thin pointer to the canonical skill
 
-## --json output schema
+Check if the codebase has drifted from the implementation plan. $ARGUMENTS
 
-When invoked with `--json`, this command emits to stdout a single JSON envelope
-classifying every bead against the active plan. The `--json` path skips the
-interactive polish-loop prompt — callers must invoke `flywheel_approve_beads`
-themselves. Pin the contract shape via `flywheel_capabilities` (`data.contract_version`).
+## Instructions
 
-Top-level: `{tool:"flywheel_drift_check", version, status, phase, data}`
-Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{code,message,hint,try_this,retryable}`)
-`data` keys: `plan_path`, `on_track[]`, `stale[]`, `blocked[]`, `new_opportunities[]`.
+1. Fetch the canonical skill body via the MCP tool:
 
-
-1. Read the plan document path from `.pi-flywheel/checkpoint.json` (`planDocument` field). If not found, scan `docs/plans/` for the most recent plan file.
-
-2. Read the current bead statuses: `br list --json` via Bash.
-
-3. Run `bv --json` via Bash for graph analysis (cycles, orphans, bottlenecks).
-
-4. Use Agent(Explore) to compare current code state against the plan:
-   - Which planned changes have been implemented?
-   - Which are no longer relevant given code changes since the plan was written?
-   - Have any new requirements emerged that the plan doesn't cover?
-
-5. Display a drift report:
    ```
-   ✅ On track: N beads
-   ⚠️  Potentially stale: N beads  
-   ❌ Blocked: N beads (dependency issues)
-   🔄 New opportunities: (not in original plan)
+   flywheel_get_skill({ name: "agent-flywheel:flywheel-drift-check" })
    ```
 
-6. Ask: "Would you like to update the plan to address the drift? (This will trigger a polish loop)"
+   Then follow the returned `body` with `$ARGUMENTS` as the skill's input. The skill parses `--json` for machine-readable envelope output.
 
-7. If yes, call `flywheel_approve_beads` with `action: "polish"` via the agent-flywheel MCP server.
+2. If `flywheel_get_skill` errors (bundle disabled via `FW_SKILL_BUNDLE=off`, MCP transport down, or skill missing from the bundle), fall back to reading `skills/flywheel-drift-check/SKILL.md` directly — degraded path, run `/agent-flywheel:flywheel-doctor` to triage.

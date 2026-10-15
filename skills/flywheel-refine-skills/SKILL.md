@@ -5,6 +5,32 @@ description: Review and improve all loaded agent skills based on session pattern
 
 Refine all agent skills.
 
+**First action: parse `$ARGUMENTS` for `--yes`, `--dry-run`, or `--skill <name>`.** This skill rewrites `SKILL.md` files, so a bare invocation must stop and surface safe alternatives instead of spawning agents.
+
+- **Bare invocation (none of the flags present)** — stop and print this safe-alt block, then exit without acting:
+  ```
+  /flywheel-refine-skills is destructive: it spawns analysis agents and
+  rewrites SKILL.md files in skills/. Skills are loaded into every
+  Claude Code session, so a regression here propagates project-wide.
+
+  Safe alternatives:
+    /agent-flywheel:flywheel-refine-skill <name>   — refine a single skill in isolation
+    /flywheel-refine-skills --skill <name>         — same effect; explicit
+    /flywheel-refine-skills --dry-run              — analyze and write proposals
+                                                     to docs/skill-refine-*.md
+                                                     without touching SKILL.md
+  Re-run with --yes to proceed across ALL skills.
+  ```
+  Do NOT spawn agents, do NOT modify any `SKILL.md`. Return.
+
+- **`--dry-run`** — run steps 1 through 7 below (analysis agents write proposals to `docs/skill-refine-<name>-proposed.md`), but **skip step 8 onward** (do not apply changes). Print the list of proposals and exit.
+
+- **`--skill <name>`** — route to `/agent-flywheel:flywheel-refine-skill <name>` (single-skill path) and exit.
+
+- **`--yes`** — proceed to step 1 and run the full sequence.
+
+---
+
 1. List all skills in the `skills/` directory.
 
 2. Search agent-mail history for skill-related patterns via `search_messages` with query "skill feedback" and "planning pattern".
