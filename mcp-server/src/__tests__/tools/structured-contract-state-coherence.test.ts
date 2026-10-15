@@ -449,6 +449,8 @@ describe('structured contract and state coherence', () => {
         beadId: string;
         round: number;
         files: string[];
+        reviewerBrief: string;
+        instructions: string;
         agentTasks: Array<{ name: string; perspective: string; task: string }>;
       };
     };
@@ -462,8 +464,11 @@ describe('structured contract and state coherence', () => {
     expect(structured.data.files).toEqual(['src/feature.ts', 'src/feature.test.ts']);
     expect(structured.data.agentTasks).toHaveLength(5);
     expect(structured.data.agentTasks[0].name).toContain(`${bead.id}-r2`);
-    expect(result.content[0].text).toContain('spawn-agents');
-    expect(result.content[0].text).toContain('FreshEyes');
-    expect(result.content[0].text).toContain('src/feature.ts');
+    expect(result.content[0].text).toContain('Prepared 5 review tasks');
+    expect(result.content[0].text).toContain(bead.id);
+    expect(result.content[0].text).not.toContain('FreshEyes');
+    expect(result.content[0].text).not.toContain('src/feature.ts');
+    expect(structured.data.reviewerBrief).toContain('src/feature.ts');
+    expect(structured.data.instructions).toContain('reviewerBrief');
   });
 });

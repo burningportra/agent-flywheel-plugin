@@ -15,9 +15,9 @@ const log = createLogger('review');
 // ─── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────────────
 //
 // Mode routing is skill-level — we do NOT introduce new MCP tools. The
-// reviewer personas are reused verbatim; `mode` only changes the agent
-// prompt preamble and the post-synthesis action (apply-diffs-and-commit
-// vs write-docs vs emit-exit-code vs ask-per-finding).
+// Reviewer lenses stay stable; `mode` changes the shared brief and the
+// post-synthesis action (apply-diffs-and-commit vs write-docs vs
+// emit-exit-code vs ask-per-finding).
 
 export const AUTOFIX_GATE_HINT =
   'Autofix refuses when the tree is dirty or the doctor is not green. Stash/commit local changes, run `flywheel_doctor`, then retry — or fall back to mode="interactive".';
@@ -390,95 +390,59 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
       ? prevResults.slice(-3).map(r => `- ${r.beadId}: ${r.status}`).join('\n')
       : '(none yet)';
 
+    const reviewerBrief = `${modeNote}${postCloseNote}Review bead ${beadId}: ${bead.title}
+
+Description:
+${bead.description.slice(0, 500)}
+
+Files: ${fileList}
+Goal: ${goal}
+Prior results:
+${prevSummary}
+cwd: ${cwd}
+
+Use the assigned lens. Follow the selected review mode. Report concrete findings and any changes.`;
+
     const agentTasks = [
       {
         name: `FreshEyes-${beadId}-r${round}`,
         perspective: 'fresh-eyes',
-        task: `${modeNote}${postCloseNote}Fresh-eyes code reviewer. You have NEVER seen this code before.
-
-**Bead:** ${beadId} — ${bead.title}
-**Files to review:** ${fileList}
-**Description:** ${bead.description.slice(0, 500)}
-**cwd:** ${cwd}
-
-Find blunders, bugs, errors, oversights. Be harsh but constructive. Fix issues directly using code tools.
-
-Report what you found and what you fixed.`,
+        task: 'Fresh eyes: inspect the changed code for concrete bugs, oversights, and missing tests; fix real issues and report findings and fixes.',
       },
       {
         name: `Adversary-${beadId}-r${round}`,
         perspective: 'adversarial',
-        task: `${modeNote}${postCloseNote}Adversarial code reviewer. Your job is to break this implementation.
-
-**Bead:** ${beadId} — ${bead.title}
-**Files to review:** ${fileList}
-**cwd:** ${cwd}
-
-**Mandatory first step**: invoke \`/ubs-workflow\` on the changed files to run the Ultimate Bug Scanner comprehensive review. Its findings are your baseline before manual attack.
-
-Then go further: trigger edge cases, find security holes, construct inputs that cause failures.
-Fix any real vulnerabilities or bugs directly.
-
-If your review surfaces a crash, hang, or memory issue in compiled code, invoke \`/gdb-for-debugging\` to reproduce it under a debugger and capture a stack trace in the report.
-
-Report your attack attempts and findings.`,
+        task: 'Adversarial: run /ubs-workflow, attack edge cases and security, and fix real bugs; for compiled-code crashes, hangs, or memory issues, reproduce with /gdb-for-debugging and include a stack trace.',
       },
       {
         name: `Ergonomics-${beadId}-r${round}`,
         perspective: 'ergonomics',
-        task: `${modeNote}${postCloseNote}Ergonomics reviewer. Focus on usability and developer experience.
-
-**Bead:** ${beadId} — ${bead.title}
-**Files to review:** ${fileList}
-**cwd:** ${cwd}
-
-If you came in fresh with zero context, would you understand this code?
-Check: naming, comments, API design, error messages, type annotations.
-Fix anything confusing or unclear directly.
-
-Report improvements made.`,
+        task: 'Ergonomics: check naming, comments, APIs, errors, and types for a zero-context maintainer; fix confusing code and report changes.',
       },
       {
         name: `RealityCheck-${beadId}-r${round}`,
         perspective: 'reality-check',
-        task: `${modeNote}${postCloseNote}Reality checker. Verify the implementation actually achieves the goal.
-
-**Goal:** ${goal}
-**Bead:** ${beadId} — ${bead.title}
-**Prior results:** ${prevSummary}
-**Files:** ${fileList}
-**cwd:** ${cwd}
-
-Check: Does this actually solve the bead's stated goal? Are there gaps between intent and implementation?
-Do NOT edit code — just report your findings.`,
+        task: 'Reality check: verify the implementation achieves the bead and overall goal; do not edit code, only report gaps.',
       },
       {
         name: `Explorer-${beadId}-r${round}`,
         perspective: 'exploration',
-        task: `${modeNote}${postCloseNote}Code explorer. Randomly explore the codebase to find related issues.
-
-**Bead:** ${beadId} — ${bead.title}
-**cwd:** ${cwd}
-
-Pick 3 random files related to the bead's area and read them. Look for:
-- Inconsistencies with the new implementation
-- Patterns broken by the changes
-- Tests that should exist but don't
-
-Report what you found. Fix obvious issues directly.`,
+        task: 'Exploration: inspect three related files for broken patterns, inconsistencies, and missing tests; fix obvious real issues and report them.',
       },
     ];
 
-    const baseInstructions = `Spawn these 5 review agents in parallel. After all complete, synthesize their findings and apply fixes. Then call \`flywheel_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
+    const composeInstructions = 'For each agent, use reviewerBrief + "\\n\\n" + agentTasks[].task as its complete prompt. Spawn all 5 review agents in parallel.';
+    const baseInstructions = `After all reviewers finish, synthesize their findings and apply fixes. Then call \`flywheel_review\` with beadId="${beadId}" and action="looks-good" or action="hit-me" for another round.`;
     const modeInstructions: Record<ReviewMode, string> = {
       autofix: `Review mode=autofix: each reviewer applies and commits its fixes directly. After all 5 finish, verify the tree is green and call \`flywheel_review\` with action="looks-good" — do NOT AskUserQuestion per finding.`,
       'report-only': `Review mode=report-only: reviewers write findings to docs/reviews/<perspective>-<date>.md and DO NOT edit code. After synthesizing, call \`flywheel_review\` with action="looks-good" to close the bead or action="hit-me" again if reports surfaced blockers.`,
       headless: `Review mode=headless (CI): reviewers emit JSON-on-stdout only. The coordinator aggregates finding counts, then calls \`flywheel_review\` with action="report", mode="headless", beadId, findingCount, and crashed. Branch on exit code 0 for clean, 1 for findings, or 2 for a reviewer crash. Do NOT AskUserQuestion — this mode is for non-interactive shells.`,
       interactive: baseInstructions,
     };
+    const modeInstruction = modeInstructions[effectiveMode];
     const instructions = postClose
-      ? `Bead ${beadId} is already closed; this is a post-close audit. ${modeInstructions[effectiveMode]} For looks-good, the bead stays closed (idempotent).`
-      : modeInstructions[effectiveMode];
+      ? `${composeInstructions} Bead ${beadId} is already closed; this is a post-close audit. ${modeInstruction} For looks-good, the bead stays closed (idempotent).`
+      : `${composeInstructions} ${modeInstruction}`;
 
     const payload = {
       kind: 'review_tasks',
@@ -490,6 +454,7 @@ Report what you found. Fix obvious issues directly.`,
       requestedMode,
       parallelSafe,
       ...(modeGateWarning ? { modeGateWarning } : {}),
+      reviewerBrief,
       agentTasks,
       files,
       instructions,
@@ -497,18 +462,7 @@ Report what you found. Fix obvious issues directly.`,
 
     return okResult(
       state.phase,
-      JSON.stringify({
-        action: 'spawn-agents',
-        beadId,
-        round,
-        postClose,
-        mode: effectiveMode,
-        requestedMode,
-        parallelSafe,
-        ...(modeGateWarning ? { modeGateWarning } : {}),
-        agentTasks,
-        instructions,
-      }, null, 2),
+      `Prepared 5 review tasks for ${beadId} (${effectiveMode}). Use structuredContent.data.reviewerBrief with each agentTasks[].task, then follow structuredContent.data.instructions.`,
       payload
     );
   }
@@ -906,17 +860,7 @@ All beads complete! Entering review gates.
 
     return okResult(
       'implementing',
-      `**${status}: Bead ${completedBeadId}.** Moving to bead ${nextBead.id}.
-
-**NEXT: Implement bead ${nextBead.id} (${nextBead.title}), then call \`flywheel_review\` when done.**
-
----
-
-## Bead ${nextBead.id}: ${nextBead.title}
-
-${nextBead.description}
-
-After implementing, commit and call \`flywheel_review\` with beadId="${nextBead.id}".`,
+      `**${status}: Bead ${completedBeadId}.** Bead ${nextBead.id} is ready. Read structuredContent.data.beads[0], implement it, then call \`flywheel_review\` with beadId="${nextBead.id}".`,
       {
         kind: 'review_tasks',
         strategy: 'single_bead',
@@ -944,17 +888,12 @@ After implementing, commit and call \`flywheel_review\` with beadId="${nextBead.
     'implementing',
     `**${status}: Bead ${completedBeadId}.** ${ready.length} beads now ready.
 
-**NEXT: Spawn ${ready.length} parallel agents, then call \`flywheel_review\` for each when done.**
-
-\`\`\`json
-${JSON.stringify({ agents: agentConfigs }, null, 2)}
-\`\`\``,
+**NEXT: Spawn ${ready.length} parallel agents from structuredContent.data.agentConfigs, then call \`flywheel_review\` for each when done.**`,
     {
       kind: 'review_tasks',
       strategy: 'parallel_beads',
       completedBeadId,
       nextBeadIds: ready.map(bead => bead.id),
-      beads: ready,
       agentConfigs,
     }
   );
