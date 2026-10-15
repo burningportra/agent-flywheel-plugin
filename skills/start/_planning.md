@@ -173,9 +173,7 @@ Before presenting the choice, briefly frame the Three Reasoning Spaces to help t
 >
 > Deep planning front-loads effort where corrections are cheapest.
 
-Step 5 is **two separate AskUserQuestion calls**, in order. The first asks Plan mode; the second, after the user answers the first, asks Ambition. They are split so option labels never need to cross-produce the two dimensions ("Deep plan, ambitious" and similar collapsed shapes drop the Ambition dimension downstream).
-
-### Step 5a — Plan mode (first call)
+Use `AskUserQuestion`:
 
 ```
 AskUserQuestion(questions: [
@@ -189,16 +187,7 @@ AskUserQuestion(questions: [
       { label: "planning-workflow", description: "Invoke /planning-workflow — 4-5 sequential Codex review rounds via NTM + optional multi-model blending. Highest quality for major new features" }
     ],
     multiSelect: false
-  }
-])
-```
-
-### Step 5b — Ambition (second call, fires after the user answers 5a)
-
-The ambitious path downstream reads Ambition from `state`; omit this call and the ambitious path cannot fire. Make this call before interpreting the user's Plan-mode answer.
-
-```
-AskUserQuestion(questions: [
+  },
   {
     question: "How ambitious should the plan be?",
     header: "Ambition",
