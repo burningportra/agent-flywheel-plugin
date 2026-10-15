@@ -42,7 +42,7 @@ export interface PromptBudgetReport {
   version: 1;
   gitHead: string;
   sourceMode: "committed-head" | "working-tree";
-  tokenEstimate: "ceil(chars / 4)";
+  estimateMethod: "ceil(chars / 4)";
   thresholdPercent: 10;
   entries: BudgetEntry[];
   totals: {
@@ -287,7 +287,7 @@ function buildReport(
     version: 1,
     gitHead: gitCommit,
     sourceMode,
-    tokenEstimate: "ceil(chars / 4)",
+    estimateMethod: "ceil(chars / 4)",
     thresholdPercent: 10,
     entries: sorted,
     totals: {
@@ -313,6 +313,7 @@ function parseReport(raw: string, label: string): PromptBudgetReport {
   if (
     report.version !== 1
     || typeof report.gitHead !== "string"
+    || report.estimateMethod !== "ceil(chars / 4)"
     || !Array.isArray(report.entries)
     || report.thresholdPercent !== 10
     || !report.totals
