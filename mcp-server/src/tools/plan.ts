@@ -672,9 +672,7 @@ Focus deeply on your assigned perspective lens.`;
 
 ## Best-of-All-Worlds Synthesis
 
-Use ultrathink.
-
-Read all ${planAgents.length} competing plans. For EACH plan, BEFORE proposing any changes:
+Read all ${planAgents.length} competing plans. Before proposing any changes, for each plan:
 
 1. **Honestly acknowledge** what that plan does better than the others — name the specific strengths, not generic praise.
 2. **Identify the unique insight** each plan contributes that the others miss.
@@ -686,7 +684,7 @@ Then synthesize:
 5. **Provide git-diff style changes** showing what was merged vs what was cut.
 6. **Flag unresolved tensions** — where plans fundamentally disagree and a judgment call was made.
 
-The synthesis must be BETTER than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.${synthesisAmbition}`,
+The synthesis must be better than any individual plan, not a lowest-common-denominator average. Preserve bold ideas; don't sand them down.${synthesisAmbition}`,
   };
 
   const compatibilityReceipt = {

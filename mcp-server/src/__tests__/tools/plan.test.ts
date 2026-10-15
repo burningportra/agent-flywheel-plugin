@@ -704,13 +704,14 @@ describe('runPlan', () => {
     }
   });
 
-  it('synthesisPrompt contains "Use ultrathink." in deep mode', async () => {
+  it('synthesisPrompt contains one effort directive and no shouted emphasis in deep mode', async () => {
     const { ctx } = makeCtx();
 
     const result = await runPlan(ctx, { cwd: '/fake/cwd', mode: 'deep' });
 
     const structured = result.structuredContent as { data: { synthesisPrompt: string } };
-    expect(structured.data.synthesisPrompt).toContain('Use ultrathink.');
+    expect(structured.data.synthesisPrompt.match(/Use ultrathink\./g)).toHaveLength(1);
+    expect(structured.data.synthesisPrompt).not.toMatch(/\b(?:EACH|BEFORE|BETTER)\b/);
   });
 
   // ── Phase 0.5 brainstorm artifact handoff ────────────────────
