@@ -1,3 +1,5 @@
+import { listTemplates } from '../bead-templates.js';
+
 export interface BeadCreationPromptOpts {
   goal: string;
   constraints?: string[];
@@ -5,8 +7,12 @@ export interface BeadCreationPromptOpts {
   planPath?: string;
   planPreview?: string;
   provenance?: string;
-  templateLibrary?: string;
   nextAction?: string;
+}
+
+function formatBuiltInTemplateIds(): string {
+  const ids = [...new Set(listTemplates().map((template) => template.id))].sort();
+  return ids.map((id) => `- ${id}`).join('\n');
 }
 
 export function buildBeadCreationPrompt(opts: BeadCreationPromptOpts): string {
@@ -53,11 +59,9 @@ Each bead description must include:
 - **HOW**: specific files to create or modify (a \`### Files:\` section listing each path)
 - **Acceptance criteria** as a checklist (\`- [ ] ...\`)`);
 
-  if (opts.templateLibrary) {
-    sections.push(`## Template Library\n${opts.templateLibrary}
+  sections.push(`## Template Library\n${formatBuiltInTemplateIds()}
 
 Templates are optional shortcuts for common bead shapes, not requirements. If a template fits, include a machine-readable \`Template: <id>\` line near the top of the final bead description so \`flywheel_calibrate\` can aggregate per-template effort. If no template fits, omit the line.`);
-  }
 
   if (opts.provenance) {
     sections.push(`## Provenance\n${opts.provenance}`);
