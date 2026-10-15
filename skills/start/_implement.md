@@ -744,43 +744,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-**On "Hand off to Codex"** — build a `RescuePacket` and dispatch via the existing codex prompt adapter. The packet contract lives in `mcp-server/src/codex-handoff.ts`; this section consumes that surface and `mcp-server/src/adapters/codex-prompt.ts` (do NOT edit either):
-
-```ts
-import { buildRescuePacket, renderRescuePromptForCodex, formatRescueEventForMemory }
-  from '../mcp-server/dist/codex-handoff.js';
-
-// 1. Dump the in-flight diff + last error envelope as the artifact.
-//    The artifact path is what Codex reads first — make it concrete.
-const artifactPath = `.pi-flywheel/rescue/impl-${beadId}-${Date.now()}.diff`;
-fs.writeFileSync(artifactPath, await execStr('git', ['diff', baseSha, 'HEAD']));
-
-const packet = buildRescuePacket({
-  phase: 'impl',
-  goal: bead.title,
-  artifact_path: artifactPath,
-  error_code: lastError.code,             // from the prior FlywheelToolError
-  hint: lastError.hint ?? '',             // VERBATIM from bead 478 hint contract
-  recent_tool_calls: state.recentToolCalls.slice(-10),
-  proposed_next_step: 'Apply a minimal fixup; do not rewrite the bead. Run npm run build && tests after the patch.',
-});
-
-const adapted = renderRescuePromptForCodex(packet, {
-  coordinatorName: '<your-agent-mail-name>',
-  projectKey: process.env.NTM_PROJECT,
-  rescueAgentName: '<adjective+noun from agent-names pool>',
-});
-
-// 2. Invoke /codex:rescue with the rendered prompt body. Use --wait
-//    (foreground) so the rescue blocks the wave's progression for this bead.
-//    Codex panes need 2 trailing newlines per AdaptedPrompt.trailingNewlines.
-```
-
-**Persist the rescue event to CASS** for the doctor's `rescues_last_30d` synthesis:
-
-```
-flywheel_memory(operation: "store", content: formatRescueEventForMemory(packet))
-```
+**On "Hand off to Codex"** — call `flywheel_rescue({ cwd, phase: 'impl', beadId, errorEnvelope })` and pass its `codexPrompt` field to the codex-rescue skill (`/codex:rescue --wait` so the rescue blocks the wave's progression for this bead). Store the returned `memoryLine` via `flywheel_memory(operation: "store", content: memoryLine)` so the doctor's `rescues_last_30d` synthesis sees it. `errorEnvelope` is the `structuredContent.data.error` object from the last failing impl-side tool call; the server assembles the diff-based rescue artifact, recent tool calls, and the Codex-tuned prompt rendering.
 
 **On Codex completion:**
 
