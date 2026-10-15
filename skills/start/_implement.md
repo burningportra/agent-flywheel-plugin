@@ -535,34 +535,20 @@ Use `TaskCreate` to create a task per bead. For each ready bead:
        verifying here keeps the wave clean.
 
        ## STEP 3.5 — WRITE COMPLETION ATTESTATION (MANDATORY)
-       Write `.pi-flywheel/completion/<bead-id>.json` matching `CompletionReportSchemaV1`
-       in `mcp-server/src/completion-report.ts`. This attestation is the ledger entry
-       that `flywheel_verify_beads` reads and `flywheel_advance_wave` gates on
-       (warn-only by default; hard-block when `FW_ATTESTATION_REQUIRED=1`).
-       Worked example:
+       Follow AGENTS.md § \"Pre-Completion Quality Gate\" and § \"Completion
+       Evidence Attestation\" verbatim — those sections are the single source
+       for this step and for the `CompletionReportSchemaV1` shape your
+       attestation must match.
 
-       ```json
-       {
-         \"version\": 1,
-         \"beadId\": \"<bead-id>\",
-         \"agentName\": \"<your-agent-name>\",
-         \"paneName\": \"<your-pane-name-or-omit>\",
-         \"status\": \"closed\",
-         \"changedFiles\": [\"path/relative/to/repo.ts\"],
-         \"commits\": [\"<short-sha>\"],
-         \"ubs\": { \"ran\": true, \"summary\": \"clean\", \"findingsFixed\": 0, \"deferredBeadIds\": [] },
-         \"verify\": [{ \"command\": \"npm test\", \"exitCode\": 0, \"summary\": \"all green\" }],
-         \"selfReview\": { \"ran\": true, \"summary\": \"no regressions\" },
-         \"beadClosedVerified\": true,
-         \"reservationsReleased\": true,
-         \"createdAt\": \"<ISO-8601 timestamp>\"
-       }
-       ```
-
-       Docs-only diffs: set `ubs.ran=false` and a non-empty `ubs.skippedReason`.
-       Status `closed` requires `beadClosedVerified=true`. Schema rejects absolute
-       paths or `..`-traversal in `changedFiles`. The schema is `version: 1` and
-       additive forever — never remove keys.
+       The per-bead implementer prompt that `flywheel_advance_wave` returned
+       in `nextWave.prompts[]` already carries the gate text and a filled-in
+       JSON example for your bead (built by
+       `mcp-server/src/adapters/completion-attestation-prompt.ts`); copy that
+       example's shape and replace the angle-bracket placeholders with real
+       evidence. If you were dispatched outside that path (e.g. a wave-1
+       launch from `flywheel_approve_beads(action: \"start\")` or a hand-written
+       marching-orders message), use the schema fields listed in AGENTS.md
+       directly — do not re-invent the gate or the example inline.
 
        ## STEP 4 — RELEASE + REPORT (MANDATORY)
        4a. Release all file reservations via release_file_reservations.
