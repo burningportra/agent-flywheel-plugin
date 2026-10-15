@@ -3,7 +3,7 @@ description: Make a slow endpoint, flow, job, or service fast. Baselines and pro
 argument-hint: "[target] [--kpi=\"p99 10s -> <500ms\"]"
 ---
 
-**First action:** Invoke `Skill(skill: "agent-flywheel:flywheel-speedup", args: "$ARGUMENTS")` and let the skill drive intake; do NOT inline the phases here.
+**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:flywheel-speedup" })` and follow its returned `body`, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:flywheel-speedup` name as `skills/flywheel-speedup/`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" and the skill body never arrives. Let the skill drive intake; do NOT inline the phases here.
 
 # `/agent-flywheel:flywheel-speedup` — make it fast, then prove it
 

@@ -3,7 +3,7 @@ description: Strategic gap analysis between vision (AGENTS.md / README.md / plan
 argument-hint: "[--duel] [options]"
 ---
 
-**First action:** Invoke `Skill(skill: "agent-flywheel:flywheel-reality-check", args: "$ARGUMENTS")` and let the skill drive the depth-selection `AskUserQuestion`; do NOT inline the prompts here.
+**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:flywheel-reality-check" })` and follow its returned `body`, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:flywheel-reality-check` name as `skills/flywheel-reality-check/`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" and the skill body never arrives. Let the skill drive the depth-selection `AskUserQuestion`; do NOT inline the prompts here.
 
 # `/agent-flywheel:flywheel-reality-check` — direct entry to the gap-analysis pass
 
@@ -11,11 +11,13 @@ Run a strategic reality-check pass on the current project — the "come-to-Jesus
 
 ## Instructions
 
-1. Invoke the reality-check skill via the `Skill` tool:
+1. Fetch the canonical skill body via the MCP tool:
 
    ```
-   Skill(skill: "agent-flywheel:flywheel-reality-check", args: "$ARGUMENTS")
+   flywheel_get_skill({ name: "agent-flywheel:flywheel-reality-check" })
    ```
+
+   Then follow the returned `body` with `$ARGUMENTS` as the skill's input.
 
 2. The skill is a thin pointer to `skills/start/_reality_check.md` (the canonical workflow). It surfaces a depth-selection `AskUserQuestion`:
    - **Reality check only** — gap report, stop after.

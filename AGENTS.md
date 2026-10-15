@@ -115,7 +115,7 @@ Current-tool index (HEAD = v3.20.0). One line per tool, alphabetical. Detailed s
 
 When loading any flywheel skill — entry-point (`/start`) or sub-phase (`_planning.md`, `_implement.md`, etc.) — **prefer `flywheel_get_skill` over `Read`**. Single MCP round-trip, served from the bundled body, ~10× less context noise than `Read` (no directory listing, no path resolution).
 
-**Skill-stub recovery.** If invoking the `Skill` tool returns only the frontmatter / pointer text instead of the canonical body (the harness sometimes ack's "skill already loaded — follow it directly" instead of inlining for re-invocations), **do NOT fall back to `Read`**. Call `flywheel_get_skill({ name: "agent-flywheel:<skill>" })` instead. Examples:
+**Skill-stub recovery.** The `Skill` tool returns "already loaded above" and no body when a slash command and a skill register under the same name (e.g. `commands/start.md` and `skills/start/SKILL.md` both resolve to `agent-flywheel:start`): the harness considers the slash expansion to count as that skill's load, so a `Skill(skill: "agent-flywheel:start")` call inside the command collapses to a stub. The four pointer commands (`commands/start.md`, `commands/flywheel-reality-check.md`, `commands/flywheel-speedup.md`, `commands/grill-with-docs.md`) now call `flywheel_get_skill({ name: "agent-flywheel:<skill>" })` as their first action — the MCP call always returns the body in Claude Code and in the OpenCode port, bypassing the same-name dedup. **Do NOT fall back to `Read`** if the Skill tool stubs; call the MCP tool. Examples:
 
 - `/start` returned a stub → `flywheel_get_skill({ name: "agent-flywheel:start" })`
 - Phase boundary needs `_planning.md` → `flywheel_get_skill({ name: "agent-flywheel:start_planning" })`
