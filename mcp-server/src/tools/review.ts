@@ -23,7 +23,7 @@ export const AUTOFIX_GATE_HINT =
   'Autofix refuses when the tree is dirty or the doctor is not green. Stash/commit local changes, run `flywheel_doctor`, then retry — or fall back to mode="interactive".';
 
 export const HEADLESS_EXIT_HINT =
-  'Headless mode returns error code "review_headless_findings" with details.findingCount when reviewers surface non-zero issues. CI wrappers should branch on structuredContent?.data?.error?.code and use details.exitCode (1 = findings, 2 = reviewer crash).';
+  'Complete headless mode with action="report", findingCount, and crashed. CI wrappers should treat a clean result as exit 0, or branch on error code "review_headless_findings" and use details.exitCode (1 = findings, 2 = reviewer crash).';
 
 function modePreamble(mode: ReviewMode, beadId: string): string {
   switch (mode) {
@@ -32,7 +32,7 @@ function modePreamble(mode: ReviewMode, beadId: string): string {
     case 'report-only':
       return `**Review mode: report-only.** Do NOT edit code. Write your full findings to \`docs/reviews/${beadId}-<perspective>-<YYYY-MM-DD>.md\` and exit. The coordinator aggregates reports — no interactive prompts.\n\n`;
     case 'headless':
-      return `**Review mode: headless (CI).** Do NOT edit code and do NOT write markdown reports. Emit a compact machine-readable JSON summary on stdout: \`{ "beadId": "${beadId}", "perspective": "<your-perspective>", "findings": [{ "severity": "error|warn|info", "file": "...", "line": 0, "message": "..." }] }\`. The coordinator aggregates exit codes (0 = clean, 1 = findings, 2 = reviewer crash).\n\n`;
+      return `**Review mode: headless (CI).** Do NOT edit code and do NOT write markdown reports. Emit a compact machine-readable JSON summary on stdout: \`{ "beadId": "${beadId}", "perspective": "<your-perspective>", "findings": [{ "severity": "error|warn|info", "file": "...", "line": 0, "message": "..." }] }\`. The coordinator aggregates the findings and submits the CI exit signal.\n\n`;
     case 'interactive':
     default:
       return '';
@@ -87,6 +87,59 @@ function errorResult(
   });
 }
 
+function handleHeadlessReport(ctx: ToolContext, args: ReviewArgs): McpToolResult {
+  const { state } = ctx;
+  if (args.mode !== 'headless') {
+    return errorResult(
+      state.phase,
+      'invalid_input',
+      'action="report" is only valid with mode="headless".',
+      { action: args.action, mode: args.mode ?? 'interactive' },
+      'Pass mode="headless", findingCount, and crashed when submitting the aggregated CI review result.',
+    );
+  }
+
+  const findingCount = args.findingCount;
+  if (typeof findingCount !== 'number' || !Number.isInteger(findingCount) || findingCount < 0) {
+    return errorResult(
+      state.phase,
+      'invalid_input',
+      'Headless review findingCount must be a non-negative integer.',
+      { findingCount },
+      'Count the findings emitted by every headless reviewer, then pass their non-negative integer total.',
+    );
+  }
+
+  const crashed = args.crashed ?? false;
+  const exitCode = crashed ? 2 : findingCount > 0 ? 1 : 0;
+  const report = {
+    kind: 'review_headless_report' as const,
+    beadId: args.beadId,
+    mode: 'headless' as const,
+    findingCount,
+    crashed,
+    exitCode,
+  };
+
+  if (exitCode === 0) {
+    return okResult(
+      state.phase,
+      `Headless review is clean for bead ${args.beadId}. CI exit code: 0.`,
+      report,
+    );
+  }
+
+  return errorResult(
+    state.phase,
+    'review_headless_findings',
+    crashed
+      ? `A headless reviewer crashed for bead ${args.beadId}.`
+      : `Headless review found ${findingCount} issue${findingCount === 1 ? '' : 's'} for bead ${args.beadId}.`,
+    report,
+    HEADLESS_EXIT_HINT,
+  );
+}
+
 function parseBrShowBead(raw: string): Bead | null {
   try {
     const parsed = JSON.parse(raw);
@@ -122,6 +175,7 @@ function looksLikeBead(value: unknown): value is Bead {
  * action="hit-me"    — Return parallel review agent task specs for CC to spawn
  * action="looks-good"— Mark bead done, advance to next or enter gates
  * action="skip"      — Skip this bead (mark deferred), move to next
+ * action="report"    — Complete headless review with an aggregated CI signal
  */
 export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<McpToolResult> {
   const { exec, cwd, state, saveState, signal } = ctx;
@@ -144,6 +198,10 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
   }
 
   const beadId = args.beadId;
+
+  if (args.action === 'report') {
+    return handleHeadlessReport(ctx, args);
+  }
 
   // ── Resolve review mode + autofix gating (bead agent-flywheel-plugin-f0j) ─
   // `mode` is advisory on `looks-good`/`skip` (those paths don't spawn
@@ -415,7 +473,7 @@ Report what you found. Fix obvious issues directly.`,
     const modeInstructions: Record<ReviewMode, string> = {
       autofix: `Review mode=autofix: each reviewer applies and commits its fixes directly. After all 5 finish, verify the tree is green and call \`flywheel_review\` with action="looks-good" — do NOT AskUserQuestion per finding.`,
       'report-only': `Review mode=report-only: reviewers write findings to docs/reviews/<perspective>-<date>.md and DO NOT edit code. After synthesizing, call \`flywheel_review\` with action="looks-good" to close the bead or action="hit-me" again if reports surfaced blockers.`,
-      headless: `Review mode=headless (CI): reviewers emit JSON-on-stdout only. The coordinator MUST aggregate finding counts and treat a non-zero count as review_headless_findings (CI exit code 1). Do NOT AskUserQuestion — this mode is for non-interactive shells.`,
+      headless: `Review mode=headless (CI): reviewers emit JSON-on-stdout only. The coordinator aggregates finding counts, then calls \`flywheel_review\` with action="report", mode="headless", beadId, findingCount, and crashed. Branch on exit code 0 for clean, 1 for findings, or 2 for a reviewer crash. Do NOT AskUserQuestion — this mode is for non-interactive shells.`,
       interactive: baseInstructions,
     };
     const instructions = postClose
@@ -458,9 +516,9 @@ Report what you found. Fix obvious issues directly.`,
   return errorResult(
     state.phase,
     'unsupported_action',
-    `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip, batch_review`,
+    `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip, batch_review, report`,
     { beadId, action: args.action },
-    'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer), "batch_review" (T4 fresh-eyes auto-trigger over a sha range).',
+    'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer), "batch_review" (T4 fresh-eyes auto-trigger over a sha range), or "report" (headless completion).',
   );
 }
 

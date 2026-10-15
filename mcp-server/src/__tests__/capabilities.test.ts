@@ -135,6 +135,15 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
     expect(alias?.deprecation_replacement).toBe('flywheel_emit_codex');
   });
 
+  it('advertises the headless review completion contract', () => {
+    const reviewTool = TOOLS.find((tool) => tool.name === 'flywheel_review');
+    if (!reviewTool) throw new Error('flywheel_review must be registered');
+
+    const summary = summarizeTool(reviewTool);
+    expect(summary.enums.action).toContain('report');
+    expect(summary.optional).toEqual(expect.arrayContaining(['crashed', 'findingCount']));
+  });
+
   it('dispatches every advertised tool to a registered runner', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'flywheel-registration-'));
     const exec = vi.fn(async () => ({ code: 1, stdout: '', stderr: 'fixture failure' }));

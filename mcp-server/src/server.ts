@@ -220,7 +220,7 @@ const PRIMARY_TOOLS = [
   },
   {
     name: 'flywheel_review',
-    description: "Submit bead implementation for review. action=hit-me spawns parallel review agents (returns agent task specs for Claude Code to spawn). action=looks-good marks bead done and advances. action=skip defers the bead. Use beadId=__gates__ for guided review gates after all beads are done. mode dispatches the same reviewers into four shapes (interactive/autofix/report-only/headless) per bead agent-flywheel-plugin-f0j.",
+    description: "Submit bead implementation for review. action=hit-me spawns parallel review agents (returns agent task specs for Claude Code to spawn). action=looks-good marks bead done and advances. action=skip defers the bead. action=report completes a headless review with a CI exit signal. Use beadId=__gates__ for guided review gates after all beads are done. mode dispatches the same reviewers into four shapes (interactive/autofix/report-only/headless) per bead agent-flywheel-plugin-f0j.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -231,8 +231,8 @@ const PRIMARY_TOOLS = [
         },
         action: {
           type: 'string',
-          enum: ['hit-me', 'looks-good', 'skip'],
-          description: 'hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead',
+          enum: ['hit-me', 'looks-good', 'skip', 'report'],
+          description: 'hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead, report=submit an aggregated headless result',
         },
         mode: {
           type: 'string',
@@ -244,6 +244,16 @@ const PRIMARY_TOOLS = [
           type: 'boolean',
           default: false,
           description: 'Caller asserts reviewers can run in parallel without racing on the same files. Advisory flag only — does not disable the autofix gate.',
+        },
+        findingCount: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Aggregated number of findings. Required when action=report and mode=headless.',
+        },
+        crashed: {
+          type: 'boolean',
+          default: false,
+          description: 'Set true when at least one headless reviewer crashed. Used only with action=report.',
         },
       },
       required: ['cwd', 'beadId', 'action'],

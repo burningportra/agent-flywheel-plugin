@@ -747,10 +747,13 @@ describe('runReview', () => {
       });
 
       const structured = result.structuredContent as {
-        data: { mode: string; parallelSafe: boolean; agentTasks: Array<{ task: string }> };
+        data: { mode: string; parallelSafe: boolean; instructions: string; agentTasks: Array<{ task: string }> };
       };
       expect(structured.data.mode).toBe('headless');
       expect(structured.data.parallelSafe).toBe(true);
+      expect(structured.data.instructions).toContain('action="report"');
+      expect(structured.data.instructions).toContain('findingCount');
+      expect(structured.data.instructions).toContain('crashed');
       for (const task of structured.data.agentTasks) {
         expect(task.task).toContain('Review mode: headless');
       }
@@ -800,6 +803,129 @@ describe('runReview', () => {
       expect(structured.data.modeGateWarning).toBeUndefined();
       for (const task of structured.data.agentTasks) {
         expect(task.task).toContain('Review mode: autofix');
+      }
+    });
+  });
+
+  describe('headless report completion', () => {
+    it('returns exitCode 1 when reviewers report findings', async () => {
+      const { ctx } = makeCtx();
+
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: 'test-bead-1',
+        action: 'report',
+        mode: 'headless',
+        findingCount: 3,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        status: 'error',
+        data: {
+          kind: 'error',
+          error: {
+            code: 'review_headless_findings',
+            retryable: false,
+            hint: expect.stringContaining('action="report"'),
+            details: {
+              beadId: 'test-bead-1',
+              findingCount: 3,
+              crashed: false,
+              exitCode: 1,
+            },
+          },
+        },
+      });
+    });
+
+    it('returns exitCode 2 when a reviewer crashed', async () => {
+      const { ctx } = makeCtx();
+
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: 'test-bead-1',
+        action: 'report',
+        mode: 'headless',
+        findingCount: 0,
+        crashed: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        status: 'error',
+        data: {
+          error: {
+            code: 'review_headless_findings',
+            details: {
+              findingCount: 0,
+              crashed: true,
+              exitCode: 2,
+            },
+          },
+        },
+      });
+    });
+
+    it('returns an ok exitCode 0 result when the report is clean', async () => {
+      const { ctx } = makeCtx();
+
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: 'test-bead-1',
+        action: 'report',
+        mode: 'headless',
+        findingCount: 0,
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({
+        status: 'ok',
+        data: {
+          kind: 'review_headless_report',
+          beadId: 'test-bead-1',
+          mode: 'headless',
+          findingCount: 0,
+          crashed: false,
+          exitCode: 0,
+        },
+      });
+    });
+
+    it('rejects report completion outside headless mode', async () => {
+      const { ctx } = makeCtx();
+
+      const result = await runReview(ctx, {
+        cwd: '/fake/cwd',
+        beadId: 'test-bead-1',
+        action: 'report',
+        mode: 'interactive',
+        findingCount: 1,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        status: 'error',
+        data: { error: { code: 'invalid_input' } },
+      });
+    });
+
+    it('rejects a missing, negative, or fractional findingCount', async () => {
+      for (const findingCount of [undefined, -1, 1.5]) {
+        const { ctx } = makeCtx();
+        const result = await runReview(ctx, {
+          cwd: '/fake/cwd',
+          beadId: 'test-bead-1',
+          action: 'report',
+          mode: 'headless',
+          findingCount,
+        });
+
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toMatchObject({
+          status: 'error',
+          data: { error: { code: 'invalid_input' } },
+        });
       }
     });
   });
