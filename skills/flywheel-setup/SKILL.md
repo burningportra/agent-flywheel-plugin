@@ -205,7 +205,7 @@ Behavior rules:
 
 If step 11 reported any Required failure, **skip** the doctor run (mirrors `runSetupAndVerify`'s `setup_unhealthy` verdict — no point running the deeper sweep when the install itself is incomplete).
 
-After the post-flight summary (whether doctor ran or was skipped), append the glossary footer — single source of truth `GLOSSARY_LINE` in `mcp-server/src/glossary.ts` — so a first-time operator finishing setup always sees the core vocabulary:
+After the post-flight summary, append this exact glossary footer so a first-time operator finishing setup sees the core vocabulary:
 
 ```
 Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol

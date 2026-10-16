@@ -1,8 +1,7 @@
 /**
  * {@link HookAdapter} implementation for Claude Code.
  *
- * Encapsulates every Claude-Code-specific path that previously lived inline
- * in `tools/doctor.ts` (and reserved for `tools/setup.ts`):
+ * Encapsulates every Claude-Code-specific path used by `tools/doctor.ts`:
  *
  *   - `${CLAUDE_PLUGIN_ROOT}` env probing
  *   - `~/.claude/plugins/agent-flywheel/plugin.json` cache lookup

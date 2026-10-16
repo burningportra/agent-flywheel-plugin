@@ -4,7 +4,7 @@
  * Modeled on context-mode/src/adapters/* (see
  * docs/research/context-mode-explore.md §4-A). Today only Claude Code is
  * shipped; tomorrow Codex/Gemini/Cursor adapters can implement the same
- * surface without touching `tools/doctor.ts` or `tools/setup.ts`.
+ * surface without touching `tools/doctor.ts`.
  *
  * Important constraints:
  *   - Methods MUST NOT throw. Return a `DiagnosticResult` row instead.
