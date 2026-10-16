@@ -51,8 +51,13 @@ function githubPatternMatches(value: string, pattern: string): boolean {
       continue;
     }
     if (character === "*" && pattern[index + 1] === "*") {
-      atoms.push(".*");
-      index += 1;
+      if (pattern[index + 2] === "/") {
+        atoms.push("(?:.*/)?");
+        index += 2;
+      } else {
+        atoms.push(".*");
+        index += 1;
+      }
       continue;
     }
     if (character === "*") {
@@ -226,6 +231,29 @@ describe("workflow default-branch triggers", () => {
         file: "fixture.yml",
         event: "pull_request",
         filter: { kind: "branches-ignore", patterns: ["main?"] },
+      },
+    ]);
+  });
+
+  it("lets globstar directory prefixes match the root branch", () => {
+    const source = [
+      "on:",
+      "  push:",
+      "    branches: ['**', '!**/main']",
+      "  pull_request:",
+      "    branches-ignore: ['**/main']",
+    ].join("\n");
+
+    expect(findMainBranchExclusions("fixture.yml", source)).toEqual([
+      {
+        file: "fixture.yml",
+        event: "push",
+        filter: { kind: "branches", patterns: ["**", "!**/main"] },
+      },
+      {
+        file: "fixture.yml",
+        event: "pull_request",
+        filter: { kind: "branches-ignore", patterns: ["**/main"] },
       },
     ]);
   });
