@@ -4,12 +4,6 @@ import { parseAgentMailResponse } from './parsers.js';
 
 export const AGENT_MAIL_URL = 'http://127.0.0.1:8765';
 
-/**
- * Call an agent-mail MCP tool through its JSON-RPC HTTP endpoint.
- *
- * The transport returns a discriminated result. Policy layers such as
- * reservation conflict handling live above this module.
- */
 export async function agentMailRPC<T = any>(
   exec: ExecFn,
   toolName: string,
@@ -67,12 +61,12 @@ export async function agentMailRPC<T = any>(
 
   const rpcResult = parsed.data as Record<string, unknown> | null;
   const data = (
-    rpcResult != null && typeof rpcResult === 'object' && 'structuredContent' in rpcResult
+    rpcResult !== null && typeof rpcResult === 'object' && 'structuredContent' in rpcResult
       ? rpcResult.structuredContent
       : rpcResult
   ) as T | null;
 
-  if (data == null) {
+  if (data === null) {
     return {
       ok: false,
       error: {
