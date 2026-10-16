@@ -265,7 +265,24 @@ describe('reserveFileReservations', () => {
     let reserveCalls = 0;
     let releaseCalls = 0;
     const exec: ExecFn = vi.fn(async (_cmd, args) => {
-      const body = JSON.parse(args[args.indexOf('-d') + 1]);
+      const rawBody = args[args.indexOf('-d') + 1] ?? '';
+      let body: unknown;
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        throw new Error('agent-mail test received malformed JSON-RPC input');
+      }
+      if (
+        !body ||
+        typeof body !== 'object' ||
+        !('params' in body) ||
+        !body.params ||
+        typeof body.params !== 'object' ||
+        !('name' in body.params) ||
+        typeof body.params.name !== 'string'
+      ) {
+        throw new Error('agent-mail test received JSON-RPC input without a tool name');
+      }
       const toolName = body.params.name;
       if (toolName === 'file_reservation_paths') {
         reserveCalls++;
