@@ -58,6 +58,21 @@ jobs:
       - run: npm run prompt-budget -- --check
         working-directory: mcp-server
 
+  dead-code:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - run: npm ci
+        working-directory: mcp-server
+      - run: npm run dead-code -- --check
+        working-directory: mcp-server
+
   dist-drift:
     runs-on: ubuntu-latest
     timeout-minutes: 5
