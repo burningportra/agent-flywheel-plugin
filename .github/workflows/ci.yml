@@ -70,9 +70,9 @@ jobs:
           cache-dependency-path: mcp-server/package-lock.json
       - run: npm ci
         working-directory: mcp-server
-      - run: npm run build
-        working-directory: mcp-server
       - run: npm run check:skills-bundle
+        working-directory: mcp-server
+      - run: npm run build
         working-directory: mcp-server
       - name: Fail if mcp-server/dist drifted from src
         run: |
