@@ -12,7 +12,7 @@ const execAsync = promisify(execCb);
 const DEFAULT_LOGFILE = ".pi-flywheel/tender-events.log";
 const DEFAULT_NTM_TIMEOUT_MS = 5_000;
 const ROBOT_STATES = new Set(["working", "idle", "rate_limited", "error", "context_low"]);
-export function usageText() {
+function usageText() {
     return [
         "Usage:",
         "  tender-daemon --session=<tmux-name> [--project=<cwd>] [--interval=30000] [--logfile=.pi-flywheel/tender-events.log] [--agent=FlywheelAgent]",

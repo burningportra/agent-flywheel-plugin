@@ -59,47 +59,9 @@ export declare function readMemory(cwd: string, task?: string): string;
  */
 export declare function appendMemory(cwd: string, entry: string, category?: string): boolean;
 /**
- * List all playbook entries.
- */
-export declare function listMemoryEntries(cwd?: string): MemoryEntry[];
-/**
- * Search memory entries by query using CASS context command.
- * Uses `cm context` (task-aware semantic matching) instead of `cm similar`
- * (keyword mode) which returns empty for most queries.
- */
-export declare function searchMemory(cwd: string, query: string): MemoryEntry[];
-/**
- * Mark a CASS rule as helpful or harmful.
- */
-export declare function markRule(bulletId: string, helpful: boolean, reason?: string, cwd?: string): boolean;
-/**
  * Run `cm onboard` to bootstrap memory for a new project.
  * Should be called once when starting flywheel on a project that has no
  * existing CASS memory. Best-effort — returns true if successful.
  */
 export declare function onboardMemory(cwd?: string): boolean;
-/**
- * Run `cm reflect` to mine raw session logs for procedural patterns.
- * This is the between-session distillation step: it extracts rules from
- * what actually happened (guide §10: "cm reflect between sessions").
- * Best-effort — returns true if cm ran successfully, false otherwise.
- */
-export declare function reflectMemory(cwd?: string): boolean;
-/**
- * Mine CASS session history for planning-related patterns and return a
- * structured skill-refinement report. Uses `cm search` to find sessions
- * that involved planning activity, then extracts recurring patterns.
- * Returns null if cm unavailable or no relevant sessions found.
- */
-export declare function mineSkillGaps(cwd: string, topic?: string): string | null;
-/**
- * Run the skill-refiner meta-pattern: given a skill file path and optional
- * CASS session data, return a prompt for rewriting the skill.
- * This is the recursive self-improvement pattern from the guide §10.
- */
-export declare function skillRefinerPrompt(skillContent: string, skillName: string, sessionSnippets?: string): string;
-/**
- * Get memory system stats.
- */
-export declare function getMemoryStats(cwd?: string): MemoryStats;
 //# sourceMappingURL=memory.d.ts.map

@@ -200,7 +200,7 @@ export async function isGeminiPlannerCliAvailable(exec, options) {
 /**
  * Format detected models for display.
  */
-export function formatDetectedModels(detected) {
+function formatDetectedModels(detected) {
     const lines = [];
     lines.push("## Detected Model Providers");
     lines.push("");

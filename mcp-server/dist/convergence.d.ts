@@ -99,52 +99,10 @@ export declare const ConvergenceStateSchema: z.ZodObject<{
     computedAt: z.ZodString;
 }, z.core.$strip>;
 export type ConvergenceState = z.infer<typeof ConvergenceStateSchema>;
-declare function countWords(s: string): number;
-declare function countLines(s: string): number;
-declare function structuralCounts(md: string): {
-    headings: number;
-    codeBlocks: number;
-    links: number;
-    listItems: number;
-};
-/**
- * Cheap shingled-similarity score in [0, 1]. Uses 4-gram character shingles.
- * 1 = identical, 0 = no shingles in common. Does not normalise markdown
- * structure (Phase 13 deferred per §12.7).
- */
-declare function jaccardSimilarity(a: string, b: string): number;
-declare function diffLineCounts(prior: string, current: string): {
-    addedLines: number;
-    removedLines: number;
-};
 export declare function computeRevisionMetrics(currentMd: string, priorMd: string | null, opts?: {
     revisionId?: string;
     timestamp?: string;
 }): RevisionMetrics;
-/**
- * Score thresholds (50/75/90 ladder):
- *   <0.50 diverging | 0.50–0.75 approaching | 0.75–0.90 nearly_converged | ≥0.90 converged
- * `oscillation.detected = true` overrides → "oscillating".
- */
-declare function statusForScore(score: number): Exclude<ConvergenceStatus, "oscillating">;
-declare function computeSignals(revs: RevisionMetrics[]): {
-    outputSizeTrend: number;
-    changeVelocity: number;
-    similarityTrend: number;
-};
-declare function detectOscillation(revs: RevisionMetrics[]): {
-    signFlips: number;
-    detected: boolean;
-};
-/**
- * Score = weighted blend of the three signals, mapped into [0,1].
- *   - similarityTrend (high = converging): weight 0.5
- *   - inverse outputSizeTrend (low churn = converging): weight 0.3
- *   - inverse changeVelocity (low diff churn = converging): weight 0.2
- *
- * With <2 revisions there's no signal to blend — score is 0 (diverging).
- */
-declare function computeScore(signals: ReturnType<typeof computeSignals>, revCount: number): number;
 export interface AppendRevisionOptions {
     /** Override for tests / reproducibility. */
     computedAt?: string;
@@ -194,17 +152,4 @@ export type ConvergenceReadResult = {
  * to gate on stale-algorithm scores.
  */
 export declare function parseConvergenceState(raw: string): ConvergenceReadResult;
-/** @internal exposed for test inspection only */
-export declare const __test: {
-    computeSignals: typeof computeSignals;
-    detectOscillation: typeof detectOscillation;
-    computeScore: typeof computeScore;
-    statusForScore: typeof statusForScore;
-    jaccardSimilarity: typeof jaccardSimilarity;
-    diffLineCounts: typeof diffLineCounts;
-    countLines: typeof countLines;
-    countWords: typeof countWords;
-    structuralCounts: typeof structuralCounts;
-};
-export {};
 //# sourceMappingURL=convergence.d.ts.map

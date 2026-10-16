@@ -80,7 +80,6 @@ export interface RemediationHandler {
  * adding a new check name to DOCTOR_CHECK_NAMES forces a TS error here.
  */
 export declare const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | null>;
-export declare function assertExhaustive(_: never): never;
 /**
  * Dispatcher entry point for `flywheel_remediate`. Caller (server.ts, T8) is
  * responsible for top-level try/catch around invalid_input from Zod.

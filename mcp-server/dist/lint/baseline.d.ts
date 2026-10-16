@@ -1,6 +1,5 @@
 import { z } from "zod";
 import type { Finding } from "./types.js";
-export declare const BASELINE_SCHEMA_VERSION = 1;
 export declare const RULESET_VERSION = 1;
 export declare function toRepoRelativePosix(file: string, repoRoot: string): string;
 declare const BaselineEntrySchema: z.ZodObject<{

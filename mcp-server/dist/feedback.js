@@ -18,7 +18,7 @@ const FEEDBACK_DIR = ".pi/flywheel-feedback";
 /**
  * Collect feedback from the current flywheel state.
  */
-export function collectFeedback(state) {
+function collectFeedback(state) {
     const beadResults = Object.values(state.beadResults ?? {});
     const completedCount = beadResults.filter((r) => r.status === "success").length;
     return {
@@ -38,7 +38,7 @@ export function collectFeedback(state) {
 /**
  * Save feedback to the project-local feedback directory.
  */
-export function saveFeedback(cwd, feedback) {
+function saveFeedback(cwd, feedback) {
     const dir = join(cwd, FEEDBACK_DIR);
     mkdirSync(dir, { recursive: true });
     const filename = `feedback-${Date.now()}.json`;
@@ -49,7 +49,7 @@ export function saveFeedback(cwd, feedback) {
 /**
  * Load all feedback files from the project.
  */
-export function loadAllFeedback(cwd) {
+function loadAllFeedback(cwd) {
     const dir = join(cwd, FEEDBACK_DIR);
     if (!existsSync(dir))
         return [];
@@ -75,7 +75,7 @@ export function loadAllFeedback(cwd) {
         return [];
     }
 }
-export function computeFeedbackStats(feedbacks) {
+function computeFeedbackStats(feedbacks) {
     if (feedbacks.length === 0) {
         return {
             totalFlywheelRuns: 0,
@@ -106,7 +106,7 @@ export function computeFeedbackStats(feedbacks) {
         avgForegoneScore: foregoneScores.length > 0 ? Math.round(foregoneScores.reduce((s, v) => s + v, 0) / foregoneScores.length) : null,
     };
 }
-export function formatFeedbackStats(stats) {
+function formatFeedbackStats(stats) {
     if (stats.totalFlywheelRuns === 0)
         return "No flywheel history yet.";
     const lines = [
@@ -143,7 +143,7 @@ const _promptTracker = new Map();
 /**
  * Track a prompt use and its outcome.
  */
-export function trackPromptUse(name, changesProduced) {
+function trackPromptUse(name, changesProduced) {
     const existing = _promptTracker.get(name) ?? { name, uses: 0, changesProduced: 0, effectiveUses: 0 };
     existing.uses++;
     existing.changesProduced += changesProduced;
@@ -154,13 +154,13 @@ export function trackPromptUse(name, changesProduced) {
 /**
  * Get all prompt tracking records for the current session.
  */
-export function getPromptRecords() {
+function getPromptRecords() {
     return Array.from(_promptTracker.values());
 }
 /**
  * Get the effectiveness rate for a specific prompt (0-1).
  */
-export function getPromptEffectiveness(name) {
+function getPromptEffectiveness(name) {
     const record = _promptTracker.get(name);
     if (!record || record.uses === 0)
         return null;
@@ -169,7 +169,7 @@ export function getPromptEffectiveness(name) {
 /**
  * Format prompt effectiveness for display.
  */
-export function formatPromptEffectiveness() {
+function formatPromptEffectiveness() {
     const records = getPromptRecords();
     if (records.length === 0)
         return "";
@@ -189,17 +189,17 @@ export function formatPromptEffectiveness() {
 /**
  * Reset tracking (for testing).
  */
-export function resetPromptTracking() {
+function resetPromptTracking() {
     _promptTracker.clear();
 }
 /**
  * Prompt text for collecting structured tool feedback from an agent.
  * Paste this into the agent's context after it finishes using a tool.
  */
-export function toolFeedbackPrompt(toolName) {
+function toolFeedbackPrompt(toolName) {
     return `## Tool Feedback Survey: ${toolName}\n\nYou just used ${toolName}. Please provide structured feedback so we can improve it.\n\n### Rate on 1-5:\n- **Usability**: How easy was it to use correctly?\n- **Ergonomics**: Did the API surface feel natural and agent-friendly?\n\n### Qualitative:\n- **Strengths**: What worked well? (list 1-3 items)\n- **Weaknesses**: What was confusing, missing, or annoying? (list 1-3 items)\n- **Suggestions**: Specific improvements you'd make (list 1-3 items)\n\n### Output Format (JSON)\n\`\`\`json\n{\n  "usability": <1-5>,\n  "ergonomics": <1-5>,\n  "strengths": ["..."],\n  "weaknesses": ["..."],\n  "suggestions": ["..."]\n}\n\`\`\``;
 }
-export function parseToolFeedback(output, toolName) {
+function parseToolFeedback(output, toolName) {
     const match = output.match(/```json\s*([\s\S]*?)```/);
     if (!match)
         return null;
@@ -221,7 +221,7 @@ export function parseToolFeedback(output, toolName) {
     }
 }
 /** Save tool feedback to .pi-flywheel-feedback/tools/<toolName>.jsonl */
-export function saveToolFeedback(cwd, feedback) {
+function saveToolFeedback(cwd, feedback) {
     // Path-traversal guard (bead mq3): toolName is derived from parsed model
     // output, so a malicious or hallucinated "../../../etc/passwd" would escape
     // the feedback dir. Reject any segment that contains separators, control

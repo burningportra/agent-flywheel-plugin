@@ -20,7 +20,7 @@ function setCache(key, value, ttlMs = CACHE_TTL_MS) {
     _sessionCache.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 /** Clear all session caches. Call after bead mutations (create/update/close). */
-export function invalidateBeadCache() {
+function invalidateBeadCache() {
     _sessionCache.delete("readBeads");
     _sessionCache.delete("readyBeads");
     _sessionCache.delete("bvTriage");
@@ -192,7 +192,7 @@ let _bvAvailable = null;
 /**
  * Detects whether the `bv` CLI is available. Result is cached.
  */
-export async function detectBv(exec) {
+async function detectBv(exec) {
     if (_bvAvailable !== null)
         return _bvAvailable;
     const result = await resilientExec(exec, "which", ["bv"], { timeout: 5000, maxRetries: 0, logWarnings: false });
@@ -200,14 +200,14 @@ export async function detectBv(exec) {
     return _bvAvailable;
 }
 /** Reset bv detection cache (for testing). */
-export function resetBvCache() {
+function resetBvCache() {
     _bvAvailable = null;
 }
 /**
  * Runs `bv --robot-insights` and returns typed graph health data.
  * Returns null if bv is unavailable or output can't be parsed.
  */
-export async function bvInsights(exec, cwd) {
+async function bvInsights(exec, cwd) {
     const cached = getCached("bvInsights");
     if (cached !== null)
         return cached;
@@ -234,7 +234,7 @@ export async function bvInsights(exec, cwd) {
  * without contending on the same bottleneck node.
  * Returns null if bv is unavailable or output can't be parsed.
  */
-export async function bvTriage(exec, cwd) {
+async function bvTriage(exec, cwd) {
     const cached = getCached("bvTriage");
     if (cached !== null)
         return cached;
@@ -266,7 +266,7 @@ export async function bvTriage(exec, cwd) {
  * Runs `bv --robot-next` and returns the highest-priority next bead.
  * Returns null if bv is unavailable, no actionable items, or parse error.
  */
-export async function bvNext(exec, cwd) {
+async function bvNext(exec, cwd) {
     if (!(await detectBv(exec)))
         return null;
     const result = await resilientExec(exec, "bv", ["--robot-next"], { timeout: 15000, cwd, maxRetries: 1, retryDelayMs: 300 });
@@ -288,7 +288,7 @@ export async function bvNext(exec, cwd) {
  * Runs `bv --robot-plan` and returns the raw output string.
  * Returns null if bv is unavailable, empty output, or error.
  */
-export async function bvPlan(exec, cwd) {
+async function bvPlan(exec, cwd) {
     if (!(await detectBv(exec)))
         return null;
     const result = await resilientExec(exec, "bv", ["--robot-plan"], { timeout: 15000, cwd, maxRetries: 1, retryDelayMs: 300 });
@@ -329,7 +329,7 @@ function parseBead(raw) {
 /**
  * Reads all beads via `br list --json`.
  */
-export async function readBeads(exec, cwd) {
+async function readBeads(exec, cwd) {
     const cached = getCached("readBeads");
     if (cached)
         return cached;
@@ -388,7 +388,7 @@ export function unwrapBrShowValue(raw) {
 /**
  * Gets a single bead by ID via `br show <id> --json`.
  */
-export async function getBeadById(exec, cwd, id) {
+async function getBeadById(exec, cwd, id) {
     const result = await brExecJson(exec, ["show", id, "--json"], { timeout: 10000, cwd });
     if (!result.ok)
         return null;
@@ -398,7 +398,7 @@ export async function getBeadById(exec, cwd, id) {
 /**
  * Lists dependency IDs for a bead via `br dep list <id>`.
  */
-export async function beadDeps(exec, cwd, id) {
+async function beadDeps(exec, cwd, id) {
     const result = await brExec(exec, ["dep", "list", id], { timeout: 10000, cwd });
     if (!result.ok)
         return [];
@@ -438,7 +438,7 @@ export function extractArtifacts(bead) {
 /**
  * Updates the status of a bead.
  */
-export async function updateBeadStatus(exec, cwd, beadId, status) {
+async function updateBeadStatus(exec, cwd, beadId, status) {
     await brExec(exec, ["update", beadId, "--status", status], {
         timeout: 10000,
         cwd,
@@ -448,7 +448,7 @@ export async function updateBeadStatus(exec, cwd, beadId, status) {
 /**
  * Syncs beads to disk.
  */
-export async function syncBeads(exec, cwd) {
+async function syncBeads(exec, cwd) {
     await brExec(exec, ["sync", "--flush-only"], { timeout: 10000, cwd });
     // Non-fatal: brExec logs warning on failure, caller continues regardless
 }
@@ -456,7 +456,7 @@ export async function syncBeads(exec, cwd) {
  * Closes orphaned beads by setting their status to "closed".
  * Returns the list of IDs that were successfully closed.
  */
-export async function remediateOrphans(exec, cwd, orphanIds) {
+async function remediateOrphans(exec, cwd, orphanIds) {
     const closed = [];
     const failed = [];
     for (const id of orphanIds) {
@@ -474,7 +474,7 @@ export async function remediateOrphans(exec, cwd, orphanIds) {
  * Validates beads — checks for dependency cycles, orphaned open beads, and graph health.
  * When bv is available, uses graph-theoretic analysis for richer validation.
  */
-export async function validateBeads(exec, cwd) {
+async function validateBeads(exec, cwd) {
     let cycles = false;
     let orphaned = [];
     const warnings = [];
@@ -624,7 +624,7 @@ export async function validateBeads(exec, cwd) {
 /**
  * Validates each open bead against automated quality checks.
  */
-export async function qualityCheckBeads(exec, cwd) {
+async function qualityCheckBeads(exec, cwd) {
     const failures = [];
     const allBeads = await readBeads(exec, cwd);
     const openBeads = allBeads.filter((b) => b.status === "open" || b.status === "in_progress");

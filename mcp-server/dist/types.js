@@ -3,7 +3,7 @@ import { z } from 'zod';
  * Estimated effort for a bead, used by the calibration system.
  * @since v3.7.0
  */
-export const EFFORT_LEVELS = ['S', 'M', 'L', 'XL'];
+const EFFORT_LEVELS = ['S', 'M', 'L', 'XL'];
 /**
  * Mapping from effort tier to expected minutes-of-work.
  * @since v3.7.0

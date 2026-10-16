@@ -1,10 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ClaudeCodeAdapter } from '../../../adapters/platform/ClaudeCodeAdapter.js';
 import { detectPlatform, getAdapter } from '../../../adapters/platform/detect.js';
-import { buildSetupReport, setupLooksHealthy } from '../../../tools/setup.js';
 function makeTmp(prefix = 'cca-') {
     return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -192,45 +191,4 @@ describe('detectPlatform / getAdapter', () => {
         expect(getAdapter('claude-code')).toBeInstanceOf(ClaudeCodeAdapter);
     });
 });
-describe('buildSetupReport / setupLooksHealthy', () => {
-    it('builds a report from the supplied adapter', () => {
-        const adapter = new ClaudeCodeAdapter();
-        const report = buildSetupReport(adapter);
-        expect(report.platform).toBe('claude-code');
-        expect(['installed', 'standalone', 'missing']).toContain(report.registration.status);
-        expect(Array.isArray(report.hookDiagnostics)).toBe(true);
-    });
-    it('setupLooksHealthy is false when registration is not "installed"', () => {
-        expect(setupLooksHealthy({
-            platform: 'claude-code',
-            registration: { status: 'missing', message: '' },
-            hookDiagnostics: [],
-            installedVersion: null,
-            pluginRoot: null,
-        })).toBe(false);
-    });
-    it('setupLooksHealthy is true when installed AND every diagnostic is green', () => {
-        expect(setupLooksHealthy({
-            platform: 'claude-code',
-            registration: { status: 'installed', message: '' },
-            hookDiagnostics: [{ id: 'x', severity: 'green', message: '' }],
-            installedVersion: '1.0.0',
-            pluginRoot: '/tmp/x',
-        })).toBe(true);
-    });
-    it('setupLooksHealthy is false when any diagnostic is yellow/red', () => {
-        expect(setupLooksHealthy({
-            platform: 'claude-code',
-            registration: { status: 'installed', message: '' },
-            hookDiagnostics: [
-                { id: 'x', severity: 'green', message: '' },
-                { id: 'y', severity: 'yellow', message: '' },
-            ],
-            installedVersion: '1.0.0',
-            pluginRoot: '/tmp/x',
-        })).toBe(false);
-    });
-});
-// Suppress unused-import lint in tip-line workspaces.
-void homedir;
 //# sourceMappingURL=ClaudeCodeAdapter.test.js.map

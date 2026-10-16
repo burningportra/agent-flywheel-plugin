@@ -30,18 +30,6 @@ export interface FlywheelFeedback {
     spaceViolationCount: number;
 }
 /**
- * Collect feedback from the current flywheel state.
- */
-export declare function collectFeedback(state: import('./types.js').FlywheelState): FlywheelFeedback;
-/**
- * Save feedback to the project-local feedback directory.
- */
-export declare function saveFeedback(cwd: string, feedback: FlywheelFeedback): string;
-/**
- * Load all feedback files from the project.
- */
-export declare function loadAllFeedback(cwd: string): FlywheelFeedback[];
-/**
  * Compute aggregate stats from all feedback.
  */
 export interface FeedbackStats {
@@ -53,8 +41,6 @@ export interface FeedbackStats {
     avgPlanQuality: number | null;
     avgForegoneScore: number | null;
 }
-export declare function computeFeedbackStats(feedbacks: FlywheelFeedback[]): FeedbackStats;
-export declare function formatFeedbackStats(stats: FeedbackStats): string;
 /** Prepend CASS context to a prompt if available. */
 export declare function withCassContext(prompt: string, cwd: string, taskDescription?: string): string;
 export interface PromptRecord {
@@ -67,26 +53,6 @@ export interface PromptRecord {
     /** Number of uses that produced at least 1 change. */
     effectiveUses: number;
 }
-/**
- * Track a prompt use and its outcome.
- */
-export declare function trackPromptUse(name: string, changesProduced: number): void;
-/**
- * Get all prompt tracking records for the current session.
- */
-export declare function getPromptRecords(): PromptRecord[];
-/**
- * Get the effectiveness rate for a specific prompt (0-1).
- */
-export declare function getPromptEffectiveness(name: string): number | null;
-/**
- * Format prompt effectiveness for display.
- */
-export declare function formatPromptEffectiveness(): string;
-/**
- * Reset tracking (for testing).
- */
-export declare function resetPromptTracking(): void;
 export interface ToolFeedback {
     toolName: string;
     sessionId?: string;
@@ -102,12 +68,4 @@ export interface ToolFeedback {
     /** Specific suggestions */
     suggestions: string[];
 }
-/**
- * Prompt text for collecting structured tool feedback from an agent.
- * Paste this into the agent's context after it finishes using a tool.
- */
-export declare function toolFeedbackPrompt(toolName: string): string;
-export declare function parseToolFeedback(output: string, toolName: string): ToolFeedback | null;
-/** Save tool feedback to .pi-flywheel-feedback/tools/<toolName>.jsonl */
-export declare function saveToolFeedback(cwd: string, feedback: ToolFeedback): void;
 //# sourceMappingURL=feedback.d.ts.map

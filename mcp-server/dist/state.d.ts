@@ -13,7 +13,7 @@ export declare const ReviewActionSchema: z.ZodEnum<{
     "looks-good": "looks-good";
 }>;
 export type ReviewActionZ = z.infer<typeof ReviewActionSchema>;
-export declare const ReviewArgsSchema: z.ZodObject<{
+declare const ReviewArgsSchema: z.ZodObject<{
     cwd: z.ZodString;
     beadId: z.ZodString;
     action: z.ZodEnum<{
@@ -55,4 +55,5 @@ export interface FlywheelMemoryOperationDescriptor {
  * `runMemory` to decide *how* each is executed.
  */
 export declare function classifyMemoryOperation(op: string): FlywheelMemoryOperationDescriptor | null;
+export {};
 //# sourceMappingURL=state.d.ts.map

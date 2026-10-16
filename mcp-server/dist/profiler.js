@@ -240,7 +240,7 @@ async function collectBestPracticesGuides(exec, cwd, fileTree, signal) {
  * Format best-practices guides for injection into planning prompts.
  * Truncates to avoid overwhelming context windows.
  */
-export function formatBestPracticesGuides(guides) {
+function formatBestPracticesGuides(guides) {
     if (guides.length === 0)
         return "";
     const parts = guides.map(g => `### ${g.name}\n${g.content.slice(0, 2000)}`);

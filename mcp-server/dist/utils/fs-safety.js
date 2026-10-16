@@ -84,7 +84,7 @@ export function getFlywheelManagedDirs(cwd) {
  */
 export const FLYWHEEL_TMP_PREFIX = "pi-flywheel-";
 /** Subdir under `.pi-flywheel/` used by `backupThenReplace`. */
-export const BACKUP_SUBDIR = "_backup";
+const BACKUP_SUBDIR = "_backup";
 // ─── Ownership check ─────────────────────────────────────────
 /**
  * Return true iff `absPath` resolves under a flywheel-managed directory

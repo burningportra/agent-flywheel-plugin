@@ -17,7 +17,7 @@ const log = createLogger('plan-simulation');
  * Dependencies are passed separately because the br CLI's JSON output does not
  * embed dependency edges — they come from `br dep list`.
  */
-export function beadsToSimulated(beads, depMap) {
+function beadsToSimulated(beads, depMap) {
     return beads.map((b) => ({
         id: b.id,
         title: b.title,
@@ -161,7 +161,7 @@ export function detectFileConflicts(beads, parallelGroups) {
  * NOTE: Beads that *create* new files will appear as missing here.
  * Callers should treat results as warnings for new-file beads, not errors.
  */
-export function detectMissingFiles(beads, repoFiles) {
+function detectMissingFiles(beads, repoFiles) {
     const missing = [];
     for (const bead of beads) {
         for (const file of bead.files) {
@@ -218,7 +218,7 @@ export function simulateExecutionPaths(beads, repoFiles) {
 /**
  * Format a SimulationResult as a human-readable markdown report.
  */
-export function formatSimulationReport(result) {
+function formatSimulationReport(result) {
     const lines = [];
     if (result.valid) {
         lines.push("✅ **Simulation passed** — no structural issues detected.");

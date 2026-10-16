@@ -99,10 +99,6 @@ export declare function isGeminiPlannerCliAvailable(exec: ExecFn, options: {
     signal?: AbortSignal;
     timeout?: number;
 }): Promise<boolean>;
-/**
- * Format detected models for display.
- */
-export declare function formatDetectedModels(detected: DetectedModels): string;
 export declare const GEMINI_MODEL_ALLOWLIST: readonly string[];
 export declare function isGeminiModelAllowed(model: string): boolean;
 /**

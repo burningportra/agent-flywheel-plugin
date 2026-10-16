@@ -75,7 +75,7 @@ export const REMEDIATION_REGISTRY = {
     // single `ln -s`. Reversible (a symlink that can be removed).
     projects_base_misconfig: projectsBaseMisconfigHandler,
 };
-export function assertExhaustive(_) {
+function assertExhaustive(_) {
     throw new Error('Non-exhaustive registry');
 }
 function truncate(s) {

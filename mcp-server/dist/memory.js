@@ -123,7 +123,7 @@ export function appendMemory(cwd, entry, category) {
 /**
  * List all playbook entries.
  */
-export function listMemoryEntries(cwd) {
+function listMemoryEntries(cwd) {
     if (!detectCass())
         return [];
     const output = runCm(["ls", "--json"], cwd);
@@ -143,7 +143,7 @@ export function listMemoryEntries(cwd) {
  * Uses `cm context` (task-aware semantic matching) instead of `cm similar`
  * (keyword mode) which returns empty for most queries.
  */
-export function searchMemory(cwd, query) {
+function searchMemory(cwd, query) {
     if (!detectCass())
         return [];
     const output = runCm(["context", query, "--json"], cwd);
@@ -160,7 +160,7 @@ export function searchMemory(cwd, query) {
 /**
  * Mark a CASS rule as helpful or harmful.
  */
-export function markRule(bulletId, helpful, reason, cwd) {
+function markRule(bulletId, helpful, reason, cwd) {
     if (!detectCass())
         return false;
     const args = ["mark", bulletId, helpful ? "--helpful" : "--harmful", "--json"];
@@ -200,7 +200,7 @@ export function onboardMemory(cwd) {
  * what actually happened (guide §10: "cm reflect between sessions").
  * Best-effort — returns true if cm ran successfully, false otherwise.
  */
-export function reflectMemory(cwd) {
+function reflectMemory(cwd) {
     if (!detectCass())
         return false;
     const result = runCm(["reflect"], cwd);
@@ -212,7 +212,7 @@ export function reflectMemory(cwd) {
  * that involved planning activity, then extracts recurring patterns.
  * Returns null if cm unavailable or no relevant sessions found.
  */
-export function mineSkillGaps(cwd, topic = "planning beads flywheel") {
+function mineSkillGaps(cwd, topic = "planning beads flywheel") {
     if (!detectCass())
         return null;
     const output = runCm(["context", topic, "--json"], cwd);
@@ -244,13 +244,13 @@ export function mineSkillGaps(cwd, topic = "planning beads flywheel") {
  * CASS session data, return a prompt for rewriting the skill.
  * This is the recursive self-improvement pattern from the guide §10.
  */
-export function skillRefinerPrompt(skillContent, skillName, sessionSnippets) {
+function skillRefinerPrompt(skillContent, skillName, sessionSnippets) {
     return `## Skill Refiner — ${skillName}\n\nYou are improving a skill file based on real usage data from past sessions.\n\n### Current Skill\n\`\`\`\n${skillContent}\n\`\`\`\n\n${sessionSnippets ? `### Session Evidence (what actually happened when agents used this skill)\n\n${sessionSnippets}\n\n` : ""}### Instructions\n1. Identify places where the skill's instructions were ambiguous, incomplete, or wrong based on the evidence\n2. Find patterns agents invented as workarounds (these reveal gaps in the skill)\n3. Add missing anti-patterns, gotchas, or tool-specific quirks\n4. Sharpen vague instructions to be concrete and actionable\n5. Output the FULL improved skill text — not just diffs\n\nBe aggressive about incorporating evidence. A skill that reflects real failure modes is worth 10x a theoretically correct one.\n\nUse ultrathink.`;
 }
 /**
  * Get memory system stats.
  */
-export function getMemoryStats(cwd) {
+function getMemoryStats(cwd) {
     if (!detectCass()) {
         return { entryCount: 0, cassAvailable: false, overallStatus: null, version: null };
     }

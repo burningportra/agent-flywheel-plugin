@@ -37,7 +37,6 @@ export interface TenderDaemonController {
     stop: (reason?: string) => Promise<void>;
     logfile: string;
 }
-export declare function usageText(): string;
 export declare function parseTenderDaemonArgs(argv: string[]): ParseArgsResult;
 export declare function parsePaneStates(raw: string): Record<string, string>;
 export declare function startTenderDaemon(args: TenderDaemonArgs, deps?: TenderDaemonDeps): Promise<TenderDaemonController>;

@@ -24,7 +24,7 @@ export function sortFindings(findings) {
         || a.column - b.column
         || a.ruleId.localeCompare(b.ruleId));
 }
-export function filterBySeverity(findings, minSeverity) {
+function filterBySeverity(findings, minSeverity) {
     if (!minSeverity)
         return findings;
     const max = SEVERITY_RANK[minSeverity];

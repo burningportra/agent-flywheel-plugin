@@ -80,7 +80,7 @@ function runMempalace(args, timeoutMs = 10_000) {
  * @param projectSlug    - Wing name (e.g. "pi-flywheel"). Use sanitiseSlug().
  * @returns true if CLI exited 0, false on any error. Never throws.
  */
-export function mineSession(transcriptPath, projectSlug) {
+function mineSession(transcriptPath, projectSlug) {
     if (!detectMempalace())
         return false;
     try {
@@ -175,7 +175,7 @@ export function searchEpisodic(query, options) {
  * ## Past Session Examples header suitable for prompt injection.
  * Returns "" if mempalace unavailable or no relevant results found.
  */
-export function getEpisodicContext(task, projectSlug) {
+function getEpisodicContext(task, projectSlug) {
     const results = searchEpisodic(task, { wing: projectSlug, nResults: 5 });
     if (!results)
         return "";
@@ -218,7 +218,7 @@ export function getEpisodicStats() {
  * Example: "/Volumes/1tb/Projects/pi-flywheel" → "pi-flywheel"
  *          "my project (v2)" → "my-project--v2-"
  */
-export function sanitiseSlug(cwd) {
+function sanitiseSlug(cwd) {
     return basename(cwd).replace(/[^a-zA-Z0-9]/g, "-");
 }
 const POSTMORTEM_GIT_TIMEOUT_MS = 8_000;

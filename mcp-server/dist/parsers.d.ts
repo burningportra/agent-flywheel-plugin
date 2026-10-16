@@ -55,26 +55,6 @@ export declare const BvBottleneckSchema: z.ZodObject<{
     ID: z.ZodString;
     Value: z.ZodNumber;
 }, z.core.$loose>;
-export declare const BvInsightsSchema: z.ZodObject<{
-    Bottlenecks: z.ZodArray<z.ZodObject<{
-        ID: z.ZodString;
-        Value: z.ZodNumber;
-    }, z.core.$loose>>;
-    Cycles: z.ZodNullable<z.ZodArray<z.ZodArray<z.ZodString>>>;
-    Orphans: z.ZodArray<z.ZodString>;
-    Articulation: z.ZodArray<z.ZodString>;
-    Slack: z.ZodArray<z.ZodObject<{
-        ID: z.ZodString;
-        Value: z.ZodNumber;
-    }, z.core.$loose>>;
-}, z.core.$loose>;
-export declare const BvNextPickSchema: z.ZodObject<{
-    id: z.ZodString;
-    title: z.ZodString;
-    score: z.ZodNumber;
-    reasons: z.ZodArray<z.ZodString>;
-    unblocks: z.ZodArray<z.ZodString>;
-}, z.core.$loose>;
 export declare const BrStructuredErrorSchema: z.ZodObject<{
     code: z.ZodOptional<z.ZodString>;
     message: z.ZodOptional<z.ZodString>;
@@ -92,36 +72,6 @@ export declare const AgentMailRpcResponseSchema: z.ZodObject<{
 export declare const CmResultSchema: z.ZodObject<{
     success: z.ZodOptional<z.ZodBoolean>;
     data: z.ZodOptional<z.ZodUnknown>;
-}, z.core.$loose>;
-export declare const CmSearchResultSchema: z.ZodObject<{
-    text: z.ZodOptional<z.ZodString>;
-    content: z.ZodOptional<z.ZodString>;
-    score: z.ZodOptional<z.ZodNumber>;
-}, z.core.$loose>;
-export declare const SophiaResultSchema: z.ZodObject<{
-    ok: z.ZodOptional<z.ZodBoolean>;
-    data: z.ZodOptional<z.ZodUnknown>;
-    error: z.ZodOptional<z.ZodObject<{
-        message: z.ZodOptional<z.ZodString>;
-    }, z.core.$strip>>;
-}, z.core.$loose>;
-export declare const ProfileCacheSchema: z.ZodObject<{
-    gitHead: z.ZodString;
-    cachedAt: z.ZodString;
-    profile: z.ZodUnknown;
-}, z.core.$loose>;
-export declare const FeedbackFileSchema: z.ZodObject<{
-    timestamp: z.ZodString;
-    goal: z.ZodString;
-    beadCount: z.ZodNumber;
-    completedCount: z.ZodNumber;
-    totalRounds: z.ZodNumber;
-    planQualityScore: z.ZodOptional<z.ZodNumber>;
-    foregoneScore: z.ZodOptional<z.ZodNumber>;
-    polishRounds: z.ZodNumber;
-    converged: z.ZodBoolean;
-    regressions: z.ZodArray<z.ZodString>;
-    spaceViolationCount: z.ZodNumber;
 }, z.core.$loose>;
 export declare function parseBrList(raw: string): ParseResult<Bead[]>;
 export declare function parseBvInsights(raw: string): ParseResult<BvInsights>;

@@ -55,8 +55,6 @@ export declare function getFlywheelManagedDirs(cwd: string): readonly string[];
  * by an ownership signal, not a bare "it's under os.tmpdir()" assumption.
  */
 export declare const FLYWHEEL_TMP_PREFIX = "pi-flywheel-";
-/** Subdir under `.pi-flywheel/` used by `backupThenReplace`. */
-export declare const BACKUP_SUBDIR = "_backup";
 export type GuardFailureReason = "target_outside_allowlist" | "target_is_symlink_off_root" | "path_resolve_failed";
 export interface GuardResult {
     ok: boolean;

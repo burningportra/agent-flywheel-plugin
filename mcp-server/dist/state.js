@@ -25,7 +25,7 @@ export const ReviewModeSchema = z.enum([
     'interactive',
 ]);
 export const ReviewActionSchema = z.enum(['hit-me', 'looks-good', 'skip']);
-export const ReviewArgsSchema = z.object({
+const ReviewArgsSchema = z.object({
     cwd: z.string().min(1),
     beadId: z.string().min(1),
     action: ReviewActionSchema,

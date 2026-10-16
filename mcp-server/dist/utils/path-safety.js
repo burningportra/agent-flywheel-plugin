@@ -16,9 +16,8 @@
  * rejection carries a short human-readable reason code so error messages at
  * MCP boundaries stay consistent.
  *
- * Companion modules: `clone-safety.ts` (git-URL allow-list, bead 016) and
- * `fs-safety.ts` (write-owner/symlink checks, bead 8tf). This module only
- * handles path *strings* — it does not touch the filesystem.
+ * `fs-safety.ts` owns write-owner and symlink checks. This module only handles
+ * path strings; it does not touch the filesystem.
  */
 import { realpathSync } from "node:fs";
 import { isAbsolute, normalize, resolve, relative, sep } from "node:path";

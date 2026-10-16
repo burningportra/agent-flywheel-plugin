@@ -1042,34 +1042,6 @@ describe('npm_marketplace_version_drift check', () => {
         }
     });
 });
-// ─── renderDoctorReport (clack-prompts) ────────────────────────────────────
-describe('renderDoctorReport (clack/picocolors)', () => {
-    it('returns criticalFails as the exit-code value', async () => {
-        const { renderDoctorReport } = await import('../../tools/doctor-render.js');
-        const greenReport = {
-            version: 1,
-            cwd: '/tmp',
-            overall: 'green',
-            criticalFails: 0,
-            partial: false,
-            checks: [{ name: 'a', severity: 'green', message: 'ok' }],
-            elapsedMs: 5,
-            timestamp: '2026-05-03T00:00:00.000Z',
-        };
-        const redReport = { ...greenReport, overall: 'red', criticalFails: 2 };
-        // Suppress clack output during tests so the test runner stays quiet.
-        const stdoutWrite = process.stdout.write.bind(process.stdout);
-        const noop = (() => true);
-        process.stdout.write = noop;
-        try {
-            expect(renderDoctorReport(greenReport)).toBe(0);
-            expect(renderDoctorReport(redReport)).toBe(2);
-        }
-        finally {
-            process.stdout.write = stdoutWrite;
-        }
-    });
-});
 describe('gemini_model_compat probe cache', () => {
     function geminiCacheHarness(cwd, versionCode) {
         const bin = join(cwd, 'gemini');

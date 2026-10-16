@@ -5,7 +5,7 @@
  * with execution ordering, parallel group computation, file conflict detection,
  * and missing file validation.
  */
-import type { Bead, HotspotMatrix } from './types.js';
+import type { HotspotMatrix } from './types.js';
 export interface SimulatedBead {
     id: string;
     title: string;
@@ -29,14 +29,6 @@ export interface SimulationResult {
     warnings: string[];
 }
 /**
- * Convert Bead[] to SimulatedBead[] using extractArtifacts for file paths.
- *
- * `depMap` maps bead ID → array of dependency IDs (beads this bead depends on).
- * Dependencies are passed separately because the br CLI's JSON output does not
- * embed dependency edges — they come from `br dep list`.
- */
-export declare function beadsToSimulated(beads: Bead[], depMap: Map<string, string[]>): SimulatedBead[];
-/**
  * Compute a valid execution order via Kahn's algorithm.
  * Returns ordered IDs (dependencies first).
  * Throws if cycles exist — caller should run cycle detection first.
@@ -54,20 +46,9 @@ export declare function computeParallelGroups(beads: SimulatedBead[]): string[][
  */
 export declare function detectFileConflicts(beads: SimulatedBead[], parallelGroups: string[][]): FileConflict[];
 /**
- * Check that files referenced by beads exist in the repo.
- *
- * NOTE: Beads that *create* new files will appear as missing here.
- * Callers should treat results as warnings for new-file beads, not errors.
- */
-export declare function detectMissingFiles(beads: SimulatedBead[], repoFiles: Set<string>): MissingFileRef[];
-/**
  * Run all simulation checks and return a consolidated result.
  */
 export declare function simulateExecutionPaths(beads: SimulatedBead[], repoFiles: Set<string>): SimulationResult;
-/**
- * Format a SimulationResult as a human-readable markdown report.
- */
-export declare function formatSimulationReport(result: SimulationResult): string;
 /**
  * Input bead for hotspot computation. Intentionally minimal — callers
  * don't need to produce a full Bead object.

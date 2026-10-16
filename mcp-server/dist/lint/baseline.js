@@ -3,7 +3,7 @@ import { readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { normalizeText } from "../utils/text-normalize.js";
-export const BASELINE_SCHEMA_VERSION = 1;
+const BASELINE_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
 // Convert any path (absolute, relative, mixed-separator) to a POSIX-style
 // path relative to repoRoot. Baseline entries store paths in this form so a
