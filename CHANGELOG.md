@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.20.1] - 2026-10-15
+
+Makes conflicting Agent Mail file reservations fail, turns CI on for `main`, and deletes the MCP server's dead code.
+
+### Fixed
+
+- **Conflicting file reservations now fail.** `reserveFileReservations()` in `mcp-server/src/agent-mail.ts` called Agent Mail's `file_reservation_paths` directly. The server grants an exclusive lease even when another agent already holds the path, so a conflict looked like success. The call now goes through `reserveOrFail()`, which treats any non-empty `conflicts` array as failure after one retry, as AGENTS.md has required since v3.11.0. The `RESERVE001` baseline entry is gone, so every raw call outside the helper fails lint.
+- **An Agent Mail reply without a `result` is an error.** `agentMailRPC` used to return `{ ok: true }` with undefined data when the JSON-RPC envelope had no `result`. It now returns the `empty_response` error kind.
+- **CI runs on `main`.** `.github/workflows/ci.yml` triggered on `master`, which this repo doesn't have, so the build, test, lint-skill, prompt-budget, dist-drift and manifest-drift jobs never ran. It now triggers on `main` and `workflow_dispatch`, and `workflow-default-branch.test.ts` fails if any workflow stops triggering on the default branch. The dist-drift job validates the committed skill bundle before building, compares it after normalizing, and fails on untracked files under `dist/`.
+- **The install-script workflow's Debian leg passes.** It runs the two Node-less installer smokes first, then installs the `.nvmrc` Node before Bats, and marks the mounted checkout as a git `safe.directory` so `sync.mjs` no longer exits 2.
+
+### Added
+
+- **`npm run dead-code -- --check` in CI.** `mcp-server/scripts/reachability.mjs --check` exits non-zero on any unreachable file or export missing from `mcp-server/.reachability-allowlist.json`, where every entry needs a reason. The new `dead-code` CI job runs it.
+- **`/start` eval covers implement, review and wrap-up.** The eval now has seven scenarios: s5 dispatches the server-built implementer prompts through a stubbed `ntm`, s6 covers wrap-up and s7 covers review. `--append-baseline` adds rows without rewriting existing ones, and each scenario kills the processes it started and fails if any survive.
+
+### Removed
+
+- **Dead server code.** 19 source files nothing reached, plus their 15 test files, are deleted. They include the old coordination cluster (`coordination.ts`, `session-state.ts`, `worktree.ts`, `tools/setup.ts`, `tools/doctor-render.ts`) and ten orphaned planning modules (`ideation-funnel.ts`, `sophia.ts`, `plan-quality.ts` and others). 22 unused `agent-mail.ts` exports are deleted, and 58 exports used only inside their own file are now file-private. `npm run dead-code` went from 25 unreachable files and 176 unreachable exports to 0 files and 9 exports, and all 9 are allowlisted with a reason. The unused `@clack/prompts` and `picocolors` dependencies are dropped.
+
 ## [3.20.0] - 2026-10-15
 
 Adds an Ambitious planning mode and the `flywheel_rescue` tool, fixes cross-program bead claims and the pointer-command dedup trap, and roughly halves the prompt text the flywheel sends.
