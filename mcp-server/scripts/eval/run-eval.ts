@@ -147,6 +147,9 @@ async function runOne(
   try {
     cwd = await setupWorktree(scenario.id, baseSha);
     brainstormPath = await writeBrainstorm(cwd, scenario.goal);
+    if (scenario.prepareFixtures) {
+      await scenario.prepareFixtures(cwd);
+    }
   } catch (err) {
     return {
       id: scenario.id,
@@ -234,7 +237,7 @@ async function main(): Promise<number> {
     return parsed.exitCode;
   }
 
-  const { onlyIds, sha: shaArg, listOnly, dryRun, writeBaseline, keepWorktrees } = parsed;
+  const { onlyIds, sha: shaArg, listOnly, dryRun, writeBaseline, appendBaseline, keepWorktrees } = parsed;
 
   if (listOnly) {
     for (const s of SCENARIOS) console.log(`${s.id}\t${s.description}`);
@@ -284,11 +287,36 @@ async function main(): Promise<number> {
     await mkdir(join(REPO_ROOT, "docs", "perf"), { recursive: true });
     await writeFile(BASELINE_PATH, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     console.log(`\nBaseline written to ${BASELINE_PATH}`);
+  } else if (appendBaseline) {
+    const merged = await mergeBaselineRows(report);
+    await writeFile(BASELINE_PATH, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+    console.log(
+      `\nBaseline rows merged into ${BASELINE_PATH} (${results.length} scenario(s) replaced/added).`,
+    );
   } else {
-    console.log(`\nBaseline NOT written (pass --write-baseline to overwrite).`);
+    console.log(
+      `\nBaseline NOT written (pass --write-baseline for a full rewrite or --append-baseline to merge selected rows).`,
+    );
   }
 
   return results.some((r) => r.status === "fail") ? 1 : 0;
+}
+
+async function mergeBaselineRows(report: BaselineReport): Promise<BaselineReport> {
+  if (!existsSync(BASELINE_PATH)) return report;
+  const prevText = readFileSync(BASELINE_PATH, "utf8");
+  const prev = JSON.parse(prevText) as BaselineReport;
+  const byId = new Map(prev.scenarios.map((s) => [s.id, s]));
+  for (const s of report.scenarios) byId.set(s.id, s);
+  return {
+    version: prev.version,
+    git_sha: report.git_sha,
+    git_dirty: report.git_dirty,
+    recorded_at: report.recorded_at,
+    model: report.model,
+    claude_cli_version: report.claude_cli_version,
+    scenarios: [...byId.values()],
+  };
 }
 
 main().then(

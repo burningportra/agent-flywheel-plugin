@@ -61,4 +61,12 @@ export type Scenario = {
   scripted: ScriptedAnswer[];
   assert: (facts: ScenarioFacts) => string[];
   maxTurns?: number;
+  /**
+   * Optional per-scenario fixture setup, invoked after the worktree is
+   * built and the brainstorm is written but before the SDK session starts.
+   * Lets a scenario pre-seed `.pi-flywheel/checkpoint.json` or a tiny
+   * closed bead so the orchestrator can route straight into Step 9 /
+   * wrap-up without the full plan + implement loop.
+   */
+  prepareFixtures?: (worktree: string) => Promise<void>;
 };

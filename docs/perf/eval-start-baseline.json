@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "git_sha": "77ee233",
+  "git_sha": "8f149957f93670826c86da26db62fc03bce1484f",
   "git_dirty": false,
-  "recorded_at": "2026-10-15T21:30:36.251Z",
+  "recorded_at": "2026-10-16T00:50:40.941Z",
   "model": "claude-sonnet-5-5",
   "claude_cli_version": "agent-sdk@0.3.300 / cli@2.1.301 (Claude Code)",
   "scenarios": [
@@ -77,6 +77,42 @@
       "tool_use_count": 43,
       "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s4-rubric-gate-before-bead-creation-2026-10-15T21-27-48-530Z.jsonl",
       "duration_ms": 175646
+    },
+    {
+      "id": "s5-dispatch-server-prompts",
+      "description": "Standard path reaches bead-approval, picks Create beads + Skip rubric + Start implementing, and the server-built implementer prompts are returned by flywheel_approve_beads(action: 'start').",
+      "status": "pass",
+      "violations": [],
+      "turns": 61,
+      "stop_reason": "success",
+      "usage": {
+        "input_tokens": 122,
+        "output_tokens": 2137,
+        "cache_read_input_tokens": 4255522,
+        "cache_creation_input_tokens": 233358
+      },
+      "cost_usd": 0.7621688999999998,
+      "tool_use_count": 34,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s5-dispatch-server-prompts-2026-10-16T00-48-03-996Z.jsonl",
+      "duration_ms": 161862
+    },
+    {
+      "id": "s6-review-wrapup-outcome-gate",
+      "description": "At phase=wrapup with a tiny closed bead pre-seeded, /start routes to the wrap-up flow and the outcome-grading/verdict gate fires (either flywheel_grade_outcome runs or the rubric-skip path short-circuits).",
+      "status": "pass",
+      "violations": [],
+      "turns": 23,
+      "stop_reason": "success",
+      "usage": {
+        "input_tokens": 46,
+        "output_tokens": 600,
+        "cache_read_input_tokens": 1067538,
+        "cache_creation_input_tokens": 102388
+      },
+      "cost_usd": 0.25449360000000004,
+      "tool_use_count": 12,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s6-review-wrapup-outcome-gate-2026-10-16T00-43-51-182Z.jsonl",
+      "duration_ms": 42072
     }
   ]
 }

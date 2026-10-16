@@ -6,6 +6,7 @@ export type ParseResult =
       listOnly: boolean;
       dryRun: boolean;
       writeBaseline: boolean;
+      appendBaseline: boolean;
       keepWorktrees: boolean;
     }
   | { kind: "help"; text: string }
@@ -23,6 +24,11 @@ Flags:
                          the result. Default: do not write. Must be a full
                          four-scenario run — refused when combined with --only.
   --no-write-baseline    Accepted no-op (preserved for backwards compat).
+  --append-baseline      Merge the result's scenario rows into the existing
+                         baseline file in place: scenarios present in the run
+                         replace their matching row, every other row is left
+                         untouched. Can be combined with --only to update a
+                         subset. Refused when combined with --write-baseline.
   --keep-worktrees       Leave /tmp/claude-501/fw-eval/<id>-* checkouts in
                          place after each scenario for inspection.
   --help, -h             Print this help and exit 0.
@@ -45,6 +51,7 @@ const KNOWN_FLAGS = new Set([
   "--dry-run",
   "--write-baseline",
   "--no-write-baseline",
+  "--append-baseline",
   "--keep-worktrees",
   "--help",
   "-h",
@@ -56,6 +63,7 @@ export function parseArgv(argv: readonly string[]): ParseResult {
   let listOnly = false;
   let dryRun = false;
   let writeBaseline = false; // M4: opt-in
+  let appendBaseline = false;
   let keepWorktrees = false;
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -99,6 +107,7 @@ export function parseArgv(argv: readonly string[]): ParseResult {
     if (a === "--list") listOnly = true;
     else if (a === "--dry-run") dryRun = true;
     else if (a === "--write-baseline") writeBaseline = true;
+    else if (a === "--append-baseline") appendBaseline = true;
     else if (a === "--no-write-baseline") {
       // M4: accepted no-op (default is already no-write).
     } else if (a === "--keep-worktrees") keepWorktrees = true;
@@ -109,7 +118,15 @@ export function parseArgv(argv: readonly string[]): ParseResult {
       kind: "error",
       exitCode: 2,
       message:
-        "--write-baseline cannot be combined with --only: a partial run must never replace the four-scenario baseline.",
+        "--write-baseline cannot be combined with --only: a partial run must never replace the full baseline.",
+    };
+  }
+  if (writeBaseline && appendBaseline) {
+    return {
+      kind: "error",
+      exitCode: 2,
+      message:
+        "--write-baseline and --append-baseline are mutually exclusive: pick one.",
     };
   }
 
@@ -120,6 +137,7 @@ export function parseArgv(argv: readonly string[]): ParseResult {
     listOnly,
     dryRun,
     writeBaseline,
+    appendBaseline,
     keepWorktrees,
   };
 }
