@@ -432,17 +432,33 @@ exit 0
           "flywheel_get_skill(name: 'agent-flywheel:start_implement') never observed; dispatch did not reach _implement.md.",
         );
       }
-      const ntmCall = facts.toolUses.find(
+      const ntmCalls = facts.toolUses.filter(
         (t) =>
           t.tool_name === "Bash" &&
           typeof t.input["command"] === "string" &&
           /\bntm\b/.test(t.input["command"] as string) &&
           /--robot-send/.test(t.input["command"] as string),
       );
-      if (!ntmCall) {
+      if (ntmCalls.length === 0) {
         violations.push(
           "No `ntm --robot-send` Bash call observed; dispatch never ran the robot-send through the ntm shim.",
         );
+      } else {
+        // The server-built implementer prompt from flywheel_approve_beads(start)
+        // / completion-attestation-prompt.ts always directs the implementer to
+        // write `.pi-flywheel/completion/<bead>.json`. That path is unique to
+        // the server-built prompt text — a model-improvised robot-send would
+        // not include it. Treat this substring as the marker that the
+        // dispatcher forwarded the server bytes rather than paraphrased.
+        const marker = ".pi-flywheel/completion";
+        const hasMarker = ntmCalls.some(
+          (t) => String(t.input["command"] ?? "").includes(marker),
+        );
+        if (!hasMarker) {
+          violations.push(
+            `No \`ntm --robot-send\` payload carried the server-built-prompt marker "${marker}"; dispatcher may have paraphrased the implementer prompt instead of forwarding the bytes.`,
+          );
+        }
       }
       return violations;
     },

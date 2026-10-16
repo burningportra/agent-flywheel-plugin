@@ -27,6 +27,80 @@ const MAIN_NODE_MODULES = join(REPO_ROOT, "mcp-server", "node_modules");
 const sh = (cmd: string, args: string[], cwd?: string): string =>
   execFileSync(cmd, args, { cwd, encoding: "utf8" }).trim();
 
+/**
+ * Find and kill every process whose argv contains `worktree`. The eval
+ * saw a tender-daemon leak when the model picked the installed plugin
+ * (`CLAUDE_PLUGIN_ROOT` was unset), survived the SDK's exit, and ran as
+ * PPID 1 for 6+ minutes. Called after every scenario; returns the count
+ * of processes killed so the caller can fail the scenario if any
+ * survived even after SIGKILL.
+ */
+function killWorktreeProcesses(worktree: string): { killed: number; survivors: number[] } {
+  let listing = "";
+  try {
+    listing = execFileSync("ps", ["-axo", "pid,command"], { encoding: "utf8" });
+  } catch {
+    return { killed: 0, survivors: [] };
+  }
+  const self = process.pid;
+  const pids: number[] = [];
+  for (const line of listing.split("\n")) {
+    const m = line.match(/^\s*(\d+)\s+(.*)$/);
+    if (!m) continue;
+    const pid = Number(m[1]);
+    const cmd = m[2] ?? "";
+    if (pid === self) continue;
+    if (cmd.includes(worktree)) pids.push(pid);
+  }
+  let killed = 0;
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+      killed += 1;
+    } catch {
+      /* already gone */
+    }
+  }
+  if (pids.length === 0) return { killed: 0, survivors: [] };
+  // Grace period, then SIGKILL anything still alive.
+  const deadline = Date.now() + 2500;
+  const survivors: number[] = [];
+  while (Date.now() < deadline) {
+    const stillAlive = pids.filter((p) => {
+      try {
+        process.kill(p, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (stillAlive.length === 0) return { killed, survivors: [] };
+    const spinDeadline = Date.now() + 200;
+    while (Date.now() < spinDeadline) {
+      /* busy-wait briefly without introducing a sleep import */
+    }
+  }
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 0);
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        /* already gone between checks */
+      }
+      try {
+        process.kill(pid, 0);
+        survivors.push(pid);
+      } catch {
+        /* confirmed dead after SIGKILL */
+      }
+    } catch {
+      /* already dead */
+    }
+  }
+  return { killed, survivors };
+}
+
 const shLog = (cmd: string, args: string[], cwd?: string): void => {
   execFileSync(cmd, args, { cwd, stdio: ["ignore", "inherit", "inherit"] });
 };
@@ -206,6 +280,19 @@ async function runOne(
   }
   if (outcome.error) violations.push(`sdk error: ${outcome.error}`);
   if (outcome.timed_out) violations.push("eval timeout before completion");
+
+  // Kill any process the model spawned that references the worktree
+  // (tender-daemon, lingering NTM controllers, nested CLIs). Fail the
+  // scenario if any process survived SIGKILL.
+  const leaks = killWorktreeProcesses(cwd);
+  if (leaks.killed > 0) {
+    console.log(`    teardown: killed ${leaks.killed} process(es) referencing ${cwd}`);
+  }
+  if (leaks.survivors.length > 0) {
+    violations.push(
+      `teardown: ${leaks.survivors.length} process(es) survived SIGKILL: pid ${leaks.survivors.join(", ")}`,
+    );
+  }
 
   if (!keepWorktrees) await removeWorktree(cwd);
 

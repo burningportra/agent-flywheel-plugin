@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "git_sha": "7899440f296cf42137d4b56c5b463297734bf526",
+  "git_sha": "52e0d5574efef3f086572fd267d27938cc6f6f62",
   "git_dirty": false,
-  "recorded_at": "2026-10-16T01:38:48.272Z",
+  "recorded_at": "2026-10-16T01:47:13.674Z",
   "model": "claude-sonnet-5-5",
   "claude_cli_version": "agent-sdk@0.3.300 / cli@2.1.301 (Claude Code)",
   "scenarios": [
@@ -87,14 +87,14 @@
       "stop_reason": "success",
       "usage": {
         "input_tokens": 54,
-        "output_tokens": 1173,
-        "cache_read_input_tokens": 1457289,
-        "cache_creation_input_tokens": 131196
+        "output_tokens": 1129,
+        "cache_read_input_tokens": 1436049,
+        "cache_creation_input_tokens": 138819
       },
-      "cost_usd": 0.35891920000000005,
+      "cost_usd": 0.37960109999999997,
       "tool_use_count": 15,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s5-dispatch-server-prompts-2026-10-16T01-35-56-497Z.jsonl",
-      "duration_ms": 74180
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s5-dispatch-server-prompts-2026-10-16T01-46-07-352Z.jsonl",
+      "duration_ms": 73544
     },
     {
       "id": "s6-review-wrapup-outcome-gate",
