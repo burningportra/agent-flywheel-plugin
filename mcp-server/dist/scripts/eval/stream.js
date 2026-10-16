@@ -93,6 +93,21 @@ export async function runScenario(opts) {
     // ~/.claude/plugins/cache/agent-flywheel copy from leaking into the
     // session. The worktree's own `.claude-plugin/plugin.json` is picked up
     // via the explicit `plugins` entry below.
+    // Prepend the per-worktree shim directory to PATH for the duration of the
+    // SDK session. Scenarios' prepareFixtures hooks write stub executables
+    // (e.g. an `ntm` shim that logs argv and exits 0 so the model's robot-send
+    // doesn't actually spawn panes) into `<cwd>/.pi-flywheel/eval-bin`; the
+    // SDK's spawned child inherits PATH from this process.
+    const shimDir = `${cwd}/.pi-flywheel/eval-bin`;
+    const prevPath = process.env.PATH;
+    process.env.PATH = prevPath ? `${shimDir}:${prevPath}` : shimDir;
+    // Point CLAUDE_PLUGIN_ROOT at the worktree so skills that reference
+    // `$CLAUDE_PLUGIN_ROOT/mcp-server/...` (e.g. `_implement.md:76` for the
+    // tender-daemon) don't pick up the installed `~/.claude/plugins/cache/...`
+    // copy. Without this override an installed daemon can escape the
+    // worktree and keep running past the SDK's exit — see teardown below.
+    const prevPluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+    process.env.CLAUDE_PLUGIN_ROOT = cwd;
     const iterator = query({
         prompt: scenario.goal,
         options: {
@@ -213,6 +228,15 @@ export async function runScenario(opts) {
         if (!errorMsg)
             errorMsg = String(err);
     }
+    // Restore PATH + CLAUDE_PLUGIN_ROOT no matter how the loop exited.
+    if (prevPath === undefined)
+        delete process.env.PATH;
+    else
+        process.env.PATH = prevPath;
+    if (prevPluginRoot === undefined)
+        delete process.env.CLAUDE_PLUGIN_ROOT;
+    else
+        process.env.CLAUDE_PLUGIN_ROOT = prevPluginRoot;
     clearTimeout(deadline);
     jsonl.end();
     totalTurns = Math.max(totalTurns, turnCounter);
