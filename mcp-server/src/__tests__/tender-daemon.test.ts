@@ -27,6 +27,38 @@ async function loadDaemonModule() {
   return import("../tender-daemon.js");
 }
 
+interface LoggedEvent {
+  kind: string;
+}
+
+async function readLoggedEvents(logfile: string): Promise<LoggedEvent[]> {
+  return (await readFile(logfile, "utf8"))
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line): LoggedEvent => {
+      const parsed: unknown = JSON.parse(line);
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        !("kind" in parsed) ||
+        typeof parsed.kind !== "string"
+      ) {
+        throw new Error(`invalid tender-daemon event: ${line}`);
+      }
+      return { kind: parsed.kind };
+    });
+}
+
+async function waitForTickCount(logfile: string, expected: number): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const events = await readLoggedEvents(logfile);
+    if (events.filter((event) => event.kind === "tick").length >= expected) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`timed out waiting for ${expected} tender-daemon ticks`);
+}
+
 describe("tender-daemon script", () => {
   let tempDir: string;
 
@@ -91,6 +123,7 @@ describe("tender-daemon script", () => {
   });
 
   it("writes tick events periodically and appends daemon_stopped on stop", async () => {
+    vi.useRealTimers();
     const firstMessageTs = new Date("2026-04-24T00:00:00.000Z").toISOString();
     fetchInboxMock
       .mockResolvedValueOnce([
@@ -108,22 +141,19 @@ describe("tender-daemon script", () => {
     const daemon = await startTenderDaemon({
       session: "test-session",
       project: tempDir,
-      interval: 1000,
+      interval: 10,
       logfile,
       agent: "FlywheelAgent",
       ntmTimeoutMs: 2000,
     });
 
-    for (let i = 0; i < 6; i++) {
-      await vi.advanceTimersByTimeAsync(1000);
+    try {
+      await waitForTickCount(logfile, 3);
+    } finally {
+      await daemon.stop("SIGTERM");
     }
-    await daemon.stop("SIGTERM");
 
-    const lines = (await readFile(logfile, "utf8"))
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as { kind: string });
+    const lines = await readLoggedEvents(logfile);
 
     const tickCount = lines.filter((event) => event.kind === "tick").length;
     expect(tickCount).toBeGreaterThanOrEqual(3);
