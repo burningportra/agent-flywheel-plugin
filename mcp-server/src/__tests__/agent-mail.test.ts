@@ -4,6 +4,7 @@ import {
   bootstrapCoordinator,
   matchesReservationPath,
   normalizeReservations,
+  reserveFileReservations,
   unwrapRPC,
   _resetBootstrapDedupeForTest,
 } from '../agent-mail.js';
@@ -237,6 +238,64 @@ describe('unwrapRPC', () => {
 
   it('returns null when result is ok:false (rpc_error)', () => {
     expect(unwrapRPC({ ok: false, error: { kind: 'rpc_error', message: 'not found' } })).toBeNull();
+  });
+});
+
+describe('reserveFileReservations', () => {
+  it('treats mixed grants and conflicts as failure and releases every spurious grant', async () => {
+    const conflicts = [
+      {
+        path: 'src/agent-mail.ts',
+        holders: [{ agent_name: 'OtherAgent', reservation_id: 99 }],
+      },
+    ];
+    let reserveCalls = 0;
+    let releaseCalls = 0;
+    const exec: ExecFn = vi.fn(async (_cmd, args) => {
+      const body = JSON.parse(args[args.indexOf('-d') + 1]);
+      const toolName = body.params.name;
+      if (toolName === 'file_reservation_paths') {
+        reserveCalls++;
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            result: {
+              structuredContent: {
+                granted: [{ id: 500 + reserveCalls, path_pattern: 'src/agent-mail.ts' }],
+                conflicts,
+              },
+            },
+          }),
+          stderr: '',
+        };
+      }
+      if (toolName === 'release_file_reservations') {
+        releaseCalls++;
+        return {
+          code: 0,
+          stdout: JSON.stringify({ result: { structuredContent: { released: 1 } } }),
+          stderr: '',
+        };
+      }
+      throw new Error(`unexpected tool: ${toolName}`);
+    });
+
+    const result = await reserveFileReservations(
+      exec,
+      '/repo',
+      'TestAgent',
+      ['src/agent-mail.ts'],
+      'regression',
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'conflicts',
+      conflicts,
+      attempts: 2,
+    });
+    expect(reserveCalls).toBe(2);
+    expect(releaseCalls).toBe(2);
   });
 });
 
