@@ -76,6 +76,13 @@ jobs:
         working-directory: mcp-server
       - name: Fail if mcp-server/dist drifted from src
         run: |
+          BUNDLE_FILTER='del(.generatedAt, .generator, .manifestSha256) | .entries |= map(del(.bundledAt))'
+          git show HEAD:mcp-server/dist/skills.bundle.json | jq -S "$BUNDLE_FILTER" > /tmp/skills-bundle.committed.json
+          jq -S "$BUNDLE_FILTER" mcp-server/dist/skills.bundle.json > /tmp/skills-bundle.built.json
+          if ! diff -u /tmp/skills-bundle.committed.json /tmp/skills-bundle.built.json; then
+            echo "::error::mcp-server/dist/skills.bundle.json content is out of sync with skills/. Run 'npm run build' in mcp-server/ and commit the result."
+            exit 1
+          fi
           if ! git diff --exit-code -- mcp-server/dist ':(exclude)mcp-server/dist/skills.bundle.json'; then
             echo "::error::mcp-server/dist is out of sync with src/. Run 'npm run build' in mcp-server/ and commit the result."
             exit 1
