@@ -1,5 +1,7 @@
 # Destructive filesystem-IO audit
 
+> **Historical source note (2026-10-15):** The `bead-review.ts` row records code that existed during this audit. The reachability audit later removed that file because no production path called it.
+
 - **Bead:** `agent-flywheel-plugin-8tf`
 - **Date:** 2026-04-23
 - **Reference:** CE phase4 blunder #3 — `forceSymlink` unconditionally

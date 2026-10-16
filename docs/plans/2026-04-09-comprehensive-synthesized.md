@@ -1,5 +1,7 @@
 # Synthesized Implementation Plan — 2026-04-09
 
+> **Historical source note (2026-10-15):** References to `scan.ts`, `bead-splitting.ts`, `plan-quality.ts`, and `goal-refinement.ts` describe the checkout used for this plan. The reachability audit later removed those files because no production path called them.
+
 ## Goal
 
 Comprehensive codebase improvement for agent-flywheel (TypeScript MCP server) across 8 areas:

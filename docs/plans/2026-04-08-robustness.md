@@ -1,5 +1,7 @@
 # Robustness Plan: Error Recovery in scan.ts + Create AGENTS.md
 
+> **Historical source note (2026-10-15):** This plan targets the former `scan.ts` wrapper. The reachability audit later removed that file because no production path called it; `flywheel_profile` calls `profileRepo` directly.
+
 **Perspective:** Robustness -- fault tolerance, worst-case analysis, defensive programming, resilience, graceful degradation.
 
 **Date:** 2026-04-08

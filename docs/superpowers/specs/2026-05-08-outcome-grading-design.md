@@ -1,5 +1,7 @@
 # Outcome Grading for agent-flywheel — Design Spec
 
+> **Historical source note (2026-10-15):** The `ideation-funnel.ts` reference describes the checkout used for this design. The reachability audit later removed that file because no production path called it.
+
 - **Status:** Draft — self-review complete, awaiting operator review
 - **Date:** 2026-05-08
 - **Authors:** Brainstorm session (operator + Claude)

@@ -1,5 +1,7 @@
 # Brainstorm — Outcome Grading (Managed Agents API integration)
 
+> **Historical source note (2026-10-15):** The `ideation-funnel.ts` reference describes the checkout used for this brainstorm. The reachability audit later removed that file because no production path called it.
+
 **Date:** 2026-05-08
 **Goal slug:** outcome-grading
 **Source:** Prior `/brainstorming` session (5-question pressure-test); skips Phase 0.5 dialogue per skip-heuristic (USER_INPUT >100 chars + detailed framing)

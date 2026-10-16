@@ -1,5 +1,7 @@
 # Type-Safe CLI Parsing Plan
 
+> **Historical source note (2026-10-15):** References to `sophia.ts`, `ideation-funnel.ts`, `plan-quality.ts`, and `bead-splitting.ts` describe the checkout used for this plan. The reachability audit later removed those files because no production path called them.
+
 **Goal:** Replace all unsafe `JSON.parse` + `as T` casts with Zod-validated parsing for br/bv CLI outputs, agent-mail responses, and other JSON boundaries.
 
 **Date:** 2026-04-09

@@ -1,5 +1,7 @@
 # Ergonomics Plan: Error Recovery in scan.ts + AGENTS.md
 
+> **Historical source note (2026-10-15):** This plan targets the former `scan.ts` wrapper. The reachability audit later removed that file because no production path called it; `flywheel_profile` calls `profileRepo` directly.
+
 **Date:** 2026-04-08
 **Perspective:** Ergonomics — developer experience, readability, minimal cognitive load, consistent patterns, great DX for contributors and sub-agents alike.
 

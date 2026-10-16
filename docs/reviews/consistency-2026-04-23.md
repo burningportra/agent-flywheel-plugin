@@ -1,5 +1,7 @@
 # Consistency review — 2026-04-23
 
+> **Historical source note (2026-10-15):** The `space-detector.ts` reference records the file set reviewed on 2026-04-23. The reachability audit later removed that file because no production path called it.
+
 Reviewer scope: conventions only (not correctness) for the 19-commit wave `dfc8c51..HEAD` (+18672/-512).
 Read-only pass. Evidence cited as `file:line`.
 

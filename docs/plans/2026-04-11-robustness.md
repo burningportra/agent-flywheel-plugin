@@ -1,5 +1,7 @@
 # Robustness Plan: Structured `structuredContent` Contracts for `flywheel_*` Tools
 
+> **Historical source note (2026-10-15):** The `bead-review` reference describes the checkout used for this plan. The reachability audit later removed `bead-review.ts` because no production path called it.
+
 Date: 2026-04-11
 Perspective: Robustness
 Scope: `flywheel_profile`, `flywheel_discover`, `flywheel_select`, `flywheel_plan`, `flywheel_approve_beads`, `flywheel_review`

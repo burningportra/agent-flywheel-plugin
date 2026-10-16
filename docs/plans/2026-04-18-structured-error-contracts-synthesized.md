@@ -1,5 +1,7 @@
 # Structured Error Contracts — Synthesized Plan
 
+> **Historical source note (2026-10-15):** The `bead-review.ts` reference describes the checkout used for this plan. The reachability audit later removed that file because no production path called it.
+
 **Date:** 2026-04-18
 **Scope:** All 8 `flywheel_*` MCP tools + `orch_*` aliases, supporting modules (`exec.ts`, `checkpoint.ts`, `deep-plan.ts`), and SKILL.md consumption patterns.
 **Synthesizes:**

@@ -5,6 +5,7 @@
 > - The "ARCHITECTURAL DIFFERENCES" table calls `Agent(run_in_background)` "Better than ntm." Reversed by AGENTS.md "NTM is mandatory for all spawned work" — `ntm spawn` + `ntm --robot-send` is now the only sanctioned multi-agent fan-out path. Raw `Task`/`Agent` calls for code-producing work are a review-bounce condition.
 > - The same table cites "Worktree isolation" as the file-conflict mitigation. Current model is single-branch on `main` with Agent Mail file reservations + `reserveOrFail()` helper (v3.11.0+) + the `RESERVE001` lint rule + the pre-commit guard. Worktrees are no longer the canonical path; `flywheel-cleanup` exists specifically to remove orphaned ones.
 > - `mcp-server/src/prompts.ts` was removed during the 2026-10-15 compression pass. The C3, C4, C9, and C17 references below describe the v3.4.x implementation and do not identify current prompt ownership.
+> - `mcp-server/src/ideation-funnel.ts` was removed after the reachability audit found no production caller. The `/idea-wizard` skill owns the live 30-to-5-to-15 workflow.
 >
 > For the current vision-vs-code state, run `/agent-flywheel:flywheel-reality-check` (date-tagged gap reports land in CASS memory). The v3.11.0+ substrate (Completion Evidence Attestation, `flywheel_observe`, `reserveOrFail` + `RESERVE001`) post-dates this document.
 
@@ -33,8 +34,8 @@ Method: Guide inventory x codebase inventory (skills/, mcp-server/src/, AGENTS.m
 
 ### C2. Idea-Wizard — CLOSED
 - **Was**: No feature ideation support
-- **Now**: `ideation-funnel.ts` implements 3-phase winnowing (30 -> 5 -> 15) with model divergence for real winnowing, dedup against existing beads
-- **Closed by**: mcp-server/src/ideation-funnel.ts
+- **Now**: `/idea-wizard` runs the 30-to-5-to-15 workflow and checks the finalists against existing beads.
+- **Closed by**: skills/idea-wizard/SKILL.md
 
 ### C3. Staggered Agent Starts — CLOSED
 - **Was**: No thundering herd prevention

@@ -1,5 +1,7 @@
 # Correctness Plan: Error Recovery in scan.ts + AGENTS.md
 
+> **Historical source note (2026-10-15):** This plan targets the former `scan.ts` wrapper. The reachability audit later removed that file because no production path called it; `flywheel_profile` calls `profileRepo` directly.
+
 **Perspective:** Correctness — technically correct, complete, no silent failures, proper TypeScript types maintained.
 
 ---

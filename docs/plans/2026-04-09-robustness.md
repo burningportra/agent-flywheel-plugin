@@ -1,5 +1,7 @@
 # Robustness Plan: Reliability Sweep — 2026-04-09
 
+> **Historical source note (2026-10-15):** The linked `scan.ts` plan describes an earlier checkout. The reachability audit later removed that wrapper because no production path called it; `flywheel_profile` calls `profileRepo` directly.
+
 **Perspective:** Robustness — failure modes, graceful degradation, abort/cancellation, checkpoint integrity, schema validation, version drift.
 
 **Agent:** RusticFalcon (claude-sonnet-4-6)

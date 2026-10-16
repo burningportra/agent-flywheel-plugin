@@ -1,4 +1,7 @@
 # Robustness Plan: Structured Error Contract — agent-flywheel-plugin
+
+> **Historical source note (2026-10-15):** The `bead-review.ts` reference describes the checkout used for this plan. The reachability audit later removed that file because no production path called it.
+
 **Date:** 2026-04-18  
 **Perspective:** Worst-case failures  
 **Scope:** All 8 `flywheel_*` MCP tools + supporting modules  

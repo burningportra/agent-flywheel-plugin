@@ -1,5 +1,7 @@
 # Plan: Error Recovery in scan.ts + AGENTS.md
 
+> **Historical source note (2026-10-15):** This plan targets the former `scan.ts` wrapper. The reachability audit later removed that file because no production path called it; `flywheel_profile` calls `profileRepo` directly.
+
 ## Goal
 
 Make `scanRepo()` and `profileRepo()` resilient to partial and total failures of their underlying shell commands and CLI tools, so the flywheel workflow never crashes at step 1. Additionally, create `AGENTS.md` at the project root to give sub-agents canonical project guidance.

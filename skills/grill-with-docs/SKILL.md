@@ -176,7 +176,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-Record each as `non-goal-*` / `exclude-*` / `avoid-*` so `synthesizeGoal` buckets them correctly.
+Record each answer as `non-goal-*`, `exclude-*`, or `avoid-*` so the handoff puts each answer in Non-Goals.
 
 #### Q5 — Success criteria (must be falsifiable)
 
@@ -238,7 +238,7 @@ If **Yes**, write `docs/adr/YYYY-MM-DD-<short-slug>.md` immediately (Step 5a). I
 ```
 AskUserQuestion(questions: [{
   question: "What evidence would prove we framed the *wrong goal*?",
-  header: "Kill criteria",
+  header: "Kill test",
   options: [
     { label: "Users want a different job", description: "Underlying job-to-be-done is elsewhere" },
     { label: "Already solved in-tree", description: "Existing path covers it; we should pick it up, not rebuild" },
@@ -408,20 +408,15 @@ Also keep a `## Smallest version (scope floor)` / `## 10x version (ambition ceil
 
 ### 6. Handoff to flywheel
 
-Build an enriched goal string. Prefer the pure helper if the MCP server is available:
+Build the enriched goal directly. Put each answer in the first matching section:
 
-```ts
-// ids MUST use the bucket keywords from goal-refinement.ts:
-// scope|target|layer → Scope
-// constraint → Constraints
-// non-goal|exclude|avoid|value no-|avoid- → Non-Goals
-// success|criteria|quality|test → Success Criteria
-// else → Implementation Notes
-import { synthesizeGoal } from 'mcp-server/src/goal-refinement.ts'; // conceptual
-const enrichedGoal = synthesizeGoal(RAW_GOAL, answers);
-```
+- An id containing `scope`, `target`, or `layer` goes in Scope.
+- An id containing `constraint` goes in Constraints.
+- An id containing `non-goal`, `exclude`, or `avoid`, or a value starting with `no-` or `avoid-`, goes in Non-Goals.
+- An id containing `success`, `criteria`, `quality`, or `test` goes in Success Criteria.
+- Every other answer goes in Implementation Notes.
 
-If you cannot import the helper, format the same markdown sections by hand:
+Use this format and omit empty sections:
 
 ```markdown
 ## Goal

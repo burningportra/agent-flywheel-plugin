@@ -1,5 +1,7 @@
 # Modernize Flywheel Plugin Internals
 
+> **Historical source note (2026-10-15):** The `scan.ts` reference describes the checkout used for this plan. The reachability audit later removed that wrapper because no production path called it; `flywheel_profile` calls `profileRepo` directly.
+
 **Date:** 2026-04-16
 **Mode:** standard plan
 **Scope:** 4 threads — MCP tool aliasing, SwarmTender config/telemetry, deep-plan latency, AST-aware TODO scanner.

@@ -1,5 +1,7 @@
 # Plan: Structured stderr Logger + SwarmTender Auto-Escalation
 
+> **Historical source note (2026-10-15):** The `sophia.ts` references describe the checkout used for this plan. The reachability audit later removed that file because no production path called it.
+
 **Date:** 2026-04-09  
 **Goal:** Replace scattered console.warn/error calls with a structured stderr logger (safe for MCP stdio), AND add SwarmTender auto-nudge-then-kill escalation for stuck agents.
 
