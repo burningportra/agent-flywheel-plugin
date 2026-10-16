@@ -71,6 +71,7 @@ jobs:
             set -e
             apt-get update
             apt-get install -y curl bash bats git shellcheck
+            git config --system --add safe.directory /work
             shellcheck -x install.sh install/lib/*.sh
             bash install.sh --noninteractive --skip-launch --skip-mcp-register --skip-agent-mail
             test -f "$HOME/.agent-flywheel/install.log"
