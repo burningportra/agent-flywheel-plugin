@@ -115,6 +115,19 @@ describe('agentMailRPC — ok:false kind:parse on invalid JSON stdout', () => {
   });
 });
 
+describe('agentMailRPC — empty response', () => {
+  it('returns empty_response when the JSON-RPC envelope omits result', async () => {
+    const exec = makeExec({ code: 0, stdout: '{}', stderr: '' });
+
+    const result = await agentMailRPC(exec, 'health_check', {});
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe('empty_response');
+    }
+  });
+});
+
 // ─── agentMailRPC — rpc_error ──────────────────────────────────
 
 describe('agentMailRPC — ok:false kind:rpc_error on JSON-RPC error field', () => {

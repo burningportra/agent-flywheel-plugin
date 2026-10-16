@@ -203,7 +203,7 @@ Behavior rules:
 - If `overall: "yellow"` and `criticalFails === 0`: print the warnings but tell the user setup succeeded.
 - If `overall: "green"`: confirm "setup verified — flywheel is healthy" and stop.
 
-If step 11 reported any Required failure, **skip** the doctor run (mirrors `runSetupAndVerify`'s `setup_unhealthy` verdict — no point running the deeper sweep when the install itself is incomplete).
+If step 11 reported any Required failure, skip the doctor run because the install is incomplete.
 
 After the post-flight summary, append this exact glossary footer so a first-time operator finishing setup sees the core vocabulary:
 

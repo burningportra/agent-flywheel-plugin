@@ -59,14 +59,14 @@ export async function agentMailRPC<T = any>(
     };
   }
 
-  const rpcResult = parsed.data as Record<string, unknown> | null;
+  const rpcResult = parsed.data as Record<string, unknown> | null | undefined;
   const data = (
-    rpcResult !== null && typeof rpcResult === 'object' && 'structuredContent' in rpcResult
+    rpcResult !== null && rpcResult !== undefined && typeof rpcResult === 'object' && 'structuredContent' in rpcResult
       ? rpcResult.structuredContent
       : rpcResult
-  ) as T | null;
+  ) as T | null | undefined;
 
-  if (data === null) {
+  if (data === null || data === undefined) {
     return {
       ok: false,
       error: {
