@@ -34,7 +34,7 @@ function setCache<T>(key: string, value: T, ttlMs: number = CACHE_TTL_MS): void 
 }
 
 /** Clear all session caches. Call after bead mutations (create/update/close). */
-export function invalidateBeadCache(): void {
+function invalidateBeadCache(): void {
   _sessionCache.delete("readBeads");
   _sessionCache.delete("readyBeads");
   _sessionCache.delete("bvTriage");
@@ -274,7 +274,7 @@ let _bvAvailable: boolean | null = null;
 /**
  * Detects whether the `bv` CLI is available. Result is cached.
  */
-export async function detectBv(exec: ExecFn): Promise<boolean> {
+async function detectBv(exec: ExecFn): Promise<boolean> {
   if (_bvAvailable !== null) return _bvAvailable;
   const result = await resilientExec(exec, "which", ["bv"], { timeout: 5000, maxRetries: 0, logWarnings: false });
   _bvAvailable = result.ok && result.value.stdout.trim().length > 0;
@@ -282,7 +282,7 @@ export async function detectBv(exec: ExecFn): Promise<boolean> {
 }
 
 /** Reset bv detection cache (for testing). */
-export function resetBvCache(): void {
+function resetBvCache(): void {
   _bvAvailable = null;
 }
 
@@ -290,7 +290,7 @@ export function resetBvCache(): void {
  * Runs `bv --robot-insights` and returns typed graph health data.
  * Returns null if bv is unavailable or output can't be parsed.
  */
-export async function bvInsights(
+async function bvInsights(
   exec: ExecFn,
   cwd: string
 ): Promise<BvInsights | null> {
@@ -317,7 +317,7 @@ export async function bvInsights(
  * without contending on the same bottleneck node.
  * Returns null if bv is unavailable or output can't be parsed.
  */
-export async function bvTriage(
+async function bvTriage(
   exec: ExecFn,
   cwd: string
 ): Promise<BvNextPick[] | null> {
@@ -350,7 +350,7 @@ export async function bvTriage(
  * Runs `bv --robot-next` and returns the highest-priority next bead.
  * Returns null if bv is unavailable, no actionable items, or parse error.
  */
-export async function bvNext(
+async function bvNext(
   exec: ExecFn,
   cwd: string
 ): Promise<BvNextPick | null> {
@@ -372,7 +372,7 @@ export async function bvNext(
  * Runs `bv --robot-plan` and returns the raw output string.
  * Returns null if bv is unavailable, empty output, or error.
  */
-export async function bvPlan(
+async function bvPlan(
   exec: ExecFn,
   cwd: string
 ): Promise<string | null> {
@@ -414,7 +414,7 @@ function parseBead(raw: unknown): Bead | null {
 /**
  * Reads all beads via `br list --json`.
  */
-export async function readBeads(
+async function readBeads(
   exec: ExecFn,
   cwd: string
 ): Promise<Bead[]> {
@@ -477,7 +477,7 @@ export function unwrapBrShowValue(raw: unknown): unknown {
 /**
  * Gets a single bead by ID via `br show <id> --json`.
  */
-export async function getBeadById(
+async function getBeadById(
   exec: ExecFn,
   cwd: string,
   id: string
@@ -491,7 +491,7 @@ export async function getBeadById(
 /**
  * Lists dependency IDs for a bead via `br dep list <id>`.
  */
-export async function beadDeps(
+async function beadDeps(
   exec: ExecFn,
   cwd: string,
   id: string
@@ -538,7 +538,7 @@ export function extractArtifacts(bead: Bead): string[] {
 /**
  * Updates the status of a bead.
  */
-export async function updateBeadStatus(
+async function updateBeadStatus(
   exec: ExecFn,
   cwd: string,
   beadId: string,
@@ -554,7 +554,7 @@ export async function updateBeadStatus(
 /**
  * Syncs beads to disk.
  */
-export async function syncBeads(
+async function syncBeads(
   exec: ExecFn,
   cwd: string
 ): Promise<void> {
@@ -566,7 +566,7 @@ export async function syncBeads(
  * Closes orphaned beads by setting their status to "closed".
  * Returns the list of IDs that were successfully closed.
  */
-export async function remediateOrphans(
+async function remediateOrphans(
   exec: ExecFn,
   cwd: string,
   orphanIds: string[]
@@ -588,7 +588,7 @@ export async function remediateOrphans(
  * Validates beads — checks for dependency cycles, orphaned open beads, and graph health.
  * When bv is available, uses graph-theoretic analysis for richer validation.
  */
-export async function validateBeads(
+async function validateBeads(
   exec: ExecFn,
   cwd: string
 ): Promise<{ ok: boolean; orphaned: string[]; cycles: boolean; warnings: string[]; shallowBeads: { id: string; reason: string }[]; templateIssues: TemplateHygieneIssue[] }> {
@@ -762,7 +762,7 @@ export interface QualityFailure {
 /**
  * Validates each open bead against automated quality checks.
  */
-export async function qualityCheckBeads(
+async function qualityCheckBeads(
   exec: ExecFn,
   cwd: string
 ): Promise<{ passed: boolean; failures: QualityFailure[] }> {

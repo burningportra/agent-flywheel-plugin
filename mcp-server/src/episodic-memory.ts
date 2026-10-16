@@ -115,7 +115,7 @@ function runMempalace(args: string[], timeoutMs = 10_000): string | null {
  * @param projectSlug    - Wing name (e.g. "pi-flywheel"). Use sanitiseSlug().
  * @returns true if CLI exited 0, false on any error. Never throws.
  */
-export function mineSession(transcriptPath: string, projectSlug: string): boolean {
+function mineSession(transcriptPath: string, projectSlug: string): boolean {
   if (!detectMempalace()) return false;
   try {
     execFileSync(
@@ -218,7 +218,7 @@ export function searchEpisodic(
  * ## Past Session Examples header suitable for prompt injection.
  * Returns "" if mempalace unavailable or no relevant results found.
  */
-export function getEpisodicContext(task: string, projectSlug: string): string {
+function getEpisodicContext(task: string, projectSlug: string): string {
   const results = searchEpisodic(task, { wing: projectSlug, nResults: 5 });
   if (!results) return "";
   return `## Past Session Examples\n${results}\n`;
@@ -264,7 +264,7 @@ export function getEpisodicStats(): EpisodicStats {
  * Example: "/Volumes/1tb/Projects/pi-flywheel" → "pi-flywheel"
  *          "my project (v2)" → "my-project--v2-"
  */
-export function sanitiseSlug(cwd: string): string {
+function sanitiseSlug(cwd: string): string {
   return basename(cwd).replace(/[^a-zA-Z0-9]/g, "-");
 }
 

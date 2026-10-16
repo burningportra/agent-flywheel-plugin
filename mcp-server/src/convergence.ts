@@ -530,7 +530,7 @@ export function parseConvergenceState(raw: string): ConvergenceReadResult {
 // ─── Internal helpers exported for test introspection ──────
 
 /** @internal exposed for test inspection only */
-export const __test = {
+const __test = {
   computeSignals,
   detectOscillation,
   computeScore,

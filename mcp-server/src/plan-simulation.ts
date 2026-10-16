@@ -50,7 +50,7 @@ export interface SimulationResult {
  * Dependencies are passed separately because the br CLI's JSON output does not
  * embed dependency edges — they come from `br dep list`.
  */
-export function beadsToSimulated(
+function beadsToSimulated(
   beads: Bead[],
   depMap: Map<string, string[]>,
 ): SimulatedBead[] {
@@ -223,7 +223,7 @@ export function detectFileConflicts(
  * NOTE: Beads that *create* new files will appear as missing here.
  * Callers should treat results as warnings for new-file beads, not errors.
  */
-export function detectMissingFiles(
+function detectMissingFiles(
   beads: SimulatedBead[],
   repoFiles: Set<string>,
 ): MissingFileRef[] {
@@ -300,7 +300,7 @@ export function simulateExecutionPaths(
 /**
  * Format a SimulationResult as a human-readable markdown report.
  */
-export function formatSimulationReport(result: SimulationResult): string {
+function formatSimulationReport(result: SimulationResult): string {
   const lines: string[] = [];
 
   if (result.valid) {

@@ -121,7 +121,7 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   projects_base_misconfig: projectsBaseMisconfigHandler,
 };
 
-export function assertExhaustive(_: never): never {
+function assertExhaustive(_: never): never {
   throw new Error('Non-exhaustive registry');
 }
 

@@ -64,7 +64,7 @@ export const BvBottleneckSchema = z
   })
   .passthrough();
 
-export const BvInsightsSchema = z
+const BvInsightsSchema = z
   .object({
     Bottlenecks: z.array(BvBottleneckSchema),
     Cycles: z.array(z.array(z.string())).nullable(),
@@ -81,7 +81,7 @@ export const BvInsightsSchema = z
   })
   .passthrough();
 
-export const BvNextPickSchema = z
+const BvNextPickSchema = z
   .object({
     id: z.string(),
     title: z.string(),
@@ -120,7 +120,7 @@ export const CmResultSchema = z
   })
   .passthrough();
 
-export const CmSearchResultSchema = z
+const CmSearchResultSchema = z
   .object({
     text: z.string().optional(),
     content: z.string().optional(),
@@ -128,7 +128,7 @@ export const CmSearchResultSchema = z
   })
   .passthrough();
 
-export const SophiaResultSchema = z
+const SophiaResultSchema = z
   .object({
     ok: z.boolean().optional(),
     data: z.unknown().optional(),
@@ -140,7 +140,7 @@ export const SophiaResultSchema = z
   })
   .passthrough();
 
-export const ProfileCacheSchema = z
+const ProfileCacheSchema = z
   .object({
     gitHead: z.string(),
     cachedAt: z.string(),
@@ -148,7 +148,7 @@ export const ProfileCacheSchema = z
   })
   .passthrough();
 
-export const FeedbackFileSchema = z
+const FeedbackFileSchema = z
   .object({
     timestamp: z.string(),
     goal: z.string(),

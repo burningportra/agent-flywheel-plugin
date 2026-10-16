@@ -32,7 +32,7 @@ export function sortFindings(findings: Finding[]): Finding[] {
   );
 }
 
-export function filterBySeverity(findings: Finding[], minSeverity?: Severity): Finding[] {
+function filterBySeverity(findings: Finding[], minSeverity?: Severity): Finding[] {
   if (!minSeverity) return findings;
   const max = SEVERITY_RANK[minSeverity];
   return findings.filter((f) => SEVERITY_RANK[f.severity] <= max);

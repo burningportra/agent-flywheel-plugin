@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Finding, Severity } from "./types.js";
 import { normalizeText } from "../utils/text-normalize.js";
 
-export const BASELINE_SCHEMA_VERSION = 1;
+const BASELINE_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
 
 // Convert any path (absolute, relative, mixed-separator) to a POSIX-style

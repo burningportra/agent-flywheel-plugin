@@ -158,7 +158,7 @@ export function appendMemory(cwd: string, entry: string, category?: string): boo
 /**
  * List all playbook entries.
  */
-export function listMemoryEntries(cwd?: string): MemoryEntry[] {
+function listMemoryEntries(cwd?: string): MemoryEntry[] {
   if (!detectCass()) return [];
   const output = runCm(["ls", "--json"], cwd);
   interface CmBullet { id: string; text: string; category?: string }
@@ -178,7 +178,7 @@ export function listMemoryEntries(cwd?: string): MemoryEntry[] {
  * Uses `cm context` (task-aware semantic matching) instead of `cm similar`
  * (keyword mode) which returns empty for most queries.
  */
-export function searchMemory(cwd: string, query: string): MemoryEntry[] {
+function searchMemory(cwd: string, query: string): MemoryEntry[] {
   if (!detectCass()) return [];
   const output = runCm(["context", query, "--json"], cwd);
   interface CmBullet { id: string; content?: string; text?: string; category?: string; finalScore?: number }
@@ -196,7 +196,7 @@ export function searchMemory(cwd: string, query: string): MemoryEntry[] {
 /**
  * Mark a CASS rule as helpful or harmful.
  */
-export function markRule(bulletId: string, helpful: boolean, reason?: string, cwd?: string): boolean {
+function markRule(bulletId: string, helpful: boolean, reason?: string, cwd?: string): boolean {
   if (!detectCass()) return false;
   const args = ["mark", bulletId, helpful ? "--helpful" : "--harmful", "--json"];
   if (reason) args.push("--reason", reason);
@@ -233,7 +233,7 @@ export function onboardMemory(cwd?: string): boolean {
  * what actually happened (guide §10: "cm reflect between sessions").
  * Best-effort — returns true if cm ran successfully, false otherwise.
  */
-export function reflectMemory(cwd?: string): boolean {
+function reflectMemory(cwd?: string): boolean {
   if (!detectCass()) return false;
   const result = runCm(["reflect"], cwd);
   return result !== null;
@@ -245,7 +245,7 @@ export function reflectMemory(cwd?: string): boolean {
  * that involved planning activity, then extracts recurring patterns.
  * Returns null if cm unavailable or no relevant sessions found.
  */
-export function mineSkillGaps(
+function mineSkillGaps(
   cwd: string,
   topic: string = "planning beads flywheel"
 ): string | null {
@@ -281,7 +281,7 @@ export function mineSkillGaps(
  * CASS session data, return a prompt for rewriting the skill.
  * This is the recursive self-improvement pattern from the guide §10.
  */
-export function skillRefinerPrompt(
+function skillRefinerPrompt(
   skillContent: string,
   skillName: string,
   sessionSnippets?: string
@@ -292,7 +292,7 @@ export function skillRefinerPrompt(
 /**
  * Get memory system stats.
  */
-export function getMemoryStats(cwd?: string): MemoryStats {
+function getMemoryStats(cwd?: string): MemoryStats {
   if (!detectCass()) {
     return { entryCount: 0, cassAvailable: false, overallStatus: null, version: null };
   }

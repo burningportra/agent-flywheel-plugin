@@ -305,7 +305,7 @@ async function collectBestPracticesGuides(
  * Format best-practices guides for injection into planning prompts.
  * Truncates to avoid overwhelming context windows.
  */
-export function formatBestPracticesGuides(
+function formatBestPracticesGuides(
   guides: Array<{ name: string; content: string }>
 ): string {
   if (guides.length === 0) return "";

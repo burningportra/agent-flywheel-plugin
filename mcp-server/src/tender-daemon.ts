@@ -76,7 +76,7 @@ export interface TenderDaemonController {
   logfile: string;
 }
 
-export function usageText(): string {
+function usageText(): string {
   return [
     "Usage:",
     "  tender-daemon --session=<tmux-name> [--project=<cwd>] [--interval=30000] [--logfile=.pi-flywheel/tender-events.log] [--agent=FlywheelAgent]",

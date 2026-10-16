@@ -235,7 +235,7 @@ export interface BeadReview {
  * Estimated effort for a bead, used by the calibration system.
  * @since v3.7.0
  */
-export const EFFORT_LEVELS = ['S', 'M', 'L', 'XL'] as const;
+const EFFORT_LEVELS = ['S', 'M', 'L', 'XL'] as const;
 export type EstimatedEffort = (typeof EFFORT_LEVELS)[number];
 
 /**
