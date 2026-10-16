@@ -174,7 +174,7 @@ function markRule(bulletId, helpful, reason, cwd) {
  * Should be called once when starting flywheel on a project that has no
  * existing CASS memory. Best-effort — returns true if successful.
  */
-export function onboardMemory(cwd) {
+function onboardMemory(cwd) {
     if (!detectCass())
         return false;
     const status = runCm(["onboard", "status", "--json"], cwd);

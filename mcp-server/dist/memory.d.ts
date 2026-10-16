@@ -58,10 +58,4 @@ export declare function readMemory(cwd: string, task?: string): string;
  * Replaces the old appendMemory (flat file append).
  */
 export declare function appendMemory(cwd: string, entry: string, category?: string): boolean;
-/**
- * Run `cm onboard` to bootstrap memory for a new project.
- * Should be called once when starting flywheel on a project that has no
- * existing CASS memory. Best-effort — returns true if successful.
- */
-export declare function onboardMemory(cwd?: string): boolean;
 //# sourceMappingURL=memory.d.ts.map
