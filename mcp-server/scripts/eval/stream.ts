@@ -175,6 +175,15 @@ export async function runScenario(opts: {
   // ~/.claude/plugins/cache/agent-flywheel copy from leaking into the
   // session. The worktree's own `.claude-plugin/plugin.json` is picked up
   // via the explicit `plugins` entry below.
+  // Prepend the per-worktree shim directory to PATH for the duration of the
+  // SDK session. Scenarios' prepareFixtures hooks write stub executables
+  // (e.g. an `ntm` shim that logs argv and exits 0 so the model's robot-send
+  // doesn't actually spawn panes) into `<cwd>/.pi-flywheel/eval-bin`; the
+  // SDK's spawned child inherits PATH from this process.
+  const shimDir = `${cwd}/.pi-flywheel/eval-bin`;
+  const prevPath = process.env.PATH;
+  process.env.PATH = prevPath ? `${shimDir}:${prevPath}` : shimDir;
+
   const iterator = query({
     prompt: scenario.goal,
     options: {
@@ -299,6 +308,9 @@ export async function runScenario(opts: {
   } catch (err) {
     if (!errorMsg) errorMsg = String(err);
   }
+  // Restore PATH no matter how the loop exited.
+  if (prevPath === undefined) delete process.env.PATH;
+  else process.env.PATH = prevPath;
   clearTimeout(deadline);
   jsonl.end();
 

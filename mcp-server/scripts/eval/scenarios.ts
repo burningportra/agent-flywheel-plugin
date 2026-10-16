@@ -248,6 +248,10 @@ export const SCENARIOS: Scenario[] = [
       // The assertion only checks that flywheel_synthesize_rubric fired,
       // which happens immediately before this ask.
       { headerContains: "rubric", option: "Skip rubric" },
+      // "Beads init" fires when the eval worktree has no `.beads/` DB
+      // yet. Must be ORDERED BEFORE the generic `beads` rule because
+      // headerContains matches the first rule by substring order.
+      { headerContains: "beads init", option: "Run br init" },
       { headerContains: "beads", option: "Reject" },
       { headerContains: "launch", option: "Back to plan" },
       ...COMMON_SCRIPTED,
@@ -277,9 +281,9 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "s5-dispatch-server-prompts",
     description:
-      "Standard path reaches bead-approval, picks Create beads + Skip rubric + Start implementing, and the server-built implementer prompts are returned by flywheel_approve_beads(action: 'start').",
+      "At phase=implementing with approved beads pre-seeded, /start loads start_implement and robot-sends via a PATH-shimmed `ntm` that logs argv and exits 0, so no real pane spawns.",
     goal:
-      "/agent-flywheel:start design a new `flywheel_whisper` observability subsystem — add a new MCP tool that emits structured breadcrumbs per call, a shared telemetry registry used by every existing tool handler, a conformance test suite covering every schema, AGENTS.md documentation of the registry pattern, a migration guide for third-party plugin authors, and a dashboard view exposing per-tool telemetry trends",
+      "/agent-flywheel:start resume implementation — dispatch the ready beads via the standard swarm path",
     scripted: [
       { headerContains: "plan mode", option: "Standard plan" },
       { headerContains: "ambition", option: "As scoped" },
@@ -288,15 +292,27 @@ export const SCENARIOS: Scenario[] = [
       // Beads header follows. "Start implementing" is the dispatch step.
       { headerContains: "rubric", option: "Skip rubric" },
       { headerContains: "beads", option: "Start implementing" },
-      // Terminate before the model spawns any real NTM pane. "Polish"
-      // (as "Polish" / "Polish more" / "Polish (refine beads to remove
-      // overlap)") is the one non-launching option present across every
-      // Launch-menu shape the orchestrator renders.
-      { headerContains: "launch", option: "Polish" },
+      // Pick a dispatching option at Launch so the orchestrator loads
+      // start_implement and robot-sends through the ntm shim. "launch"
+      // (lowercase) substring-matches every dispatching option across
+      // observed menu shapes: "Launch (Recommended)" and
+      // "Coordinator-serial launch (one bead at a time, contention-safe)".
+      // The ntm shim installed by prepareFixtures logs argv to
+      // `.pi-flywheel/eval-bin/ntm.log` and exits 0 — no real pane spawns.
+      { headerContains: "launch", option: "launch" },
       // The orchestrator sometimes asks a separate `Init beads` menu
       // when the eval worktree has no `.beads/` yet; let it run `br init`
       // so the dispatch path keeps going.
       { headerContains: "init beads", option: "Run br init" },
+      // Avoid a mid-wave fresh-eyes review burning turns; off is cheapest.
+      { headerContains: "batch review", option: "Off" },
+      // Looper-based tending — the Recommended path. Note the AGENTS.md
+      // contract still requires NTM for the DISPATCH itself regardless
+      // of which tending mode is picked.
+      { headerContains: "supervision", option: "Looper-based" },
+      // Goal-labelling (fires on checkpoint-resume when the stored goal
+      // was redacted or missing).
+      { headerContains: "goal", option: "Use default" },
       // Fallback shared steering (same shape as the earlier four).
       { headerContains: "pre-flight", option: "Continue with degraded" },
       { headerContains: "setup fixes", option: "Continue with degraded" },
@@ -315,36 +331,117 @@ export const SCENARIOS: Scenario[] = [
       { headerContains: "kill signal", option: "Record as kill criterion, proceed" },
       { headerContains: "approve", option: "Approve" },
     ],
+    prepareFixtures: async (worktree) => {
+      const { mkdir, writeFile, chmod } = await import("node:fs/promises");
+      const { execFileSync } = await import("node:child_process");
+      const { join } = await import("node:path");
+      const binDir = join(worktree, ".pi-flywheel", "eval-bin");
+      await mkdir(binDir, { recursive: true });
+      // `ntm` shim: log every argv to a file inside the worktree and exit
+      // 0 so dispatch doesn't actually spawn panes. The skill's
+      // "NTM-unavailable fallback" path triggers when `ntm deps -v` prints
+      // nothing or looks unhealthy, so the shim prints a healthy-looking
+      // line for `deps` / `--version` and still logs argv for `spawn` /
+      // `--robot-send`. `--robot-send` payloads are the key evidence —
+      // they must carry the server-built per-bead prompt.
+      const ntmShim = `#!/usr/bin/env bash
+set -u
+log="${binDir}/ntm.log"
+printf '%s\\0' "$@" >> "$log"
+printf '\\n--CALL--\\n' >> "$log"
+case "\${1:-}" in
+  deps|--deps)
+    echo "ntm-eval-shim: healthy (claude cc=ok cod=ok gem=ok)"
+    ;;
+  --version)
+    echo "ntm-eval-shim 0.0.0"
+    ;;
+  config)
+    if [ "\${2:-}" = "show" ]; then
+      # Pretend projects_base is this worktree's parent so the doctor
+      # row stays green and the dispatch path keeps going.
+      printf 'projects_base=%s\\n' "\${PWD%/*}"
+    fi
+    ;;
+  *)
+    : # fall through; argv already logged
+    ;;
+esac
+exit 0
+`;
+      const ntmPath = join(binDir, "ntm");
+      await writeFile(ntmPath, ntmShim, "utf8");
+      await chmod(ntmPath, 0o755);
+      // Create a real bead in `.beads/` so the orchestrator doesn't bail
+      // out with "No beads" and ask whether to Treat-as-goal / Scan /
+      // Pick-up-existing-plan. The orchestrator reads the beads DB via
+      // `br list`, so a checkpoint stub alone is insufficient.
+      await mkdir(join(worktree, ".pi-flywheel"), { recursive: true });
+      execFileSync("br", ["init", "--prefix", "eval"], { cwd: worktree, stdio: "ignore" });
+      const beadId = execFileSync(
+        "br",
+        [
+          "create",
+          "--priority",
+          "p1",
+          "-t",
+          "task",
+          "--silent",
+          "--description",
+          "Eval fixture bead: dispatch-only scenario. The scenario's goal is to observe start_implement loading plus a `ntm --robot-send` call through the shim; the model never actually edits code.",
+          "Add a tiny docstring to AGENTS.md",
+        ],
+        { cwd: worktree, encoding: "utf8" },
+      ).trim();
+      const now = new Date().toISOString();
+      const checkpoint = {
+        schemaVersion: 1,
+        writtenAt: now,
+        flywheelVersion: "eval-fixture",
+        state: {
+          phase: "implementing",
+          selectedGoal: "resume implementation — dispatch the ready beads via the standard swarm path",
+          goalSlug: "resume-implementation-dispatch",
+          constraints: [],
+          retryCount: 0,
+          maxRetries: 3,
+          maxReviewPasses: 2,
+          iterationRound: 0,
+          currentGateIndex: 0,
+          activeBeadIds: [beadId],
+          currentBeadId: beadId,
+        },
+        stateHash: "",
+      };
+      await writeFile(
+        join(worktree, ".pi-flywheel", "checkpoint.json"),
+        JSON.stringify(checkpoint, null, 2),
+        "utf8",
+      );
+    },
     assert: (facts) => {
       const violations: string[] = [];
-      const startCall = facts.toolUses.find((t) => {
-        const isApprove =
-          t.tool_name === "flywheel_approve_beads" ||
-          t.tool_name.endsWith("__flywheel_approve_beads");
-        if (!isApprove) return false;
-        return String(t.input["action"] ?? "").toLowerCase() === "start";
-      });
-      if (!startCall) {
+      const implementSkillLoad = facts.toolUses.find(
+        (t) =>
+          (t.tool_name === "flywheel_get_skill" ||
+            t.tool_name.endsWith("__flywheel_get_skill")) &&
+          String(t.input["name"] ?? "").includes("start_implement"),
+      );
+      if (!implementSkillLoad) {
         violations.push(
-          "flywheel_approve_beads(action: 'start') not observed; implementer-dispatch gate never fired.",
+          "flywheel_get_skill(name: 'agent-flywheel:start_implement') never observed; dispatch did not reach _implement.md.",
         );
       }
-      const brCreateBefore = facts.toolUses.filter(
+      const ntmCall = facts.toolUses.find(
         (t) =>
-          t.turn < (startCall?.turn ?? Number.POSITIVE_INFINITY) &&
           t.tool_name === "Bash" &&
           typeof t.input["command"] === "string" &&
-          /\bbr\s+create\b/.test(t.input["command"] as string),
+          /\bntm\b/.test(t.input["command"] as string) &&
+          /--robot-send/.test(t.input["command"] as string),
       );
-      if (brCreateBefore.length === 0 && startCall) {
+      if (!ntmCall) {
         violations.push(
-          "No `br create` observed before dispatch — the bead-creation step was skipped.",
-        );
-      }
-      const beadsAsk = asksByHeader(facts, "beads")[0];
-      if (!beadsAsk) {
-        violations.push(
-          "Beads header AskUserQuestion not observed; dispatch menu never surfaced.",
+          "No `ntm --robot-send` Bash call observed; dispatch never ran the robot-send through the ntm shim.",
         );
       }
       return violations;
@@ -486,6 +583,164 @@ export const SCENARIOS: Scenario[] = [
       if (!wrapAsk) {
         violations.push(
           "No review-mode / verdict-gate / recover / wrap-up / post-mortem AskUserQuestion observed; skill-text menu never fired at wrap-up.",
+        );
+      }
+      return violations;
+    },
+    maxTurns: 120,
+  },
+  {
+    id: "s7-review-phase-flywheel-review",
+    description:
+      "At phase=reviewing with a tiny closed bead pre-seeded, /start loads start_review and calls flywheel_review on the bead.",
+    goal:
+      "/agent-flywheel:start review the just-closed bead and record the verdict",
+    scripted: [
+      // "Review target" asks what to review. Options vary by orchestrator
+      // state — "Review n4k.4 commits (Recommended)" or
+      // "Review commit n4k.1" or "HEAD commit (Recommended)". Using the
+      // bare word "Review" substring-matches all three recommended-review
+      // paths; the fallback is "HEAD commit" in older menu shapes.
+      { headerContains: "review target", option: "Review" },
+      { headerContains: "review mode", option: "Looks good" },
+      { headerContains: "stragglers", option: "Continue" },
+      { headerContains: "br errors", option: "Continue" },
+      { headerContains: "compliance", option: "Continue" },
+      { headerContains: "progress", option: "Continue" },
+      { headerContains: "drift", option: "Continue" },
+      { headerContains: "coverage", option: "Continue" },
+      { headerContains: "ui polish", option: "Skip" },
+      // Fallback steering.
+      { headerContains: "pre-flight", option: "Continue with degraded" },
+      { headerContains: "framing", option: "Skip framing" },
+      { headerContains: "goal input", option: "Yes, full flywheel" },
+      { headerContains: "goal", option: "Yes, full flywheel" },
+    ],
+    prepareFixtures: async (worktree) => {
+      const { mkdir, writeFile, chmod } = await import("node:fs/promises");
+      const { execFileSync } = await import("node:child_process");
+      const { join } = await import("node:path");
+      // Same ntm shim as s5 — reviewer prompts may spawn robot-sends too.
+      const binDir = join(worktree, ".pi-flywheel", "eval-bin");
+      await mkdir(binDir, { recursive: true });
+      const ntmShim = `#!/usr/bin/env bash
+set -u
+log="${binDir}/ntm.log"
+printf '%s\\0' "$@" >> "$log"
+printf '\\n--CALL--\\n' >> "$log"
+case "\${1:-}" in
+  deps|--deps) echo "ntm-eval-shim: healthy (claude cc=ok cod=ok gem=ok)";;
+  --version) echo "ntm-eval-shim 0.0.0";;
+  config)
+    if [ "\${2:-}" = "show" ]; then printf 'projects_base=%s\\n' "\${PWD%/*}"; fi
+    ;;
+esac
+exit 0
+`;
+      await writeFile(join(binDir, "ntm"), ntmShim, "utf8");
+      await chmod(join(binDir, "ntm"), 0o755);
+      // Create a real closed bead in `.beads/` and attach a completion
+      // attestation. The orchestrator reads from `br`, so a checkpoint
+      // stub alone isn't enough to route the review phase at the stub id.
+      execFileSync("br", ["init", "--prefix", "eval"], { cwd: worktree, stdio: "ignore" });
+      const stubBeadId = execFileSync(
+        "br",
+        [
+          "create",
+          "--priority",
+          "p1",
+          "-t",
+          "task",
+          "--silent",
+          "--description",
+          "Eval fixture bead: review-phase scenario. Pre-closed with a stub attestation so flywheel_review has a bead to score.",
+          "Review stub for s7",
+        ],
+        { cwd: worktree, encoding: "utf8" },
+      ).trim();
+      execFileSync("br", ["close", stubBeadId, "--reason", "eval fixture"], {
+        cwd: worktree,
+        stdio: "ignore",
+      });
+      await mkdir(join(worktree, ".pi-flywheel", "completion"), { recursive: true });
+      const now = new Date().toISOString();
+      const attestation = {
+        version: 1,
+        beadId: stubBeadId,
+        agentName: "EvalFixture",
+        status: "closed",
+        changedFiles: ["AGENTS.md"],
+        commits: ["0000000"],
+        ubs: {
+          ran: false,
+          summary: "fixture — docs-only diff",
+          findingsFixed: 0,
+          deferredBeadIds: [],
+          skippedReason: "eval fixture; not a real diff",
+        },
+        verify: [{ command: "echo fixture", exitCode: 0, summary: "fixture pass" }],
+        selfReview: { ran: true, summary: "fixture pre-seeded by s7" },
+        beadClosedVerified: true,
+        reservationsReleased: true,
+        createdAt: now,
+      };
+      await writeFile(
+        join(worktree, ".pi-flywheel", "completion", `${stubBeadId}.json`),
+        JSON.stringify(attestation, null, 2),
+        "utf8",
+      );
+      const checkpoint = {
+        schemaVersion: 1,
+        writtenAt: now,
+        flywheelVersion: "eval-fixture",
+        state: {
+          phase: "reviewing",
+          selectedGoal: "review the just-closed bead and record the verdict",
+          goalSlug: "review-the-just-closed-bead",
+          constraints: [],
+          retryCount: 0,
+          maxRetries: 3,
+          maxReviewPasses: 2,
+          iterationRound: 0,
+          currentGateIndex: 0,
+          activeBeadIds: [stubBeadId],
+          currentBeadId: stubBeadId,
+          beadReviews: {},
+        },
+        stateHash: "",
+      };
+      await writeFile(
+        join(worktree, ".pi-flywheel", "checkpoint.json"),
+        JSON.stringify(checkpoint, null, 2),
+        "utf8",
+      );
+    },
+    assert: (facts) => {
+      const violations: string[] = [];
+      // Both assertions are strict (per 4p7 reopen round 2): SKILL.md's
+      // Universal Rule 3 requires `flywheel_get_skill(start_<phase>)` at
+      // every phase boundary before any tool in that phase runs. If the
+      // model skips the phase skill (as the resume path currently does),
+      // the eval must record it as a fail — that's the point.
+      const reviewSkillLoad = facts.toolUses.find(
+        (t) =>
+          (t.tool_name === "flywheel_get_skill" ||
+            t.tool_name.endsWith("__flywheel_get_skill")) &&
+          String(t.input["name"] ?? "").includes("start_review"),
+      );
+      if (!reviewSkillLoad) {
+        violations.push(
+          "flywheel_get_skill(name: 'agent-flywheel:start_review') never observed; SKILL.md Universal Rule 3 says every phase boundary must load the phase skill before any tool runs.",
+        );
+      }
+      const reviewCall = facts.toolUses.find(
+        (t) =>
+          t.tool_name === "flywheel_review" ||
+          t.tool_name.endsWith("__flywheel_review"),
+      );
+      if (!reviewCall) {
+        violations.push(
+          "flywheel_review not called; review phase never engaged.",
         );
       }
       return violations;

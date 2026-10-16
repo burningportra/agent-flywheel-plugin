@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "git_sha": "8f149957f93670826c86da26db62fc03bce1484f",
+  "git_sha": "7899440f296cf42137d4b56c5b463297734bf526",
   "git_dirty": false,
-  "recorded_at": "2026-10-16T00:50:40.941Z",
+  "recorded_at": "2026-10-16T01:38:48.272Z",
   "model": "claude-sonnet-5-5",
   "claude_cli_version": "agent-sdk@0.3.300 / cli@2.1.301 (Claude Code)",
   "scenarios": [
@@ -11,108 +11,126 @@
       "description": "After the Phase 0.5 brainstorm skip, Step 5 fires a Plan-mode (4 options) + Ambition (2 options) AskUserQuestion.",
       "status": "pass",
       "violations": [],
-      "turns": 46,
+      "turns": 38,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 92,
-        "output_tokens": 1848,
-        "cache_read_input_tokens": 2377732,
-        "cache_creation_input_tokens": 146250
+        "input_tokens": 76,
+        "output_tokens": 2296,
+        "cache_read_input_tokens": 2318398,
+        "cache_creation_input_tokens": 158108
       },
-      "cost_usd": 0.5391477,
-      "tool_use_count": 25,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s1-step0d-and-step5-2026-10-15T21-22-10-240Z.jsonl",
-      "duration_ms": 112367
+      "cost_usd": 0.4974636,
+      "tool_use_count": 22,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s1-step0d-and-step5-2026-10-16T01-27-44-580Z.jsonl",
+      "duration_ms": 131483
     },
     {
       "id": "s2-standard-no-early-br-create",
       "description": "Standard plan path reaches the plan-ready/plan-gate menu and runs no `br create` before the user picks Create beads.",
       "status": "pass",
       "violations": [],
-      "turns": 40,
+      "turns": 36,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 80,
-        "output_tokens": 1864,
-        "cache_read_input_tokens": 2272469,
-        "cache_creation_input_tokens": 176656
+        "input_tokens": 72,
+        "output_tokens": 2205,
+        "cache_read_input_tokens": 2115940,
+        "cache_creation_input_tokens": 150507
       },
-      "cost_usd": 0.4621,
-      "tool_use_count": 24,
-      "artifact_path": "mcp-server/scripts/eval/artifacts/s2-standard-no-early-br-create-2026-10-15T21-31-14-088Z.jsonl",
-      "duration_ms": 103000
+      "cost_usd": 0.472562,
+      "tool_use_count": 21,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s2-standard-no-early-br-create-2026-10-16T01-30-13-837Z.jsonl",
+      "duration_ms": 145839
     },
     {
       "id": "s3-ambitious-writes-charter-first",
       "description": "Ambitious path writes docs/brainstorms/<slug>-<date>-ambition.md before calling flywheel_plan with ambition='ambitious'.",
       "status": "pass",
       "violations": [],
-      "turns": 48,
+      "turns": 43,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 96,
-        "output_tokens": 2648,
-        "cache_read_input_tokens": 2678656,
-        "cache_creation_input_tokens": 141942
+        "input_tokens": 86,
+        "output_tokens": 1583,
+        "cache_read_input_tokens": 2559128,
+        "cache_creation_input_tokens": 126835
       },
-      "cost_usd": 0.5093124,
-      "tool_use_count": 23,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s3-ambitious-writes-charter-first-2026-10-15T21-25-42-585Z.jsonl",
-      "duration_ms": 124362
+      "cost_usd": 0.5003412,
+      "tool_use_count": 24,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s3-ambitious-writes-charter-first-2026-10-16T01-32-02-648Z.jsonl",
+      "duration_ms": 99064
     },
     {
       "id": "s4-rubric-gate-before-bead-creation",
       "description": "Choosing Create beads triggers the Step 5.6.5 rubric gate (flywheel_synthesize_rubric) before any bead creation.",
       "status": "pass",
       "violations": [],
-      "turns": 73,
+      "turns": 55,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 146,
-        "output_tokens": 2592,
-        "cache_read_input_tokens": 4792329,
-        "cache_creation_input_tokens": 168551
+        "input_tokens": 110,
+        "output_tokens": 2148,
+        "cache_read_input_tokens": 3646462,
+        "cache_creation_input_tokens": 162552
       },
-      "cost_usd": 0.7891503999999999,
-      "tool_use_count": 43,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s4-rubric-gate-before-bead-creation-2026-10-15T21-27-48-530Z.jsonl",
-      "duration_ms": 175646
+      "cost_usd": 0.6358194999999999,
+      "tool_use_count": 32,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s4-rubric-gate-before-bead-creation-2026-10-16T01-33-42-480Z.jsonl",
+      "duration_ms": 128400
     },
     {
       "id": "s5-dispatch-server-prompts",
-      "description": "Standard path reaches bead-approval, picks Create beads + Skip rubric + Start implementing, and the server-built implementer prompts are returned by flywheel_approve_beads(action: 'start').",
+      "description": "At phase=implementing with approved beads pre-seeded, /start loads start_implement and robot-sends via a PATH-shimmed `ntm` that logs argv and exits 0, so no real pane spawns.",
       "status": "pass",
       "violations": [],
-      "turns": 61,
+      "turns": 27,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 122,
-        "output_tokens": 2137,
-        "cache_read_input_tokens": 4255522,
-        "cache_creation_input_tokens": 233358
+        "input_tokens": 54,
+        "output_tokens": 1173,
+        "cache_read_input_tokens": 1457289,
+        "cache_creation_input_tokens": 131196
       },
-      "cost_usd": 0.7621688999999998,
-      "tool_use_count": 34,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s5-dispatch-server-prompts-2026-10-16T00-48-03-996Z.jsonl",
-      "duration_ms": 161862
+      "cost_usd": 0.35891920000000005,
+      "tool_use_count": 15,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s5-dispatch-server-prompts-2026-10-16T01-35-56-497Z.jsonl",
+      "duration_ms": 74180
     },
     {
       "id": "s6-review-wrapup-outcome-gate",
       "description": "At phase=wrapup with a tiny closed bead pre-seeded, /start routes to the wrap-up flow and the outcome-grading/verdict gate fires (either flywheel_grade_outcome runs or the rubric-skip path short-circuits).",
       "status": "pass",
       "violations": [],
-      "turns": 23,
+      "turns": 14,
       "stop_reason": "success",
       "usage": {
-        "input_tokens": 46,
-        "output_tokens": 600,
-        "cache_read_input_tokens": 1067538,
-        "cache_creation_input_tokens": 102388
+        "input_tokens": 28,
+        "output_tokens": 157,
+        "cache_read_input_tokens": 550677,
+        "cache_creation_input_tokens": 106634
       },
-      "cost_usd": 0.25449360000000004,
-      "tool_use_count": 12,
-      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s6-review-wrapup-outcome-gate-2026-10-16T00-43-51-182Z.jsonl",
-      "duration_ms": 42072
+      "cost_usd": 0.207093,
+      "tool_use_count": 7,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s6-review-wrapup-outcome-gate-2026-10-16T01-37-04-489Z.jsonl",
+      "duration_ms": 28096
+    },
+    {
+      "id": "s7-review-phase-flywheel-review",
+      "description": "At phase=reviewing with a tiny closed bead pre-seeded, /start loads start_review and calls flywheel_review on the bead.",
+      "status": "pass",
+      "violations": [],
+      "turns": 18,
+      "stop_reason": "success",
+      "usage": {
+        "input_tokens": 36,
+        "output_tokens": 634,
+        "cache_read_input_tokens": 790099,
+        "cache_creation_input_tokens": 80482
+      },
+      "cost_usd": 0.2329453,
+      "tool_use_count": 11,
+      "artifact_path": "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/scripts/eval/artifacts/s7-review-phase-flywheel-review-2026-10-16T01-38-19-757Z.jsonl",
+      "duration_ms": 34339
     }
   ]
 }
