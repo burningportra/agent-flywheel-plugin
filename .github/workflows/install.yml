@@ -70,14 +70,26 @@ jobs:
           docker run --rm -v "$PWD:/work" -w /work debian:12 bash -c '
             set -e
             apt-get update
-            apt-get install -y curl bash bats shellcheck
+            apt-get install -y curl bash bats git shellcheck
             shellcheck -x install.sh install/lib/*.sh
-            bats install/test/*.bats
             bash install.sh --noninteractive --skip-launch --skip-mcp-register --skip-agent-mail
             test -f "$HOME/.agent-flywheel/install.log"
+            grep -F "Node 20+ required" "$HOME/.agent-flywheel/install.log"
             # Idempotency
             bash install.sh --noninteractive --skip-launch --skip-mcp-register --skip-agent-mail | tee run2.log
             grep -E "(already|Skipping|complete)" run2.log
+
+            # The smoke above intentionally starts without Node. Install the
+            # repo-pinned major only for the Node-dependent OpenCode tests.
+            export NVM_DIR="$HOME/.nvm"
+            curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh -o /tmp/install-nvm.sh
+            touch "$HOME/.bashrc"
+            PROFILE="$HOME/.bashrc" bash /tmp/install-nvm.sh
+            . "$NVM_DIR/nvm.sh" --no-use
+            nvm install
+            NODE_MAJOR="$(tr -d "v[:space:]" < .nvmrc)"
+            test "$(node -p "process.versions.node.split(String.fromCharCode(46))[0]")" = "$NODE_MAJOR"
+            bats install/test/*.bats
           '
 
   windows:
