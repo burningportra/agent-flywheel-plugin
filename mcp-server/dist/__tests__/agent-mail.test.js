@@ -79,6 +79,16 @@ describe('agentMailRPC — ok:false kind:parse on invalid JSON stdout', () => {
         }
     });
 });
+describe('agentMailRPC — empty response', () => {
+    it('returns empty_response when the JSON-RPC envelope omits result', async () => {
+        const exec = makeExec({ code: 0, stdout: '{}', stderr: '' });
+        const result = await agentMailRPC(exec, 'health_check', {});
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.error.kind).toBe('empty_response');
+        }
+    });
+});
 // ─── agentMailRPC — rpc_error ──────────────────────────────────
 describe('agentMailRPC — ok:false kind:rpc_error on JSON-RPC error field', () => {
     it('returns rpc_error when response contains error field', async () => {
@@ -189,7 +199,23 @@ describe('reserveFileReservations', () => {
         let reserveCalls = 0;
         let releaseCalls = 0;
         const exec = vi.fn(async (_cmd, args) => {
-            const body = JSON.parse(args[args.indexOf('-d') + 1]);
+            const rawBody = args[args.indexOf('-d') + 1] ?? '';
+            let body;
+            try {
+                body = JSON.parse(rawBody);
+            }
+            catch {
+                throw new Error('agent-mail test received malformed JSON-RPC input');
+            }
+            if (!body ||
+                typeof body !== 'object' ||
+                !('params' in body) ||
+                !body.params ||
+                typeof body.params !== 'object' ||
+                !('name' in body.params) ||
+                typeof body.params.name !== 'string') {
+                throw new Error('agent-mail test received JSON-RPC input without a tool name');
+            }
             const toolName = body.params.name;
             if (toolName === 'file_reservation_paths') {
                 reserveCalls++;

@@ -71,7 +71,11 @@ export class ClaudeCodeAdapter {
         try {
             const raw = readFileSync(settingsPath, 'utf8');
             const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== 'object' || !('hooks' in parsed) || parsed.hooks == null) {
+            if (!parsed ||
+                typeof parsed !== 'object' ||
+                !('hooks' in parsed) ||
+                parsed.hooks === null ||
+                parsed.hooks === undefined) {
                 out.push({
                     id: 'settings_json_no_hooks',
                     severity: 'yellow',

@@ -83,6 +83,30 @@ describe("eval argv parser (M4)", () => {
         if (r3.kind === "run")
             expect(r3.keepWorktrees).toBe(true);
     });
+    it("--append-baseline alone parses with appendBaseline=true", () => {
+        const r = parseArgv(["--append-baseline"]);
+        expect(r.kind).toBe("run");
+        if (r.kind === "run") {
+            expect(r.appendBaseline).toBe(true);
+            expect(r.writeBaseline).toBe(false);
+        }
+    });
+    it("--append-baseline is allowed with --only (partial update is the point)", () => {
+        const r = parseArgv(["--append-baseline", "--only", "s5-impl,s6-review"]);
+        expect(r.kind).toBe("run");
+        if (r.kind === "run") {
+            expect(r.appendBaseline).toBe(true);
+            expect([...r.onlyIds].sort()).toEqual(["s5-impl", "s6-review"]);
+        }
+    });
+    it("--write-baseline + --append-baseline is refused", () => {
+        const r = parseArgv(["--write-baseline", "--append-baseline"]);
+        expect(r.kind).toBe("error");
+        if (r.kind === "error") {
+            expect(r.exitCode).toBe(2);
+            expect(r.message).toContain("mutually exclusive");
+        }
+    });
     it("HELP_TEXT lists every documented flag + env knob", () => {
         for (const flag of [
             "--only",
@@ -91,6 +115,7 @@ describe("eval argv parser (M4)", () => {
             "--dry-run",
             "--write-baseline",
             "--no-write-baseline",
+            "--append-baseline",
             "--keep-worktrees",
             "--help",
         ]) {

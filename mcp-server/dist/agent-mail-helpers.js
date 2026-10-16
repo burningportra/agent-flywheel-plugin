@@ -1,4 +1,4 @@
-import { agentMailRPC } from "./agent-mail.js";
+import { agentMailRPC } from "./agent-mail-rpc.js";
 import { createLogger } from "./logger.js";
 const log = createLogger("agent-mail-helpers");
 // Default TTL for reservation grants (1 hour).

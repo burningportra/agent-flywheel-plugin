@@ -16,8 +16,7 @@
  * rejection carries a short human-readable reason code so error messages at
  * MCP boundaries stay consistent.
  *
- * `fs-safety.ts` owns write-owner and symlink checks. This module only handles
- * path strings; it does not touch the filesystem.
+ * `fs-safety.ts` owns write-owner and symlink checks.
  */
 import { realpathSync } from "node:fs";
 import { isAbsolute, normalize, resolve, relative, sep } from "node:path";

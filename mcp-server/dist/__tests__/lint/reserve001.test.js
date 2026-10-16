@@ -83,7 +83,7 @@ describe("RESERVE001 — graceful degradation", () => {
     });
 });
 describe("RESERVE001 — production scan against repo (smoke)", () => {
-    it("finds exactly one direct call site in mcp-server/src (the agent-mail.ts orphan)", async () => {
+    it("finds no direct call sites outside the helper", async () => {
         const repoRoot = path.resolve(__dirname, "..", "..", "..", "..");
         const ctx = {
             filePath: "<unused>",
@@ -91,9 +91,7 @@ describe("RESERVE001 — production scan against repo (smoke)", () => {
             repoRoot,
         };
         const findings = await reserve001.check(emptyDoc, ctx);
-        expect(findings).toHaveLength(1);
-        expect(findings[0].file).toBe("mcp-server/src/agent-mail.ts");
-        expect(findings[0].line).toBe(229);
+        expect(findings).toEqual([]);
     });
 });
 //# sourceMappingURL=reserve001.test.js.map

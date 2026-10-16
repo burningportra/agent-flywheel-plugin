@@ -1,5 +1,5 @@
 import type { ExecFn } from "./exec.js";
-import { type AgentMailReservation } from "./agent-mail.js";
+import type { AgentMailReservation } from "./agent-mail.js";
 export interface ReservationConflictHolder {
     agent_name?: string;
     reservation_id?: number | string;

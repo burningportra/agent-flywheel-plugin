@@ -325,6 +325,13 @@ export interface IdeaProvenance {
 export type IdeaCategory = "feature" | "refactor" | "docs" | "dx" | "performance" | "reliability" | "security" | "testing";
 export type FlywheelPhase = "idle" | "profiling" | "discovering" | "awaiting_selection" | "planning" | "researching" | "awaiting_plan_approval" | "creating_beads" | "refining_beads" | "awaiting_bead_approval" | "implementing" | "reviewing" | "iterating" | "complete" | "doctor" | "observe";
 export type CoordinationMode = "worktree" | "single-branch";
+export interface CoordinationBackend {
+    beads: boolean;
+    agentMail: boolean;
+    sophia: boolean;
+    preCommitGuardInstalled?: boolean;
+}
+export type CoordinationStrategy = "beads" | "bare";
 export interface FlywheelState {
     phase: FlywheelPhase;
     repoProfile?: RepoProfile;
@@ -351,9 +358,9 @@ export interface FlywheelState {
     sophiaCRBranch?: string;
     sophiaCRTitle?: string;
     /** Detected coordination backends (beads, agentMail, sophia) */
-    coordinationBackend?: import("./coordination.js").CoordinationBackend;
+    coordinationBackend?: CoordinationBackend;
     /** Selected coordination strategy based on available backends */
-    coordinationStrategy?: import("./coordination.js").CoordinationStrategy;
+    coordinationStrategy?: CoordinationStrategy;
     /** Coordination mode: worktree isolation vs single-branch */
     coordinationMode?: CoordinationMode;
     /** Whether agent-mail session was bootstrapped for this flywheel run */

@@ -1,82 +1,10 @@
 import { createLogger } from "./logger.js";
 import { errMsg } from "./errors.js";
 import { parseAgentMailResponse } from "./parsers.js";
+import { AGENT_MAIL_URL, agentMailRPC } from "./agent-mail-rpc.js";
+import { reserveOrFail } from "./agent-mail-helpers.js";
+export { AGENT_MAIL_URL, agentMailRPC };
 const log = createLogger("agent-mail");
-export const AGENT_MAIL_URL = "http://127.0.0.1:8765";
-/**
- * Call an agent-mail MCP tool via its JSON-RPC HTTP endpoint.
- * Used by the agent-flywheel itself (not sub-agents) to manage projects/reservations.
- *
- * Returns a discriminated union: `{ ok: true, data }` on success,
- * `{ ok: false, error }` with a classified error kind on failure.
- */
-export async function agentMailRPC(exec, toolName, args) {
-    const body = JSON.stringify({
-        jsonrpc: "2.0",
-        id: Date.now(),
-        method: "tools/call",
-        params: { name: toolName, arguments: args },
-    });
-    let result;
-    try {
-        result = await exec("curl", [
-            "-s", "-X", "POST", `${AGENT_MAIL_URL}/api`,
-            "-H", "Content-Type: application/json",
-            "-d", body,
-            "--max-time", "5",
-        ], { timeout: 8000 });
-    }
-    catch (err) {
-        return {
-            ok: false,
-            error: {
-                kind: "timeout",
-                message: err?.message ?? "exec timed out",
-            },
-        };
-    }
-    // curl exit non-zero → network error
-    if (result.code !== 0) {
-        return {
-            ok: false,
-            error: {
-                kind: "network",
-                message: `curl exited with code ${result.code}`,
-                code: result.code,
-                stderr: result.stderr || undefined,
-            },
-        };
-    }
-    // Parse and validate JSON-RPC response
-    const parsed = parseAgentMailResponse(result.stdout);
-    if (!parsed.ok) {
-        // Determine error kind from the parser error message
-        const isRpcError = parsed.error.startsWith("RPC error:");
-        return {
-            ok: false,
-            error: {
-                kind: isRpcError ? "rpc_error" : "parse",
-                message: parsed.error,
-                stderr: isRpcError ? undefined : result.stdout.slice(0, 200) || undefined,
-            },
-        };
-    }
-    // Extract data — agent-mail wraps actual payload in structuredContent
-    const rpcResult = parsed.data;
-    const data = (rpcResult != null && typeof rpcResult === "object" && "structuredContent" in rpcResult
-        ? rpcResult.structuredContent
-        : rpcResult);
-    if (data == null) {
-        return {
-            ok: false,
-            error: {
-                kind: "empty_response",
-                message: `No data in response for ${toolName}`,
-            },
-        };
-    }
-    return { ok: true, data };
-}
 /**
  * Backward-compatible unwrapper: extracts data from AgentMailResult
  * or returns null on error (matching the old agentMailRPC return contract).
@@ -164,14 +92,14 @@ export function normalizeReservations(payload) {
  * Reserve files for an agent before launch/hand-off.
  */
 export async function reserveFileReservations(exec, cwd, agentName, files, reason) {
-    return unwrapRPC(await agentMailRPC(exec, "file_reservation_paths", {
-        project_key: cwd,
-        agent_name: agentName,
-        paths: files,
-        ttl_seconds: 3600,
+    return reserveOrFail(files, {
+        exec,
+        cwd,
+        agentName,
+        ttlSeconds: 3600,
         exclusive: true,
-        ...(reason ? { reason } : {}),
-    }));
+        reason,
+    });
 }
 /**
  * Check whether any requested files are already reserved by another agent.

@@ -1,6 +1,8 @@
 import type { ExecFn } from "./exec.js";
 import type { AgentMailResult } from "./types.js";
-export declare const AGENT_MAIL_URL = "http://127.0.0.1:8765";
+import { AGENT_MAIL_URL, agentMailRPC } from "./agent-mail-rpc.js";
+import { type ReserveOrFailResult } from "./agent-mail-helpers.js";
+export { AGENT_MAIL_URL, agentMailRPC };
 export interface AgentMailReservation {
     id?: number | string;
     agent_name?: string;
@@ -23,14 +25,6 @@ export interface AgentMailMessage {
     [key: string]: unknown;
 }
 /**
- * Call an agent-mail MCP tool via its JSON-RPC HTTP endpoint.
- * Used by the agent-flywheel itself (not sub-agents) to manage projects/reservations.
- *
- * Returns a discriminated union: `{ ok: true, data }` on success,
- * `{ ok: false, error }` with a classified error kind on failure.
- */
-export declare function agentMailRPC<T = any>(exec: ExecFn, toolName: string, args: Record<string, unknown>): Promise<AgentMailResult<T>>;
-/**
  * Backward-compatible unwrapper: extracts data from AgentMailResult
  * or returns null on error (matching the old agentMailRPC return contract).
  */
@@ -40,7 +34,7 @@ export declare function normalizeReservations(payload: any): AgentMailReservatio
 /**
  * Reserve files for an agent before launch/hand-off.
  */
-export declare function reserveFileReservations(exec: ExecFn, cwd: string, agentName: string, files: string[], reason?: string): Promise<any>;
+export declare function reserveFileReservations(exec: ExecFn, cwd: string, agentName: string, files: string[], reason?: string): Promise<ReserveOrFailResult>;
 /**
  * Check whether any requested files are already reserved by another agent.
  */

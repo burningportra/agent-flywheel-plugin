@@ -16,8 +16,7 @@
  * rejection carries a short human-readable reason code so error messages at
  * MCP boundaries stay consistent.
  *
- * `fs-safety.ts` owns write-owner and symlink checks. This module only handles
- * path strings; it does not touch the filesystem.
+ * `fs-safety.ts` owns write-owner and symlink checks.
  */
 export type SafePathReason = "empty" | "not_string" | "control_char" | "null_byte" | "absolute_when_relative_expected" | "parent_traversal" | "escapes_root" | "separator_in_segment" | "reserved_segment" | "too_long" | "colon" | "backslash";
 export interface SafePathOk {

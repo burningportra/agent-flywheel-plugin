@@ -63,8 +63,8 @@ export type FlywheelErrorCode = z.infer<typeof FlywheelErrorCodeSchema>;
  * build gate) fails the build.
  *
  * Field naming: snake_case (`try_this`) is preserved on the wire
- * envelope (`FlywheelToolError`); camelCase (`tryThis`) is the
- * internal-only meta shape consumed by `format-error.ts` (T1.3).
+ * envelope (`FlywheelToolError`); camelCase (`tryThis`) is the internal shape
+ * that `errors-try-this.ts` uses to derive `ERROR_META`.
  */
 export type ErrorMeta = {
     readonly hint: string;

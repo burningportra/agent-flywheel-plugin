@@ -212,5 +212,188 @@ export const SCENARIOS = [
         },
         maxTurns: 100,
     },
+    // -------------------------------------------------------------------------
+    // 4p7: cover start_implement, start_review, start_wrapup past bead approval
+    // -------------------------------------------------------------------------
+    {
+        id: "s5-dispatch-server-prompts",
+        description: "Standard path reaches bead-approval, picks Create beads + Skip rubric + Start implementing, and the server-built implementer prompts are returned by flywheel_approve_beads(action: 'start').",
+        goal: "/agent-flywheel:start design a new `flywheel_whisper` observability subsystem — add a new MCP tool that emits structured breadcrumbs per call, a shared telemetry registry used by every existing tool handler, a conformance test suite covering every schema, AGENTS.md documentation of the registry pattern, a migration guide for third-party plugin authors, and a dashboard view exposing per-tool telemetry trends",
+        scripted: [
+            { headerContains: "plan mode", option: "Standard plan" },
+            { headerContains: "ambition", option: "As scoped" },
+            { headerContains: "plan ready", option: "Create beads" },
+            // Picking "Skip rubric" lets flywheel_approve_beads(start) fire; the
+            // Beads header follows. "Start implementing" is the dispatch step.
+            { headerContains: "rubric", option: "Skip rubric" },
+            { headerContains: "beads", option: "Start implementing" },
+            // Terminate before the model spawns any real NTM pane. "Polish"
+            // (as "Polish" / "Polish more" / "Polish (refine beads to remove
+            // overlap)") is the one non-launching option present across every
+            // Launch-menu shape the orchestrator renders.
+            { headerContains: "launch", option: "Polish" },
+            // The orchestrator sometimes asks a separate `Init beads` menu
+            // when the eval worktree has no `.beads/` yet; let it run `br init`
+            // so the dispatch path keeps going.
+            { headerContains: "init beads", option: "Run br init" },
+            // Fallback shared steering (same shape as the earlier four).
+            { headerContains: "pre-flight", option: "Continue with degraded" },
+            { headerContains: "setup fixes", option: "Continue with degraded" },
+            { headerContains: "framing", option: "Skip framing" },
+            { headerContains: "smallest", option: "Happy-path MVP" },
+            { headerContains: "floor", option: "Happy-path MVP" },
+            { headerContains: "10x", option: "Breadth expansion" },
+            { headerContains: "ceiling", option: "Breadth expansion" },
+            { headerContains: "adjacents", option: "Nothing adjacent" },
+            { headerContains: "decompose", option: "Keep as one cycle" },
+            { headerContains: "problem", option: "Missing capability" },
+            { headerContains: "non-goals", option: "No new dependencies" },
+            { headerContains: "success", option: "Tests / CI gate" },
+            { headerContains: "constraints", option: "Compatibility" },
+            { headerContains: "kill criteria", option: "None — framing is solid" },
+            { headerContains: "kill signal", option: "Record as kill criterion, proceed" },
+            { headerContains: "approve", option: "Approve" },
+        ],
+        assert: (facts) => {
+            const violations = [];
+            const startCall = facts.toolUses.find((t) => {
+                const isApprove = t.tool_name === "flywheel_approve_beads" ||
+                    t.tool_name.endsWith("__flywheel_approve_beads");
+                if (!isApprove)
+                    return false;
+                return String(t.input["action"] ?? "").toLowerCase() === "start";
+            });
+            if (!startCall) {
+                violations.push("flywheel_approve_beads(action: 'start') not observed; implementer-dispatch gate never fired.");
+            }
+            const brCreateBefore = facts.toolUses.filter((t) => t.turn < (startCall?.turn ?? Number.POSITIVE_INFINITY) &&
+                t.tool_name === "Bash" &&
+                typeof t.input["command"] === "string" &&
+                /\bbr\s+create\b/.test(t.input["command"]));
+            if (brCreateBefore.length === 0 && startCall) {
+                violations.push("No `br create` observed before dispatch — the bead-creation step was skipped.");
+            }
+            const beadsAsk = asksByHeader(facts, "beads")[0];
+            if (!beadsAsk) {
+                violations.push("Beads header AskUserQuestion not observed; dispatch menu never surfaced.");
+            }
+            return violations;
+        },
+        maxTurns: 120,
+    },
+    {
+        id: "s6-review-wrapup-outcome-gate",
+        description: "At phase=wrapup with a tiny closed bead pre-seeded, /start routes to the wrap-up flow and the outcome-grading/verdict gate fires (either flywheel_grade_outcome runs or the rubric-skip path short-circuits).",
+        goal: "/agent-flywheel:start wrap up the completed cycle, run the outcome grader, and record the verdict",
+        scripted: [
+            { headerContains: "review mode", option: "Looks good" },
+            { headerContains: "review", option: "Looks good" },
+            { headerContains: "verdict", option: "Satisfied" },
+            { headerContains: "grading", option: "Accept and continue" },
+            { headerContains: "iterate", option: "Accept anyway" },
+            { headerContains: "rubric", option: "Skip rubric" },
+            // Grader short-circuit: when flywheel_grade_outcome can't run
+            // (no rubric persisted), the skill asks the Recover menu. Accept
+            // without grade terminates the cycle cleanly.
+            { headerContains: "recover", option: "Accept without grade" },
+            { headerContains: "wrap-up", option: "Skip wrap-up" },
+            { headerContains: "stray files", option: "Skip stray files" },
+            { headerContains: "version", option: "Skip" },
+            { headerContains: "post-mortem", option: "Skip" },
+            // Fallback steering if the orchestrator reroutes mid-stream.
+            { headerContains: "pre-flight", option: "Continue with degraded" },
+            { headerContains: "framing", option: "Skip framing" },
+            { headerContains: "goal input", option: "Yes, full flywheel" },
+            { headerContains: "goal", option: "Yes, full flywheel" },
+        ],
+        prepareFixtures: async (worktree) => {
+            const { mkdir, writeFile } = await import("node:fs/promises");
+            const { join } = await import("node:path");
+            await mkdir(join(worktree, ".pi-flywheel", "completion"), { recursive: true });
+            // Pre-seed a tiny closed bead's attestation. The orchestrator reads
+            // this via flywheel_verify_beads at wrap-up and gates on its presence.
+            const stubBeadId = "flywheel-eval-stub-closed-bead";
+            const now = new Date().toISOString();
+            const attestation = {
+                version: 1,
+                beadId: stubBeadId,
+                agentName: "EvalFixture",
+                status: "closed",
+                changedFiles: ["AGENTS.md"],
+                commits: ["0000000"],
+                ubs: {
+                    ran: false,
+                    summary: "fixture — docs-only diff",
+                    findingsFixed: 0,
+                    deferredBeadIds: [],
+                    skippedReason: "eval fixture; not a real diff",
+                },
+                verify: [
+                    { command: "echo fixture", exitCode: 0, summary: "fixture pass" },
+                ],
+                selfReview: { ran: true, summary: "fixture pre-seeded by s6" },
+                beadClosedVerified: true,
+                reservationsReleased: true,
+                createdAt: now,
+            };
+            await writeFile(join(worktree, ".pi-flywheel", "completion", `${stubBeadId}.json`), JSON.stringify(attestation, null, 2), "utf8");
+            // Pre-seed a wrap-up-phase checkpoint. `flywheelVersion` is left
+            // blank because the orchestrator doesn't gate on an exact match for
+            // test purposes, and `stateHash` is left blank for the same reason;
+            // the loader tolerates both for fixture use.
+            const checkpoint = {
+                schemaVersion: 1,
+                writtenAt: now,
+                flywheelVersion: "eval-fixture",
+                state: {
+                    phase: "wrapup",
+                    selectedGoal: "wrap up the completed cycle, run the outcome grader, and record the verdict",
+                    goalSlug: "wrap-up-the-completed-cycle",
+                    constraints: [],
+                    retryCount: 0,
+                    maxRetries: 3,
+                    maxReviewPasses: 2,
+                    iterationRound: 0,
+                    currentGateIndex: 0,
+                    activeBeadIds: [stubBeadId],
+                    outcomeGradingSkipped: false,
+                },
+                stateHash: "",
+            };
+            await writeFile(join(worktree, ".pi-flywheel", "checkpoint.json"), JSON.stringify(checkpoint, null, 2), "utf8");
+        },
+        assert: (facts) => {
+            const violations = [];
+            const reviewed = facts.toolUses.find((t) => t.tool_name === "flywheel_review" ||
+                t.tool_name.endsWith("__flywheel_review"));
+            const graded = facts.toolUses.find((t) => t.tool_name === "flywheel_grade_outcome" ||
+                t.tool_name.endsWith("__flywheel_grade_outcome"));
+            const rubricSkip = facts.toolUses.find((t) => (t.tool_name === "flywheel_synthesize_rubric" ||
+                t.tool_name.endsWith("__flywheel_synthesize_rubric")) &&
+                String(t.input["action"] ?? "").toLowerCase() === "skip");
+            const verifyBeads = facts.toolUses.find((t) => t.tool_name === "flywheel_verify_beads" ||
+                t.tool_name.endsWith("__flywheel_verify_beads"));
+            if (!reviewed && !graded && !rubricSkip && !verifyBeads) {
+                violations.push("neither flywheel_review nor flywheel_grade_outcome nor flywheel_synthesize_rubric(skip) nor flywheel_verify_beads observed; wrap-up/review phase never engaged");
+            }
+            // Any of these headers means a wrap-up / review skill menu fired.
+            // The grader "Recover" menu is the one the skill asks when
+            // `flywheel_grade_outcome` can't run (no rubric), which is itself
+            // evidence that the wrap-up skill routed through outcome-grading.
+            const wrapAsk = asksByHeader(facts, "verdict")[0] ??
+                asksByHeader(facts, "grading")[0] ??
+                asksByHeader(facts, "iterate")[0] ??
+                asksByHeader(facts, "review mode")[0] ??
+                asksByHeader(facts, "review")[0] ??
+                asksByHeader(facts, "recover")[0] ??
+                asksByHeader(facts, "wrap-up")[0] ??
+                asksByHeader(facts, "post-mortem")[0];
+            if (!wrapAsk) {
+                violations.push("No review-mode / verdict-gate / recover / wrap-up / post-mortem AskUserQuestion observed; skill-text menu never fired at wrap-up.");
+            }
+            return violations;
+        },
+        maxTurns: 120,
+    },
 ];
 //# sourceMappingURL=scenarios.js.map
