@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.20.0] - 2026-10-15
+
+Adds an Ambitious planning mode and the `flywheel_rescue` tool, fixes cross-program bead claims and the pointer-command dedup trap, and roughly halves the prompt text the flywheel sends.
+
 Compression and correctness pass (program `agent-flywheel-plugin-m66`): the measured prompt surface shrank by **211,146 chars / 52,788 tokens (46.5%)**, every confirmed bug was fixed with a regression test, and every unwired promise was either implemented or deleted. The four `/start` behavior-eval scenarios all pass at HEAD. See `docs/perf/compression-report.md` for the full before/after tables and bead list.
 
 ### Added
