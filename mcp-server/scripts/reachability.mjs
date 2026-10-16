@@ -12,7 +12,13 @@ const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs",
 const EXPLICIT_SCRIPT_ROOTS = ["scripts/launch-server.mjs", "scripts/tender-daemon.ts"];
 
 function parseArgs(argv) {
-  const options = { root: DEFAULT_ROOT, json: false, help: false };
+  const options = {
+    root: DEFAULT_ROOT,
+    json: false,
+    help: false,
+    check: false,
+    allowlist: null,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--root") {
@@ -22,6 +28,13 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--json") {
       options.json = true;
+    } else if (arg === "--check") {
+      options.check = true;
+    } else if (arg === "--allowlist") {
+      const file = argv[index + 1];
+      if (!file) throw new Error("--allowlist requires a file path");
+      options.allowlist = path.resolve(file);
+      index += 1;
     } else if (arg === "--help" || arg === "-h") {
       options.help = true;
     } else {
@@ -29,6 +42,160 @@ function parseArgs(argv) {
     }
   }
   return options;
+}
+
+// Allowlist contract: see mcp-server/.reachability-allowlist.json for the schema.
+// Rows are keyed by file (for UNREACHABLE_FILE) and file+name (for
+// UNREACHABLE_EXPORT) so the entry survives a line-number shift. Every row
+// must carry a non-empty reason. --check additionally fails on stale rows —
+// an allowlist entry that no current report row matches, so the list can't rot.
+function loadAllowlist(root, overridePath) {
+  const resolved = overridePath ?? path.join(root, ".reachability-allowlist.json");
+  if (!existsSync(resolved)) {
+    return { path: resolved, present: false, files: [], exports: [] };
+  }
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(resolved, "utf8"));
+  } catch (error) {
+    throw new Error(`invalid allowlist JSON at ${resolved}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`invalid allowlist shape at ${resolved}: expected an object`);
+  }
+  const filesRaw = Array.isArray(raw.unreachableFiles) ? raw.unreachableFiles : [];
+  const exportsRaw = Array.isArray(raw.unreachableExports) ? raw.unreachableExports : [];
+  return {
+    path: resolved,
+    present: true,
+    files: filesRaw,
+    exports: exportsRaw,
+  };
+}
+
+function validateAllowlistEntries(allowlist) {
+  const errors = [];
+  const seenFiles = new Set();
+  const seenExports = new Set();
+  for (const entry of allowlist.files) {
+    if (!entry || typeof entry !== "object") {
+      errors.push("unreachableFiles entry is not an object");
+      continue;
+    }
+    if (typeof entry.file !== "string" || entry.file.length === 0) {
+      errors.push("unreachableFiles entry is missing a non-empty file");
+      continue;
+    }
+    if (typeof entry.reason !== "string" || entry.reason.trim().length === 0) {
+      errors.push(`unreachableFiles[${entry.file}] has no non-empty reason`);
+    }
+    if (seenFiles.has(entry.file)) {
+      errors.push(`unreachableFiles[${entry.file}] duplicated`);
+    } else {
+      seenFiles.add(entry.file);
+    }
+  }
+  for (const entry of allowlist.exports) {
+    if (!entry || typeof entry !== "object") {
+      errors.push("unreachableExports entry is not an object");
+      continue;
+    }
+    if (typeof entry.file !== "string" || entry.file.length === 0) {
+      errors.push("unreachableExports entry is missing a non-empty file");
+      continue;
+    }
+    if (typeof entry.name !== "string" || entry.name.length === 0) {
+      errors.push(`unreachableExports[${entry.file}] is missing a non-empty name`);
+      continue;
+    }
+    if (typeof entry.reason !== "string" || entry.reason.trim().length === 0) {
+      errors.push(`unreachableExports[${entry.file}:${entry.name}] has no non-empty reason`);
+    }
+    const key = `${entry.file}::${entry.name}`;
+    if (seenExports.has(key)) {
+      errors.push(`unreachableExports[${entry.file}:${entry.name}] duplicated`);
+    } else {
+      seenExports.add(key);
+    }
+  }
+  return errors;
+}
+
+function runCheck(report, allowlist) {
+  const validationErrors = validateAllowlistEntries(allowlist);
+  const allowedFiles = new Map();
+  for (const entry of allowlist.files) {
+    if (typeof entry?.file === "string") allowedFiles.set(entry.file, { matched: false, reason: entry.reason });
+  }
+  const allowedExports = new Map();
+  for (const entry of allowlist.exports) {
+    if (typeof entry?.file === "string" && typeof entry?.name === "string") {
+      allowedExports.set(`${entry.file}::${entry.name}`, { matched: false, reason: entry.reason });
+    }
+  }
+  const unallowedFiles = [];
+  for (const row of report.unreachableFiles) {
+    const entry = allowedFiles.get(row.file);
+    if (entry) entry.matched = true;
+    else unallowedFiles.push(row);
+  }
+  const unallowedExports = [];
+  for (const row of report.unreachableExports) {
+    const key = `${row.file}::${row.name}`;
+    const entry = allowedExports.get(key);
+    if (entry) {
+      entry.matched = true;
+      continue;
+    }
+    // Cascade: a file in `unreachableFiles` implicitly allows every
+    // UNREACHABLE_EXPORT row whose reason is `unreachable-file` and whose
+    // file matches, so the operator does not need to list every orphaned
+    // export of a library-kept module.
+    const fileEntry = allowedFiles.get(row.file);
+    if (fileEntry && row.reason === "unreachable-file") {
+      fileEntry.matched = true;
+      continue;
+    }
+    unallowedExports.push(row);
+  }
+  const staleFiles = [];
+  for (const [file, state] of allowedFiles) if (!state.matched) staleFiles.push(file);
+  const staleExports = [];
+  for (const [key, state] of allowedExports) if (!state.matched) staleExports.push(key);
+
+  return {
+    ok:
+      validationErrors.length === 0 &&
+      unallowedFiles.length === 0 &&
+      unallowedExports.length === 0 &&
+      staleFiles.length === 0 &&
+      staleExports.length === 0,
+    allowlistPath: allowlist.path,
+    allowlistPresent: allowlist.present,
+    validationErrors,
+    unallowedFiles,
+    unallowedExports,
+    staleFiles,
+    staleExports,
+  };
+}
+
+function formatCheck(result) {
+  const lines = [`Allowlist: ${result.allowlistPath}${result.allowlistPresent ? "" : " (missing)"}`];
+  if (result.validationErrors.length > 0) {
+    lines.push("", `Allowlist validation errors (${result.validationErrors.length}):`);
+    for (const err of result.validationErrors) lines.push(`  ${err}`);
+  }
+  lines.push("", `Unallowed unreachable files (${result.unallowedFiles.length}):`);
+  for (const row of result.unallowedFiles) lines.push(`  UNREACHABLE_FILE ${row.file}`);
+  lines.push("", `Unallowed unreachable exports (${result.unallowedExports.length}):`);
+  for (const row of result.unallowedExports) lines.push(`  UNREACHABLE_EXPORT ${row.file} ${row.name} reason=${row.reason}`);
+  lines.push("", `Stale allowlist files (${result.staleFiles.length}):`);
+  for (const file of result.staleFiles) lines.push(`  STALE ${file}`);
+  lines.push("", `Stale allowlist exports (${result.staleExports.length}):`);
+  for (const key of result.staleExports) lines.push(`  STALE ${key.replace("::", " ")}`);
+  lines.push("", result.ok ? "reachability check: ok" : "reachability check: FAIL");
+  return `${lines.join("\n")}\n`;
 }
 
 function toPosix(relativePath) {
@@ -805,10 +972,19 @@ function formatReport(report) {
 try {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    process.stdout.write("Usage: node scripts/reachability.mjs [--root <mcp-server>] [--json]\n");
+    process.stdout.write(
+      "Usage: node scripts/reachability.mjs [--root <mcp-server>] [--json] [--check] [--allowlist <path>]\n",
+    );
   } else {
     const report = analyze(options.root);
-    process.stdout.write(options.json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report));
+    if (options.check) {
+      const allowlist = loadAllowlist(options.root, options.allowlist);
+      const result = runCheck(report, allowlist);
+      process.stdout.write(options.json ? `${JSON.stringify({ report, check: result }, null, 2)}\n` : formatCheck(result));
+      if (!result.ok) process.exitCode = 1;
+    } else {
+      process.stdout.write(options.json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report));
+    }
   }
 } catch (error) {
   process.stderr.write(`reachability: ${error instanceof Error ? error.message : String(error)}\n`);

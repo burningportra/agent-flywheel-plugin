@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "unreachableFiles": [],
+  "unreachableExports": [
+    {
+      "file": "src/commit-batch.ts",
+      "name": "recordBatchReview",
+      "reason": "Unit-tested through src/__tests__/commit-batch.test.ts; reachability treats test-only call sites as non-production, so the export appears unreachable even though it has coverage. Candidate for TEST_ONLY_EXPORT once the tracer widens its test-call heuristic."
+    },
+    {
+      "file": "src/lint/config.ts",
+      "name": "LintConfigSchema",
+      "reason": "Re-exported through src/lint/index.ts for callers that load the lint public surface via namespace import. Kept as library API alongside the paired type export."
+    },
+    {
+      "file": "src/lint/reporters/index.ts",
+      "name": "format",
+      "reason": "Called by scripts/lint-skill-dir.ts and scripts/lint-skill.ts through a dynamic await import() destructure for dual-runtime (tsx vs dist) loading. reachability.mjs follows the file but not the destructured symbols."
+    },
+    {
+      "file": "src/lint/reporters/index.ts",
+      "name": "sortFindings",
+      "reason": "Called by scripts/lint-skill-dir.ts and scripts/lint-skill.ts through a dynamic await import() destructure for dual-runtime (tsx vs dist) loading. reachability.mjs follows the file but not the destructured symbols."
+    },
+    {
+      "file": "src/lint/rules/tone001.ts",
+      "name": "proseFrom",
+      "reason": "Called by scripts/update-tone-baseline.ts through a dynamic await import() destructure for dual-runtime (tsx vs dist) loading. reachability.mjs follows the file but not the destructured symbols."
+    },
+    {
+      "file": "src/tender-daemon.ts",
+      "name": "parseTenderDaemonArgs",
+      "reason": "Called inside src/tender-daemon.ts by runCli (which is itself dynamically imported from scripts/tender-daemon.ts) and unit-tested through loadDaemonModule in src/__tests__/tender-daemon.test.ts. Export is required by the test loader."
+    },
+    {
+      "file": "src/tender-daemon.ts",
+      "name": "parsePaneStates",
+      "reason": "Called inside src/tender-daemon.ts by startTenderDaemon's loop (which is itself dynamically imported from scripts/tender-daemon.ts) and unit-tested through loadDaemonModule in src/__tests__/tender-daemon.test.ts. Export is required by the test loader."
+    },
+    {
+      "file": "src/tender-daemon.ts",
+      "name": "startTenderDaemon",
+      "reason": "Called inside src/tender-daemon.ts by runCli (which is itself dynamically imported from scripts/tender-daemon.ts) and unit-tested through loadDaemonModule in src/__tests__/tender-daemon.test.ts. Export is required by the test loader."
+    },
+    {
+      "file": "src/tender-daemon.ts",
+      "name": "runCli",
+      "reason": "Dynamically imported by scripts/tender-daemon.ts via `const { runCli } = await import(modulePath)`. reachability.mjs follows the dynamic specifier for file reachability but does not record the destructured symbol as an import."
+    }
+  ]
+}
