@@ -397,6 +397,15 @@ export type FlywheelPhase =
 
 export type CoordinationMode = "worktree" | "single-branch";
 
+export interface CoordinationBackend {
+  beads: boolean;
+  agentMail: boolean;
+  sophia: boolean;
+  preCommitGuardInstalled?: boolean;
+}
+
+export type CoordinationStrategy = "beads" | "bare";
+
 export interface FlywheelState {
   phase: FlywheelPhase;
   repoProfile?: RepoProfile;
@@ -421,9 +430,9 @@ export interface FlywheelState {
 
   // ─── Coordination backend state ────────────────────────────
   /** Detected coordination backends (beads, agentMail, sophia) */
-  coordinationBackend?: import("./coordination.js").CoordinationBackend;
+  coordinationBackend?: CoordinationBackend;
   /** Selected coordination strategy based on available backends */
-  coordinationStrategy?: import("./coordination.js").CoordinationStrategy;
+  coordinationStrategy?: CoordinationStrategy;
   /** Coordination mode: worktree isolation vs single-branch */
   coordinationMode?: CoordinationMode;
   /** Whether agent-mail session was bootstrapped for this flywheel run */

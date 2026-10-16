@@ -20,14 +20,6 @@
       "reason": "Slash reference \"/superpowers\" is a user-global skill (installed at ~/.claude/skills/), not in this plugin's manifest — the lint registry only scans project-local skills/."
     },
     {
-      "ruleId": "RESERVE001",
-      "rulesetVersion": 1,
-      "file": "mcp-server/src/agent-mail.ts",
-      "line": 229,
-      "fingerprint": "sha256:75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070",
-      "reason": "Preexisting RESERVE001 finding baselined pending a separate deslop pass."
-    },
-    {
       "ruleId": "SLASH001",
       "rulesetVersion": 1,
       "file": "skills/start/_deslop.md",

@@ -1,5 +1,6 @@
 import type { ExecFn } from "./exec.js";
-import { agentMailRPC, type AgentMailReservation } from "./agent-mail.js";
+import type { AgentMailReservation } from "./agent-mail.js";
+import { agentMailRPC } from "./agent-mail-rpc.js";
 import { createLogger } from "./logger.js";
 
 const log = createLogger("agent-mail-helpers");

@@ -91,7 +91,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
 
   state.repoProfile = profile;
   state.coordinationBackend = coordinationBackend;
-  state.coordinationStrategy = coordinationStrategy as FlywheelState['coordinationStrategy'];
+  state.coordinationStrategy = coordinationStrategy;
   state.coordinationMode ??= 'worktree';
   if (args.goal) {
     state.selectedGoal = args.goal;

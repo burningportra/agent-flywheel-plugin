@@ -129,7 +129,7 @@ The 2026-04-30 3-way duel cohort (`docs/duels/2026-04-30.md`, plan `docs/plans/2
 
 - **`flywheel_observe({ cwd })`** — single-call session-state snapshot. Versioned `FlywheelObserveReport` covering `cwd`, `git.{branch, head, dirty, untracked[]}`, `checkpoint.{exists, phase?, selectedGoal?, planDocument?, activeBeadIds[]?, warnings[]}`, `beads.{initialized, counts, ready[]}`, `agentMail.{reachable, unreadCount?, warning?}`, `ntm.{available, panes[]?, warning?}`, `artifacts.{wizard[], flywheelScratch[]}`, and `hints[]` with `severity: info|warn|red`. Idempotent and non-mutating; doctor probes are cached or short-budgeted (<1.5s total tool runtime); every external probe degrades gracefully (sub-section flagged `unavailable: true` rather than failing the whole call). Hint surface includes missing or invalid completion attestations from the Stage 1 ledger so a forgotten dogfood file is visible at the next `/start` rather than silently rotting.
 - **Completion Evidence Attestation (Stage 1).** New module `mcp-server/src/completion-report.ts` exports `CompletionReportSchemaV1` (Zod, `version: 1` additive forever), `readCompletionReport(cwd, beadId)`, `validateCompletionReport(report, bead, { cwd? })`, `formatCompletionEvidenceSummary(report)`, and `writeCompletionReport(cwd, report)`. `flywheel_verify_beads` reads `.pi-flywheel/completion/<beadId>.json` for every closed bead and surfaces `missingEvidence[]` / `invalidEvidence[]`. `flywheel_advance_wave` is the gate — Stage 1 default is warn-only (`needsEvidence: true` on the outcome); set `FW_ATTESTATION_REQUIRED=1` to flip to hard-block returning `attestation_missing` / `attestation_invalid` (2 new structured error codes). The server-built implementer prompts returned by `flywheel_approve_beads(action: "start")` and `flywheel_advance_wave` inject the gate text and a per-bead worked JSON example from `CompletionReportSchemaV1` through `mcp-server/src/adapters/completion-attestation-prompt.ts`. The implementer skills (`skills/flywheel-swarm/SKILL.md`, `commands/flywheel-swarm.md`, `skills/start/_implement.md`) dispatch those prompts unchanged.
-- **Lock-aware reservation helper + `RESERVE001` lint rule.** New module `mcp-server/src/agent-mail-helpers.ts` exports `reserveOrFail(paths, opts)` and `releaseReservations(reservationIds)`. `reserveOrFail` wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry. New lint rule `mcp-server/src/lint/rules/reserve001.ts` flags raw `agentMailRPC("file_reservation_paths")` call sites outside the helper module; the existing single use inside `reserveFileReservations()` (`mcp-server/src/agent-mail.ts`) is baselined; new offenders fail CI.
+- **Lock-aware reservation helper + `RESERVE001` lint rule.** New module `mcp-server/src/agent-mail-helpers.ts` exports `reserveOrFail(paths, opts)` and `releaseReservations(reservationIds)`. `reserveOrFail` wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry. `reserveFileReservations()` in `mcp-server/src/agent-mail.ts` routes through this helper. The `RESERVE001` lint rule flags every raw call outside the helper module, and new offenders fail CI.
 
 ## MCP tools added in v3.12.0
 
@@ -340,7 +340,7 @@ Docs-only diffs: set `ubs.ran=false` with a non-empty `ubs.skippedReason` ("docs
 
 **Coordinator-side mitigation, mandatory for now:**
 
-1. **Use `reserveOrFail()` from `mcp-server/src/agent-mail-helpers.ts`** (v3.11.0+). This helper wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry before failing. **Do not call `agentMailRPC("file_reservation_paths", ...)` directly** — the `RESERVE001` lint rule (`mcp-server/src/lint/rules/reserve001.ts`) flags raw call sites and the existing single use inside `reserveFileReservations()` (`mcp-server/src/agent-mail.ts`) is baselined; new offenders fail CI. Use `releaseReservations(reservationIds)` for the symmetric release.
+1. **Use `reserveOrFail()` from `mcp-server/src/agent-mail-helpers.ts`** (v3.11.0+). This helper wraps `agentMailRPC("file_reservation_paths", ...)` and treats any non-empty `conflicts` array as failure even when `granted` is also populated, with one exponential-backoff retry before failing. `reserveFileReservations()` routes through the same helper. **Do not call `agentMailRPC("file_reservation_paths", ...)` directly**. The `RESERVE001` lint rule (`mcp-server/src/lint/rules/reserve001.ts`) flags every raw call outside the helper module. Use `releaseReservations(reservationIds)` for the symmetric release.
 2. The pre-commit guard (`/Users/kevtrinh/.mcp_agent_mail_git_mailbox_repo/projects/<slug>/.git/hooks/pre-commit`, installed via `install_precommit_guard`) is the second line of defense — it blocks commits that touch a path reserved by another agent. Do not bypass it.
 3. Round-1 of the 2026-04-26 reality-check session showed two agents (RoseFalcon + StormyAnchor) holding exclusive reservations on `mcp-server/scripts/lint-skill.ts` simultaneously. No actual write-conflict materialised that session, but the latent risk is real — the `reserveOrFail()` mitigation above is what closes it from the coordinator side.
 
@@ -392,15 +392,6 @@ flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConf
 ```
 
 That remediation stops launchd/systemd/best-effort runtimes, runs `am doctor repair --yes` and `am doctor archive-normalize --yes`, restarts Agent Mail, and verifies `/health/liveness`. NTM swarm agents must not run mutating `am doctor` commands directly; they should report Agent Mail health issues to the coordinator.
-
-### Programmatic Health Check
-
-`checkAgentMailHealth()` (exported from `mcp-server/src/agent-mail.ts`) sends a lightweight HEAD request to `http://127.0.0.1:8765/mcp` with a 3-second timeout. It returns:
-
-- `{ reachable: true, transport: "http" }` on success.
-- `{ reachable: false, error: "..." }` with an actionable message on failure.
-
-The result is cached for the session on success. On failure, the cache expires after **30 seconds** and triggers a re-check (so a briefly-unreachable server is retried automatically). This function does not block operations that do not need agent-mail; callers decide how to handle an unreachable result.
 
 ## Code Conventions
 
