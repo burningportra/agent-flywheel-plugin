@@ -72,10 +72,18 @@ jobs:
         working-directory: mcp-server
       - run: npm run build
         working-directory: mcp-server
+      - run: npm run check:skills-bundle
+        working-directory: mcp-server
       - name: Fail if mcp-server/dist drifted from src
         run: |
-          if ! git diff --exit-code -- mcp-server/dist; then
+          if ! git diff --exit-code -- mcp-server/dist ':(exclude)mcp-server/dist/skills.bundle.json'; then
             echo "::error::mcp-server/dist is out of sync with src/. Run 'npm run build' in mcp-server/ and commit the result."
+            exit 1
+          fi
+          UNTRACKED=$(git ls-files --others --exclude-standard -- mcp-server/dist)
+          if [ -n "$UNTRACKED" ]; then
+            echo "::error::mcp-server/dist has untracked build output. Run 'npm run build' in mcp-server/ and commit the result."
+            echo "$UNTRACKED"
             exit 1
           fi
 
