@@ -516,9 +516,10 @@ describe('runPlan', () => {
             }));
             expect(freshPerspective).not.toHaveProperty('model');
             expect(freshPerspective).not.toHaveProperty('subagent_type');
-            expect(data.instructions).toContain('pi auth check --model "vercel-ai-gateway/google/gemini-4-argon"');
+            expect(data.instructions).toContain('PI_MODEL="vercel-ai-gateway/google/gemini-4-argon"');
+            expect(data.instructions).toContain('pi auth check --model "$PI_MODEL"');
             expect(data.instructions).toContain('tmux split-window -t "$SESSION:0"');
-            expect(data.instructions).toContain('pi --model "vercel-ai-gateway/google/gemini-4-argon" --thinking high --no-approve');
+            expect(data.instructions).toContain('pi --model "$PI_MODEL" --thinking high --no-approve');
             expect(data.instructions).toContain('remain-on-exit on');
             expect(data.instructions).toContain('am macros start-session');
             expect(data.instructions).toContain('--program pi');
@@ -530,7 +531,7 @@ describe('runPlan', () => {
             const data = await runDeepWith('pi');
             const freshPerspective = data.planAgents.find((agent) => agent.perspective === 'fresh-perspective');
             expect(freshPerspective?.piModel).toBe('openrouter/google/gemini-4-argon');
-            expect(data.instructions).toContain('pi --model "openrouter/google/gemini-4-argon" --thinking high');
+            expect(data.instructions).toContain('PI_MODEL="openrouter/google/gemini-4-argon"');
         });
         it('no longer adds a Gemini CLI planner when only gemini is installed', async () => {
             const data = await runDeepWith('gemini');
