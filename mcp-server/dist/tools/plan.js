@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeOkToolResult, slugifyGoal } from './shared.js';
-import { getDeepPlanModels, isGeminiPlannerCliAvailable, } from '../model-detection.js';
+import { getDeepPlanModels, isPiPlannerCliAvailable, } from '../model-detection.js';
 import { readMemory } from '../memory.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { assertSafeRelativePath, resolveRealpathWithinRoot, } from '../utils/path-safety.js';
@@ -454,8 +454,11 @@ Focus deeply on your assigned perspective lens.`;
     finally {
         releaseBeadMutex(briefMutexKey);
     }
-    const geminiAvailable = await isGeminiPlannerCliAvailable(exec, { cwd, signal });
-    const dynamicModels = getDeepPlanModels({ geminiAvailable });
+    const piAvailable = await isPiPlannerCliAvailable(exec, { cwd, signal });
+    const dynamicModels = getDeepPlanModels({
+        piAvailable,
+        piModel: process.env.FW_PI_PLANNER_MODEL,
+    });
     const plannerTask = (lens) => `Read \`${briefDocument}\` first. The path is relative to the project checkout. Use ultrathink. Your lens: ${lens}`;
     const planAgents = [
         {
@@ -480,7 +483,7 @@ Focus deeply on your assigned perspective lens.`;
                 'Ask whether it is easy to use correctly, hard to misuse, and consistent with existing codebase patterns.'),
         },
     ];
-    // Add the optional fourth planner when the Gemini CLI is installed for NTM routing.
+    // Add the optional fourth planner when the Pi CLI is installed.
     if (dynamicModels.freshPerspective) {
         planAgents.push({
             ...dynamicModels.freshPerspective,
@@ -492,8 +495,9 @@ Focus deeply on your assigned perspective lens.`;
     const synthesisAmbition = inputs.ambition === 'ambitious'
         ? '\n\nAmbition mode: the synthesized plan keeps the charter\'s target rung, stretch target, and floor-first phase order. Where plans disagree on how far to climb, keep the more ambitious path that still has an outside judge and a fallback. Do not average ambition down.'
         : '';
-    const geminiDispatch = dynamicModels.freshPerspective
-        ? ` The fresh-perspective entry uses runner="ntm-gmi": start or reuse an NTM Gemini pane and send its task with \`ntm --robot-send="$SESSION" --panes=<gmi-pane> --type=gmi --msg="<task>"\`. Gemini panes have no MCP tools, so bootstrap with \`am macros start-session --project "${cwd}" --program gemini-cli --model "<gemini-model>" --task "fresh-perspective planning"\` and return the artifact path with \`am mail send --project "${cwd}" --from "<agent-name>" --to "<coordinator>" --subject "[plan] fresh-perspective delivered" --body "<path>"\`. Do not pass it to Agent as a model. If that optional pane reports an authentication or model error, continue with the three Agent-routed plans and report the missing perspective.`
+    const piModel = dynamicModels.freshPerspective?.piModel;
+    const piDispatch = piModel
+        ? ` The fresh-perspective entry uses runner="pi-pane". ntm has no pi lane, so run \`pi auth check --model "${piModel}"\`, then add one pane to the deep-plan NTM session with \`tmux split-window -t "$SESSION:0" -v -c "${cwd}" -P -F '#{pane_id}' pi --model "${piModel}" --thinking high --no-approve --name deep-plan-fresh-perspective "<task>"\` and keep its last output readable with \`tmux set-option -p -t <pane-id> remain-on-exit on\`. \`--no-approve\` skips project-local Pi files and project MCP servers, so the pane can't stop at a trust prompt and has no Agent Mail MCP tools. The task tells Pi to bootstrap with \`am macros start-session --project "${cwd}" --program pi --model "${piModel}" --task "fresh-perspective planning"\` and return the artifact path with \`am mail send --project "${cwd}" --from "<agent-name>" --to "<coordinator>" --subject "[plan] fresh-perspective delivered" --body "<path>"\`. Do not pass it to Agent as a model. If the auth check fails or the pane exits before writing its plan, continue with the three Agent-routed plans and report the missing perspective.`
         : '';
     const payload = {
         kind: 'deep_plan_spawn',
@@ -506,7 +510,7 @@ Focus deeply on your assigned perspective lens.`;
         briefDocument,
         planAgents,
         synthesisModel: dynamicModels.synthesis,
-        instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true and bootstrap Agent Mail with macro_start_session.${geminiDispatch} Every planner writes to docs/plans/<date>-<perspective>.md. Agent-routed planners send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+        instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true and bootstrap Agent Mail with macro_start_session.${piDispatch} Every planner writes to docs/plans/<date>-<perspective>.md. Agent-routed planners send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
         synthesisPrompt: `Use ultrathink.
 
 ## Best-of-All-Worlds Synthesis

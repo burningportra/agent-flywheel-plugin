@@ -25,11 +25,11 @@ export declare const DEEP_PLAN_MODELS: {
     readonly synthesis: "opus";
 };
 export declare const REFINEMENT_MODELS: readonly AgentModelAlias[];
-export declare const GEMINI_PLANNER_DISPATCH: Readonly<{
-    runner: "ntm-gmi";
-    provider: "gemini";
-    paneType: "gmi";
-}>;
+export interface PiPlannerDispatch {
+    runner: 'pi-pane';
+    provider: 'pi';
+    piModel: string;
+}
 export interface ModelProvider {
     name: string;
     prefix: string;
@@ -87,14 +87,15 @@ export interface DeepPlanModelSelection {
     correctness: AgentModelAlias;
     ergonomics: AgentModelAlias;
     synthesis: AgentModelAlias;
-    freshPerspective: typeof GEMINI_PLANNER_DISPATCH | null;
+    freshPerspective: PiPlannerDispatch | null;
 }
 export declare function getDeepPlanModels(capabilities?: {
-    geminiAvailable?: boolean;
+    piAvailable?: boolean;
+    piModel?: string;
 }): DeepPlanModelSelection;
 export declare function getRefinementModel(round: number): AgentModelAlias;
-/** Mirrors the doctor's gemini_cli check; NTM reports later auth/model failures. */
-export declare function isGeminiPlannerCliAvailable(exec: ExecFn, options: {
+/** Probes `which pi`; the Pi pane reports provider auth and model errors when it starts. */
+export declare function isPiPlannerCliAvailable(exec: ExecFn, options: {
     cwd: string;
     signal?: AbortSignal;
     timeout?: number;

@@ -492,34 +492,62 @@ describe('runPlan', () => {
             rmSync(cwd, { recursive: true, force: true });
         }
     });
-    it('adds a fresh-perspective NTM gmi planner when the Gemini CLI signal is healthy', async () => {
-        const { ctx } = makeCtx();
-        const exec = createMockExec([
-            { cmd: 'which', args: ['gemini'], result: { code: 0, stdout: '/usr/local/bin/gemini\n', stderr: '' } },
-        ]);
-        const result = await runPlan({ ...ctx, exec }, { cwd: '/fake/cwd', mode: 'deep' });
-        const structured = result.structuredContent;
-        expect(structured.data.planAgents).toHaveLength(4);
-        const freshPerspective = structured.data.planAgents.find((agent) => agent.perspective === 'fresh-perspective');
-        expect(freshPerspective).toEqual(expect.objectContaining({
-            runner: 'ntm-gmi',
-            provider: 'gemini',
-            paneType: 'gmi',
-        }));
-        expect(freshPerspective).not.toHaveProperty('model');
-        expect(freshPerspective).not.toHaveProperty('subagent_type');
-        expect(structured.data.instructions).toContain('ntm --robot-send');
-        expect(structured.data.instructions).toContain('--type=gmi');
-        expect(structured.data.instructions).toContain('am macros start-session');
-        expect(structured.data.instructions).toContain('--program gemini-cli');
-        expect(structured.data.instructions).toContain('am mail send');
+    describe('fresh-perspective Pi planner', () => {
+        const runDeepWith = async (installed) => {
+            const { ctx } = makeCtx();
+            const exec = createMockExec([
+                { cmd: 'which', args: [installed], result: { code: 0, stdout: `/usr/local/bin/${installed}\n`, stderr: '' } },
+            ]);
+            const result = await runPlan({ ...ctx, exec }, { cwd: '/fake/cwd', mode: 'deep' });
+            return result.structuredContent.data;
+        };
+        afterEach(() => {
+            vi.unstubAllEnvs();
+        });
+        it('adds a Pi pane planner on Gemini Argon through Vercel when the Pi CLI is installed', async () => {
+            vi.stubEnv('FW_PI_PLANNER_MODEL', '');
+            const data = await runDeepWith('pi');
+            expect(data.planAgents).toHaveLength(4);
+            const freshPerspective = data.planAgents.find((agent) => agent.perspective === 'fresh-perspective');
+            expect(freshPerspective).toEqual(expect.objectContaining({
+                runner: 'pi-pane',
+                provider: 'pi',
+                piModel: 'vercel-ai-gateway/google/gemini-4-argon',
+            }));
+            expect(freshPerspective).not.toHaveProperty('model');
+            expect(freshPerspective).not.toHaveProperty('subagent_type');
+            expect(data.instructions).toContain('pi auth check --model "vercel-ai-gateway/google/gemini-4-argon"');
+            expect(data.instructions).toContain('tmux split-window -t "$SESSION:0"');
+            expect(data.instructions).toContain('pi --model "vercel-ai-gateway/google/gemini-4-argon" --thinking high --no-approve');
+            expect(data.instructions).toContain('remain-on-exit on');
+            expect(data.instructions).toContain('am macros start-session');
+            expect(data.instructions).toContain('--program pi');
+            expect(data.instructions).toContain('am mail send');
+            expect(data.instructions).not.toContain('--type=gmi');
+        });
+        it('passes FW_PI_PLANNER_MODEL through to the Pi pane command', async () => {
+            vi.stubEnv('FW_PI_PLANNER_MODEL', 'openrouter/google/gemini-4-argon');
+            const data = await runDeepWith('pi');
+            const freshPerspective = data.planAgents.find((agent) => agent.perspective === 'fresh-perspective');
+            expect(freshPerspective?.piModel).toBe('openrouter/google/gemini-4-argon');
+            expect(data.instructions).toContain('pi --model "openrouter/google/gemini-4-argon" --thinking high');
+        });
+        it('no longer adds a Gemini CLI planner when only gemini is installed', async () => {
+            const data = await runDeepWith('gemini');
+            expect(data.planAgents.map((agent) => agent.perspective)).toEqual([
+                'correctness',
+                'robustness',
+                'ergonomics',
+            ]);
+            expect(data.instructions).not.toMatch(/gmi|gemini/);
+        });
     });
-    it('passes cwd, signal, and a bounded timeout to the Gemini capability probe', async () => {
+    it('passes cwd, signal, and a bounded timeout to the Pi capability probe', async () => {
         const { ctx } = makeCtx();
         const signal = new AbortController().signal;
         const exec = vi.fn(createMockExec());
         await runPlan({ ...ctx, exec, signal }, { cwd: '/fake/cwd', mode: 'deep' });
-        expect(exec).toHaveBeenCalledWith('which', ['gemini'], {
+        expect(exec).toHaveBeenCalledWith('which', ['pi'], {
             timeout: 1500,
             cwd: defaultCwd,
             signal,
