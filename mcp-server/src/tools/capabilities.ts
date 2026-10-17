@@ -124,6 +124,8 @@ export const FLYWHEEL_ENV_VARS: Record<string, string> = {
     '"debug" | "info" | "warn" | "error" — server log verbosity. Set to "debug" when triaging tool failures.',
   FW_MAX_OUTCOME_ITERATIONS:
     'Server-side cap on outcome-grading iterations per cycle. Default: 5.',
+  FW_PI_PLANNER_MODEL:
+    'Model the deep-plan Pi planner passes to pi --model. Default: "vercel-ai-gateway/google/gemini-4-argon". A value with characters outside a model id falls back to the default.',
   FW_RUBRIC_SYNTH_TIMEOUT_MS:
     'Per-call timeout for flywheel_synthesize_rubric. Default: 180000.',
   FW_SESSION_ID:

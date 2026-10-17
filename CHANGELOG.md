@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Deep plan's third planner runs in Pi instead of a Gemini CLI pane.** ntm 1.36.1 has no `pi` lane, so `skills/start/_planning.md` spawns `--cc=1 --cod=1` with NTM and adds one Pi pane to the same session with `tmux split-window`. Pi runs `vercel-ai-gateway/google/gemini-4-argon` by default, so the plan still gets a Gemini perspective, and the new `FW_PI_PLANNER_MODEL` env var overrides the model. `flywheel_plan(mode: "deep")` now adds its optional fresh-perspective planner when `which pi` succeeds instead of `which gemini`, returns it as `runner: "pi-pane"` with a `piModel` field, and its instructions run `pi auth check` first. Both paths launch Pi with `--no-approve`, because in a repo with a `.mcp.json` the `pi-mcp-adapter` extension otherwise stops the pane at an "Allow project MCP server" prompt. The pane reports its plan through the `am` CLI instead. A model value with characters outside a model id falls back to the default with a warning, because the value goes into a shell command. When Pi is missing or its auth check fails, the ergonomics lens goes to a second Claude pane. Duel plan and the planning-workflow review rounds still use the `gmi` lane.
+
 ## [3.20.1] - 2026-10-15
 
 Makes conflicting Agent Mail file reservations fail, turns CI on for `main`, and deletes the MCP server's dead code.

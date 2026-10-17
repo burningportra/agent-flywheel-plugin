@@ -301,53 +301,42 @@ Run `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition`, reconcile
 >   header: "Codex config",
 >   options: [
 >     { label: "Apply fix and proceed (Recommended)", description: "Run: flywheel_remediate({checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true}). Idempotent. Then spawn the swarm." },
->     { label: "Skip cod from swarm", description: "Spawn with --cc=N --gmi=M only (no cod panes). Loses Codex perspective but avoids crash." },
+>     { label: "Skip cod from swarm", description: "Spawn the Claude and Pi planners only (no cod pane). Loses Codex perspective but avoids crash." },
 >     { label: "Continue anyway", description: "Spawn cod panes despite known incompatibility — they will likely crash within seconds." }
 >   ],
 >   multiSelect: false
 > }])
 > ```
 >
-> Before a `gmi` spawn, show this gate when `gemini_model_compat` is yellow or red. Treat a missing row from an older server as green.
->
-> ```
-> AskUserQuestion(questions: [{
->   question: "Doctor flagged gemini_model_compat (configured gemini model outside the documented allowlist). How to handle the gmi lane?",
->   header: "Gemini",
->   options: [
->     { label: "Skip gmi from swarm (Recommended)", description: "Re-shape lane sizes via substitution ladder (gmi→cod→pi→cc). Loses Gemini perspective but avoids spawn crash." },
->     { label: "Continue anyway", description: "Spawn gmi panes despite known incompatibility — they will likely reject the configured model and exit." }
->   ],
->   multiSelect: false
-> }])
-> ```
->
-> In looper-driven or `--no-user` contexts, log the downgrade and apply the `gmi→cod→pi→cc` substitution ladder without another question.
+> The third planner is Pi running a Gemini model, not a Gemini CLI pane. ntm 1.36.1 has no `pi` lane (`ntm spawn --pi=1` fails with `unknown flag: --pi`), so step 2 adds the Pi pane to the NTM session with `tmux split-window`. Set `PI_MODEL` to the `piModel` of the `runner: "pi-pane"` entry that `flywheel_plan` returned. It defaults to `vercel-ai-gateway/google/gemini-4-argon`, and `FW_PI_PLANNER_MODEL` overrides it. Run `pi auth check --model "$PI_MODEL"` before spawning. If there's no `pi-pane` entry because Pi isn't installed, or the check exits non-zero, tell the user and give the ergonomics lens to a second Claude pane (`--cc=2 --cod=1`), following the AGENTS.md substitution ladder.
 
 1. **Bootstrap coordination.** Call `macro_start_session`, note the assigned name, and create `deep-plan-<slug>` with `TeamCreate`.
 
-2. **Spawn three planners.** When NTM is available, load `/ntm` and `/vibing-with-ntm`, then use the canonical mixed ratio:
+2. **Spawn three planners.** When NTM is available, load `/ntm` and `/vibing-with-ntm`. NTM spawns the Claude and Codex panes, then tmux adds the Pi pane to the same session:
 
    ```bash
    SESSION="${NTM_PROJECT}--deep-plan-<slug>"
-   ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
+   ntm spawn "$NTM_PROJECT" --label deep-plan-<slug> --no-user --cc=1 --cod=1 --stagger-mode=smart
+   PI_PANE=$(tmux split-window -t "$SESSION:0" -v -c "$PWD" -P -F '#{pane_id}' \
+     pi --model "$PI_MODEL" --thinking high --no-approve --name deep-plan-ergonomics "<ergonomics planner prompt>")
+   tmux set-option -p -t "$PI_PANE" remain-on-exit on
+   tmux select-layout -t "$SESSION:0" even-vertical
    ```
 
-   Assign pane 1 to correctness, pane 2 to ergonomics, and pane 3 to robustness. Dispatch with `ntm --robot-send`; plain `ntm send` can stop at the CASS dedup prompt.
+   Claude takes correctness. Codex takes robustness, matching the robustness entry from `flywheel_plan`. Pi takes ergonomics plus the task of the `fresh-perspective` entry, so deep plan runs three planners. Pi gets its prompt at launch, and `remain-on-exit` keeps its last output readable after it exits. `--no-approve` makes Pi skip the repo's project-local Pi files and project MCP servers for this run, so the pane can't stop at a trust or "Allow project MCP server" prompt; AGENTS.md and CLAUDE.md still load. Put a long prompt in a small launcher script so quoting can't break the command. Dispatch the two NTM panes with `ntm --robot-send`; plain `ntm send` can stop at the CASS dedup prompt.
 
    ```bash
-   ntm --robot-send="$SESSION" --panes=1 --msg="<correctness planner prompt>"
-   ntm --robot-send="$SESSION" --panes=2 --msg="<ergonomics planner prompt>"
-   ntm --robot-send="$SESSION" --panes=3 --msg="<robustness planner prompt>"
+   ntm --robot-send="$SESSION" --type=cc --msg="<correctness planner prompt>"
+   ntm --robot-send="$SESSION" --type=cod --msg="<robustness planner prompt>"
    ```
 
-   Use `--panes=N`. The singular `--pane=N` broadcasts. When an index is known, omit `--type=` because combining it with `--panes` can match no pane during startup. Send a ping first and require `successful: ["N"]`.
+   Address the NTM panes by `--type=` because a `--no-user` session can start at pane index 0 and each type has one pane here. Don't combine `--type=` with `--panes`, which can match no pane during startup. Send a ping first and require one successful pane.
 
-   Each planner calls `macro_start_session`, reads the goal, repository context, and relevant memory, writes `docs/plans/<date>-<perspective>.md`, then mails the path under `[deep-plan] <perspective> plan`. Pass the project as the positional NTM argument and the purpose through `--label` so the session resolves inside `projects_base`.
+   Each planner calls `macro_start_session`, reads the goal, repository context, and relevant memory, writes `docs/plans/<date>-<perspective>.md`, then mails the path under `[deep-plan] <perspective> plan`. Because `--no-approve` skips the repo's `.mcp.json`, the Pi pane usually has no Agent Mail MCP tools, so its prompt tells it to register with `am macros start-session --project "$PWD" --program pi --model "$PI_MODEL" --task "ergonomics planning"` and to mail its path with `am mail send --project "$PWD" --from "<its agent name>" --to "<coordinator>" --subject "[deep-plan] ergonomics plan" --body "<path>"`. Pass the project as the positional NTM argument and the purpose through `--label` so the session resolves inside `projects_base`.
 
    When NTM is unavailable, spawn the same three perspectives as background agents. Save their task ids, require the same files and mail subjects, and force-stop an unresponsive task.
 
-3. **Tend and collect.** Follow `/vibing-with-ntm`. Wait on the live robot surfaces and cross-check Agent Mail. `ntm status` is stale, `ntm send` can stop for dedup confirmation, and `ntm view` changes the user's layout; use `--robot-is-working`, `--robot-tail`, and `--robot-send`. Read delivered plan paths from disk and commit each perspective plan when it lands. Shutdown messages go to each agent by name because they cannot be broadcast.
+3. **Tend and collect.** Follow `/vibing-with-ntm`. Wait on the live robot surfaces and cross-check Agent Mail. `ntm status` is stale, `ntm send` can stop for dedup confirmation, and `ntm view` changes the user's layout; use `--robot-is-working`, `--robot-tail`, and `--robot-send`. The Pi pane isn't an NTM agent type, so check it with `tmux capture-pane -p -t "$PI_PANE"` and `tmux display-message -p -t "$PI_PANE" '#{pane_dead}'`. If it exits before its plan lands, read its last lines, tell the user the ergonomics perspective is missing, and continue with the other two. Read delivered plan paths from disk and commit each perspective plan when it lands. Shutdown messages go to each agent by name because they cannot be broadcast.
 
 4. **Synthesize.** Spawn one synthesis agent:
    ```

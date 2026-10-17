@@ -249,6 +249,7 @@ State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 - Single-shot research / read-only Q&A subagents that produce no code and no PRs (e.g. `Explore`, `general-purpose` for one-off lookups). These can use the `Task`/`Agent` tool directly.
 - Single foreground `Bash` invocations that complete in-band (linter, test, build).
 - Codex-rescue / triangulation calls where the codex skill's contract explicitly handles the dispatch.
+- The Deep plan Pi pane. ntm 1.36.1 has no `pi` lane (`ntm spawn --pi=1` fails with `unknown flag: --pi`), so `skills/start/_planning.md` adds one Pi planner to the NTM-spawned deep-plan session with `tmux split-window`. The session and its other panes still come from `ntm spawn`.
 
 If you find yourself wanting to spawn N>1 coding workers without NTM, stop and load `/ntm` + `/vibing-with-ntm` first. Reviewers: reject PRs whose skill changes introduce non-NTM fan-out for implementation work.
 
@@ -272,6 +273,8 @@ Smaller swarms scale the ratio down (e.g. `--cc=1 --cod=1 --gmi=1` for three pan
 3. **All three peers unavailable → `cc`** (cc-only is the last-resort floor; it works, but it gives up the cross-agent fresh-eyes signal — operators should treat it as a degraded mode and log it).
 
 The same ladder runs lane-by-lane: a four-pane spawn that loses Gemini becomes `--cc=2 --cod=2`, not `--cc=4`. The operator preference for "pure cc" swarms is the explicit override that lands at step 3 — it is not the default.
+
+**Deep plan exception (2026-10-17).** Deep plan runs its third planner in Pi on a Gemini model instead of a Gemini CLI pane, by operator decision. The session is `--cc=1 --cod=1` plus one Pi pane added with `tmux split-window`. The model defaults to `vercel-ai-gateway/google/gemini-4-argon`, and `FW_PI_PLANNER_MODEL` overrides it. When Pi is missing or `pi auth check` fails, the lens goes to a second Claude pane (`--cc=2 --cod=1`). Duel plan and the planning-workflow review rounds keep the `gmi` lane.
 
 **Retired rules.**
 
