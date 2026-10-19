@@ -13,6 +13,7 @@ import { z } from "zod";
 import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
 import { getSkill, type GetSkillResult } from "../skills-bundle.js";
 import type { McpToolResult, ToolContext } from "../types.js";
+import { VERSION } from "../version.js";
 import { makeToolResult } from "./shared.js";
 
 const GetSkillInputSchema = z.object({
@@ -32,11 +33,13 @@ type GetSkillStructuredContent = {
   data: {
     kind: "skill";
     skill: GetSkillResult;
+    /** The running plugin's version, so the start screen needs no shell call to print it. */
+    pluginVersion: string;
   };
 };
 
 function renderSkillText(result: GetSkillResult): string {
-  const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}]`;
+  const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}, plugin v${VERSION}]`;
   return `${header}\n\n${result.body}`;
 }
 
@@ -69,7 +72,7 @@ export async function runGetSkill(
       version: 1,
       status: "ok",
       phase: "idle",
-      data: { kind: "skill", skill: result },
+      data: { kind: "skill", skill: result, pluginVersion: VERSION },
     };
     return makeToolResult(renderSkillText(result), structured);
   } catch (err: unknown) {

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { _resetSkillsBundleCache } from '../../skills-bundle.js';
 import { runGetSkill } from '../../tools/get-skill.js';
+import { VERSION } from '../../version.js';
 import { makeState } from '../helpers/mocks.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -169,6 +170,7 @@ describe('flywheel_get_skill result shape', () => {
     });
     expect(typeof skill?.body).toBe('string');
     expect(typeof skill?.frontmatter).toBe('object');
+    expect(data?.pluginVersion).toBe(VERSION);
   });
 
   it('returns not_found error envelope for missing skill', async () => {
@@ -191,6 +193,7 @@ describe('flywheel_get_skill result shape', () => {
     const text = result.content[0]?.text ?? '';
     expect(text).toContain('agent-flywheel:start');
     expect(text).toContain('bundle');
+    expect(text).toContain(`plugin v${VERSION}`);
   });
 });
 
