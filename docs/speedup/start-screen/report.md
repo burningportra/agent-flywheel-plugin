@@ -37,7 +37,7 @@ In a clean clone with the changes applied, vitest, lint:skill, prompt-budget, ch
 
 ## Round 2
 
-Round 2 (`agent-flywheel-plugin-lnr`) brought the start screen from a 45.25 s median (`f9b0e5f`) down to 32.00 s (`9db9519`) and 36.15 s (`4236e36`, after restoring three verbatim first-sentence CASS learnings), over 2.3× faster than the 84.0 s v3.23.0 baseline.
+Round 2 (`agent-flywheel-plugin-lnr`) kept three changes. Each one beat or matched its own baseline in an interleaved A/B: 45.25 → 42.40 s, 46.00 → 32.00 s, and 33.80 → 36.15 s for the content fix. Those medians come from separate sessions, and identical arms differ by up to 5.75 s, so they don't chain into one end-to-end number. No A/B ran the final `4236e36` directly against `f9b0e5f` or v3.23.0, because `claude -p` hit the weekly usage limit first. Read the final median of about 32–36 s, against v3.23.0's 84.0 s in round 1, as an estimate of roughly 2.3× rather than a measured ratio.
 
 ### Noise floor
 
@@ -66,5 +66,5 @@ A 4-round interleaved baseline-versus-baseline run (`f9b0e5f` vs `f9b0e5f`) meas
 ### Built but unmeasured (saved as patch)
 
 - **Hypothesis 3: `withStartState` opt-in on `flywheel_get_skill`** (`docs/speedup/start-screen/round2-h3-with-start-state.patch`, follow-up bead `agent-flywheel-plugin-d7o`). Adds `withStartState?: boolean` to `flywheel_get_skill` so `commands/start.md` can preload `doctor`, `observe`, and both `history: 0` `flywheel_memory` searches in parallel during the Turn 2 skill fetch, eliminating Turn 3. Built and verified against unit tests (`11/11` in `get-skill.test.ts`, plus `pointer-command-guard`, `lint:skill`, `prompt-budget`, `check:skills-bundle`, and `dead-code`), but the 12-round A/B benchmark could not run because `claude -p` hit the account weekly usage limit (`HTTP 429 usage_limit_reached`, resets Oct 21 at 10pm America/New_York). Per protocol, the unmeasured change was not committed to `mcp-server/src/`; its diff is saved at `docs/speedup/start-screen/round2-h3-with-start-state.patch` and tracked in `agent-flywheel-plugin-d7o`.
-- **Hypothesis 4: `ToolSearch` deferral.** Claude Code's session initialization defers MCP tool schemas above its client-side threshold and requires `ToolSearch` before invoking deferred tools; `.claude-plugin/plugin.json` has no manifest option to bypass tool deferral from the plugin side.
+- **Hypothesis 4: `ToolSearch` deferral.** Not tried. `.claude-plugin/plugin.json` has no field that controls whether Claude Code defers a plugin's MCP tools. Nobody checked whether a Claude Code user setting can turn deferral off.
 
