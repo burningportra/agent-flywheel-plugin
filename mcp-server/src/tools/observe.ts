@@ -85,6 +85,7 @@ const CheckpointSectionSchema = z.object({
 const BeadCountsSchema = z.object({
   open: z.number().int().nonnegative(),
   in_progress: z.number().int().nonnegative(),
+  blocked: z.number().int().nonnegative().optional(),
   closed: z.number().int().nonnegative(),
   deferred: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
@@ -289,6 +290,39 @@ function readCheckpointSection(
   }
 }
 
+const COUNTED_STATUSES = ['open', 'in_progress', 'blocked', 'closed', 'deferred'] as const;
+
+const BrCountSchema = z.object({
+  total: z.number().int().nonnegative(),
+  groups: z.array(z.object({ group: z.string(), count: z.number().int().nonnegative() })),
+});
+
+/**
+ * Exact per-status totals from `br count`, which, unlike `br list`, has no
+ * row limit and includes blocked beads. Null when this br can't count.
+ */
+async function countBeadsByStatus(
+  ctx: ToolContext,
+): Promise<z.infer<typeof BeadCountsSchema> | null> {
+  try {
+    const result = await ctx.exec(
+      'br',
+      ['count', '--by', 'status', ...COUNTED_STATUSES.flatMap((status) => ['--status', status]), '--json'],
+      { timeout: PROBE_TIMEOUT_MS, cwd: ctx.cwd, signal: ctx.signal },
+    );
+    if (result.code !== 0) return null;
+    const parsed = BrCountSchema.safeParse(JSON.parse(result.stdout));
+    if (!parsed.success) return null;
+    const counts = { open: 0, in_progress: 0, blocked: 0, closed: 0, deferred: 0, total: parsed.data.total };
+    for (const { group, count } of parsed.data.groups) {
+      if ((COUNTED_STATUSES as readonly string[]).includes(group)) counts[group as (typeof COUNTED_STATUSES)[number]] = count;
+    }
+    return counts;
+  } catch {
+    return null;
+  }
+}
+
 async function probeBeads(
   ctx: ToolContext,
 ): Promise<z.infer<typeof BeadsSectionSchema>> {
@@ -299,6 +333,12 @@ async function probeBeads(
     deferred: 0,
     total: 0,
   };
+
+  const readyProbe = probeReadyBeads(ctx);
+  const counted = await countBeadsByStatus(ctx);
+  if (counted) {
+    return { initialized: true, counts: counted, ready: await readyProbe };
+  }
 
   let listResult: { code: number; stdout: string; stderr: string };
   try {
@@ -348,9 +388,21 @@ async function probeBeads(
     }
   }
 
-  // "ready" beads: open + no unmet dependencies. We approximate via `br ready`
-  // — falling back to "all open" if the subcommand is unavailable so we never
-  // fail the whole tool.
+  return {
+    initialized: true,
+    counts,
+    ready: await readyProbe,
+    ...(parsed.rejected > 0
+      ? { warning: `${parsed.rejected} bead row(s) rejected by parser` }
+      : {}),
+  };
+}
+
+// "ready" beads: open + no unmet dependencies, from `br ready`. Optional, so
+// a failure leaves the list empty instead of failing the whole tool.
+async function probeReadyBeads(
+  ctx: ToolContext,
+): Promise<z.infer<typeof BeadReadyRowSchema>[]> {
   let ready: z.infer<typeof BeadReadyRowSchema>[] = [];
   try {
     const readyResult = await ctx.exec(
@@ -369,15 +421,7 @@ async function probeBeads(
   } catch {
     // ready is optional — degrade silently.
   }
-
-  return {
-    initialized: true,
-    counts,
-    ready,
-    ...(parsed.rejected > 0
-      ? { warning: `${parsed.rejected} bead row(s) rejected by parser` }
-      : {}),
-  };
+  return ready;
 }
 
 async function probeAgentMail(
@@ -737,7 +781,7 @@ function renderObserveText(report: FlywheelObserveReport): string {
     lines.push(`  beads: unavailable (${report.beads.warning})`);
   } else {
     lines.push(
-      `  beads: ${report.beads.counts.total} total | ${report.beads.counts.open} open, ${report.beads.counts.in_progress} in-progress, ${report.beads.counts.closed} closed | ${report.beads.ready.length} ready`,
+      `  beads: ${report.beads.counts.total} total | ${report.beads.counts.open} open, ${report.beads.counts.in_progress} in-progress, ${report.beads.counts.blocked ?? 0} blocked, ${report.beads.counts.closed} closed | ${report.beads.ready.length} ready`,
     );
   }
   lines.push(
