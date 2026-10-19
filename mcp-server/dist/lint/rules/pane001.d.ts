@@ -4,10 +4,12 @@ import type { Rule, RuleContext } from "../types.js";
  * skill bodies (`skills/start/SKILL.md`, `skills/start/_*.md`).
  *
  * AGENTS.md's "## NTM pane priority" section names the canonical pane ratio
- * (cc:cod:gem 1:1:1 as of v3.17.0) and substitution ladder
- * (gmi→cod→pi→cc). When a skill file embeds an `ntm spawn` invocation with
- * a non-canonical lane mix and no nearby "override" marker, the rule fires
- * an `error`-severity PANE001 finding.
+ * (cc:pi:gem 1:1:1 as of v3.21.0) and substitution ladder
+ * (gmi→pi→cod→cc). When a skill file embeds an `ntm spawn` or
+ * `swarm-spawn.js` invocation with a non-canonical lane mix and no nearby
+ * override marker, the rule fires an `error`-severity PANE001 finding. ntm
+ * has no Pi agent type, so `--pi=N` on a plain `ntm spawn` line is always a
+ * finding: Pi lanes go through `swarm-spawn.js`.
  *
  * Override markers (recognised within ±6 lines of the offending line) let
  * a skill intentionally diverge — e.g. `_deslop.md`'s "5-Cod swarm —
@@ -38,23 +40,27 @@ export interface Pane001Context extends RuleContext {
     /** Override the parsed canonical (tests inject for fixture-based behaviour). */
     canonical?: CanonicalRule;
 }
+export type Lane = "cc" | "cod" | "gmi" | "pi";
 export interface CanonicalRule {
-    /** Required lanes — order-sensitive when rendering. */
-    lanes: Array<"cc" | "cod" | "gmi" | "pi">;
-    /** Ratio expressed as integers, indexed by `lanes`. e.g. [1,1,1] for cc:cod:gem 1:1:1. */
+    /** Required lanes, cc first — order-sensitive when rendering. */
+    lanes: Lane[];
+    /** Ratio expressed as integers, indexed by `lanes`. e.g. [1,1,1] for cc:pi:gem 1:1:1. */
     ratio: number[];
     /** Substitution ladder; first entry is the lane that gets reassigned when missing. */
-    ladder: Array<"cc" | "cod" | "gmi" | "pi">;
-    /** Pinned doc version that introduced the rule (e.g. "v3.17.0"). */
+    ladder: Lane[];
+    /** Pinned doc version that introduced the rule (e.g. "v3.21.0"). */
     version: string | null;
 }
 /**
  * Parse AGENTS.md's "## NTM pane priority" section for the canonical rule.
  *
- * Looks for: a 1:1:1-style ratio (e.g. "cc:cod:gem 1:1:1") AND a substitution
- * ladder (e.g. "gmi→cod→pi→cc" or "gmi -> cod -> pi -> cc"). Returns null if
- * either is missing — the rule is then advisory-only (no findings emitted)
- * rather than firing against an unparseable AGENTS.md.
+ * Looks for a three-lane ratio whose first lane is cc (e.g. "cc:pi:gem
+ * 1:1:1"; "gem" is the prose form of the "gmi" flag) and a substitution
+ * ladder (e.g. "gmi→pi→cod→cc" or "gmi -> pi -> cod -> cc"). Returns null
+ * when the ratio is missing — the rule is then advisory-only (no findings
+ * emitted) rather than firing against an unparseable AGENTS.md. A missing
+ * ladder falls back to canonical peers first, then the remaining lanes,
+ * then cc.
  *
  * Exported for test access only.
  */
@@ -70,13 +76,14 @@ export declare function extractLaneCounts(line: string): Record<string, number>;
  * Validate an extracted lane-count map against the canonical ratio.
  *
  * Rules:
- *   - All lane counts non-negative integers.
- *   - The cc:cod:gem proportion (ignoring pi) must match canonical ratio
- *     after scaling, OR every requested lane is 0 (degraded mode).
- *   - `pi` is allowed in addition to canonical lanes ONLY when at least one
- *     of cod/gmi is 0 (per the substitution ladder gmi→cod→pi→cc — pi only
- *     enters when cod or gmi has been dropped). If pi is present with both
- *     cod>0 AND gmi>0, that's a violation.
+ *   - The canonical lanes' proportion must match the canonical ratio after
+ *     integer scaling. A canonical peer lane at 0 is a dropped lane, which
+ *     the substitution ladder permits.
+ *   - A lane outside the canonical set (cod under cc:pi:gem) is a fallback.
+ *     It may appear only when at least one canonical peer is 0, because the
+ *     ladder brings it in only to cover a dropped lane.
+ *   - When every canonical peer is 0 the spawn is a cc-only or fallback-only
+ *     degraded shape, which the rule leaves to the override markers.
  *
  * Returns `null` if valid; otherwise an explanation string.
  */

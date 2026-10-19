@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import * as path from "node:path";
+const ALL_LANES = ["cc", "cod", "gmi", "pi"];
 /**
  * Canonical PANE001 override markers.
  *
@@ -14,13 +15,22 @@ const OVERRIDE_MARKERS = [
 /** Recognised NTM lane flags. `--gem=` is the deprecated synonym for `--gmi=`. */
 const LANE_FLAG_PATTERN = /--(cc|cod|gmi|gem|pi)=(\d+)/g;
 const OVERRIDE_PROXIMITY_LINES = 6;
+/** Commands that spawn swarm lanes. `swarm-spawn.js` adds Pi panes to an `ntm spawn` session. */
+const SPAWN_COMMANDS = ["swarm-spawn.js", "ntm spawn"];
+function toLane(token) {
+    const lower = token.toLowerCase();
+    return (lower === "gem" ? "gmi" : lower);
+}
 /**
  * Parse AGENTS.md's "## NTM pane priority" section for the canonical rule.
  *
- * Looks for: a 1:1:1-style ratio (e.g. "cc:cod:gem 1:1:1") AND a substitution
- * ladder (e.g. "gmi→cod→pi→cc" or "gmi -> cod -> pi -> cc"). Returns null if
- * either is missing — the rule is then advisory-only (no findings emitted)
- * rather than firing against an unparseable AGENTS.md.
+ * Looks for a three-lane ratio whose first lane is cc (e.g. "cc:pi:gem
+ * 1:1:1"; "gem" is the prose form of the "gmi" flag) and a substitution
+ * ladder (e.g. "gmi→pi→cod→cc" or "gmi -> pi -> cod -> cc"). Returns null
+ * when the ratio is missing — the rule is then advisory-only (no findings
+ * emitted) rather than firing against an unparseable AGENTS.md. A missing
+ * ladder falls back to canonical peers first, then the remaining lanes,
+ * then cc.
  *
  * Exported for test access only.
  */
@@ -31,44 +41,27 @@ export function parseCanonicalFromAgentsMd(content) {
     const body = sectionRe.exec(content)?.[0];
     if (body === undefined)
         return null;
-    // Ratio: cc:cod:gem 1:1:1 (the documented form; lanes always cc/cod/gem
-    // because "gem" is the prose form for the "gmi" flag). Tolerate optional
-    // backticks and whitespace between "gem" and the digit triple — markdown
-    // renderings commonly wrap the lane name as `cc:cod:gem` for code styling.
-    const ratioRe = /cc:cod:gem[`\s]*(\d+):(\d+):(\d+)/i;
+    // Tolerate backticks and whitespace between the lane triple and the digit
+    // triple — markdown renderings commonly wrap it as `cc:pi:gem`.
+    const ratioRe = /\bcc:(cod|gem|gmi|pi):(cod|gem|gmi|pi)[`\s]*(\d+):(\d+):(\d+)/i;
     const ratioMatch = ratioRe.exec(body);
     if (ratioMatch === null)
         return null;
-    const [, ccRatio, codRatio, gemRatio] = ratioMatch;
-    const ratio = [Number(ccRatio), Number(codRatio), Number(gemRatio)];
-    // Substitution ladder. Two accepted forms:
-    //   inline arrow form:  "gmi→cod→pi→cc" or "gmi -> cod -> pi -> cc"
-    //   list-step form:     "Missing `gmi` → `cod`" + "`cod` also unavailable → `pi`" + …
-    // We try the inline form first; fall back to scanning the body for the
-    // canonical lane-order pattern (gmi, cod, pi, cc) appearing in order. If
-    // neither matches but the ratio is present, we assume the documented
-    // default ladder (gmi → cod → pi → cc).
-    let ladder = ["gmi", "cod", "pi", "cc"];
+    const [, second, third, ccRatio, secondRatio, thirdRatio] = ratioMatch;
+    const lanes = ["cc", toLane(second), toLane(third)];
+    const ratio = [Number(ccRatio), Number(secondRatio), Number(thirdRatio)];
+    const peers = lanes.slice(1).reverse();
+    let ladder = [...peers, ...ALL_LANES.filter((lane) => !lanes.includes(lane)), "cc"];
     const inlineLadderRe = /\b(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)/i;
     const inlineMatch = inlineLadderRe.exec(body);
     if (inlineMatch !== null) {
-        ladder = [
-            inlineMatch[1].toLowerCase(),
-            inlineMatch[2].toLowerCase(),
-            inlineMatch[3].toLowerCase(),
-            inlineMatch[4].toLowerCase(),
-        ];
+        ladder = inlineMatch.slice(1, 5).map((token) => toLane(token));
     }
-    // Optional version pin (e.g. "Changed in v3.17.0" or "as of v3.17.0").
+    // Optional version pin (e.g. "Changed in v3.21.0" or "as of v3.21.0").
     const versionRe = /v(\d+\.\d+(?:\.\d+)?)/;
     const versionMatch = versionRe.exec(body);
     const version = versionMatch ? `v${versionMatch[1]}` : null;
-    return {
-        lanes: ["cc", "cod", "gmi"],
-        ratio,
-        ladder,
-        version,
-    };
+    return { lanes, ratio, ladder, version };
 }
 /**
  * Extract `--cc=N --cod=M --gmi=K --pi=L` style ratios from a single line.
@@ -92,65 +85,52 @@ export function extractLaneCounts(line) {
  * Validate an extracted lane-count map against the canonical ratio.
  *
  * Rules:
- *   - All lane counts non-negative integers.
- *   - The cc:cod:gem proportion (ignoring pi) must match canonical ratio
- *     after scaling, OR every requested lane is 0 (degraded mode).
- *   - `pi` is allowed in addition to canonical lanes ONLY when at least one
- *     of cod/gmi is 0 (per the substitution ladder gmi→cod→pi→cc — pi only
- *     enters when cod or gmi has been dropped). If pi is present with both
- *     cod>0 AND gmi>0, that's a violation.
+ *   - The canonical lanes' proportion must match the canonical ratio after
+ *     integer scaling. A canonical peer lane at 0 is a dropped lane, which
+ *     the substitution ladder permits.
+ *   - A lane outside the canonical set (cod under cc:pi:gem) is a fallback.
+ *     It may appear only when at least one canonical peer is 0, because the
+ *     ladder brings it in only to cover a dropped lane.
+ *   - When every canonical peer is 0 the spawn is a cc-only or fallback-only
+ *     degraded shape, which the rule leaves to the override markers.
  *
  * Returns `null` if valid; otherwise an explanation string.
  */
 export function validateLaneCounts(counts, canonical) {
-    const cc = counts["cc"] ?? 0;
-    const cod = counts["cod"] ?? 0;
-    const gmi = counts["gmi"] ?? 0;
-    const pi = counts["pi"] ?? 0;
-    const total = cc + cod + gmi + pi;
-    if (total === 0)
-        return null; // no panes at all — not our concern
-    // Pi gate: pi may only appear when at least one of cod/gmi is 0 (lower in
-    // the ladder).
-    if (pi > 0 && cod > 0 && gmi > 0) {
-        return `--pi=${pi} present alongside both --cod=${cod} AND --gmi=${gmi}; per substitution ladder ${canonical.ladder.join("→")} pi only enters when cod or gmi is downgraded`;
-    }
-    // If no cod and no gmi requested at all, this is an all-cc or all-pi spawn.
-    // Treated as a documented exception path (handled by override marker check
-    // upstream). Don't fire here.
-    if (cod === 0 && gmi === 0)
+    const count = (lane) => counts[lane] ?? 0;
+    if (ALL_LANES.reduce((sum, lane) => sum + count(lane), 0) === 0)
         return null;
-    // Canonical proportion check on the cc:cod:gem axes. We allow any common
-    // multiplier (1:1:1 → 1/1/1, 2/2/2, 3/3/3, …). Skip the check if cc is 0
-    // (degraded mode with cc dropped — rare but technically valid via ladder).
-    if (cc === 0) {
-        return `--cc=0 with --cod=${cod} or --gmi=${gmi} non-zero; canonical baseline requires cc>0 (cc:cod:gem ${canonical.ratio.join(":")})`;
-    }
-    const [rc, rco, rgm] = canonical.ratio;
-    if (rc === 0)
-        return null; // canonical doesn't constrain cc (defensive)
-    // Each lane present (>0) must scale by the same multiple of canonical.
-    // Lanes equal to 0 are skipped — the substitution ladder permits any lane
-    // to drop out (as long as the pi gate above is satisfied).
-    const multipliers = [];
-    if (cc > 0)
-        multipliers.push(cc / rc);
-    if (cod > 0 && rco > 0)
-        multipliers.push(cod / rco);
-    if (gmi > 0 && rgm > 0)
-        multipliers.push(gmi / rgm);
-    if (multipliers.length < 2)
-        return null; // only one lane has signal — can't compare
-    const m0 = multipliers[0];
-    for (const m of multipliers) {
-        if (Math.abs(m - m0) > 0.001) {
-            return `lane ratio ${cc}:${cod}:${gmi} (cc:cod:gmi) does not match canonical ${canonical.ratio.join(":")} (cc:cod:gem). Expected each present lane to scale by the same integer multiple of canonical, e.g. --cc=2 --cod=2 --gmi=2 or --cc=3 --cod=3 --gmi=3.`;
+    const [primary, ...peers] = canonical.lanes;
+    const fallbacks = ALL_LANES.filter((lane) => !canonical.lanes.includes(lane));
+    const shape = canonical.lanes.join(":");
+    const ladder = canonical.ladder.join("→");
+    if (peers.every((lane) => count(lane) > 0)) {
+        for (const lane of fallbacks) {
+            if (count(lane) > 0) {
+                return `--${lane}=${count(lane)} present alongside ${peers.map((peer) => `--${peer}=${count(peer)}`).join(" AND ")}; per substitution ladder ${ladder} ${lane} only enters when ${peers.join(" or ")} is downgraded`;
+            }
         }
     }
-    // Multipliers also need to be (near) integer — non-integer indicates an
-    // ad-hoc ratio rather than a scaling of canonical.
+    if (peers.every((lane) => count(lane) === 0))
+        return null;
+    if (count(primary) === 0) {
+        return `--${primary}=0 with ${peers.map((peer) => `--${peer}=${count(peer)}`).join(" or ")} non-zero; canonical baseline requires ${primary}>0 (${shape} ${canonical.ratio.join(":")})`;
+    }
+    // Each canonical lane present (>0) must scale by the same multiple.
+    const multipliers = canonical.lanes.flatMap((lane, index) => {
+        const ratio = canonical.ratio[index] ?? 0;
+        return count(lane) > 0 && ratio > 0 ? [count(lane) / ratio] : [];
+    });
+    if (multipliers.length < 2)
+        return null;
+    const m0 = multipliers[0];
+    const observed = canonical.lanes.map((lane) => count(lane)).join(":");
+    if (multipliers.some((m) => Math.abs(m - m0) > 0.001)) {
+        const example = (n) => canonical.lanes.map((lane, i) => `--${lane}=${n * (canonical.ratio[i] ?? 1)}`).join(" ");
+        return `lane ratio ${observed} (${shape}) does not match canonical ${canonical.ratio.join(":")} (${shape}). Expected each present lane to scale by the same integer multiple of canonical, e.g. ${example(2)} or ${example(3)}.`;
+    }
     if (Math.abs(m0 - Math.round(m0)) > 0.001) {
-        return `lane multiplier ${m0.toFixed(2)} is non-integer (cc=${cc} cod=${cod} gmi=${gmi}); canonical ${canonical.ratio.join(":")} must be scaled by an integer factor`;
+        return `lane multiplier ${m0.toFixed(2)} is non-integer (${shape} ${observed}); canonical ${canonical.ratio.join(":")} must be scaled by an integer factor`;
     }
     return null;
 }
@@ -222,10 +202,11 @@ function hasOverrideMarkerNear(source, zeroBasedLine, proximityLines) {
  * Exported for test access.
  */
 export function extractSpawnSubstring(line) {
-    if (!line.includes("ntm spawn"))
+    const command = SPAWN_COMMANDS.find((name) => line.includes(name));
+    if (command === undefined)
         return null;
     // Try backtick-delimited form first.
-    const backtickRe = /`([^`]*?ntm spawn[^`]*)`/;
+    const backtickRe = new RegExp(`\`([^\`]*?${command.replace(/[.]/g, "\\.")}[^\`]*)\``);
     const m = backtickRe.exec(line);
     if (m !== null)
         return m[1];
@@ -251,6 +232,19 @@ function scanLine(source, lineIndex, line, canonical, file) {
         return null;
     if (Object.values(counts).reduce((a, b) => a + b, 0) === 0)
         return null;
+    const rawNtm = !spawnSubstring.includes("swarm-spawn.js");
+    // ntm has no Pi agent type, so no override marker can make this line run.
+    if (rawNtm && (counts["pi"] ?? 0) > 0) {
+        return {
+            ruleId: "PANE001",
+            severity: "error",
+            file,
+            line: lineIndex + 1,
+            column: 1,
+            message: `ntm spawn has no pi lane (ntm rejects --pi=${counts["pi"]} with "unknown flag: --pi")`,
+            hint: 'Spawn Pi lanes with node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> --label <label> --pi=N --pi-model=<model>, which runs ntm spawn for the other lanes.',
+        };
+    }
     const verdict = validateLaneCounts(counts, canonical);
     if (verdict === null)
         return null;
@@ -262,8 +256,8 @@ function scanLine(source, lineIndex, line, canonical, file) {
         file,
         line: lineIndex + 1,
         column: 1,
-        message: `NTM pane priority drift from AGENTS.md canonical (cc:cod:gem ${canonical.ratio.join(":")}${canonical.version ? `, ${canonical.version}` : ""}): ${verdict}`,
-        hint: `Either align the spawn shape with the canonical ratio + substitution ladder (${canonical.ladder.join("→")}), or document the divergence with an "explicit override" marker within ±6 lines so reviewers see the intent.`,
+        message: `NTM pane priority drift from AGENTS.md canonical (${canonical.lanes.join(":")} ${canonical.ratio.join(":")}${canonical.version ? `, ${canonical.version}` : ""}): ${verdict}`,
+        hint: `Either align the spawn shape with the canonical ratio + substitution ladder (${canonical.ladder.join("→")}), or document the divergence with a PANE001-OVERRIDE: marker within ±6 lines so reviewers see the intent.`,
     };
 }
 async function scanFile(rel, abs, canonical) {
@@ -274,7 +268,7 @@ async function scanFile(rel, abs, canonical) {
     catch {
         return [];
     }
-    if (!source.includes("ntm spawn"))
+    if (!SPAWN_COMMANDS.some((command) => source.includes(command)))
         return [];
     const findings = [];
     const lines = source.split("\n");
@@ -287,7 +281,7 @@ async function scanFile(rel, abs, canonical) {
 }
 export const pane001 = {
     id: "PANE001",
-    description: "NTM pane-priority spawn shapes in skill files must match AGENTS.md canonical (cc:cod:gem 1:1:1) or document an explicit override.",
+    description: "NTM pane-priority spawn shapes in skill files must match AGENTS.md canonical (cc:pi:gem 1:1:1) or document an explicit override.",
     severity: "error",
     async check(doc, ctx) {
         const rc = ctx;
@@ -314,7 +308,7 @@ export const pane001 = {
         const findings = [];
         // First check the Document itself (typically SKILL.md).
         const docPath = doc.filePath ?? rc.filePath;
-        if (docPath && doc.source.includes("ntm spawn")) {
+        if (docPath && SPAWN_COMMANDS.some((command) => doc.source.includes(command))) {
             const lines = doc.source.split("\n");
             for (let i = 0; i < lines.length; i++) {
                 const f = scanLine(doc.source, i, lines[i], canonical, docPath);

@@ -88,7 +88,7 @@ export function allGreenStubs() {
         { match: (cmd, args) => cmd === 'git' && args[0] === 'rev-parse', respond: ok('abc123') },
         { match: (cmd, args) => cmd === 'git' && args[0] === 'status', respond: ok('') },
         { match: (cmd, args) => cmd === 'git' && args[0] === 'worktree', respond: ok('') },
-        // Swarm-agent CLI detection (claude/codex/gemini at 1:1:1).
+        // Swarm-agent CLI detection (claude/pi/gemini at 1:1:1, codex fallback).
         {
             match: (cmd, args) => cmd === 'which' && args[0] === 'claude',
             respond: ok('/usr/local/bin/claude'),
@@ -100,6 +100,14 @@ export function allGreenStubs() {
         {
             match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
             respond: ok('/usr/local/bin/gemini'),
+        },
+        {
+            match: (cmd, args) => cmd === 'which' && args[0] === 'pi',
+            respond: ok('/usr/local/bin/pi'),
+        },
+        {
+            match: (cmd, args) => cmd === 'pi' && args[0] === 'auth' && args[1] === 'check',
+            respond: ok('ready'),
         },
         // Orphan tender-daemons (n3a) — no daemons running → green.
         {

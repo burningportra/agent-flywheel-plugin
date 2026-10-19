@@ -34,7 +34,6 @@ export const FLYWHEEL_ENV_VARS = {
     FW_GRADER_TIMEOUT_MS: 'Per-grader-invocation timeout in milliseconds. Default: 180000.',
     FW_LOG_LEVEL: '"debug" | "info" | "warn" | "error" — server log verbosity. Set to "debug" when triaging tool failures.',
     FW_MAX_OUTCOME_ITERATIONS: 'Server-side cap on outcome-grading iterations per cycle. Default: 5.',
-    FW_PI_PLANNER_MODEL: 'Model the deep-plan Pi planner passes to pi --model. Default: "vercel-ai-gateway/google/gemini-4-argon". A value with characters outside a model id falls back to the default.',
     FW_RUBRIC_SYNTH_TIMEOUT_MS: 'Per-call timeout for flywheel_synthesize_rubric. Default: 180000.',
     FW_SESSION_ID: 'Session id used for telemetry correlation; auto-generated if unset.',
     FW_SKILL_BUNDLE: 'Override path to the skills bundle used by flywheel_get_skill. When unset the server reads from the plugin install root.',

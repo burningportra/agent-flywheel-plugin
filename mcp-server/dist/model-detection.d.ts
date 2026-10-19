@@ -4,7 +4,6 @@
  * Agent-facing roles use stable model aliases. Provider model IDs remain here
  * only for capability reporting and CLI compatibility checks.
  */
-import type { ExecFn } from './exec.js';
 export declare const AGENT_MODEL_ALIASES: {
     readonly opus: "opus";
     readonly sonnet: "sonnet";
@@ -25,11 +24,6 @@ export declare const DEEP_PLAN_MODELS: {
     readonly synthesis: "opus";
 };
 export declare const REFINEMENT_MODELS: readonly AgentModelAlias[];
-export interface PiPlannerDispatch {
-    runner: 'pi-pane';
-    provider: 'pi';
-    piModel: string;
-}
 export interface ModelProvider {
     name: string;
     prefix: string;
@@ -83,23 +77,7 @@ export declare const MODEL_ROUTING_TIERS: {
  * In MCP context, the caller can pass available model IDs from the runtime.
  */
 export declare function detectAvailableModels(availableModelIds?: string[]): DetectedModels;
-export interface DeepPlanModelSelection {
-    correctness: AgentModelAlias;
-    ergonomics: AgentModelAlias;
-    synthesis: AgentModelAlias;
-    freshPerspective: PiPlannerDispatch | null;
-}
-export declare function getDeepPlanModels(capabilities?: {
-    piAvailable?: boolean;
-    piModel?: string;
-}): DeepPlanModelSelection;
 export declare function getRefinementModel(round: number): AgentModelAlias;
-/** Probes `which pi`; the Pi pane reports provider auth and model errors when it starts. */
-export declare function isPiPlannerCliAvailable(exec: ExecFn, options: {
-    cwd: string;
-    signal?: AbortSignal;
-    timeout?: number;
-}): Promise<boolean>;
 export declare const GEMINI_MODEL_ALLOWLIST: readonly string[];
 export declare function isGeminiModelAllowed(model: string): boolean;
 /**

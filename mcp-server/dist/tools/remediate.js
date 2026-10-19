@@ -42,6 +42,8 @@ export const REMEDIATION_REGISTRY = {
     claude_cli: null,
     codex_cli: null,
     gemini_cli: null,
+    // Pi install and `pi auth login` are user-managed.
+    pi_cli: null,
     swarm_model_ratio: null,
     // claude-orchestrator-3s58 — comment out top-level `model = "gpt-5*"` /
     // `"o4-mini*"` line in ~/.codex/config.toml so the codex-companion

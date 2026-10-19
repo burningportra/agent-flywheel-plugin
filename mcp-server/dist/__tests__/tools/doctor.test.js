@@ -89,7 +89,7 @@ function allGreenStubs() {
             match: (cmd, args) => cmd === 'git' && args[0] === 'worktree',
             respond: ok(''),
         },
-        // Swarm-agent CLI detection (claude/codex/gemini at 1:1:1).
+        // Swarm-agent CLI detection (claude/pi/gemini at 1:1:1, codex fallback).
         {
             match: (cmd, args) => cmd === 'which' && args[0] === 'claude',
             respond: ok('/usr/local/bin/claude'),
@@ -101,6 +101,14 @@ function allGreenStubs() {
         {
             match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
             respond: ok('/usr/local/bin/gemini'),
+        },
+        {
+            match: (cmd, args) => cmd === 'which' && args[0] === 'pi',
+            respond: ok('/usr/local/bin/pi'),
+        },
+        {
+            match: (cmd, args) => cmd === 'pi' && args[0] === 'auth' && args[1] === 'check',
+            respond: ok('ready'),
         },
         // Orphan tender-daemons (n3a) — no tender-daemons running → green.
         {
@@ -751,6 +759,53 @@ describe('isGeminiModelAllowed', () => {
     });
     it('is case-insensitive and trims whitespace', () => {
         expect(isGeminiModelAllowed('  Gemini-3.1-Flash-Preview  ')).toBe(true);
+    });
+});
+describe('pi_cli and swarm_model_ratio', () => {
+    async function sweep(stubs) {
+        const cwd = makeTmpCwd();
+        try {
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec([...stubs, ...allGreenStubs()]),
+                codexConfigPath: null,
+            });
+            return {
+                pi: report.checks.find((c) => c.name === 'pi_cli'),
+                ratio: report.checks.find((c) => c.name === 'swarm_model_ratio'),
+            };
+        }
+        finally {
+            cleanup(cwd);
+        }
+    }
+    it('green with the Claude:Pi:Gemini ratio when Pi is installed and authed', async () => {
+        const { pi, ratio } = await sweep([]);
+        expect(pi.severity).toBe('green');
+        expect(pi.message).toBe('pi cli at /usr/local/bin/pi');
+        expect(ratio.severity).toBe('green');
+        expect(ratio.message).toBe('claude+pi+gemini available; ratio 1:1:1 achievable; codex fallback available');
+    });
+    it('yellow "not ready" when pi is on PATH but the gateway auth check fails', async () => {
+        const { pi, ratio } = await sweep([
+            {
+                match: (cmd, args) => cmd === 'pi' && args[0] === 'auth',
+                respond: { result: { code: 1, stdout: 'not_ready', stderr: '' } },
+            },
+        ]);
+        expect(pi.severity).toBe('yellow');
+        expect(pi.message).toBe('pi cli not ready (pi auth check for vercel-ai-gateway: not_ready)');
+        expect(ratio.severity).toBe('yellow');
+        expect(ratio.message).toContain('pi missing; ratio 1:0:1 achievable; codex fallback available');
+    });
+    it('yellow "not installed" when which finds no pi', async () => {
+        const { pi } = await sweep([
+            {
+                match: (cmd, args) => cmd === 'which' && args[0] === 'pi',
+                respond: { result: { code: 1, stdout: '', stderr: '' } },
+            },
+        ]);
+        expect(pi.severity).toBe('yellow');
+        expect(pi.message).toContain('pi cli not installed');
     });
 });
 describe('gemini_model_compat (integrated)', () => {

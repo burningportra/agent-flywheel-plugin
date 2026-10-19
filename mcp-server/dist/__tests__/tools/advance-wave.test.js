@@ -55,7 +55,7 @@ function makeCtx(stateOverrides = {}, execCalls = [], capabilityCalls = availabl
     };
     return { ctx, state };
 }
-function availableCliCalls(gemini = true) {
+function availableCliCalls(gemini = true, pi = true) {
     return [
         {
             cmd: 'which',
@@ -77,7 +77,14 @@ function availableCliCalls(gemini = true) {
         {
             cmd: 'which',
             args: ['pi'],
-            result: { code: 1, stdout: '', stderr: 'pi not found' },
+            result: pi
+                ? { code: 0, stdout: '/bin/pi\n', stderr: '' }
+                : { code: 1, stdout: '', stderr: 'pi not found' },
+        },
+        {
+            cmd: 'pi',
+            args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--no-refresh'],
+            result: { code: 0, stdout: 'ready\n', stderr: '' },
         },
     ];
 }
@@ -190,7 +197,7 @@ describe('runAdvanceWave', () => {
         expect(data.nextWave.beadIds).toEqual(['next-1', 'next-2', 'next-3']);
         expect(data.nextWave.lanes).toEqual([
             { lane: 'cc', beadIds: ['next-1'] },
-            { lane: 'cod', beadIds: ['next-2'] },
+            { lane: 'pi', beadIds: ['next-2'] },
             { lane: 'gmi', beadIds: ['next-3'] },
         ]);
         expect(data.nextWave.prompts.map((prompt) => ({
@@ -198,7 +205,7 @@ describe('runAdvanceWave', () => {
             lane: prompt.lane,
         }))).toEqual([
             { beadId: 'next-1', lane: 'cc' },
-            { beadId: 'next-2', lane: 'cod' },
+            { beadId: 'next-2', lane: 'pi' },
             { beadId: 'next-3', lane: 'gmi' },
         ]);
         for (const prompt of data.nextWave.prompts) {
@@ -285,14 +292,34 @@ describe('runAdvanceWave', () => {
         const result = await runAdvanceWave(ctx, { cwd: '/fake/project', closedBeadIds: ['prev-1'], maxNextWave: 5 });
         const data = result.structuredContent.data;
         const lanes = data.nextWave.prompts.map((prompt) => prompt.lane);
-        expect(lanes).toEqual(['cc', 'cc', 'cod', 'cod', 'gmi']);
+        expect(lanes).toEqual(['cc', 'cc', 'pi', 'pi', 'gmi']);
     });
-    it('reassigns a missing Gemini share to Codex', async () => {
+    it('reassigns a missing Gemini share to Pi', async () => {
         const nextBeads = Array.from({ length: 6 }, (_, index) => makeBead({
             id: `fallback-${index + 1}`,
             title: `Fallback ${index + 1}`,
         }));
         const { ctx } = makeCtx({}, [brShowClosed('prev-1'), brReadyCall(nextBeads)], availableCliCalls(false));
+        const result = await runAdvanceWave(ctx, {
+            cwd: '/fake/project',
+            closedBeadIds: ['prev-1'],
+            maxNextWave: 6,
+        });
+        const data = result.structuredContent.data;
+        expect(data.nextWave.lanes).toEqual([
+            { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
+            {
+                lane: 'pi',
+                beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
+            },
+        ]);
+    });
+    it('reassigns missing Gemini and Pi shares to Codex', async () => {
+        const nextBeads = Array.from({ length: 6 }, (_, index) => makeBead({
+            id: `fallback-${index + 1}`,
+            title: `Fallback ${index + 1}`,
+        }));
+        const { ctx } = makeCtx({}, [brShowClosed('prev-1'), brReadyCall(nextBeads)], availableCliCalls(false, false));
         const result = await runAdvanceWave(ctx, {
             cwd: '/fake/project',
             closedBeadIds: ['prev-1'],

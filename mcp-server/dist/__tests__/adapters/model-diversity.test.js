@@ -2,8 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { detectCliCapabilities, splitBeadsByProvider, describeCapabilities, adaptPromptFor, } from '../../adapters/model-diversity.js';
 import { pickAgentName, allocateAgentNames, randomAgentName, AGENT_NAME_POOL_SIZE, AGENT_NAME_ADJECTIVES, AGENT_NAME_NOUNS, } from '../../adapters/agent-names.js';
 // ─── Helpers ───────────────────────────────────────────────────────────────
-function makeWhichExec(present) {
+/** `which` finds the listed binaries; `pi auth check` answers `ready` unless `piAuth` is false. */
+function makeWhichExec(present, piAuth = true) {
     return async (cmd, args) => {
+        if (cmd === 'pi' || cmd === present['pi']) {
+            return piAuth && args[0] === 'auth'
+                ? { code: 0, stdout: 'ready\n', stderr: '' }
+                : { code: 1, stdout: 'not_ready\n', stderr: '' };
+        }
         if (cmd !== 'which') {
             return { code: 1, stdout: '', stderr: 'unexpected cmd' };
         }
@@ -22,12 +28,13 @@ function caps(available = {}) {
         claude: mk('claude', available.claude !== false),
         codex: mk('codex', available.codex !== false),
         gemini: mk('gemini', available.gemini !== false),
-        pi: mk('pi', available.pi === true),
+        pi: mk('pi', available.pi !== false),
     };
 }
+const SIX = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'];
 // ─── CLI detection ─────────────────────────────────────────────────────────
 describe('detectCliCapabilities', () => {
-    it('reports primary CLIs and the Pi fallback when which finds them', async () => {
+    it('reports every CLI when which finds it and Pi has gateway credentials', async () => {
         const exec = makeWhichExec({
             claude: '/usr/local/bin/claude',
             codex: '/usr/local/bin/codex',
@@ -41,6 +48,13 @@ describe('detectCliCapabilities', () => {
         expect(result.pi.available).toBe(true);
         expect(result.claude.path).toBe('/usr/local/bin/claude');
     });
+    it('reports Pi as unavailable, keeping its path, when the gateway auth check fails', async () => {
+        const exec = makeWhichExec({ claude: '/usr/local/bin/claude', pi: '/usr/local/bin/pi' }, false);
+        const result = await detectCliCapabilities(exec);
+        expect(result.pi.available).toBe(false);
+        expect(result.pi.path).toBe('/usr/local/bin/pi');
+        expect(result.pi.reason).toBe('pi auth check for vercel-ai-gateway: not_ready');
+    });
     it('reports missing CLIs as unavailable with a reason', async () => {
         const exec = makeWhichExec({
             claude: '/usr/local/bin/claude',
@@ -52,6 +66,7 @@ describe('detectCliCapabilities', () => {
         expect(result.codex.available).toBe(false);
         expect(result.codex.reason).toBeTruthy();
         expect(result.gemini.available).toBe(true);
+        expect(result.pi.available).toBe(false);
     });
     it('does not throw when exec rejects — surfaces as unavailable', async () => {
         const exec = async () => {
@@ -64,92 +79,91 @@ describe('detectCliCapabilities', () => {
 });
 // ─── Split logic ───────────────────────────────────────────────────────────
 describe('splitBeadsByProvider', () => {
-    it('six-bead wave with all CLIs present assigns 2/2/2', () => {
-        const plan = splitBeadsByProvider(['b1', 'b2', 'b3', 'b4', 'b5', 'b6'], caps());
+    it('six-bead wave with all CLIs present assigns Claude, Pi, and Gemini 2/2/2', () => {
+        const plan = splitBeadsByProvider(SIX, caps());
         expect(plan.lanes).toEqual([
             { provider: 'claude', beadIds: ['b1', 'b2'] },
-            { provider: 'codex', beadIds: ['b3', 'b4'] },
+            { provider: 'pi', beadIds: ['b3', 'b4'] },
             { provider: 'gemini', beadIds: ['b5', 'b6'] },
         ]);
         expect(plan.ratio).toBe('2:2:2');
+        expect(plan.degraded).toBe(false);
+        expect(plan.warnings).toEqual([]);
     });
-    it('missing Gemini reassigns its canonical share to Codex', () => {
-        const plan = splitBeadsByProvider(['b1', 'b2', 'b3', 'b4', 'b5', 'b6'], caps({ gemini: false }));
+    it('missing Pi hands its share to Codex', () => {
+        const plan = splitBeadsByProvider(SIX, caps({ pi: false }));
         expect(plan.lanes).toEqual([
             { provider: 'claude', beadIds: ['b1', 'b2'] },
-            { provider: 'codex', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+            { provider: 'gemini', beadIds: ['b5', 'b6'] },
+            { provider: 'codex', beadIds: ['b3', 'b4'] },
         ]);
         expect(plan.warnings).toEqual([
-            'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to codex',
+            'pi CLI not available (pi not on PATH); reassigned 2 bead(s) to codex',
         ]);
-        expect(plan.ratio).toBe('2:4:0');
+        expect(plan.ratio).toBe('2:0:2');
+        expect(plan.degraded).toBe(true);
     });
-    it('missing Codex and Gemini reassigns both shares to Pi', () => {
-        const plan = splitBeadsByProvider(['b1', 'b2', 'b3', 'b4', 'b5', 'b6'], caps({ codex: false, gemini: false, pi: true }));
+    it('missing Pi and Codex hands the Pi share to Gemini', () => {
+        const plan = splitBeadsByProvider(SIX, caps({ pi: false, codex: false }));
+        expect(plan.lanes).toEqual([
+            { provider: 'claude', beadIds: ['b1', 'b2'] },
+            { provider: 'gemini', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+        ]);
+        expect(plan.ratio).toBe('2:0:4');
+    });
+    it('missing Gemini hands its share to Pi, not Codex', () => {
+        const plan = splitBeadsByProvider(SIX, caps({ gemini: false }));
         expect(plan.lanes).toEqual([
             { provider: 'claude', beadIds: ['b1', 'b2'] },
             { provider: 'pi', beadIds: ['b3', 'b4', 'b5', 'b6'] },
         ]);
         expect(plan.warnings).toEqual([
-            'codex CLI not available (codex not on PATH); reassigned 2 bead(s) to pi',
             'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to pi',
         ]);
+        expect(plan.ratio).toBe('2:4:0');
     });
-    it('keeps Pi out when Gemini can inherit a missing Codex share', () => {
-        const plan = splitBeadsByProvider(['b1', 'b2', 'b3', 'b4', 'b5', 'b6'], caps({ codex: false, gemini: true, pi: true }));
+    it('missing Pi and Gemini hands both shares to Codex', () => {
+        const plan = splitBeadsByProvider(SIX, caps({ pi: false, gemini: false }));
         expect(plan.lanes).toEqual([
             { provider: 'claude', beadIds: ['b1', 'b2'] },
-            { provider: 'gemini', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+            { provider: 'codex', beadIds: ['b3', 'b4', 'b5', 'b6'] },
         ]);
         expect(plan.warnings).toEqual([
-            'codex CLI not available (codex not on PATH); reassigned 2 bead(s) to gemini',
+            'pi CLI not available (pi not on PATH); reassigned 2 bead(s) to codex',
+            'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to codex',
         ]);
+        expect(plan.ratio).toBe('2:0:0');
     });
-    it('3-bead wave with all CLIs present → 1 Claude + 1 Codex + 1 Gemini', () => {
+    it('only Claude left takes every share', () => {
+        const plan = splitBeadsByProvider(SIX, caps({ pi: false, gemini: false, codex: false }));
+        expect(plan.lanes).toEqual([{ provider: 'claude', beadIds: SIX }]);
+        expect(plan.ratio).toBe('6:0:0');
+    });
+    it('3-bead wave with all CLIs present → 1 Claude + 1 Pi + 1 Gemini', () => {
         const plan = splitBeadsByProvider(['b1', 'b2', 'b3'], caps());
-        expect(plan.lanes).toHaveLength(3);
-        expect(plan.lanes[0]).toEqual({ provider: 'claude', beadIds: ['b1'] });
-        expect(plan.lanes[1]).toEqual({ provider: 'codex', beadIds: ['b2'] });
-        expect(plan.lanes[2]).toEqual({ provider: 'gemini', beadIds: ['b3'] });
-        expect(plan.degraded).toBe(false);
-        expect(plan.warnings).toHaveLength(0);
+        expect(plan.lanes).toEqual([
+            { provider: 'claude', beadIds: ['b1'] },
+            { provider: 'pi', beadIds: ['b2'] },
+            { provider: 'gemini', beadIds: ['b3'] },
+        ]);
         expect(plan.ratio).toBe('1:1:1');
-    });
-    it('missing Codex reassigns its share to Gemini before Pi', () => {
-        const plan = splitBeadsByProvider(['b1', 'b2', 'b3'], caps({ codex: false }));
-        expect(plan.degraded).toBe(true);
-        expect(plan.warnings.some((w) => w.includes('codex'))).toBe(true);
-        expect(plan.lanes).toHaveLength(2);
-        const claude = plan.lanes.find((l) => l.provider === 'claude');
-        const gemini = plan.lanes.find((l) => l.provider === 'gemini');
-        expect(claude.beadIds).toEqual(['b1']);
-        expect(gemini.beadIds).toEqual(['b2', 'b3']);
-        // No codex lane present.
-        expect(plan.lanes.find((l) => l.provider === 'codex')).toBeUndefined();
-        expect(plan.ratio).toBe('1:0:2');
     });
     it('N % 3 = 1 → claude gets the extra bead', () => {
         const plan = splitBeadsByProvider(['a', 'b', 'c', 'd'], caps());
-        const claude = plan.lanes.find((l) => l.provider === 'claude');
-        const codex = plan.lanes.find((l) => l.provider === 'codex');
-        const gemini = plan.lanes.find((l) => l.provider === 'gemini');
-        expect(claude.beadIds).toHaveLength(2);
-        expect(codex.beadIds).toHaveLength(1);
-        expect(gemini.beadIds).toHaveLength(1);
+        expect(plan.lanes.map((l) => l.beadIds.length)).toEqual([2, 1, 1]);
         expect(plan.ratio).toBe('2:1:1');
     });
-    it('N % 3 = 2 → claude + codex get the extras', () => {
+    it('N % 3 = 2 → claude + pi get the extras', () => {
         const plan = splitBeadsByProvider(['a', 'b', 'c', 'd', 'e'], caps());
-        const claude = plan.lanes.find((l) => l.provider === 'claude');
-        const codex = plan.lanes.find((l) => l.provider === 'codex');
-        const gemini = plan.lanes.find((l) => l.provider === 'gemini');
-        expect(claude.beadIds).toHaveLength(2);
-        expect(codex.beadIds).toHaveLength(2);
-        expect(gemini.beadIds).toHaveLength(1);
+        expect(plan.lanes.map((l) => [l.provider, l.beadIds.length])).toEqual([
+            ['claude', 2],
+            ['pi', 2],
+            ['gemini', 1],
+        ]);
         expect(plan.ratio).toBe('2:2:1');
     });
     it('all CLIs missing → empty lanes + degraded + actionable warning', () => {
-        const plan = splitBeadsByProvider(['b1'], caps({ claude: false, codex: false, gemini: false }));
+        const plan = splitBeadsByProvider(['b1'], caps({ claude: false, codex: false, gemini: false, pi: false }));
         expect(plan.lanes).toEqual([]);
         expect(plan.degraded).toBe(true);
         expect(plan.warnings.length).toBeGreaterThan(0);
@@ -157,15 +171,11 @@ describe('splitBeadsByProvider', () => {
     });
     it('preserves bead order within lanes (priority-sorted input)', () => {
         const plan = splitBeadsByProvider(['p0', 'p1', 'p2', 'p3', 'p4', 'p5'], caps());
-        expect(plan.lanes[0].beadIds).toEqual(['p0', 'p1']);
-        expect(plan.lanes[1].beadIds).toEqual(['p2', 'p3']);
-        expect(plan.lanes[2].beadIds).toEqual(['p4', 'p5']);
+        expect(plan.lanes.map((l) => l.beadIds)).toEqual([['p0', 'p1'], ['p2', 'p3'], ['p4', 'p5']]);
     });
     it('describeCapabilities formats the doctor one-liner', () => {
-        expect(describeCapabilities(caps())).toContain('ratio 1:1:1');
-        const partial = describeCapabilities(caps({ codex: false }));
-        expect(partial).toContain('codex missing');
-        expect(partial).toContain('ratio 1:0:1');
+        expect(describeCapabilities(caps())).toBe('claude+pi+gemini available; ratio 1:1:1 achievable; codex fallback available');
+        expect(describeCapabilities(caps({ pi: false, codex: false }))).toBe('claude+gemini available; pi missing; ratio 1:0:1 achievable');
     });
 });
 // ─── Prompt adaptation facade ──────────────────────────────────────────────
@@ -205,12 +215,22 @@ describe('adaptPromptFor', () => {
         expect(out.prompt).toContain('STOP');
         expect(out.prompt).toContain("program='gemini-cli'");
     });
-    it('pi adapter emits the shared terminal-worker contract for an NTM Pi pane', () => {
-        const out = adaptPromptFor('pi', ctx);
+    it('pi adapter routes Agent Mail through the am CLI because Pi panes load no project MCP servers', () => {
+        const out = adaptPromptFor('pi', { ...ctx, title: "Fix Bob's parser" });
         expect(out.provider).toBe('pi');
         expect(out.trailingNewlines).toBe(1);
-        expect(out.prompt).toContain("program='pi'");
-        expect(out.prompt).toContain("model='pi'");
+        expect(out.prompt).toContain("0a. am macros start-session --project 'agent-flywheel-plugin' --program pi --model pi --agent-name 'CoralDune' --task 'Implementing bead agent-flywheel-plugin-x6g: Fix Bob'\\''s parser' --json");
+        expect(out.prompt).toContain("am file_reservations reserve 'agent-flywheel-plugin' 'CoralDune' <path>... --exclusive");
+        expect(out.prompt).toContain("am mail send --project 'agent-flywheel-plugin' --from 'CoralDune' --to 'SilentHarbor' --subject '[impl] agent-flywheel-plugin-x6g done'");
+        expect(out.prompt).toContain("- am file_reservations release 'agent-flywheel-plugin' 'CoralDune'");
+        expect(out.prompt).not.toContain('macro_start_session(');
+        expect(out.prompt).not.toContain('send_message to');
+    });
+    it('claude adapter keeps the Agent Mail MCP tool calls', () => {
+        const out = adaptPromptFor('claude', ctx);
+        expect(out.prompt).toContain("0c. send_message to 'SilentHarbor' subject '[impl] agent-flywheel-plugin-x6g started'.");
+        expect(out.prompt).toContain('- release_file_reservations.');
+        expect(out.prompt).not.toContain('am mail send');
     });
 });
 // ─── Agent-name pool ───────────────────────────────────────────────────────

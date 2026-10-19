@@ -1,9 +1,11 @@
 /**
- * Swarm-agent model diversity — Claude : Codex : Gemini at 1:1:1 via NTM,
- * with Pi as the first non-primary fallback.
+ * Swarm-agent model diversity — Claude : Pi : Gemini at 1:1:1, with Codex
+ * as the fallback that takes Pi's share. Pi runs on a Vercel AI Gateway
+ * model the user picks through `flywheel_pi_models`.
  *
  * Responsibilities:
- *   1. Detect CLI availability (`which claude codex gemini pi`).
+ *   1. Detect CLI availability (`which claude codex gemini pi`, plus Pi's
+ *      gateway credentials).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so
@@ -20,7 +22,7 @@ export type ModelProvider = 'claude' | 'codex' | 'gemini' | 'pi';
 export interface CliCapability {
     readonly provider: ModelProvider;
     readonly available: boolean;
-    /** Resolved binary path when available. */
+    /** Resolved binary path when the binary is on PATH, even if it isn't ready. */
     readonly path?: string;
     /** Error text when unavailable (ENOENT or version probe failure). */
     readonly reason?: string;
@@ -44,7 +46,7 @@ export interface DispatchPlan {
     /** True when one or more preferred CLIs were missing and we fell back. */
     readonly degraded: boolean;
     /**
-     * Assigned Claude:Codex:Gemini bead counts.
+     * Assigned Claude:Pi:Gemini bead counts.
      * Six beads with all providers → "2:2:2".
      */
     readonly ratio: string;
@@ -61,14 +63,15 @@ export declare function detectCliCapabilities(exec: ExecFn, opts?: {
     cwd?: string;
     signal?: AbortSignal;
 }): Promise<CapabilitiesMap>;
+export declare const PRIMARY_PROVIDERS: readonly ["claude", "pi", "gemini"];
 /**
- * Split N beads into canonical Claude/Codex/Gemini shares, then transfer a
+ * Split N beads into canonical Claude/Pi/Gemini shares, then transfer a
  * missing provider's complete share through the supported fallback order.
  *
  * Contract:
  *   - sum(lane.beadIds.length) == beadIds.length
  *   - lanes contain only providers with `available === true`
- *   - lane order is claude, codex, gemini, pi (stable; skipped entries omit)
+ *   - lane order is claude, pi, gemini, codex (stable; skipped entries omit)
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
  */
@@ -81,8 +84,8 @@ export declare function splitBeadsByProvider(beadIds: readonly string[], caps: C
 export declare function adaptPromptFor(provider: ModelProvider, ctx: BeadDispatchContext): AdaptedPrompt;
 /**
  * Describe the capabilities map in a doctor-ready one-liner.
- *   All-available → "claude:gemini:codex available; ratio 1:1:1 achievable"
- *   Missing codex → "claude+gemini available; codex missing; ratio 1:0:1 achievable"
+ *   All-available → "claude+pi+gemini available; ratio 1:1:1 achievable"
+ *   Missing pi    → "claude+gemini available; pi missing; ratio 1:0:1 achievable; codex fallback available"
  */
 export declare function describeCapabilities(caps: CapabilitiesMap): string;
 //# sourceMappingURL=model-diversity.d.ts.map

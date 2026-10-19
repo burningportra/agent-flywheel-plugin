@@ -4,7 +4,7 @@ import { buildImplementerDispatch, } from '../../adapters/implementer-dispatch.j
 const unusedExec = async () => {
     throw new Error('capability probe should not run when capabilities are supplied');
 };
-function capabilities(gemini = true, pi = false) {
+function capabilities(gemini = true, pi = true) {
     return {
         claude: { provider: 'claude', available: true, path: '/bin/claude' },
         codex: { provider: 'codex', available: true, path: '/bin/codex' },
@@ -46,10 +46,17 @@ function completionReportExample(prompt) {
     return parsed;
 }
 function assertCompletionGate(prompt) {
-    expect(prompt.prompt).toContain("human_key='/workspace/project'");
-    expect(prompt.prompt).toContain(`agent_name='${prompt.agentName}'`);
+    if (prompt.lane === 'pi') {
+        expect(prompt.prompt).toContain("--project '/workspace/project'");
+        expect(prompt.prompt).toContain(`--agent-name '${prompt.agentName}'`);
+        expect(prompt.prompt).toContain("--to 'WindyBasin'");
+    }
+    else {
+        expect(prompt.prompt).toContain("human_key='/workspace/project'");
+        expect(prompt.prompt).toContain(`agent_name='${prompt.agentName}'`);
+        expect(prompt.prompt).toContain("send_message to 'WindyBasin'");
+    }
     expect(prompt.prompt).not.toContain('preferred_name=');
-    expect(prompt.prompt).toContain("send_message to 'WindyBasin'");
     expect(prompt.prompt).not.toContain('AGENTS.md');
     expect(prompt.prompt).toContain('## PRE-COMPLETION QUALITY GATE');
     expect(prompt.prompt).toContain(`.pi-flywheel/completion/${prompt.beadId}.json`);
@@ -68,14 +75,14 @@ describe('buildImplementerDispatch', () => {
         });
         expect(dispatch.lanes).toEqual([
             { lane: 'cc', beadIds: ['bead-1', 'bead-2'] },
-            { lane: 'cod', beadIds: ['bead-3', 'bead-4'] },
+            { lane: 'pi', beadIds: ['bead-3', 'bead-4'] },
             { lane: 'gmi', beadIds: ['bead-5', 'bead-6'] },
         ]);
         expect(dispatch.prompts.map(({ beadId, lane }) => ({ beadId, lane }))).toEqual([
             { beadId: 'bead-1', lane: 'cc' },
             { beadId: 'bead-2', lane: 'cc' },
-            { beadId: 'bead-3', lane: 'cod' },
-            { beadId: 'bead-4', lane: 'cod' },
+            { beadId: 'bead-3', lane: 'pi' },
+            { beadId: 'bead-4', lane: 'pi' },
             { beadId: 'bead-5', lane: 'gmi' },
             { beadId: 'bead-6', lane: 'gmi' },
         ]);
@@ -86,11 +93,13 @@ describe('buildImplementerDispatch', () => {
             assertCompletionGate(prompt);
         expect(dispatch.prompts[0]?.prompt.endsWith('\n')).toBe(true);
         expect(dispatch.prompts[0]?.prompt.endsWith('\n\n')).toBe(false);
-        expect(dispatch.prompts[2]?.prompt.endsWith('\n\n')).toBe(true);
+        expect(dispatch.prompts[2]?.prompt.endsWith('\n')).toBe(true);
+        expect(dispatch.prompts[2]?.prompt.endsWith('\n\n')).toBe(false);
+        expect(dispatch.prompts[2]?.prompt).toContain('am macros start-session');
         expect(dispatch.prompts[4]?.prompt.endsWith('\n')).toBe(true);
         expect(dispatch.prompts[4]?.prompt.endsWith('\n\n')).toBe(false);
     });
-    it('reassigns the missing Gemini share to Codex without changing Claude share', async () => {
+    it('reassigns the missing Gemini share to Pi without changing Claude share', async () => {
         const dispatch = await buildImplementerDispatch({
             exec: unusedExec,
             cwd: '/workspace/project',
@@ -100,38 +109,36 @@ describe('buildImplementerDispatch', () => {
         });
         expect(dispatch.lanes).toEqual([
             { lane: 'cc', beadIds: ['bead-1', 'bead-2'] },
-            { lane: 'cod', beadIds: ['bead-3', 'bead-4', 'bead-5', 'bead-6'] },
-        ]);
-        expect(dispatch.prompts.map((prompt) => prompt.lane)).toEqual([
-            'cc', 'cc', 'cod', 'cod', 'cod', 'cod',
-        ]);
-        expect(dispatch.degraded).toBe(true);
-        expect(dispatch.warnings).toEqual([
-            'gemini CLI not available (not installed); reassigned 2 bead(s) to codex',
-        ]);
-    });
-    it('uses Pi when both non-Claude primary providers are unavailable', async () => {
-        const caps = capabilities(false, true);
-        const dispatch = await buildImplementerDispatch({
-            exec: unusedExec,
-            cwd: '/workspace/project',
-            beads: beads(6),
-            coordinatorName: 'WindyBasin',
-            capabilities: {
-                ...caps,
-                codex: { provider: 'codex', available: false, reason: 'not installed' },
-            },
-        });
-        expect(dispatch.lanes).toEqual([
-            { lane: 'cc', beadIds: ['bead-1', 'bead-2'] },
             { lane: 'pi', beadIds: ['bead-3', 'bead-4', 'bead-5', 'bead-6'] },
         ]);
         expect(dispatch.prompts.map((prompt) => prompt.lane)).toEqual([
             'cc', 'cc', 'pi', 'pi', 'pi', 'pi',
         ]);
+        expect(dispatch.degraded).toBe(true);
+        expect(dispatch.warnings).toEqual([
+            'gemini CLI not available (not installed); reassigned 2 bead(s) to pi',
+        ]);
+    });
+    it('hands the Pi share to Codex when Pi is unavailable', async () => {
+        const dispatch = await buildImplementerDispatch({
+            exec: unusedExec,
+            cwd: '/workspace/project',
+            beads: beads(6),
+            coordinatorName: 'WindyBasin',
+            capabilities: capabilities(true, false),
+        });
+        expect(dispatch.lanes).toEqual([
+            { lane: 'cc', beadIds: ['bead-1', 'bead-2'] },
+            { lane: 'gmi', beadIds: ['bead-5', 'bead-6'] },
+            { lane: 'cod', beadIds: ['bead-3', 'bead-4'] },
+        ]);
+        expect(dispatch.prompts.map((prompt) => prompt.lane)).toEqual([
+            'cc', 'cc', 'cod', 'cod', 'gmi', 'gmi',
+        ]);
         for (const prompt of dispatch.prompts)
             assertCompletionGate(prompt);
-        expect(dispatch.prompts[2]?.prompt).toContain("program='pi'");
+        expect(dispatch.prompts[2]?.prompt).toContain("program='codex'");
+        expect(dispatch.prompts[2]?.prompt.endsWith('\n\n')).toBe(true);
     });
     it('returns an empty dispatch without probing capabilities when there are no beads', async () => {
         const dispatch = await buildImplementerDispatch({

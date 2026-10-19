@@ -4,9 +4,6 @@
  * Agent-facing roles use stable model aliases. Provider model IDs remain here
  * only for capability reporting and CLI compatibility checks.
  */
-import { detectCliCapabilities } from './adapters/model-diversity.js';
-import { createLogger } from './logger.js';
-const log = createLogger('model-detection');
 export const AGENT_MODEL_ALIASES = {
     opus: 'opus',
     sonnet: 'sonnet',
@@ -31,10 +28,6 @@ export const REFINEMENT_MODELS = Object.freeze([
     AGENT_MODEL_ALIASES.fable,
     AGENT_MODEL_ALIASES.sonnet,
 ]);
-/** Gemini through Pi's Vercel AI Gateway provider; override with FW_PI_PLANNER_MODEL. */
-const PI_PLANNER_DEFAULT_MODEL = 'vercel-ai-gateway/google/gemini-4-argon';
-/** The model is interpolated into shell commands, so only model-id characters pass. */
-const PI_MODEL_PATTERN = /^[A-Za-z0-9._/@:+-]+$/;
 /** Models used by the swarm launcher. */
 export const SWARM_MODELS = {
     opus: CURRENT_MODEL_IDS.opus,
@@ -178,38 +171,10 @@ export function detectAvailableModels(availableModelIds) {
         freshPerspectiveModel,
     };
 }
-function resolvePiPlannerModel(requested) {
-    if (!requested)
-        return PI_PLANNER_DEFAULT_MODEL;
-    if (PI_MODEL_PATTERN.test(requested))
-        return requested;
-    log.warn('FW_PI_PLANNER_MODEL has characters outside a model id; using the default', {
-        requested,
-        fallback: PI_PLANNER_DEFAULT_MODEL,
-    });
-    return PI_PLANNER_DEFAULT_MODEL;
-}
-export function getDeepPlanModels(capabilities = {}) {
-    return {
-        ...DEEP_PLAN_MODELS,
-        freshPerspective: capabilities.piAvailable
-            ? { runner: 'pi-pane', provider: 'pi', piModel: resolvePiPlannerModel(capabilities.piModel) }
-            : null,
-    };
-}
 export function getRefinementModel(round) {
     const index = ((round % REFINEMENT_MODELS.length) + REFINEMENT_MODELS.length)
         % REFINEMENT_MODELS.length;
     return REFINEMENT_MODELS[index] ?? AGENT_MODEL_ALIASES.opus;
-}
-/** Probes `which pi`; the Pi pane reports provider auth and model errors when it starts. */
-export async function isPiPlannerCliAvailable(exec, options) {
-    const capabilities = await detectCliCapabilities(exec, {
-        timeout: options.timeout ?? 1500,
-        cwd: options.cwd,
-        signal: options.signal,
-    });
-    return capabilities.pi.available;
 }
 /**
  * Format detected models for display.

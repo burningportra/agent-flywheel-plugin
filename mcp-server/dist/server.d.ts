@@ -64,6 +64,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -201,6 +204,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -260,6 +266,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -336,6 +345,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -451,6 +463,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -532,6 +547,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -595,6 +613,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -672,6 +693,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -741,6 +765,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -814,6 +841,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -898,6 +928,97 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+            planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
+            reason?: undefined;
+            section?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            action: {
+                type: string;
+                enum: string[];
+                default: string;
+                description: string;
+            };
+            roles: {
+                type: string;
+                items: {
+                    type: string;
+                    enum: string[];
+                };
+                description: string;
+            };
+            picks: {
+                type: string;
+                description: string;
+                properties: {
+                    robustness: {
+                        type: string;
+                    };
+                    ergonomics: {
+                        type: string;
+                    };
+                    implementer: {
+                        type: string;
+                    };
+                };
+            };
+            refresh: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            ambition?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            coordinatorName?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
+            beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -954,6 +1075,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1018,6 +1142,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -1077,6 +1204,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             sinceDays?: undefined;
@@ -1139,6 +1269,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1164,7 +1297,7 @@ export declare const TOOLS: ({
             };
             checkName: {
                 type: string;
-                enum: ("orphan_tender_daemons" | "mcp_connectivity" | "agent_mail_liveness" | "br_binary" | "bv_binary" | "ntm_binary" | "cm_binary" | "node_version" | "git_status" | "dist_drift" | "orphaned_worktrees" | "checkpoint_validity" | "claude_cli" | "codex_cli" | "gemini_cli" | "swarm_model_ratio" | "codex_config_compat" | "gemini_model_compat" | "rescues_last_30d" | "npm_marketplace_version_drift" | "convergence_state_validity" | "outcome_rubric_validity" | "projects_base_misconfig")[];
+                enum: ("orphan_tender_daemons" | "mcp_connectivity" | "agent_mail_liveness" | "br_binary" | "bv_binary" | "ntm_binary" | "cm_binary" | "node_version" | "git_status" | "dist_drift" | "orphaned_worktrees" | "checkpoint_validity" | "claude_cli" | "codex_cli" | "gemini_cli" | "pi_cli" | "swarm_model_ratio" | "codex_config_compat" | "gemini_model_compat" | "rescues_last_30d" | "npm_marketplace_version_drift" | "convergence_state_validity" | "outcome_rubric_validity" | "projects_base_misconfig")[];
                 description: string;
             };
             autoConfirm: {
@@ -1209,6 +1342,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1267,6 +1403,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1357,6 +1496,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1416,6 +1558,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1477,6 +1622,9 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;

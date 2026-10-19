@@ -27,6 +27,7 @@ import { runGradeOutcome } from './tools/grade-outcome.js';
 import { runCapabilitiesWith } from './tools/capabilities.js';
 import { runRobotDocs, ROBOT_DOCS_SECTIONS } from './tools/robot-docs.js';
 import { runRescue } from './tools/rescue.js';
+import { runPiModels } from './tools/pi-models.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -378,6 +379,41 @@ const PRIMARY_TOOLS = [
         },
     },
     {
+        name: 'flywheel_pi_models',
+        description: 'Pick models for Pi lanes from the live Vercel AI Gateway catalog and usage leaderboard. action="list" ranks tool-capable models by recent gateway token share and returns one AskUserQuestion payload per role in data.questions. action="choose" takes the answers keyed by role, resolves each to a vercel-ai-gateway/<id> model, runs pi auth check, remembers the picks in .pi-flywheel/pi-models.json, and returns data.piModels plus data.piReady.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                action: {
+                    type: 'string',
+                    enum: ['list', 'choose'],
+                    default: 'list',
+                    description: 'list=rank models and build the questions, choose=validate and remember the answers',
+                },
+                roles: {
+                    type: 'array',
+                    items: { type: 'string', enum: ['robustness', 'ergonomics', 'implementer'] },
+                    description: 'Lanes to ask about with action=list. Deep plan uses ["robustness","ergonomics"]; swarms use ["implementer"] (the default).',
+                },
+                picks: {
+                    type: 'object',
+                    description: 'Required with action=choose. Maps a role to the chosen option label, catalog name, or gateway model id.',
+                    properties: {
+                        robustness: { type: 'string' },
+                        ergonomics: { type: 'string' },
+                        implementer: { type: 'string' },
+                    },
+                },
+                refresh: {
+                    type: 'boolean',
+                    description: 'Refetch even when the cached catalog is under an hour old.',
+                },
+            },
+            required: ['cwd'],
+        },
+    },
+    {
         name: 'flywheel_doctor',
         description: 'Run an 11-check health sweep of the flywheel environment: MCP connectivity, agent-mail liveness, required/optional CLIs (br/bv/ntm/cm), node version, git status, dist drift, orphaned worktrees, and checkpoint validity. Read-only — never mutates checkpoint or state. Returns a DoctorReport with per-check severity (green/yellow/red).',
         inputSchema: {
@@ -614,6 +650,7 @@ const PRIMARY_RUNNERS = {
     flywheel_get_skill: runGetSkill,
     flywheel_observe: runObserve,
     flywheel_rescue: runRescue,
+    flywheel_pi_models: runPiModels,
     flywheel_remediate: async (ctx, args) => {
         const parsed = RemediateInputSchema.parse(args);
         return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);
