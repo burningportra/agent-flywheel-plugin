@@ -18,6 +18,7 @@
  * bead `1qn` (codex-rescue handoff). Treat it as stable.
  */
 import type { ExecFn } from '../exec.js';
+import type { SwarmMix } from '../types.js';
 import type { AdaptedPrompt, BeadDispatchContext } from './codex-prompt.js';
 export type ModelProvider = 'claude' | 'codex' | 'gemini' | 'pi';
 /** Per-provider availability signal. */
@@ -81,6 +82,11 @@ export declare const PRIMARY_PROVIDERS: readonly ["claude", "pi", "gemini"];
  *     by caller: highest-priority → first lane slot)
  */
 export declare function splitBeadsByProvider(beadIds: readonly string[], caps: CapabilitiesMap): DispatchPlan;
+/**
+ * The lanes a swarm of `panes` panes gets on this host, split the way
+ * implementation waves split beads. Undefined when no lane is usable.
+ */
+export declare function swarmMixFor(caps: CapabilitiesMap, panes?: number): SwarmMix | undefined;
 /**
  * Pick the right adapter for a provider. Centralised so the dispatch
  * loop can `adaptPromptFor(lane.provider, ctx)` without importing all

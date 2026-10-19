@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { detectCliCapabilities, splitBeadsByProvider, describeCapabilities, adaptPromptFor, } from '../../adapters/model-diversity.js';
+import { detectCliCapabilities, splitBeadsByProvider, describeCapabilities, swarmMixFor, adaptPromptFor, } from '../../adapters/model-diversity.js';
 import { pickAgentName, allocateAgentNames, randomAgentName, AGENT_NAME_POOL_SIZE, AGENT_NAME_ADJECTIVES, AGENT_NAME_NOUNS, } from '../../adapters/agent-names.js';
 // ─── Helpers ───────────────────────────────────────────────────────────────
 /** `which` finds the listed binaries; `pi auth check` answers `ready` unless `piAuth` is false. */
@@ -216,6 +216,19 @@ describe('splitBeadsByProvider', () => {
         expect(describeCapabilities(caps())).toBe('claude+pi+gemini available; ratio 1:1:1 achievable; codex fallback available');
         expect(describeCapabilities(caps({ pi: false, codex: false }))).toBe('claude+gemini available; pi missing; ratio 1:0:1 achievable');
         expect(describeCapabilities(geminiOff())).toBe('claude+pi available; gemini disabled; ratio 1:1:0 achievable; codex fallback available');
+    });
+});
+describe('swarmMixFor', () => {
+    it('names only the lanes a six-pane swarm spawns on this host', () => {
+        expect(swarmMixFor(caps())).toEqual({ label: 'cc:pi:gmi 2:2:2', spawnFlags: '--cc=2 --pi=2 --gmi=2' });
+        expect(swarmMixFor(geminiOff())).toEqual({ label: 'cc:pi 2:4', spawnFlags: '--cc=2 --pi=4' });
+        expect(swarmMixFor(caps({ pi: false }))).toEqual({ label: 'cc:gmi:cod 2:2:2', spawnFlags: '--cc=2 --gmi=2 --cod=2' });
+        expect(swarmMixFor(geminiOff(caps({ pi: false })))).toEqual({ label: 'cc:cod 2:4', spawnFlags: '--cc=2 --cod=4' });
+        expect(swarmMixFor(caps({ pi: false, gemini: false, codex: false }))).toEqual({ label: 'cc 6', spawnFlags: '--cc=6' });
+    });
+    it('scales with the pane count and is undefined when no lane is usable', () => {
+        expect(swarmMixFor(geminiOff(), 3)).toEqual({ label: 'cc:pi 1:2', spawnFlags: '--cc=1 --pi=2' });
+        expect(swarmMixFor(caps({ claude: false, pi: false, gemini: false, codex: false }))).toBeUndefined();
     });
 });
 // ─── Prompt adaptation facade ──────────────────────────────────────────────

@@ -202,6 +202,26 @@ describe('runDoctorChecks', () => {
             cleanup(cwd);
         }
     });
+    it('leaves out the swarm mix when the sweep runs out of budget, even though the lane probes answered', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const exec = makeStubbedExec([
+                { match: (cmd) => cmd === 'br', respond: { hangMs: 30_000, result: { code: 0, stdout: '', stderr: '' } } },
+                ...allGreenStubs(),
+            ]);
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec,
+                codexConfigPath: null,
+                perCheckTimeoutMs: 60_000,
+                totalBudgetMs: 400,
+            });
+            expect(report.partial).toBe(true);
+            expect(report).not.toHaveProperty('swarm');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
     it('mid-sweep abort short-circuits slow checks without blocking the sweep', async () => {
         const cwd = makeTmpCwd();
         try {
@@ -227,6 +247,7 @@ describe('runDoctorChecks', () => {
             // still complete even when exec is hanging — that is fine. What matters
             // is that exec-bound checks do NOT block.
             expect(report.checks.length).toBe(DOCTOR_CHECK_NAMES.length);
+            expect(report).not.toHaveProperty('swarm');
         }
         finally {
             cleanup(cwd);
@@ -772,6 +793,7 @@ describe('pi_cli and swarm_model_ratio', () => {
             return {
                 pi: report.checks.find((c) => c.name === 'pi_cli'),
                 ratio: report.checks.find((c) => c.name === 'swarm_model_ratio'),
+                swarm: report.swarm,
             };
         }
         finally {
@@ -779,14 +801,15 @@ describe('pi_cli and swarm_model_ratio', () => {
         }
     }
     it('green with the Claude:Pi:Gemini ratio when Pi is installed and authed', async () => {
-        const { pi, ratio } = await sweep([]);
+        const { pi, ratio, swarm } = await sweep([]);
         expect(pi.severity).toBe('green');
         expect(pi.message).toBe('pi cli at /usr/local/bin/pi');
         expect(ratio.severity).toBe('green');
         expect(ratio.message).toBe('claude+pi+gemini available; ratio 1:1:1 achievable; codex fallback available');
+        expect(swarm).toEqual({ label: 'cc:pi:gmi 2:2:2', spawnFlags: '--cc=2 --pi=2 --gmi=2' });
     });
     it('yellow "not ready" when pi is on PATH but the gateway auth check fails', async () => {
-        const { pi, ratio } = await sweep([
+        const { pi, ratio, swarm } = await sweep([
             {
                 match: (cmd, args) => cmd === 'pi' && args[0] === 'auth',
                 respond: { result: { code: 1, stdout: '{"status":"not_ready","provider":"vercel-ai-gateway","reason":"credentials_not_configured"}', stderr: '' } },
@@ -796,6 +819,7 @@ describe('pi_cli and swarm_model_ratio', () => {
         expect(pi.message).toBe('pi cli not ready (pi auth check: vercel-ai-gateway not_ready (credentials_not_configured))');
         expect(ratio.severity).toBe('yellow');
         expect(ratio.message).toContain('pi missing; ratio 1:0:1 achievable; codex fallback available');
+        expect(swarm).toEqual({ label: 'cc:gmi:cod 2:2:2', spawnFlags: '--cc=2 --gmi=2 --cod=2' });
     });
     it('yellow "not installed" when which finds no pi', async () => {
         const { pi } = await sweep([
@@ -829,6 +853,7 @@ describe('a lane switched off in flywheel.config.yaml', () => {
                 disabled: true,
             });
             expect(check('pi_cli')).not.toHaveProperty('disabled');
+            expect(report.swarm).toEqual({ label: 'cc:pi 2:4', spawnFlags: '--cc=2 --pi=4' });
         }
         finally {
             cleanup(cwd);
@@ -849,6 +874,7 @@ describe('a lane switched off in flywheel.config.yaml', () => {
                 severity: 'yellow',
                 message: 'claude available; pi missing; gemini disabled; ratio 1:0:0 achievable; codex fallback available',
             });
+            expect(report.swarm).toEqual({ label: 'cc:cod 2:4', spawnFlags: '--cc=2 --cod=4' });
         }
         finally {
             cleanup(cwd);
@@ -927,6 +953,7 @@ describe('gemini_model_compat (integrated)', () => {
             expect(compat.message).toContain('outside allowlist');
             expect(compat.hint).toBeDefined();
             expect(compat.hint.toLowerCase()).toContain('allowlist');
+            expect(report.swarm).toEqual({ label: 'cc:pi 2:4', spawnFlags: '--cc=2 --pi=4' });
         }
         finally {
             cleanup(cwd);

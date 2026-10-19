@@ -23,7 +23,7 @@ import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
 import { errMsg } from '../errors.js';
 import { readTelemetry } from '../telemetry.js';
-import { detectCliCapabilities, describeCapabilities, PRIMARY_PROVIDERS, } from '../adapters/model-diversity.js';
+import { detectCliCapabilities, describeCapabilities, PRIMARY_PROVIDERS, swarmMixFor, } from '../adapters/model-diversity.js';
 import { getAdapter } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
@@ -270,6 +270,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
     const partial = externallyAborted || budgetExceeded;
     const criticalFails = countCriticalFails(checks);
     const ntm = deriveNtmReadiness(cwd, partial, checks, projectsBaseReadiness);
+    const swarm = partial ? undefined : swarmMixFor(withGeminiModelCheck(await swarmCapsPromise, checks));
     return {
         version: 1,
         cwd,
@@ -278,9 +279,17 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         partial,
         checks,
         ntm,
+        ...(swarm ? { swarm } : {}),
         elapsedMs,
         timestamp,
     };
+}
+/** A Gemini CLI whose model `gemini_model_compat` rejects can't take a swarm lane. */
+function withGeminiModelCheck(caps, checks) {
+    const compat = checks.find((c) => c.name === 'gemini_model_compat');
+    if (!caps.gemini.available || compat === undefined || compat.severity === 'green')
+        return caps;
+    return { ...caps, gemini: { ...caps.gemini, available: false, reason: compat.message } };
 }
 /**
  * Count of red-severity checks. The exit code of the slash-command CLI is

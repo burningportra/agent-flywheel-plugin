@@ -755,6 +755,16 @@ export declare const NtmReadinessSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     resolvedTarget: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>], "NTM_AVAILABLE">;
 export type NtmReadiness = z.infer<typeof NtmReadinessSchema>;
+/**
+ * The lanes a six-pane swarm gets on this host, after the substitution
+ * ladder and the `lanes:` switches in flywheel.config.yaml. Menus print
+ * `label`, and swarm spawns pass `spawnFlags` to `swarm-spawn.js`.
+ */
+export declare const SwarmMixSchema: z.ZodObject<{
+    label: z.ZodString;
+    spawnFlags: z.ZodString;
+}, z.core.$strip>;
+export type SwarmMix = z.infer<typeof SwarmMixSchema>;
 export declare const DoctorReportSchema: z.ZodObject<{
     version: z.ZodLiteral<1>;
     cwd: z.ZodString;
@@ -797,6 +807,10 @@ export declare const DoctorReportSchema: z.ZodObject<{
         target: z.ZodOptional<z.ZodString>;
         resolvedTarget: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>], "NTM_AVAILABLE">>;
+    swarm: z.ZodOptional<z.ZodObject<{
+        label: z.ZodString;
+        spawnFlags: z.ZodString;
+    }, z.core.$strip>>;
     elapsedMs: z.ZodNumber;
     timestamp: z.ZodString;
 }, z.core.$strip>;

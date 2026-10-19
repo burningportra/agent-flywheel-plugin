@@ -169,6 +169,30 @@ export function splitBeadsByProvider(beadIds, caps) {
     const ratio = PRIMARY_PROVIDERS.map((provider) => String(assigned.get(provider)?.length ?? 0)).join(':');
     return { lanes, warnings, degraded, ratio };
 }
+/** Each lane's `swarm-spawn.js` flag name. */
+const SPAWN_LANE = {
+    claude: 'cc',
+    pi: 'pi',
+    gemini: 'gmi',
+    codex: 'cod',
+};
+/**
+ * The lanes a swarm of `panes` panes gets on this host, split the way
+ * implementation waves split beads. Undefined when no lane is usable.
+ */
+export function swarmMixFor(caps, panes = 6) {
+    const slots = Array.from({ length: panes }, (_, i) => String(i));
+    const lanes = splitBeadsByProvider(slots, caps).lanes.map((lane) => ({
+        name: SPAWN_LANE[lane.provider],
+        panes: lane.beadIds.length,
+    }));
+    if (lanes.length === 0)
+        return undefined;
+    return {
+        label: `${lanes.map((l) => l.name).join(':')} ${lanes.map((l) => l.panes).join(':')}`,
+        spawnFlags: lanes.map((l) => `--${l.name}=${l.panes}`).join(' '),
+    };
+}
 // ─── Prompt adaptation facade ─────────────────────────────────────────────
 /**
  * Pick the right adapter for a provider. Centralised so the dispatch
