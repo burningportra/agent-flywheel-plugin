@@ -4,7 +4,7 @@
 
 **When to use:** the user picked "Simplify pass" (or legacy "Deslop pass") from Step 0d/0e — they want `/simplify-and-refactor-code-isomorphically` applied as a proof-obligated, isomorphism-preserving refactor pass. Meaningful on any repo (with or without open beads).
 
-**How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Cod swarm — codex-heavy mode is the deslop signature and an explicit override of the v3.17.0 canonical cc:cod:gem 1:1:1; the substitution ladder gmi→cod→pi→cc applies when Codex is unavailable on the host, per AGENTS.md NTM pane priority / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
+**How to use:** read this file, then surface a follow-up `AskUserQuestion` so the user picks the invocation mode (single-pass / fresh-eyes / 5-Cod swarm — codex-heavy mode is the deslop signature and an explicit override of the v3.21.0 canonical cc:pi:gem 1:1:1; when Codex is unavailable on the host it falls back to gmi, then pi, then cc, per AGENTS.md NTM pane priority / iterative). Do NOT pick a mode unilaterally — per UNIVERSAL RULE 1, this is a labeled-option decision. The slash-named skills referenced below (`/simplify-and-refactor-code-isomorphically`, `/repeatedly-apply-skill`, `/ntm`, `/vibing-with-ntm`) are load-bearing — invoke via the `Skill` tool, do NOT paraphrase.
 
 ---
 
@@ -17,7 +17,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Single-pass (Recommended)", description: "One in-process invocation of /simplify-and-refactor-code-isomorphically. Fast; good for small/medium repos or initial exploration." },
     { label: "Single + fresh-eyes", description: "Single-pass, then a verbatim fresh-eyes review prompt to catch any isomorphism violations the first pass introduced." },
-    { label: "5-Cod swarm via NTM", description: "Spawn 5 Codex panes — codex-heavy mode is the deslop signature (per-pane prompts are codex-tuned) and an explicit override of the v3.17.0 cc:cod:gem 1:1:1 canonical. Each pane tackles a different code area; Claude (you) is controller running fresh-eyes review. Substitution ladder gmi→cod→pi→cc when Codex unavailable on this host (see AGENTS.md NTM pane priority). 5-min looper. Best for large repos." },
+    { label: "5-Cod swarm via NTM", description: "Spawn 5 Codex panes — codex-heavy mode is the deslop signature (per-pane prompts are codex-tuned) and an explicit override of the v3.21.0 cc:pi:gem 1:1:1 canonical. Each pane tackles a different code area; Claude (you) is controller running fresh-eyes review. Falls back to gmi, then pi, then cc when Codex is unavailable on this host (see AGENTS.md NTM pane priority). 5-min looper. Best for large repos." },
     { label: "Iterative (10x via /repeatedly-apply-skill)", description: "Solo agent re-applies the skill 10 times with fresh-eyes review between passes. No NTM required. Good for slow-burn cleanup." }
   ],
   multiSelect: false
@@ -83,12 +83,13 @@ This mode mirrors the v3.6.0 wave-orchestration pattern but specialised for refa
 ```bash
 SESSION="${NTM_PROJECT}--deslop"
 # Pane-type priority (see AGENTS.md "NTM pane priority"):
-#   the v3.17.0 canonical default is mixed cc:cod:gem 1:1:1. Deslop's
+#   the v3.21.0 canonical default is mixed cc:pi:gem 1:1:1. Deslop's
 #   --cod=5 shape is an explicit override — the per-pane prompts in §4c
 #   are codex-tuned (terse preambles, COMPLETION_REPORT block, input-buffer
 #   flush), and the deslop discipline depends on Codex's refactor style.
-#   When Codex is unavailable, fall through the substitution ladder:
-#   --gmi=5 first, then --pi=5, then --cc=5. None of the fallbacks share
+#   When Codex is unavailable, fall back to five Gemini panes, then to
+#   Pi panes through swarm-spawn.js (it needs one NTM lane, so one cc
+#   pane plus four Pi panes), then to five Claude panes. None of the fallbacks share
 #   Codex's COMPLETION_REPORT contract — surface that to the user before
 #   the swarm spawns.
 ntm spawn "$NTM_PROJECT" --label deslop --no-user --cod=5 --stagger-mode=smart

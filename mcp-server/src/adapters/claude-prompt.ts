@@ -19,6 +19,64 @@ interface TerminalPromptIdentity {
   readonly provider: 'claude' | 'pi';
   readonly program: 'claude-code' | 'pi';
   readonly model: 'claude' | 'pi';
+  /** Pi panes run with `--no-approve`, which skips project MCP servers, so they reach Agent Mail through the `am` CLI. */
+  readonly agentMail: 'mcp' | 'cli';
+}
+
+interface AgentMailSteps {
+  readonly bootstrap: readonly string[];
+  readonly report: readonly string[];
+}
+
+const AGENT_MAIL_SAFETY =
+  'Do NOT run `am doctor repair`, `am doctor archive-normalize`, or delete `.mailbox.activity.lock`; if Agent Mail looks busy/unhealthy, report it to the coordinator and ask them to run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.';
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function agentMailSteps(
+  bead: BeadDispatchContext,
+  identity: TerminalPromptIdentity,
+  completionLength: string,
+): AgentMailSteps {
+  const task = `Implementing bead ${bead.beadId}: ${bead.title}`;
+  if (identity.agentMail === 'mcp') {
+    return {
+      bootstrap: [
+        '0a. macro_start_session(',
+        `      human_key='${bead.projectKey}',`,
+        `      program='${identity.program}',`,
+        `      model='${identity.model}',`,
+        `      task_description='${task}',`,
+        `      agent_name='${bead.agentName}')`,
+        '0b. file_reservation_paths for every file you plan to edit. Retry 3x with 30s backoff.',
+        `0c. send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} started'.`,
+        `0d. Agent Mail runtime safety: use the Agent Mail MCP/HTTP tools only. ${AGENT_MAIL_SAFETY}`,
+      ],
+      report: [
+        '- release_file_reservations.',
+        `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} done' (target ${completionLength}).`,
+      ],
+    };
+  }
+  const project = shellQuote(bead.projectKey);
+  const agent = shellQuote(bead.agentName);
+  const send = (subject: string, body: string) =>
+    `am mail send --project ${project} --from ${agent} --to ${shellQuote(bead.coordinatorName)} --subject ${shellQuote(subject)} --body ${body}`;
+  return {
+    bootstrap: [
+      'This pane has no Agent Mail MCP tools. Run these `am` CLI commands in your shell instead.',
+      `0a. am macros start-session --project ${project} --program ${identity.program} --model ${identity.model} --agent-name ${agent} --task ${shellQuote(task)} --json`,
+      `0b. am file_reservations reserve ${project} ${agent} <path>... --exclusive --ttl 3600 --reason ${shellQuote(bead.beadId)} for every file you plan to edit. If the output lists conflicts, retry 3x with 30s backoff.`,
+      `0c. ${send(`[impl] ${bead.beadId} started`, "'started'")}`,
+      `0d. Agent Mail runtime safety: ${AGENT_MAIL_SAFETY}`,
+    ],
+    report: [
+      `- am file_reservations release ${project} ${agent}`,
+      `- ${send(`[impl] ${bead.beadId} done`, `'<summary, target ${completionLength}>'`)}`,
+    ],
+  };
 }
 
 function adaptPromptForTerminal(
@@ -48,20 +106,13 @@ function adaptPromptForTerminal(
       : '- (none)';
 
   const acceptanceBlock = bead.acceptance.map((a) => `- ${a}`).join('\n');
+  const mail = agentMailSteps(bead, identity, completionLength);
 
   const prompt = [
     '## STEP 0 — AGENT MAIL BOOTSTRAP (MANDATORY — DO THIS BEFORE ANYTHING ELSE)',
     'Do NOT read any files or run any commands until all 4 sub-steps below are complete.',
     '',
-    '0a. macro_start_session(',
-    `      human_key='${bead.projectKey}',`,
-    `      program='${identity.program}',`,
-    `      model='${identity.model}',`,
-    `      task_description='Implementing bead ${bead.beadId}: ${bead.title}',`,
-    `      agent_name='${bead.agentName}')`,
-    '0b. file_reservation_paths for every file you plan to edit. Retry 3x with 30s backoff.',
-    `0c. send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} started'.`,
-    '0d. Agent Mail runtime safety: use the Agent Mail MCP/HTTP tools only. Do NOT run `am doctor repair`, `am doctor archive-normalize`, or delete `.mailbox.activity.lock`; if Agent Mail looks busy/unhealthy, report it to the coordinator and ask them to run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.',
+    ...mail.bootstrap,
     '',
     '## STEP 1 — IMPLEMENT',
     thinkingDirective,
@@ -89,8 +140,7 @@ function adaptPromptForTerminal(
     `- \`br update ${bead.beadId} --status closed\`; verify via \`br show ${bead.beadId} --json\`.`,
     '',
     '## STEP 4 — RELEASE + REPORT',
-    '- release_file_reservations.',
-    `- send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} done' (target ${completionLength}).`,
+    ...mail.report,
     '',
     buildPreCompletionQualityGate(bead),
   ].join('\n');
@@ -109,6 +159,7 @@ export function adaptPromptForClaude(
     provider: 'claude',
     program: 'claude-code',
     model: 'claude',
+    agentMail: 'mcp',
   });
 }
 
@@ -119,5 +170,6 @@ export function adaptPromptForPi(
     provider: 'pi',
     program: 'pi',
     model: 'pi',
+    agentMail: 'cli',
   });
 }

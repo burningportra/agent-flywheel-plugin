@@ -27,6 +27,7 @@ import { readTelemetry } from '../telemetry.js';
 import {
   detectCliCapabilities,
   describeCapabilities,
+  PRIMARY_PROVIDERS,
   type CapabilitiesMap,
   type ModelProvider,
 } from '../adapters/model-diversity.js';
@@ -93,10 +94,12 @@ export const DOCTOR_CHECK_NAMES = [
   'dist_drift',
   'orphaned_worktrees',
   'checkpoint_validity',
-  // Swarm-agent model diversity (claude/codex/gemini at 1:1:1 via NTM).
+  // Swarm-agent model diversity (claude/pi/gemini at 1:1:1, codex as fallback).
   'claude_cli',
   'codex_cli',
   'gemini_cli',
+  // Pi counts only when its Vercel AI Gateway credentials pass `pi auth check`.
+  'pi_cli',
   'swarm_model_ratio',
   // Codex companion app-server / ChatGPT-account compat (bead `cif`).
   'codex_config_compat',
@@ -254,8 +257,8 @@ export async function runDoctorChecks(
   const semaphore = new Semaphore(maxConcurrency);
 
   // Detect implementation-CLI capabilities once and share the result
-  // across the four model-diversity checks (avoids spawning `which`
-  // four separate times for the same answer).
+  // across the five model-diversity checks (avoids spawning `which`
+  // five separate times for the same answer).
   const swarmCapsPromise = detectCliCapabilities(exec, {
     timeout: perCheckTimeoutMs,
     cwd,
@@ -293,6 +296,7 @@ export async function runDoctorChecks(
     () => checkSwarmModelCli('claude_cli', 'claude', swarmCapsPromise, combined, now),
     () => checkSwarmModelCli('codex_cli', 'codex', swarmCapsPromise, combined, now),
     () => checkSwarmModelCli('gemini_cli', 'gemini', swarmCapsPromise, combined, now),
+    () => checkSwarmModelCli('pi_cli', 'pi', swarmCapsPromise, combined, now),
     () => checkSwarmModelRatio(swarmCapsPromise, combined, now),
     () =>
       checkCodexConfigCompat(
@@ -1275,13 +1279,13 @@ async function checkConvergenceStateValidity(
 // ─── Swarm-agent model diversity checks ───────────────────────────────────
 
 /**
- * 12-14. Per-provider CLI availability for the swarm-agent model
+ * 12-15. Per-provider CLI availability for the swarm-agent model
  * diversity feature. Yellow (not red) when missing — the wave can still
  * proceed via fallback to another provider; the doctor's
  * `swarm_model_ratio` synthesis check reports the achievable ratio.
  */
 async function checkSwarmModelCli(
-  checkName: 'claude_cli' | 'codex_cli' | 'gemini_cli',
+  checkName: 'claude_cli' | 'codex_cli' | 'gemini_cli' | 'pi_cli',
   provider: ModelProvider,
   capsPromise: Promise<CapabilitiesMap>,
   signal: AbortSignal,
@@ -1305,7 +1309,7 @@ async function checkSwarmModelCli(
     return {
       name: checkName,
       severity: 'yellow',
-      message: `${provider} cli not installed${cap.reason ? ` (${cap.reason})` : ''}`,
+      message: `${provider} cli ${cap.path ? 'not ready' : 'not installed'}${cap.reason ? ` (${cap.reason})` : ''}`,
       hint: CLI_NOT_AVAILABLE_HINT,
       durationMs: now() - start,
     };
@@ -1321,11 +1325,11 @@ async function checkSwarmModelCli(
 }
 
 /**
- * 15. Synthesised swarm model ratio. Reports the Claude:Codex:Gemini
+ * 15. Synthesised swarm model ratio. Reports the Claude:Pi:Gemini
  * ratio achievable in this environment. Severity:
- *   - green when all three CLIs are present (1:1:1).
- *   - yellow when at least one primary CLI or the Pi fallback is present.
- *   - red when no primary CLI or Pi fallback is present.
+ *   - green when all three primary lanes are usable (1:1:1).
+ *   - yellow when at least one primary lane or the Codex fallback is usable.
+ *   - red when no primary lane or Codex fallback is usable.
  */
 async function checkSwarmModelRatio(
   capsPromise: Promise<CapabilitiesMap>,
@@ -1337,10 +1341,11 @@ async function checkSwarmModelRatio(
   try {
     const caps = await capsPromise;
     const description = describeCapabilities(caps);
-    const primaryAvailableCount = (
-      ['claude', 'codex', 'gemini'] as const
-    ).reduce((acc, p) => acc + (caps[p].available ? 1 : 0), 0);
-    if (primaryAvailableCount === 3) {
+    const primaryAvailableCount = PRIMARY_PROVIDERS.reduce(
+      (acc, p) => acc + (caps[p].available ? 1 : 0),
+      0,
+    );
+    if (primaryAvailableCount === PRIMARY_PROVIDERS.length) {
       return {
         name: 'swarm_model_ratio',
         severity: 'green',
@@ -1348,7 +1353,7 @@ async function checkSwarmModelRatio(
         durationMs: now() - start,
       };
     }
-    if (primaryAvailableCount === 0 && !caps.pi.available) {
+    if (primaryAvailableCount === 0 && !caps.codex.available) {
       return {
         name: 'swarm_model_ratio',
         severity: 'red',

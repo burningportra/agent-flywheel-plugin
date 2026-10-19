@@ -55,7 +55,7 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 | Completion attestation ledger | ✅ Zod-validated JSON | ✗ | ✗ | ✗ |
 | Bead-graph dependency view | ✅ `bv` + Cytoscape viewer | ✗ | ✗ | ✗ |
 | Auto-recovery (stalled beads, drift) | ✅ tender daemon + 4-min looper | ✗ | ✗ | partial |
-| Doctor / setup / healthcheck triage | ✅ 23-check sweep | ✗ | ✗ | ✗ |
+| Doctor / setup / healthcheck triage | ✅ 24-check sweep | ✗ | ✗ | ✗ |
 
 ---
 
@@ -75,11 +75,13 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 
 # Pick "Set a goal". Type the goal. Pick "Full flywheel".
 # The flywheel runs /brainstorming, generates a plan via 3 parallel
-# models (claude-opus, claude-sonnet, codex), splits it into beads,
-# and asks you to approve.
+# planners (Claude plus two Pi panes on gateway models you pick),
+# splits it into beads, and asks you to approve.
 
-# After approval, the swarm spawns:
-ntm spawn agent-flywheel --label impl --cc=2 --cod=2 --gmi=2 --stagger-mode=smart
+# After approval, it asks which gateway model the Pi panes run, then
+# spawns the swarm (ntm for cc and gmi, tmux panes for Pi):
+node mcp-server/dist/scripts/swarm-spawn.js agent-flywheel --label impl \
+  --cc=2 --pi=2 --pi-model=vercel-ai-gateway/<model> --gmi=2
 
 # Each pane gets a marching-orders message via Agent Mail. The
 # tender daemon nudges stalled panes. When all beads close,
@@ -229,7 +231,7 @@ Stuck? Run the diagnostic triage chain:
 
 | Order | Command | Role | Run when |
 |---|---|---|---|
-| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 23 checks, ~2s | First — always safe |
+| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 24 checks, ~2s | First — always safe |
 | 2 | `/agent-flywheel:flywheel-setup` | Apply fixes (install / register / configure) | Only if doctor is yellow / red |
 | 3 | `/agent-flywheel:flywheel-healthcheck` | Deep periodic audit (codebase + dep graph) | Periodically; not for setup problems |
 
@@ -341,7 +343,7 @@ claude --plugin-dir .
      │    ├── server.ts                ← MCP tool registration
      │    ├── tools/                   ← 14 flywheel_* tools
      │    │    ├── observe.ts          ← session-state snapshot (v3.11)
-     │    │    ├── doctor.ts           ← 23-check toolchain probe
+     │    │    ├── doctor.ts           ← 24-check toolchain probe
      │    │    ├── remediate.ts        ← one-tap doctor fixes
      │    │    ├── advance-wave.ts     ← wave gating + attestation read
      │    │    ├── verify-beads.ts     ← bead-close reconciliation
@@ -373,8 +375,8 @@ claude --plugin-dir .
 | Role | Model |
 |---|---|
 | Correctness plan agent | `claude-opus-4-7` |
-| Ergonomics plan agent | `claude-sonnet-4-6` |
-| Robustness plan agent | `codex` |
+| Ergonomics plan agent | Pi on a Vercel AI Gateway model you pick (`claude-sonnet-4-6` without Pi) |
+| Robustness plan agent | Pi on a Vercel AI Gateway model you pick (`codex` without Pi) |
 | Swarm implementation agents | `claude-haiku-4-5` (lightweight) |
 | Review agents | `claude-sonnet-4-6` |
 

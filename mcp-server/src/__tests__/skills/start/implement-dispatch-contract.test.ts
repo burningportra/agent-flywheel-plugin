@@ -25,13 +25,26 @@ describe('server-owned wave-one implementer dispatch', () => {
     expect(content).not.toContain('copy the gate text from AGENTS.md');
   });
 
-  it('keeps the NTM spawn and pane-addressing invariants', () => {
+  it.each(['skills/start/_implement.md', 'skills/flywheel-swarm/SKILL.md'])(
+    '%s spawns Pi lanes through swarm-spawn.js on a user-picked model',
+    (relativePath) => {
+      const content = read(relativePath);
+
+      expect(content).toContain('node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug>');
+      expect(content).toContain('--cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>');
+      expect(content).toContain('flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })');
+      expect(content).toContain('data.piModels.implementer');
+      // ntm 1.36.1 rejects --pi on a raw spawn.
+      expect(content).not.toMatch(/ntm spawn[^\n]*--pi=/);
+    },
+  );
+
+  it('keeps the pane-addressing invariants', () => {
     const content = read('skills/start/_implement.md');
 
-    expect(content).toContain('ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user');
-    expect(content).toContain('--cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --pi=<N_pi> --stagger-mode=smart');
     expect(content).toContain('Use `--panes=N`');
     expect(content).toContain('`--pane=N` (singular) is silently broadcast to ALL panes');
+    expect(content).toContain("Don't add `--type`: ntm reports Pi panes as type `unknown`");
   });
 
   it('branches on every server-owned batch-review next step kind', () => {

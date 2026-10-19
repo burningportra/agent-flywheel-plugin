@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import {
@@ -149,7 +149,7 @@ describe("PANE001 — validateLaneCounts", () => {
   it("flags --pi=N alongside both cod>0 AND gmi>0 (pi gate)", () => {
     const v = validateLaneCounts({ cc: 2, cod: 2, gmi: 2, pi: 1 }, CANONICAL_RULE);
     expect(v).not.toBeNull();
-    expect(v).toMatch(/pi=1 present alongside both/);
+    expect(v).toMatch(/--pi=1 present alongside --cod=2 AND --gmi=2/);
   });
 
   it("allows --pi=N when cod=0 (substitution ladder: cod missing → bump pi)", () => {
@@ -487,5 +487,78 @@ describe("PANE001 — rule.check (cross-file scan)", () => {
       canonical: CANONICAL_RULE,
     } as never);
     expect(findings.find((f) => f.file.endsWith("_swarm.md"))).toBeUndefined();
+  });
+});
+
+// ─── cc:pi:gem canonical (v3.21.0) ───────────────────────────────────────
+
+describe("PANE001 — cc:pi:gem canonical from the repo AGENTS.md", () => {
+  const repoRoot = path.resolve(__dirname, "../../../..");
+  const canonical = parseCanonicalFromAgentsMd(readFileSync(path.join(repoRoot, "AGENTS.md"), "utf8"))!;
+  const emptyDoc: Document = { source: "", filePath: "<unused>" };
+
+  async function scan(line: string) {
+    const dir = freshDir("pane001-pi-");
+    const skillsRoot = path.join(dir, "skills", "start");
+    mkdirSync(skillsRoot, { recursive: true });
+    writeFileSync(path.join(skillsRoot, "_spawn.md"), `# Spawn\n\n\`\`\`bash\n${line}\n\`\`\`\n`, "utf8");
+    return pane001.check(emptyDoc, { filePath: "<unused>", source: "", canonical, skillsRoot } as never);
+  }
+
+  it("parses Claude, Pi, and Gemini at 1:1:1 with the gmi→pi→cod→cc ladder", () => {
+    expect(canonical).toEqual({
+      lanes: ["cc", "pi", "gmi"],
+      ratio: [1, 1, 1],
+      ladder: ["gmi", "pi", "cod", "cc"],
+      version: "v3.21.0",
+    });
+  });
+
+  it.each<[Record<string, number>, string]>([
+    [{ cc: 2, pi: 2, gmi: 2 }, "canonical 2:2:2"],
+    [{ cc: 2, cod: 2, gmi: 2 }, "Codex standing in for a missing Pi"],
+    [{ cc: 2, cod: 4 }, "Codex taking both missing shares"],
+    [{ cc: 6 }, "cc-only floor"],
+  ])("accepts %o (%s)", (counts) => {
+    expect(validateLaneCounts(counts, canonical)).toBeNull();
+  });
+
+  it("rejects Codex alongside a full Pi and Gemini share", () => {
+    expect(validateLaneCounts({ cc: 2, pi: 2, gmi: 2, cod: 1 }, canonical)).toBe(
+      "--cod=1 present alongside --pi=2 AND --gmi=2; per substitution ladder gmi→pi→cod→cc cod only enters when pi or gmi is downgraded",
+    );
+  });
+
+  it("flags Pi absorbing a missing Gemini share, which needs an override marker tied to the doctor row", () => {
+    expect(validateLaneCounts({ cc: 2, pi: 4 }, canonical)).toMatch(/lane ratio 2:4:0 \(cc:pi:gmi\)/);
+  });
+
+  it("rejects a Pi lane out of ratio with Claude", () => {
+    expect(validateLaneCounts({ cc: 1, pi: 2, gmi: 1 }, canonical)).toMatch(/lane ratio 1:2:1 \(cc:pi:gmi\)/);
+  });
+
+  it("accepts a canonical swarm-spawn.js line", async () => {
+    const findings = await scan(
+      'node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" proj --label impl --cc=2 --pi=2 --pi-model=vercel-ai-gateway/x/y --gmi=2',
+    );
+    expect(findings).toEqual([]);
+  });
+
+  it("flags a drifting swarm-spawn.js line", async () => {
+    const findings = await scan("node swarm-spawn.js proj --label impl --cc=3 --pi=1 --pi-model=a/b --gmi=1");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.message).toMatch(/lane ratio 3:1:1/);
+  });
+
+  it("flags --pi on a raw ntm spawn even next to an override marker, because ntm has no pi lane", async () => {
+    const findings = await scan("# PANE001-OVERRIDE: testing\nntm spawn proj --label x --no-user --cc=2 --pi=2 --gmi=2");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.message).toBe('ntm spawn has no pi lane (ntm rejects --pi=2 with "unknown flag: --pi")');
+    expect(findings[0]!.hint).toContain("swarm-spawn.js");
+  });
+
+  it("finds no drift in the repo's own start skills", async () => {
+    const findings = await pane001.check(emptyDoc, { filePath: "<unused>", source: "", repoRoot } as never);
+    expect(findings).toEqual([]);
   });
 });

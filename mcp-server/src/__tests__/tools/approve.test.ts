@@ -38,7 +38,7 @@ function parsePromptCompletionReport(prompt: string): unknown {
   return CompletionReportSchemaV1.parse(JSON.parse(materialized));
 }
 
-function availableCliCalls(gemini = true): ExecCall[] {
+function availableCliCalls(gemini = true, pi = true): ExecCall[] {
   return [
     {
       cmd: 'which',
@@ -60,7 +60,14 @@ function availableCliCalls(gemini = true): ExecCall[] {
     {
       cmd: 'which',
       args: ['pi'],
-      result: { code: 1, stdout: '', stderr: 'pi not found' },
+      result: pi
+        ? { code: 0, stdout: '/bin/pi\n', stderr: '' }
+        : { code: 1, stdout: '', stderr: 'pi not found' },
+    },
+    {
+      cmd: 'pi',
+      args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--no-refresh'],
+      result: { code: 0, stdout: 'ready\n', stderr: '' },
     },
   ];
 }
@@ -560,7 +567,7 @@ describe('runApprove', () => {
         creationAudit: { planCoverage: null, duplicateCandidates: [] },
         lanes: [
           { lane: 'cc', beadIds: ['bead-1'] },
-          { lane: 'cod', beadIds: ['bead-2'] },
+          { lane: 'pi', beadIds: ['bead-2'] },
         ],
         prompts: [
           {
@@ -571,7 +578,7 @@ describe('runApprove', () => {
           },
           {
             beadId: 'bead-2',
-            lane: 'cod',
+            lane: 'pi',
             agentName: expect.any(String),
             prompt: expect.stringContaining('## PRE-COMPLETION QUALITY GATE'),
           },
@@ -620,14 +627,14 @@ describe('runApprove', () => {
 
     expect(data.lanes).toEqual([
       { lane: 'cc', beadIds: ['wave-1-1', 'wave-1-2'] },
-      { lane: 'cod', beadIds: ['wave-1-3', 'wave-1-4'] },
+      { lane: 'pi', beadIds: ['wave-1-3', 'wave-1-4'] },
       { lane: 'gmi', beadIds: ['wave-1-5', 'wave-1-6'] },
     ]);
     expect(data.prompts.map(({ beadId, lane }) => ({ beadId, lane }))).toEqual([
       { beadId: 'wave-1-1', lane: 'cc' },
       { beadId: 'wave-1-2', lane: 'cc' },
-      { beadId: 'wave-1-3', lane: 'cod' },
-      { beadId: 'wave-1-4', lane: 'cod' },
+      { beadId: 'wave-1-3', lane: 'pi' },
+      { beadId: 'wave-1-4', lane: 'pi' },
       { beadId: 'wave-1-5', lane: 'gmi' },
       { beadId: 'wave-1-6', lane: 'gmi' },
     ]);
@@ -636,7 +643,9 @@ describe('runApprove', () => {
       expect(prompt.prompt).toContain(`.pi-flywheel/completion/${prompt.beadId}.json`);
       expect(prompt.prompt).toContain(`"beadId": "${prompt.beadId}"`);
       expect(prompt.prompt).toContain(`"agentName": "${prompt.agentName}"`);
-      expect(prompt.prompt).toContain("send_message to 'WindyBasin'");
+      expect(prompt.prompt).toContain(
+        prompt.lane === 'pi' ? "--to 'WindyBasin'" : "send_message to 'WindyBasin'",
+      );
       expect(prompt.prompt).not.toContain('AGENTS.md');
       expect(parsePromptCompletionReport(prompt.prompt)).toMatchObject({
         beadId: prompt.beadId,
@@ -645,7 +654,7 @@ describe('runApprove', () => {
     }
   });
 
-  it('returns 2/4 wave-one lanes when Gemini is unavailable', async () => {
+  it('returns 2/4 wave-one lanes with Pi taking the Gemini share when Gemini is unavailable', async () => {
     const beads = Array.from({ length: 6 }, (_, index) => makeBead({
       id: `fallback-${index + 1}`,
       title: `Fallback ${index + 1}`,
@@ -664,10 +673,39 @@ describe('runApprove', () => {
     expect(structured.data.lanes).toEqual([
       { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
       {
-        lane: 'cod',
+        lane: 'pi',
         beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
       },
     ]);
+  });
+
+  it('hands the Pi share to Codex when Pi is not on PATH', async () => {
+    const beads = Array.from({ length: 6 }, (_, index) => makeBead({
+      id: `nopi-${index + 1}`,
+      title: `No Pi ${index + 1}`,
+      description: `Implement no-pi ${index + 1}.\nHOW: src/nopi-${index + 1}.ts`,
+    }));
+    const { ctx } = makeCtx(
+      {},
+      makeExecCalls(beads),
+      '/fake/cwd',
+      availableCliCalls(true, false),
+    );
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+    const structured = result.structuredContent as {
+      data: { lanes: unknown; dispatch: { degraded: boolean; warnings: string[] } };
+    };
+
+    expect(structured.data.lanes).toEqual([
+      { lane: 'cc', beadIds: ['nopi-1', 'nopi-2'] },
+      { lane: 'gmi', beadIds: ['nopi-5', 'nopi-6'] },
+      { lane: 'cod', beadIds: ['nopi-3', 'nopi-4'] },
+    ]);
+    expect(structured.data.dispatch).toEqual({
+      degraded: true,
+      warnings: ['pi CLI not available (which pi exited 1); reassigned 2 bead(s) to codex'],
+    });
   });
 
   it('does not mutate the implementation state when no provider is available', async () => {

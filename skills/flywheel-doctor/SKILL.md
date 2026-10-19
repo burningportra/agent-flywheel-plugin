@@ -23,7 +23,8 @@ When invoked with `--json`, the skill emits to stdout exactly the `structuredCon
 
 - `ntm_binary` — ntm CLI present and runnable.
 - `claude_cli` / `codex_cli` / `gemini_cli` — per-CLI installation + auth state.
-- `swarm_model_ratio` — synthesis check reporting the achievable cc:cod:gmi ratio.
+- `pi_cli` — Pi on PATH with Vercel AI Gateway credentials (`pi auth check`). Swarms and deep plan use it; duels don't.
+- `swarm_model_ratio` — synthesis check reporting the achievable cc:pi:gmi ratio, with Codex as the fallback lane.
 
 If any two of `{claude_cli, codex_cli, gemini_cli}` are green AND `ntm_binary` is green, duels can run. If only one is green, the duel skill aborts in Phase 1 detection — fall back to single-agent paths (`/idea-wizard`, `mode=deep`, 5-agent fresh-eyes) until the other CLIs are healthy.
 

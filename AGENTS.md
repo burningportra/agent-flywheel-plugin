@@ -12,7 +12,7 @@ Cold-reader affordance. Each bullet links to an existing section below.
 
 - **Project-local skills** — see [`Available CLI Tools`](#available-cli-tools), [`SKILL.md linting`](#skillmd-linting), and `skills/` (project-local skill bodies loaded via `flywheel_get_skill`).
 - **MCP tools** — see [`MCP tools quick reference`](#mcp-tools-quick-reference) for the at-a-glance index, then version-sliced sections (`v3.7.0`, `v3.11.0`, `v3.12.0`) for change history.
-- **Swarm path** — see [`NTM is mandatory for all spawned work`](#ntm-is-mandatory-for-all-spawned-work) + [`Agent Coordination`](#agent-coordination) + [`Bead Lifecycle`](#bead-lifecycle). Quick recipe: `ntm spawn <project> --label <purpose> --no-user --cc=N --cod=M --stagger-mode=smart` → `ntm --robot-send=<session> --panes=<idx> --type=cc --msg="…"` → each agent runs `macro_start_session` + `reserveOrFail` + close bead with `br update --status closed` and write `.pi-flywheel/completion/<bead>.json` per the [Pre-Completion Quality Gate](#pre-completion-quality-gate-mandatory-for-every-spawned-implementor).
+- **Swarm path** — see [`NTM is mandatory for all spawned work`](#ntm-is-mandatory-for-all-spawned-work) + [`Agent Coordination`](#agent-coordination) + [`Bead Lifecycle`](#bead-lifecycle). Quick recipe: `flywheel_pi_models` for the Pi model → `node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> --label <purpose> --cc=N --pi=N --pi-model=<model> --gmi=N` → `ntm --robot-send=<session> --panes=<printed index> --msg="…"` → each agent runs `macro_start_session` + `reserveOrFail` + close bead with `br update --status closed` and write `.pi-flywheel/completion/<bead>.json` per the [Pre-Completion Quality Gate](#pre-completion-quality-gate-mandatory-for-every-spawned-implementor).
 - **Conventions** — see [`Hard Constraints`](#hard-constraints), [`Code Conventions`](#code-conventions), and [`Tool name deprecation`](#tool-name-deprecation).
 
 ## High-stakes track (dueling-idea-wizards integration)
@@ -87,11 +87,12 @@ Current-tool index (HEAD = v3.20.0). One line per tool, alphabetical. Detailed s
 - **`flywheel_calibrate({ sinceDays? })`** — bead-template effort calibration from closed `br list` rows. Rows are grouped by the `Template: <id>` line the bead-creation builder requires at the top of every new bead; beads without a matching template fall into the `__untemplated__` bucket.
 - **`flywheel_convergence({ planSlug })`** — read-only `ConvergenceState` from `.pi-flywheel/plans/<slug>/convergence.json` (multi-signal score + B6 oscillation flag). v3.12.0+. See "MCP tools added in v3.12.0" for B6 semantics.
 - **`flywheel_discover`** — surface ranked improvement ideas after a profile pass.
-- **`flywheel_doctor`** — health sweep, currently 23 checks (incl. v3.12.0 `convergence_state_validity`, v3.13.0 `outcome_rubric_validity`, v3.18.0 `gemini_model_compat`, `orphan_tender_daemons`, `npm_marketplace_version_drift`, `projects_base_misconfig`). Read-only. Also returns `data.preflightBanner` (rendered string, or null when all critical checks are green) and `data.firstRun`, which `skills/start/SKILL.md` Step 0 prints instead of rebuilding the banner from the rows.
+- **`flywheel_doctor`** — health sweep, currently 24 checks (incl. v3.12.0 `convergence_state_validity`, v3.13.0 `outcome_rubric_validity`, v3.18.0 `gemini_model_compat`, `orphan_tender_daemons`, `npm_marketplace_version_drift`, `projects_base_misconfig`, v3.21.0 `pi_cli`). Read-only. Also returns `data.preflightBanner` (rendered string, or null when all critical checks are green) and `data.firstRun`, which `skills/start/SKILL.md` Step 0 prints instead of rebuilding the banner from the rows.
 - **`flywheel_emit_codex({ targetDir, pluginRoot? })`** — emit `AGENTS.md` and `.codex/skills/*.md` under a destination inside `cwd`; Claude Code remains the source of truth.
 - **`flywheel_get_skill({ name })`** — bundled skill body in one round-trip. Preferred over `Read` for skill lookups.
 - **`flywheel_memory({ operation, query?, content? })`** — CASS memory; operations: `search | store | draft_postmortem | draft_solution_doc | refresh_learnings`. The `refresh_learnings` op classifies `docs/solutions/` entries Keep/Update/Consolidate/Replace/Delete.
 - **`flywheel_observe`** — single-call session-state snapshot; surfaces hints from missing completion attestations.
+- **`flywheel_pi_models({ action, roles?, picks?, refresh? })`** — v3.21.0; `action: "list"` ranks the live Vercel AI Gateway models for the Pi lanes and returns one `AskUserQuestion` payload per role; `action: "choose"` validates the answers, runs `pi auth check`, remembers the picks, and returns `data.piModels`.
 - **`flywheel_plan({ mode, ambition? })`** — planner; modes: `standard | deep | duel`. Every mode auto-detects `docs/brainstorms/<slug>-<date>.md`. `ambition: "ambitious"` (orthogonal to mode) also requires the ambition charter `docs/brainstorms/<slug>-<date>-ambition.md` from the `_planning.md` Step 5 ambition pass and injects it into every planner prompt.
 - **`flywheel_profile`** — repo profile with git-HEAD-keyed cache. Always call first.
 - **`flywheel_remediate({ checkName })`** — apply canonical fix for a failing doctor check (per-check mutex, `dry_run` default).
@@ -233,6 +234,18 @@ State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 - **Result contract.** Success returns `data.packet`, `data.codexPrompt`, and `data.memoryLine`. `codexPrompt` includes the two trailing newlines required by the Codex input buffer. Invalid phases return `invalid_input`; artifact, Git, and CASS failures reuse existing structured error codes.
 - **Generated aliases.** Every canonical runner now generates its `orch_*` alias from the same registry. `orch_rescue`, `orch_emit_codex`, `orch_doctor`, `orch_convergence`, `orch_synthesize_rubric`, and `orch_grade_outcome` therefore use the canonical runner during the v4.0 deprecation window.
 
+## MCP tools added in v3.21.0
+
+Pi replaces Codex as the second primary lane in deep plan and implementation swarms, by operator decision. Pi runs on a Vercel AI Gateway model, and the gateway's top models change every few weeks, so the user picks the model each time a Pi lane spawns instead of the plugin pinning one.
+
+- **`flywheel_pi_models({ cwd, action?, roles?, picks?, refresh? })`** — source `mcp-server/src/pi-models.ts` (domain) and `mcp-server/src/tools/pi-models.ts` (handler). Roles are `robustness` and `ergonomics` (deep plan) and `implementer` (swarms).
+  - `action: "list"` (default) reads the public catalog at `https://ai-gateway.vercel.sh/v1/models` and the CC-BY-4.0 usage leaderboard at `https://vercel.com/api/ai/leaderboard-export?dataset=models&modality=text&format=json`, cached for an hour in `.pi-flywheel/cache/gateway-models.json`. A failed fetch falls back to the cache with `source.stale: true`; with no cache it returns `missing_prerequisite`. Candidates are tool-capable language models ranked by mean token share over the last 7 days. Dated snapshots (`-1017`) inherit their family's share, so the newest snapshot ranks with its family. Free, batch, deprecated, stealth, and Anthropic models are dropped, since the Claude lane covers Anthropic. Up to two reasoning models released in the last 14 days are added as `isNew` even with no share yet. Each question puts the user's last pick for that role first, adds its `-fast` variant when the gateway lists one, and gives deep plan's two roles different default labs.
+  - `action: "choose"` takes `picks` keyed by role, as option labels, gateway ids, or `vercel-ai-gateway/<id>`. An unknown model returns `invalid_input` with `details.suggestions`. It runs `pi auth check --provider vercel-ai-gateway --no-refresh`, writes `.pi-flywheel/pi-models.json`, and returns `data.piModels` (role → `vercel-ai-gateway/<id>`), `data.piReady`, and `data.authDetail`.
+- **`swarm-spawn.js`** (`mcp-server/scripts/swarm-spawn.ts` → `mcp-server/src/swarm-spawn.ts`). ntm 1.36.1 has no `pi` lane, so this script runs `ntm spawn --no-user --stagger-mode=smart` for the cc, gmi, and cod lanes, then adds one `pi --model <model> --thinking high --no-approve` pane per `--pi` count with `tmux split-window`, titled `<session>__pi_<n>` with `remain-on-exit on`. It prints `{ session, panes: [{ lane, index, paneId, model? }], errors }` and exits 1 when any pane failed.
+- **`pi_cli` doctor check.** Green when `pi` is on PATH and `pi auth check` reports ready for the gateway; yellow otherwise. `swarm_model_ratio` now reports the Claude:Pi:Gemini ratio, and `splitBeadsByProvider` assigns Pi's share to Codex, then Gemini, when Pi isn't ready.
+- **Pi implementer prompts use the `am` CLI.** Pi panes load no project MCP servers under `--no-approve`, so `adaptPromptForPi` writes Agent Mail steps as `am macros start-session`, `am file_reservations reserve|release`, and `am mail send` commands.
+- **Removed.** `FW_PI_PLANNER_MODEL`, the `vercel-ai-gateway/google/gemini-4-argon` default, and the deep-plan `fresh-perspective` planner. The ergonomics planner's task now covers challenging shared assumptions.
+
 ## NTM is mandatory for all spawned work
 
 **Hard rule.** Every multi-agent spawn — planning fan-out, swarm waves, deslop sweeps, reality-check follow-ups, scrutiny passes, parallel reviewers, ad-hoc "do these N things in parallel" requests — **must go through NTM** (`ntm spawn` + `ntm --robot-send`). No exceptions.
@@ -243,45 +256,48 @@ State fields added by the fresh-eyes auto-trigger feature (v3.17.0+):
 - `tmux new-window` / `tmux split-window` invoked directly (NTM owns pane lifecycle, robot-send addressing, stagger, and stuck-pane recovery).
 - Spawning agents through any other orchestrator (custom shell loops, Makefile parallel targets, `xargs -P`, GNU `parallel`) for work that produces code or PRs.
 
-**Why:** NTM provides the canonical pane registry, robot-send addressing (`--type=cc|pi|cod|gem`), Agent Mail integration, stuck-pane detection, stagger to avoid cold-boot thundering herd, and the `--no-user` discipline. Bypassing it loses observability, breaks file-reservation handshakes, and produces work the flywheel cannot track or recover.
+**Why:** NTM provides the canonical pane registry, robot-send addressing (`--type=cc|cod|gem`, or `--panes=<index>`), Agent Mail integration, stuck-pane detection, stagger to avoid cold-boot thundering herd, and the `--no-user` discipline. Bypassing it loses observability, breaks file-reservation handshakes, and produces work the flywheel cannot track or recover.
 
 **Allowed exceptions (narrow):**
 - Single-shot research / read-only Q&A subagents that produce no code and no PRs (e.g. `Explore`, `general-purpose` for one-off lookups). These can use the `Task`/`Agent` tool directly.
 - Single foreground `Bash` invocations that complete in-band (linter, test, build).
 - Codex-rescue / triangulation calls where the codex skill's contract explicitly handles the dispatch.
-- The Deep plan Pi pane. ntm 1.36.1 has no `pi` lane (`ntm spawn --pi=1` fails with `unknown flag: --pi`), so `skills/start/_planning.md` adds one Pi planner to the NTM-spawned deep-plan session with `tmux split-window`. The session and its other panes still come from `ntm spawn`.
+- Pi panes from `swarm-spawn.js`. ntm 1.36.1 has no `pi` lane (`--pi=1` fails with `unknown flag: --pi`), so the script adds Pi panes to the session `ntm spawn` created, with `tmux split-window`, and prints their indices for `ntm --robot-send --panes=`. NTM still owns the session and every other pane. Add Pi panes through this script rather than with a hand-written `tmux split-window`.
 
 If you find yourself wanting to spawn N>1 coding workers without NTM, stop and load `/ntm` + `/vibing-with-ntm` first. Reviewers: reject PRs whose skill changes introduce non-NTM fan-out for implementation work.
 
 ## NTM pane priority
 
-**Canonical rule (Changed in v3.17.0).** Mixed `cc:cod:gem` 1:1:1 — Claude, Codex, and Gemini at equal share — is the default for every NTM spawn. The model-diversified split is the point: three independent reasoners running in parallel surface different failure modes, and the 1:1:1 ratio is what downstream pipelines (Step 9 fresh-eyes, duel review, batch synthesis) implicitly assume when they reconcile cross-agent votes.
+**Canonical rule (Changed in v3.21.0).** Mixed `cc:pi:gem` 1:1:1 — Claude, Pi, and Gemini at equal share — is the default for every swarm spawn. The model-diversified split is the point: three independent reasoners running in parallel surface different failure modes, and the 1:1:1 ratio is what downstream pipelines (Step 9 fresh-eyes, batch synthesis) assume when they reconcile cross-agent votes. Pi took Codex's seat by operator decision. It runs on a Vercel AI Gateway model the user picks through `flywheel_pi_models` at spawn time, because the gateway's top models change every few weeks.
 
-**Baseline pattern.** A six-pane spawn:
+**Baseline pattern.** ntm 1.36.1 has no `pi` lane, so swarms spawn through `swarm-spawn.js`, which runs `ntm spawn --no-user --stagger-mode=smart` for the cc, gmi, and cod lanes and adds the Pi panes to the same session. A six-pane spawn:
 
 ```
-ntm spawn <project> --label <purpose> --no-user \
-  --cc=2 --cod=2 --gmi=2 --stagger-mode=smart
+node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> --label <purpose> \
+  --cc=2 --pi=2 --pi-model=vercel-ai-gateway/<model> --gmi=2
 ```
 
-Smaller swarms scale the ratio down (e.g. `--cc=1 --cod=1 --gmi=1` for three panes); larger swarms scale it up while keeping each provider's share equal until the substitution ladder fires.
+Address every pane by the `index` the script prints, with `ntm --robot-send --panes=<index>`. There is no `--type=pi`: ntm reports Pi panes as type `unknown`, so tend them with `tmux capture-pane` and `#{pane_dead}`. Pi prompts reach Agent Mail through the `am` CLI because `--no-approve` skips project MCP servers.
 
-**Substitution ladder when a provider is unavailable.** The doctor's `claude_cli`, `codex_cli`, `gemini_cli`, `swarm_model_ratio`, `codex_config_compat`, and (v3.17.0) `gemini_model_compat` checks together signal which lanes the host can actually fill. When a provider is missing or non-green, its share is reassigned in this order:
+Smaller swarms scale the ratio down (e.g. `--cc=1 --pi=1 --gmi=1` for three panes); larger swarms scale it up while keeping each provider's share equal until the substitution ladder fires.
 
-1. **Missing `gmi` → `cod`** (closest peer in the diversity space — both are non-Claude reasoners with comparable depth).
-2. **`cod` also unavailable → `pi`** (Pi inherits the lane only when both Gemini and Codex are off the table; this is also the path the noob-onboarding flow takes when the host has no API credentials).
+**Substitution ladder when a provider is unavailable.** The doctor's `claude_cli`, `pi_cli`, `gemini_cli`, `codex_cli`, `swarm_model_ratio`, `codex_config_compat`, and `gemini_model_compat` checks together signal which lanes the host can fill. `pi_cli` is green only when `pi` is on PATH and `pi auth check --provider vercel-ai-gateway` reports ready. The ladder is gmi→pi→cod→cc, applied lane by lane:
+
+1. **Missing `pi` → `cod`.** Codex takes Pi's share. It's the lane Pi replaced and the other non-Claude reasoner with comparable depth.
+2. **Missing `gmi` → `pi`**, or `cod` when Pi is missing too.
 3. **All three peers unavailable → `cc`** (cc-only is the last-resort floor; it works, but it gives up the cross-agent fresh-eyes signal — operators should treat it as a degraded mode and log it).
 
-The same ladder runs lane-by-lane: a four-pane spawn that loses Gemini becomes `--cc=2 --cod=2`, not `--cc=4`. The operator preference for "pure cc" swarms is the explicit override that lands at step 3 — it is not the default.
+A four-pane spawn that loses Gemini becomes `--cc=2 --pi=2`, not `--cc=4`. `flywheel_approve_beads(action: "start")` and `flywheel_advance_wave` apply the same order server-side (`FALLBACK_PRIORITY` in `mcp-server/src/adapters/model-diversity.ts`), so implementation waves spawn the lane counts they return. The operator preference for "pure cc" swarms is the explicit override that lands at step 3 — it is not the default.
 
-**Deep plan exception (2026-10-17).** Deep plan runs its third planner in Pi on a Gemini model instead of a Gemini CLI pane, by operator decision. The session is `--cc=1 --cod=1` plus one Pi pane added with `tmux split-window`. The model defaults to `vercel-ai-gateway/google/gemini-4-argon`, and `FW_PI_PLANNER_MODEL` overrides it. When Pi is missing or `pi auth check` fails, the lens goes to a second Claude pane (`--cc=2 --cod=1`). Duel plan and the planning-workflow review rounds keep the `gmi` lane.
+**Deep plan exception (v3.21.0).** Deep plan runs one Claude planner (correctness) and two Pi planners (robustness and ergonomics), each on a model the user picks through `flywheel_pi_models` with roles `robustness` and `ergonomics`, so its spawn is `--cc=1 --pi=2`. Without Pi, Codex takes robustness and a second Claude pane takes ergonomics (`--cc=2 --cod=1`). Duel plan, duel review, the planning-workflow review rounds, and deslop keep their Codex lanes.
 
 **Retired rules.**
 
-- The v3.12.0 "prefer `--cod=` over `--pi=`" priority is **retired**. Cod-first only applies inside the substitution ladder above (step 1 fallback for missing Gemini); it is not the canonical secondary lane in fresh spawns.
-- The pre-v3.12.0 "pi over cod" priority is also **retired**. Pi is the second fallback (step 2), not a default.
+- The v3.17.0 canonical `cc:cod:gem` 1:1:1 is **retired**. Codex is now the fallback for a missing Pi, not a default lane.
+- The v3.12.0 "prefer `--cod=` over `--pi=`" priority and the pre-v3.12.0 "pi over cod" priority are both **retired**.
+- The 2026-10-17 deep-plan Pi pane on `vercel-ai-gateway/google/gemini-4-argon` and its `FW_PI_PLANNER_MODEL` override are **retired** in favor of the user-picked models above.
 
-Applies to every `ntm spawn` and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, `skills/start/_reality_check.md`, `skills/start/_inflight_prompt.md`, `skills/start/SKILL.md`, and any future swarm/orchestrator skill). Reviewers: reject any PR that ships `--cc=N` alone, `--cod=N` alone, or `--pi=N` alone in production swarm code without a substitution-ladder justification tied to a non-green doctor row.
+Applies to every swarm spawn and `ntm --robot-send` invocation in this plugin's skills (`skills/start/_planning.md`, `skills/start/_implement.md`, `skills/start/_deslop.md`, `skills/start/_reality_check.md`, `skills/start/_inflight_prompt.md`, `skills/start/SKILL.md`, `skills/flywheel-swarm/SKILL.md`, and any future swarm/orchestrator skill). Reviewers: reject any PR that ships `--cc=N` alone, `--pi=N` alone, or `--cod=N` alone in production swarm code without a substitution-ladder justification tied to a non-green doctor row. PANE001 also rejects `--pi=` on a raw `ntm spawn`, which no override marker can fix.
 
 ## Bead Lifecycle
 

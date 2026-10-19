@@ -1,9 +1,11 @@
 /**
- * Swarm-agent model diversity — Claude : Codex : Gemini at 1:1:1 via NTM,
- * with Pi as the first non-primary fallback.
+ * Swarm-agent model diversity — Claude : Pi : Gemini at 1:1:1, with Codex
+ * as the fallback that takes Pi's share. Pi runs on a Vercel AI Gateway
+ * model the user picks through `flywheel_pi_models`.
  *
  * Responsibilities:
- *   1. Detect CLI availability (`which claude codex gemini pi`).
+ *   1. Detect CLI availability (`which claude codex gemini pi`, plus Pi's
+ *      gateway credentials).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so
@@ -16,6 +18,7 @@
 
 import type { ExecFn } from '../exec.js';
 import { errMsg } from '../errors.js';
+import { checkPiGatewayAuth, PI_GATEWAY_PROVIDER } from '../pi-models.js';
 import { adaptPromptForClaude, adaptPromptForPi } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
 import { adaptPromptForGemini } from './gemini-prompt.js';
@@ -27,7 +30,7 @@ export type ModelProvider = 'claude' | 'codex' | 'gemini' | 'pi';
 export interface CliCapability {
   readonly provider: ModelProvider;
   readonly available: boolean;
-  /** Resolved binary path when available. */
+  /** Resolved binary path when the binary is on PATH, even if it isn't ready. */
   readonly path?: string;
   /** Error text when unavailable (ENOENT or version probe failure). */
   readonly reason?: string;
@@ -54,7 +57,7 @@ export interface DispatchPlan {
   /** True when one or more preferred CLIs were missing and we fell back. */
   readonly degraded: boolean;
   /**
-   * Assigned Claude:Codex:Gemini bead counts.
+   * Assigned Claude:Pi:Gemini bead counts.
    * Six beads with all providers → "2:2:2".
    */
   readonly ratio: string;
@@ -110,40 +113,50 @@ export async function detectCliCapabilities(
     }
   };
 
+  // A Pi lane runs on the Vercel AI Gateway, so Pi counts only with its credentials.
+  const probePi = async (): Promise<CliCapability> => {
+    const found = await probe('pi');
+    if (!found.available) return found;
+    const auth = await checkPiGatewayAuth(exec, { cwd: opts.cwd, signal: opts.signal, timeout: 3000 });
+    return auth.ready
+      ? found
+      : { ...found, available: false, reason: `pi auth check for ${PI_GATEWAY_PROVIDER}: ${auth.detail}` };
+  };
+
   const [claude, codex, gemini, pi] = await Promise.all([
     probe('claude'),
     probe('codex'),
     probe('gemini'),
-    probe('pi'),
+    probePi(),
   ]);
   return { claude, codex, gemini, pi };
 }
 
 // ─── Ratio math + split ───────────────────────────────────────────────────
 
-const PRIMARY_PROVIDERS = ['claude', 'codex', 'gemini'] as const;
+export const PRIMARY_PROVIDERS = ['claude', 'pi', 'gemini'] as const;
 
 const ROUTING_PROVIDERS: readonly ModelProvider[] = Object.freeze([
   'claude',
-  'codex',
-  'gemini',
   'pi',
+  'gemini',
+  'codex',
 ]);
 
 const FALLBACK_PRIORITY = {
-  claude: ['codex', 'gemini', 'pi'],
-  codex: ['gemini', 'pi', 'claude'],
-  gemini: ['codex', 'pi', 'claude'],
+  claude: ['pi', 'gemini', 'codex'],
+  pi: ['codex', 'gemini', 'claude'],
+  gemini: ['pi', 'codex', 'claude'],
 } as const satisfies Record<(typeof PRIMARY_PROVIDERS)[number], readonly ModelProvider[]>;
 
 /**
- * Split N beads into canonical Claude/Codex/Gemini shares, then transfer a
+ * Split N beads into canonical Claude/Pi/Gemini shares, then transfer a
  * missing provider's complete share through the supported fallback order.
  *
  * Contract:
  *   - sum(lane.beadIds.length) == beadIds.length
  *   - lanes contain only providers with `available === true`
- *   - lane order is claude, codex, gemini, pi (stable; skipped entries omit)
+ *   - lane order is claude, pi, gemini, codex (stable; skipped entries omit)
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
  */
@@ -160,7 +173,7 @@ export function splitBeadsByProvider(
     return {
       lanes: [],
       warnings: [
-        'no implementation CLI available (claude, codex, gemini, pi all missing)',
+        'no implementation CLI available (claude, pi, gemini, codex all missing)',
       ],
       degraded: true,
       ratio: '0:0:0',
@@ -245,8 +258,8 @@ export function adaptPromptFor(
 
 /**
  * Describe the capabilities map in a doctor-ready one-liner.
- *   All-available → "claude:gemini:codex available; ratio 1:1:1 achievable"
- *   Missing codex → "claude+gemini available; codex missing; ratio 1:0:1 achievable"
+ *   All-available → "claude+pi+gemini available; ratio 1:1:1 achievable"
+ *   Missing pi    → "claude+gemini available; pi missing; ratio 1:0:1 achievable; codex fallback available"
  */
 export function describeCapabilities(caps: CapabilitiesMap): string {
   const avail = PRIMARY_PROVIDERS.filter((p) => caps[p].available);
@@ -258,6 +271,6 @@ export function describeCapabilities(caps: CapabilitiesMap): string {
   parts.push(avail.length > 0 ? `${avail.join('+')} available` : 'no CLIs available');
   if (miss.length > 0) parts.push(`${miss.join('+')} missing`);
   parts.push(`ratio ${ratio} achievable`);
-  if (caps.pi.available) parts.push('pi fallback available');
+  if (caps.codex.available) parts.push('codex fallback available');
   return parts.join('; ');
 }

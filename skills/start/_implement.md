@@ -99,7 +99,7 @@ During each tend cycle:
 
 1. Capture state with `ntm --robot-snapshot --robot-format=toon`, then block on `ntm --robot-wait "$SESSION" --wait-until=attention,action_required,mail_ack_required --timeout=90s`.
 2. Cross-check `ntm --robot-is-working="$SESSION"` with Agent Mail and `git log --oneline --grep="<full-bead-id>"`. Read and acknowledge `[impl] <full-bead-id> done` messages.
-3. About 60 seconds after spawn, confirm each pane registered an Agent Mail identity. Nudge a missing identity with `ntm --robot-send`.
+3. About 60 seconds after spawn, confirm each pane registered an Agent Mail identity. Nudge a missing identity with `ntm --robot-send`. ntm can't classify Pi panes, so check each one with `tmux capture-pane -p -t <paneId>` and `tmux display-message -p -t <paneId> '#{pane_dead}'`.
 4. Print a tick only when pane state, inbox count, or commits change.
 5. Call `ScheduleWakeup(270s, …)` and end the turn while work continues.
 
@@ -170,33 +170,28 @@ In unattended runs, apply the recommended remediation. Stop if compatibility sta
 
 Load `/ntm` and `/vibing-with-ntm` before spawning. Follow `/vibing-with-ntm` for nudge escalation, the stuck-pane ladder, rate-limit probes, context handoff, and convergence termination.
 
-When `NTM_AVAILABLE=true`, derive `N_cc`, `N_cod`, `N_gmi`, and `N_pi` from the returned lanes, then spawn:
+When `NTM_AVAILABLE=true`, count the panes per lane from the returned lanes: `N_cc`, `N_pi`, `N_gmi`, and `N_cod`. Codex lanes appear only when Pi or Gemini fell back. When `N_pi` is above 0, ask which gateway model the Pi panes run, because gateway models change every few weeks:
+
+1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })` and pass `data.questions[0]` to `AskUserQuestion` unchanged. Its first option is the user's last pick.
+2. Call `flywheel_pi_models({ cwd, action: "choose", picks: { implementer: "<answer>" } })` and set `PI_IMPL_MODEL` from `data.piModels.implementer`. An `invalid_input` result lists close ids in `error.details.suggestions`; ask again with those. If `list` fails or `piReady` is false, tell the user that the Pi lanes can't start and stop before spawning.
+
+ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc, gmi, and cod lanes and adds the Pi panes to the same session with tmux:
 
 ```bash
 SESSION="${NTM_PROJECT}--impl-<goal-slug>"
-ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-  --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --pi=<N_pi> --stagger-mode=smart
+node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
+  --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>
 ```
 
-Pane addressing is numeric. With `--no-user`, providers occupy contiguous pane indices:
+Drop `--pi` and `--pi-model` when `N_pi` is 0. The script prints `{ session, panes: [{ lane, index, paneId, model? }], errors }`. A non-zero exit lists what failed in `errors`; tell the user and give the prompts that have no pane to `Agent()` workers as in the fallback below.
 
-| Lane | Pane indices |
-|------|--------------|
-| Claude | `1` through `N_cc` |
-| Codex | `N_cc+1` through `N_cc+N_cod` |
-| Gemini | `N_cc+N_cod+1` through `N_cc+N_cod+N_gmi` |
-| Pi | `N_cc+N_cod+N_gmi+1` through `N_cc+N_cod+N_gmi+N_pi` |
-
-Use `--panes=N` with numeric indices. `--pane=N` (singular) is silently broadcast to ALL panes. Do not combine a known `--panes` index with `--type` during startup because pane metadata may not exist yet. Pane spawn uses `gmi`; the provider filter uses `gem`.
-
-Process prompt records in array order. Send each record unchanged to the next unused numeric pane in that record's `lane`:
+Process prompt records in array order. Send each record unchanged to the next unused pane whose `lane` matches the record's `lane`, by that pane's `index`:
 
 ```bash
-ntm --robot-send="$SESSION" --panes=1 --msg="<matching data.prompts[].prompt>"
-ntm --robot-send="$SESSION" --panes=$((N_cc+1)) --msg="<matching data.prompts[].prompt>"
-ntm --robot-send="$SESSION" --panes=$((N_cc+N_cod+1)) --msg="<matching data.prompts[].prompt>"
-ntm --robot-send="$SESSION" --panes=$((N_cc+N_cod+N_gmi+1)) --msg="<matching data.prompts[].prompt>"
+ntm --robot-send="$SESSION" --panes=<index of the next unused pane in this lane> --msg="<matching data.prompts[].prompt>"
 ```
+
+Use `--panes=N` with numeric indices. `--pane=N` (singular) is silently broadcast to ALL panes. Don't add `--type`: ntm reports Pi panes as type `unknown`, and pane metadata may not exist yet during startup. Pi prompts reach Agent Mail through the `am` CLI because Pi panes run with `--no-approve` and load no project MCP servers.
 
 Use `ntm --robot-send`; `ntm send` can abort at the CASS dedup prompt. Surface `data.dispatch.warnings` or `nextWave.warnings` before spawning.
 

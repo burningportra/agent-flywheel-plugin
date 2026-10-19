@@ -8,9 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Pi replaces Codex as the second lane in deep plan and implementation swarms, and the user picks each Pi lane's model from the live Vercel AI Gateway list.
+
+### Added
+
+- **`flywheel_pi_models` picks gateway models for the Pi lanes.** Gateway models change every few weeks, so the plugin no longer pins one. `action: "list"` reads the public Vercel AI Gateway catalog and its CC-BY-4.0 usage leaderboard, caches both for an hour in `.pi-flywheel/cache/gateway-models.json`, and ranks tool-capable language models by this week's token share. Dated snapshots such as `deepseek/deepseek-v4.1-flash-1017` inherit their family's share, and up to two reasoning models released in the last 14 days are listed as new. Free, batch, deprecated, stealth, and Anthropic models are left out. It returns one `AskUserQuestion` payload per role (`robustness`, `ergonomics`, `implementer`), with the user's last pick first and its `-fast` variant beside it. `action: "choose"` accepts an option label or a typed model id, suggests close ids for an unknown one, runs `pi auth check`, and saves the picks in `.pi-flywheel/pi-models.json`. A failed fetch falls back to the cached copy and says so.
+- **`swarm-spawn.js` adds Pi panes to an NTM session.** ntm 1.36.1 has no `pi` lane and rejects `--pi=N`, so `mcp-server/dist/scripts/swarm-spawn.js` runs `ntm spawn --no-user --stagger-mode=smart` for the cc, gmi, and cod lanes, then adds one `pi --model <model> --thinking high --no-approve` pane per `--pi` count with `tmux split-window`. It prints every pane's lane and tmux index as JSON, so coordinators address Pi panes with `ntm --robot-send --panes=<index>`. This fixes bead `agent-flywheel-plugin-27q`: `_implement.md`, `flywheel-swarm`, and the reality-check ladder used to pass `--pi=` to `ntm spawn`, which fails.
+- **`pi_cli` doctor check.** Green when `pi` is on PATH and `pi auth check --provider vercel-ai-gateway` reports ready. The doctor now runs 24 checks.
+
 ### Changed
 
-- **Deep plan's third planner runs in Pi instead of a Gemini CLI pane.** ntm 1.36.1 has no `pi` lane, so `skills/start/_planning.md` spawns `--cc=1 --cod=1` with NTM and adds one Pi pane to the same session with `tmux split-window`. Pi runs `vercel-ai-gateway/google/gemini-4-argon` by default, so the plan still gets a Gemini perspective, and the new `FW_PI_PLANNER_MODEL` env var overrides the model. `flywheel_plan(mode: "deep")` now adds its optional fresh-perspective planner when `which pi` succeeds instead of `which gemini`, returns it as `runner: "pi-pane"` with a `piModel` field, and its instructions run `pi auth check` first. Both paths launch Pi with `--no-approve`, because in a repo with a `.mcp.json` the `pi-mcp-adapter` extension otherwise stops the pane at an "Allow project MCP server" prompt. The pane reports its plan through the `am` CLI instead. A model value with characters outside a model id falls back to the default with a warning, because the value goes into a shell command. When Pi is missing or its auth check fails, the ergonomics lens goes to a second Claude pane. Duel plan and the planning-workflow review rounds still use the `gmi` lane.
+- **Swarms default to `cc:pi:gmi` 1:1:1, with Codex as the fallback.** `splitBeadsByProvider` assigns beads across Claude, Pi, and Gemini. A missing Pi hands its share to Codex, then Gemini, and a missing Gemini hands its share to Pi, then Codex. `swarm_model_ratio` reports the Claude:Pi:Gemini ratio. The implementation, in-flight resume, reality-check closure, and saturation skills spawn through `swarm-spawn.js` and ask for the Pi model first. AGENTS.md "NTM pane priority" names `cc:pi:gem` as canonical with the ladder gmi→pi→cod→cc, and PANE001 enforces it. PANE001 also flags `--pi=` on any raw `ntm spawn`, with no override. Duel, the planning-workflow review rounds, and deslop keep Codex.
+- **Deep plan runs Claude plus two Pi planners.** Claude takes correctness, and Pi panes take robustness and ergonomics on the models the user picks, through `swarm-spawn.js ... --cc=1 --pi=2`. Without Pi, Codex takes robustness and a second Claude pane takes ergonomics. `flywheel_plan(mode: "deep")` returns `runner: "pi-pane"` entries when Pi is ready, and the ergonomics planner now also challenges shared assumptions, which used to be the fresh-perspective planner's job.
+- **Pi implementer prompts reach Agent Mail through the `am` CLI.** Pi panes run with `--no-approve`, which skips project MCP servers, so `adaptPromptForPi` writes the bootstrap, reservation, and report steps as `am` commands.
+
+### Removed
+
+- **`FW_PI_PLANNER_MODEL`, the pinned `google/gemini-4-argon` deep-plan model, and the deep-plan fresh-perspective planner.** None of them shipped in a release.
 
 ## [3.20.1] - 2026-10-15
 

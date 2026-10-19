@@ -5,12 +5,6 @@
  * only for capability reporting and CLI compatibility checks.
  */
 
-import type { ExecFn } from './exec.js';
-import { detectCliCapabilities } from './adapters/model-diversity.js';
-import { createLogger } from './logger.js';
-
-const log = createLogger('model-detection');
-
 export const AGENT_MODEL_ALIASES = {
   opus: 'opus',
   sonnet: 'sonnet',
@@ -41,18 +35,6 @@ export const REFINEMENT_MODELS: readonly AgentModelAlias[] = Object.freeze([
   AGENT_MODEL_ALIASES.fable,
   AGENT_MODEL_ALIASES.sonnet,
 ]);
-
-/** Gemini through Pi's Vercel AI Gateway provider; override with FW_PI_PLANNER_MODEL. */
-const PI_PLANNER_DEFAULT_MODEL = 'vercel-ai-gateway/google/gemini-4-argon';
-
-/** The model is interpolated into shell commands, so only model-id characters pass. */
-const PI_MODEL_PATTERN = /^[A-Za-z0-9._/@:+-]+$/;
-
-export interface PiPlannerDispatch {
-  runner: 'pi-pane';
-  provider: 'pi';
-  piModel: string;
-}
 
 export interface ModelProvider {
   name: string;
@@ -248,51 +230,10 @@ export function detectAvailableModels(availableModelIds?: string[]): DetectedMod
   };
 }
 
-export interface DeepPlanModelSelection {
-  correctness: AgentModelAlias;
-  ergonomics: AgentModelAlias;
-  synthesis: AgentModelAlias;
-  freshPerspective: PiPlannerDispatch | null;
-}
-
-function resolvePiPlannerModel(requested: string | undefined): string {
-  if (!requested) return PI_PLANNER_DEFAULT_MODEL;
-  if (PI_MODEL_PATTERN.test(requested)) return requested;
-  log.warn('FW_PI_PLANNER_MODEL has characters outside a model id; using the default', {
-    requested,
-    fallback: PI_PLANNER_DEFAULT_MODEL,
-  });
-  return PI_PLANNER_DEFAULT_MODEL;
-}
-
-export function getDeepPlanModels(
-  capabilities: { piAvailable?: boolean; piModel?: string } = {},
-): DeepPlanModelSelection {
-  return {
-    ...DEEP_PLAN_MODELS,
-    freshPerspective: capabilities.piAvailable
-      ? { runner: 'pi-pane', provider: 'pi', piModel: resolvePiPlannerModel(capabilities.piModel) }
-      : null,
-  };
-}
-
 export function getRefinementModel(round: number): AgentModelAlias {
   const index = ((round % REFINEMENT_MODELS.length) + REFINEMENT_MODELS.length)
     % REFINEMENT_MODELS.length;
   return REFINEMENT_MODELS[index] ?? AGENT_MODEL_ALIASES.opus;
-}
-
-/** Probes `which pi`; the Pi pane reports provider auth and model errors when it starts. */
-export async function isPiPlannerCliAvailable(
-  exec: ExecFn,
-  options: { cwd: string; signal?: AbortSignal; timeout?: number },
-): Promise<boolean> {
-  const capabilities = await detectCliCapabilities(exec, {
-    timeout: options.timeout ?? 1500,
-    cwd: options.cwd,
-    signal: options.signal,
-  });
-  return capabilities.pi.available;
 }
 
 /**

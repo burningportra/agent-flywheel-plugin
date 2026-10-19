@@ -2,12 +2,8 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatS
 import { join } from 'node:path';
 import type { ToolContext, McpToolResult, PlanAmbition, PlanArgs } from '../types.js';
 import { makeOkToolResult, slugifyGoal } from './shared.js';
-import {
-  getDeepPlanModels,
-  isPiPlannerCliAvailable,
-  type AgentModelAlias,
-  type PiPlannerDispatch,
-} from '../model-detection.js';
+import { DEEP_PLAN_MODELS, type AgentModelAlias } from '../model-detection.js';
+import { detectCliCapabilities } from '../adapters/model-diversity.js';
 import { readMemory } from '../memory.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
@@ -37,10 +33,12 @@ type PlanAgent =
     perspective: 'robustness';
     task: string;
   }
-  | (PiPlannerDispatch & {
-    perspective: 'fresh-perspective';
+  | {
+    runner: 'pi-pane';
+    provider: 'pi';
+    perspective: 'robustness' | 'ergonomics';
     task: string;
-  });
+  };
 
 type PlannerArtifact = { path: string; content: string };
 
@@ -598,64 +596,45 @@ Focus deeply on your assigned perspective lens.`;
     releaseBeadMutex(briefMutexKey);
   }
 
-  const piAvailable = await isPiPlannerCliAvailable(exec, { cwd, signal });
-  const dynamicModels = getDeepPlanModels({
-    piAvailable,
-    piModel: process.env.FW_PI_PLANNER_MODEL,
-  });
+  // Pi lanes need the pi binary and gateway credentials, the same check the swarm uses.
+  const piLanes = (await detectCliCapabilities(exec, { cwd, signal })).pi.available;
 
   const plannerTask = (lens: string): string =>
     `Read \`${briefDocument}\` first. The path is relative to the project checkout. Use ultrathink. Your lens: ${lens}`;
+  const robustnessTask = plannerTask(
+    'ROBUSTNESS — Focus on performance, scalability, retry logic, timeouts, graceful degradation, and observability. ' +
+    'Ask what happens under load, which operational concerns matter, and how the system fails gracefully.',
+  );
+  const ergonomicsTask = plannerTask(
+    'ERGONOMICS — Focus on API design, developer experience, naming, documentation, discoverability, and simplicity. ' +
+    'Ask whether it is easy to use correctly, hard to misuse, and consistent with existing codebase patterns. ' +
+    'Also challenge shared assumptions: propose the simplest alternative that satisfies the goal and flag under-specified or contradictory work.',
+  );
 
   const planAgents: PlanAgent[] = [
     {
       runner: 'agent-model',
-      model: dynamicModels.correctness,
+      model: DEEP_PLAN_MODELS.correctness,
       perspective: 'correctness',
       task: plannerTask(
         'CORRECTNESS — Focus on type safety, edge cases, error handling, validation, data integrity, and invariants. ' +
         'Ask what can go wrong, which failure modes matter, and whether the interfaces are correct.',
       ),
     },
-    {
-      runner: 'agent-subagent',
-      subagent_type: CODEX_SUBAGENT_TYPE,
-      perspective: 'robustness',
-      task: plannerTask(
-        'ROBUSTNESS — Focus on performance, scalability, retry logic, timeouts, graceful degradation, and observability. ' +
-        'Ask what happens under load, which operational concerns matter, and how the system fails gracefully.',
-      ),
-    },
-    {
-      runner: 'agent-model',
-      model: dynamicModels.ergonomics,
-      perspective: 'ergonomics',
-      task: plannerTask(
-        'ERGONOMICS — Focus on API design, developer experience, naming, documentation, discoverability, and simplicity. ' +
-        'Ask whether it is easy to use correctly, hard to misuse, and consistent with existing codebase patterns.',
-      ),
-    },
+    piLanes
+      ? { runner: 'pi-pane', provider: 'pi', perspective: 'robustness', task: robustnessTask }
+      : { runner: 'agent-subagent', subagent_type: CODEX_SUBAGENT_TYPE, perspective: 'robustness', task: robustnessTask },
+    piLanes
+      ? { runner: 'pi-pane', provider: 'pi', perspective: 'ergonomics', task: ergonomicsTask }
+      : { runner: 'agent-model', model: DEEP_PLAN_MODELS.ergonomics, perspective: 'ergonomics', task: ergonomicsTask },
   ];
-
-  // Add the optional fourth planner when the Pi CLI is installed.
-  if (dynamicModels.freshPerspective) {
-    planAgents.push({
-      ...dynamicModels.freshPerspective,
-      perspective: 'fresh-perspective',
-      task: plannerTask(
-        'FRESH PERSPECTIVE — Challenge shared assumptions, propose the simplest alternative that satisfies the goal, ' +
-        'flag under-specified or contradictory work, and question every architectural choice for simpler standard approaches or hidden dependencies.',
-      ),
-    });
-  }
 
   const synthesisAmbition = inputs.ambition === 'ambitious'
     ? '\n\nAmbition mode: the synthesized plan keeps the charter\'s target rung, stretch target, and floor-first phase order. Where plans disagree on how far to climb, keep the more ambitious path that still has an outside judge and a fallback. Do not average ambition down.'
     : '';
 
-  const piModel = dynamicModels.freshPerspective?.piModel;
-  const piDispatch = piModel
-    ? ` The fresh-perspective entry uses runner="pi-pane". ntm has no pi lane, so set \`PI_MODEL="${piModel}"\`, run \`pi auth check --model "$PI_MODEL"\`, then add a pane to the deep-plan NTM session with \`tmux split-window -t "$SESSION:0" -c "$PWD" -P -F '#{pane_id}' pi --model "$PI_MODEL" --thinking high --no-approve "<task>"\` and \`tmux set-option -p -t <pane-id> remain-on-exit on\`. \`--no-approve\` keeps a repo .mcp.json from stopping Pi at a trust prompt and leaves it without Agent Mail MCP tools, so the task tells it to run \`am macros start-session --project "${cwd}" --program pi --model "$PI_MODEL"\` and send its plan path with \`am mail send --project "${cwd}" --from "<agent-name>" --to "<coordinator>" --subject "[plan] fresh-perspective delivered" --body "<path>"\`. If the auth check fails or the pane exits before writing its plan, continue with the three Agent-routed plans and report the missing perspective.`
+  const piDispatch = piLanes
+    ? ' Entries with runner="pi-pane" run in Pi panes on the models the user picks with flywheel_pi_models (roles robustness and ergonomics). The Deep plan recipe in skills/start/_planning.md adds them to the deep-plan NTM session with swarm-spawn.js.'
     : '';
 
   const payload = {
@@ -668,8 +647,8 @@ Focus deeply on your assigned perspective lens.`;
     ambitionDocument,
     briefDocument,
     planAgents,
-    synthesisModel: dynamicModels.synthesis,
-    instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true and bootstrap Agent Mail with macro_start_session.${piDispatch} Every planner writes to docs/plans/<date>-<perspective>.md. Agent-routed planners send the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${dynamicModels.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
+    synthesisModel: DEEP_PLAN_MODELS.synthesis,
+    instructions: `Spawn the ${planAgents.length} planning entries in parallel. Entries with runner="agent-model" or runner="agent-subagent" use TeamCreate + Agent with run_in_background: true.${piDispatch} Every planner bootstraps Agent Mail with macro_start_session, writes to docs/plans/<date>-<perspective>.md, and sends the file path via send_message. After the successful planners finish, spawn the synthesis agent with model="${DEEP_PLAN_MODELS.synthesis}" to read the delivered files and write docs/plans/<date>-<slug>-synthesized.md. Then call flywheel_plan with planFile: "docs/plans/<date>-<slug>-synthesized.md" (NOT planContent — passing large text through stdio stalls the MCP server).`,
     synthesisPrompt: `Use ultrathink.
 
 ## Best-of-All-Worlds Synthesis

@@ -265,7 +265,7 @@ Print this block first (per the menu-visibility rule below):
 
 ```
 Primary entry points (active session: '<goal>' @ <phase>):
-  • Auto-swarm          — in-flight resume with cc:cod:gem 2:2:2 swarm (Recommended)
+  • Auto-swarm          — in-flight resume with cc:pi:gem 2:2:2 swarm (Recommended)
   • Resume session      — continue manually (no swarm)
   • Set a goal          — type a fresh goal in Other; appends to existing beads after drift confirm
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps to bead creation
@@ -307,7 +307,7 @@ Print this block first (per the menu-visibility rule below):
 
 ```
 Primary entry points (<N> open beads):
-  • Auto-swarm          — in-flight resume with cc:cod:gem 2:2:2 swarm (Recommended)
+  • Auto-swarm          — in-flight resume with cc:pi:gem 2:2:2 swarm (Recommended)
   • Work on beads       — refine / implement / inspect manually
   • Set a goal          — type a fresh goal in Other; appends new beads to the current set
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; merges into the current bead set

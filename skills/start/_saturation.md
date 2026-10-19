@@ -101,7 +101,7 @@ Procedure:
 
 ## Step 5: Dispatch into the existing swarm
 
-If the in-flight swarm panes are still alive, dispatch the new beads via `flywheel_advance_wave` — the existing mixed `cc:cod:gmi` 1:1:1 swarm (per AGENTS.md "NTM pane priority"; whatever composition the substitution ladder landed on at spawn time) picks them up via `bv triage` on their next looper tick. No new pane spawning needed.
+If the in-flight swarm panes are still alive, dispatch the new beads via `flywheel_advance_wave` — the existing mixed `cc:pi:gmi` 1:1:1 swarm (per AGENTS.md "NTM pane priority"; whatever composition the substitution ladder landed on at spawn time) picks them up via `bv triage` on their next looper tick. No new pane spawning needed.
 
 If the swarm has been torn down (post-saturation cleanup), surface:
 
@@ -110,9 +110,9 @@ AskUserQuestion(questions: [{
   question: "<N> saturation beads created but the swarm is offline. How should I proceed?",
   header: "Dispatch",
   options: [
-    { label: "Re-spawn swarm and dispatch", description: "Spin up mixed cc:cod:gmi 1:1:1 (e.g. --cc=2 --cod=2 --gmi=2) per _inflight_prompt.md and AGENTS.md NTM pane priority; apply the substitution ladder (gmi→cod→pi→cc) if a provider is non-green" },
+    { label: "Re-spawn swarm and dispatch", description: "Spin up mixed cc:pi:gmi 1:1:1 (e.g. --cc=2 --pi=2 --gmi=2) through swarm-spawn.js per _inflight_prompt.md and AGENTS.md NTM pane priority; apply the substitution ladder (gmi→pi→cod→cc) if a provider is non-green" },
     { label: "Save for next session", description: "Beads are tagged and queued — they'll show up at next /start as 'open beads exist'" },
-    { label: "Spawn smaller swarm", description: "Mixed 1:1:1 at smaller scale (e.g. --cc=1 --cod=1 --gmi=1) — sufficient if the saturation bead count is small; same substitution ladder applies" }
+    { label: "Spawn smaller swarm", description: "Mixed 1:1:1 at smaller scale (e.g. --cc=1 --pi=1 --gmi=1) — sufficient if the saturation bead count is small; same substitution ladder applies" }
   ],
   multiSelect: false
 }])

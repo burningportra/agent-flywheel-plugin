@@ -1,53 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  DEEP_PLAN_MODELS,
   detectAvailableModels,
-  getDeepPlanModels,
   getRefinementModel,
 } from '../model-detection.js';
 
 describe('model detection', () => {
-  it('returns Agent aliases for deep planning and omits the Pi planner by default', () => {
-    expect(getDeepPlanModels()).toEqual({
-      correctness: 'opus',
-      ergonomics: 'sonnet',
-      synthesis: 'opus',
-      freshPerspective: null,
-    });
-  });
-
-  it('returns a Pi pane dispatch on Gemini Argon through Vercel when Pi is available', () => {
-    expect(getDeepPlanModels({ piAvailable: true })).toEqual({
-      correctness: 'opus',
-      ergonomics: 'sonnet',
-      synthesis: 'opus',
-      freshPerspective: {
-        runner: 'pi-pane',
-        provider: 'pi',
-        piModel: 'vercel-ai-gateway/google/gemini-4-argon',
-      },
-    });
-  });
-
-  it('uses a requested Pi model id', () => {
-    const selection = getDeepPlanModels({
-      piAvailable: true,
-      piModel: 'openrouter/google/gemini-4-argon:high',
-    });
-
-    expect(selection.freshPerspective?.piModel).toBe('openrouter/google/gemini-4-argon:high');
-  });
-
-  it('falls back to the default Pi model and warns when the requested one could break the shell command', () => {
-    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    try {
-      const selection = getDeepPlanModels({ piAvailable: true, piModel: 'argon"; echo pwned' });
-
-      expect(selection.freshPerspective?.piModel).toBe('vercel-ai-gateway/google/gemini-4-argon');
-      const written = stderr.mock.calls.map(([chunk]) => String(chunk)).join('');
-      expect(written).toContain('FW_PI_PLANNER_MODEL');
-    } finally {
-      stderr.mockRestore();
-    }
+  it('pins the Agent aliases for the Claude deep-plan seats', () => {
+    expect(DEEP_PLAN_MODELS).toEqual({ correctness: 'opus', ergonomics: 'sonnet', synthesis: 'opus' });
   });
 
   it('rotates refinement through stable Agent aliases', () => {

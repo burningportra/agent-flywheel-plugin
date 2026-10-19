@@ -17,19 +17,19 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 
 3. Bootstrap Agent Mail, create `swarm-<goal-slug>`, and resolve `$NTM_PROJECT` through the readiness procedure in `_implement.md`. Use the lane counts exactly as returned. The server has already applied provider availability and fallback.
 
-4. Create one task per `START_DATA.prompts[]` record, then spawn the returned counts:
+4. Create one task per `START_DATA.prompts[]` record. Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. When `N_pi` is above 0, call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })`, ask `data.questions[0]` with `AskUserQuestion`, call it again with `action: "choose"` and the answer as `picks.implementer`, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. Stop if `list` fails or `piReady` is false. Then spawn the returned counts:
    ```bash
    IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
-   ntm spawn "$NTM_PROJECT" --label impl-<goal-slug> --no-user \
-     --cc=<N_cc> --cod=<N_cod> --gmi=<N_gmi> --pi=<N_pi> --stagger-mode=smart
+   node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
+     --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>
    ```
-   Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. With `--no-user`, pane indices start at 1 and follow spawn order `cc`, `cod`, `gmi`, then fallback-only `pi`. Address panes by numeric index. Use `--panes=N`. Singular `--pane=N` broadcasts to every pane, and combining a known index with `--type` can match nothing during startup.
+   Drop `--pi` and `--pi-model` when `N_pi` is 0. The script runs `ntm spawn` for the NTM lanes, adds the Pi panes, and prints `{ session, panes: [{ lane, index, paneId }], errors }`. Address panes by the printed `index` with `--panes=N`. Singular `--pane=N` broadcasts to every pane, and ntm reports Pi panes as type `unknown`, so don't add `--type`. On a non-zero exit, show `errors` to the user.
 
 5. Send every prompt unchanged to its assigned pane:
    ```bash
-   ntm --robot-send="$IMPL_SESSION" --panes=<numeric-index> --msg="<START_DATA.prompts[i].prompt>"
+   ntm --robot-send="$IMPL_SESSION" --panes=<next unused index in the record's lane> --msg="<START_DATA.prompts[i].prompt>"
    ```
-   Send each record once in array order. The prompt already contains Agent Mail bootstrap, file reservations, provider-specific instructions, the pre-completion gate, a bead-specific `CompletionReport` JSON example, and trailing newlines. Save each task id, pane index, and `agentName` for tending and restart.
+   Send each record once in array order, to the next unused pane in its `lane`. Pi prompts reach Agent Mail through the `am` CLI. The prompt already contains Agent Mail bootstrap, file reservations, provider-specific instructions, the pre-completion gate, a bead-specific `CompletionReport` JSON example, and trailing newlines. Save each task id, pane index, and `agentName` for tending and restart.
 
    If `START_DATA.dispatch.degraded` is true, show its warnings before spawning.
 

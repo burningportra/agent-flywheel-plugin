@@ -630,7 +630,7 @@ describe('runPlan', () => {
     }
   });
 
-  describe('fresh-perspective Pi planner', () => {
+  describe('Pi deep-plan planners', () => {
     type DeepPayload = {
       data: {
         instructions: string;
@@ -638,56 +638,59 @@ describe('runPlan', () => {
       };
     };
 
-    const runDeepWith = async (installed: string) => {
+    const whichFinds = (bin: string) => ({
+      cmd: 'which',
+      args: [bin],
+      result: { code: 0, stdout: `/usr/local/bin/${bin}\n`, stderr: '' },
+    });
+    const piAuth = (ready: boolean) => ({
+      cmd: 'pi',
+      args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--no-refresh'],
+      result: ready
+        ? { code: 0, stdout: 'ready\n', stderr: '' }
+        : { code: 1, stdout: 'not_ready\n', stderr: '' },
+    });
+    const runDeepWith = async (calls: Parameters<typeof createMockExec>[0]) => {
       const { ctx } = makeCtx();
-      const exec = createMockExec([
-        { cmd: 'which', args: [installed], result: { code: 0, stdout: `/usr/local/bin/${installed}\n`, stderr: '' } },
-      ]);
-      const result = await runPlan({ ...ctx, exec }, { cwd: '/fake/cwd', mode: 'deep' });
+      const result = await runPlan({ ...ctx, exec: createMockExec(calls) }, { cwd: '/fake/cwd', mode: 'deep' });
       return (result.structuredContent as DeepPayload).data;
     };
 
-    afterEach(() => {
-      vi.unstubAllEnvs();
-    });
+    it('gives robustness and ergonomics to Pi panes when Pi has gateway credentials', async () => {
+      const data = await runDeepWith([whichFinds('pi'), piAuth(true)]);
 
-    it('adds a Pi pane planner on Gemini Argon through Vercel when the Pi CLI is installed', async () => {
-      vi.stubEnv('FW_PI_PLANNER_MODEL', '');
-
-      const data = await runDeepWith('pi');
-
-      expect(data.planAgents).toHaveLength(4);
-      const freshPerspective = data.planAgents.find((agent) => agent.perspective === 'fresh-perspective');
-      expect(freshPerspective).toEqual(expect.objectContaining({
-        runner: 'pi-pane',
-        provider: 'pi',
-        piModel: 'vercel-ai-gateway/google/gemini-4-argon',
-      }));
-      expect(freshPerspective).not.toHaveProperty('model');
-      expect(freshPerspective).not.toHaveProperty('subagent_type');
-      expect(data.instructions).toContain('PI_MODEL="vercel-ai-gateway/google/gemini-4-argon"');
-      expect(data.instructions).toContain('pi auth check --model "$PI_MODEL"');
-      expect(data.instructions).toContain('tmux split-window -t "$SESSION:0"');
-      expect(data.instructions).toContain('pi --model "$PI_MODEL" --thinking high --no-approve');
-      expect(data.instructions).toContain('remain-on-exit on');
-      expect(data.instructions).toContain('am macros start-session');
-      expect(data.instructions).toContain('--program pi');
-      expect(data.instructions).toContain('am mail send');
+      expect(data.planAgents.map(({ runner, perspective, provider, model }) => ({ runner, perspective, provider, model }))).toEqual([
+        { runner: 'agent-model', perspective: 'correctness', provider: undefined, model: 'opus' },
+        { runner: 'pi-pane', perspective: 'robustness', provider: 'pi', model: undefined },
+        { runner: 'pi-pane', perspective: 'ergonomics', provider: 'pi', model: undefined },
+      ]);
+      for (const agent of data.planAgents) expect(agent).not.toHaveProperty('piModel');
+      expect(data.instructions).toContain('flywheel_pi_models (roles robustness and ergonomics)');
+      expect(data.instructions).toContain('swarm-spawn.js');
       expect(data.instructions).not.toContain('--type=gmi');
     });
 
-    it('passes FW_PI_PLANNER_MODEL through to the Pi pane command', async () => {
-      vi.stubEnv('FW_PI_PLANNER_MODEL', 'openrouter/google/gemini-4-argon');
+    it('falls back to Codex robustness and Claude ergonomics when the Pi auth check fails', async () => {
+      const data = await runDeepWith([whichFinds('pi'), piAuth(false)]);
 
-      const data = await runDeepWith('pi');
-
-      const freshPerspective = data.planAgents.find((agent) => agent.perspective === 'fresh-perspective');
-      expect(freshPerspective?.piModel).toBe('openrouter/google/gemini-4-argon');
-      expect(data.instructions).toContain('PI_MODEL="openrouter/google/gemini-4-argon"');
+      expect(data.planAgents.map(({ runner, perspective }) => ({ runner, perspective }))).toEqual([
+        { runner: 'agent-model', perspective: 'correctness' },
+        { runner: 'agent-subagent', perspective: 'robustness' },
+        { runner: 'agent-model', perspective: 'ergonomics' },
+      ]);
+      expect(data.planAgents[2]).toMatchObject({ model: 'sonnet' });
+      expect(data.instructions).not.toContain('pi-pane');
     });
 
-    it('no longer adds a Gemini CLI planner when only gemini is installed', async () => {
-      const data = await runDeepWith('gemini');
+    it('asks the ergonomics planner to challenge shared assumptions now that the fresh-perspective planner is gone', async () => {
+      const data = await runDeepWith([whichFinds('pi'), piAuth(true)]);
+
+      expect(data.planAgents.map((agent) => agent.perspective)).not.toContain('fresh-perspective');
+      expect(data.planAgents[2]!.task).toContain('Also challenge shared assumptions');
+    });
+
+    it('does not add a Gemini CLI planner when only gemini is installed', async () => {
+      const data = await runDeepWith([whichFinds('gemini')]);
 
       expect(data.planAgents.map((agent) => agent.perspective)).toEqual([
         'correctness',
