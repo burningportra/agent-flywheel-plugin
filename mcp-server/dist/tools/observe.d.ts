@@ -29,6 +29,12 @@ declare const HintSchema: z.ZodObject<{
 export declare const FlywheelObserveReportSchema: z.ZodObject<{
     version: z.ZodLiteral<1>;
     cwd: z.ZodString;
+    projectName: z.ZodOptional<z.ZodString>;
+    recentPlans: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    topErrorCodes: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        code: z.ZodString;
+        count: z.ZodNumber;
+    }, z.core.$strip>>>;
     timestamp: z.ZodString;
     elapsedMs: z.ZodNumber;
     git: z.ZodObject<{

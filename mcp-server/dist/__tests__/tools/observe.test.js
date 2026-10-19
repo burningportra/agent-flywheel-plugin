@@ -10,9 +10,9 @@
  *   6. tool registers via the existing tool-listing path (TOOLS array + dispatch)
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync, } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { runObserve, FlywheelObserveReportSchema, _resetDoctorCache, } from '../../tools/observe.js';
 import { TOOLS, createCallToolHandler } from '../../server.js';
 import { createInitialState } from '../../types.js';
@@ -520,6 +520,86 @@ describe('flywheel_observe — T7 attestation hints', () => {
             // No attestation hints when there's nothing to probe.
             const attestationHints = sc.data.report.hints.filter((h) => h.message.includes('attestation') || h.message.includes('in-flight'));
             expect(attestationHints).toEqual([]);
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
+// ─── Start-screen snapshot fields (agent-flywheel-plugin-lnr) ─────────────
+describe('flywheel_observe — start-screen fields (projectName, recentPlans, topErrorCodes)', () => {
+    it('reads projectName from package.json and falls back to the directory name', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const exec = makeStubbedExec(gracefulDegradeStubs());
+            const fallbackRes = await runObserve(makeCtx(cwd, exec), { cwd });
+            const fallbackReport = fallbackRes.structuredContent.data.report;
+            expect(fallbackReport.projectName).toBe(basename(cwd));
+            writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'custom-pkg-name' }));
+            const pkgRes = await runObserve(makeCtx(cwd, exec), { cwd });
+            const pkgReport = pkgRes.structuredContent.data.report;
+            expect(pkgReport.projectName).toBe('custom-pkg-name');
+            expect(pkgRes.content[0]?.text).toContain('project: custom-pkg-name');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('returns the newest three docs/plans/*.md paths sorted by mtime descending', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const plansDir = join(cwd, 'docs', 'plans');
+            mkdirSync(plansDir, { recursive: true });
+            const files = [
+                ['oldest.md', 1_000],
+                ['second.md', 2_000],
+                ['third.md', 3_000],
+                ['newest.md', 4_000],
+                ['ignored.txt', 5_000],
+            ];
+            for (const [name, sec] of files) {
+                const p = join(plansDir, name);
+                writeFileSync(p, `# ${name}`);
+                utimesSync(p, sec, sec);
+            }
+            const exec = makeStubbedExec(gracefulDegradeStubs());
+            const res = await runObserve(makeCtx(cwd, exec), { cwd });
+            const report = res.structuredContent.data.report;
+            expect(report.recentPlans).toEqual([
+                'docs/plans/newest.md',
+                'docs/plans/third.md',
+                'docs/plans/second.md',
+            ]);
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('returns the top three nonzero error codes from .pi-flywheel/error-counts.json', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            mkdirSync(join(cwd, '.pi-flywheel'), { recursive: true });
+            writeFileSync(join(cwd, '.pi-flywheel', 'error-counts.json'), JSON.stringify({
+                version: 1,
+                sessionStartIso: '2026-10-19T00:00:00.000Z',
+                counts: {
+                    cli_failure: 2,
+                    exec_timeout: 9,
+                    invalid_input: 5,
+                    not_found: 0,
+                    internal_error: 4,
+                },
+                recentEvents: [],
+            }));
+            const exec = makeStubbedExec(gracefulDegradeStubs());
+            const res = await runObserve(makeCtx(cwd, exec), { cwd });
+            const report = res.structuredContent.data.report;
+            expect(report.topErrorCodes).toEqual([
+                { code: 'exec_timeout', count: 9 },
+                { code: 'invalid_input', count: 5 },
+                { code: 'internal_error', count: 4 },
+            ]);
+            expect(res.content[0]?.text).toContain('error-counts: exec_timeout=9, invalid_input=5, internal_error=4');
         }
         finally {
             cleanup(cwd);

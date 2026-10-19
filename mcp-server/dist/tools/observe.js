@@ -16,8 +16,8 @@
  *      `unavailable: true` rather than failing the whole call.
  */
 import { z } from 'zod';
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import { readCheckpoint } from '../checkpoint.js';
 import { runDoctorChecks } from './doctor.js';
 import { parseBrList } from '../br-parser.js';
@@ -28,6 +28,7 @@ import { readCompletionReport } from '../completion-report.js';
 import { ConvergenceStateSchema } from '../convergence.js';
 import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
+import { readTelemetry } from '../telemetry.js';
 const log = createLogger('observe');
 // ─── Constants ────────────────────────────────────────────────────────────
 /** Per-probe timeout budget. Keeps the tool inside the 1.5s wall-clock target. */
@@ -40,8 +41,16 @@ const ARTIFACT_HARD_CAP = 50;
 const ATTESTATION_STALE_MS = 24 * 60 * 60 * 1000;
 /** Hard cap on attestation probes so a runaway activeBeadIds list can't blow the budget. */
 const ATTESTATION_PROBE_CAP = 50;
+/** Cap on recent plan paths surfaced for the start screen. */
+const RECENT_PLANS_CAP = 3;
+/** Cap on top nonzero telemetry error codes surfaced for the start screen. */
+const TOP_ERROR_CODES_CAP = 3;
 // ─── Schema ───────────────────────────────────────────────────────────────
 const SeveritySchema = z.enum(['info', 'warn', 'red']);
+const TopErrorCodeRowSchema = z.object({
+    code: z.string(),
+    count: z.number().int().positive(),
+});
 const HintSchema = z.object({
     severity: SeveritySchema,
     message: z.string(),
@@ -120,6 +129,9 @@ const AttestationsSectionSchema = z.object({
 export const FlywheelObserveReportSchema = z.object({
     version: z.literal(1),
     cwd: z.string(),
+    projectName: z.string().optional(),
+    recentPlans: z.array(z.string()).optional(),
+    topErrorCodes: z.array(TopErrorCodeRowSchema).optional(),
     timestamp: z.string(),
     elapsedMs: z.number().int().nonnegative(),
     git: GitSectionSchema,
@@ -467,6 +479,60 @@ function probeArtifacts(cwd) {
         ...(truncated ? { truncated: true } : {}),
     };
 }
+function readProjectName(cwd) {
+    try {
+        const raw = readFileSync(join(cwd, 'package.json'), 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed &&
+            typeof parsed === 'object' &&
+            typeof parsed.name === 'string' &&
+            parsed.name.trim().length > 0) {
+            return parsed.name.trim();
+        }
+    }
+    catch {
+        // package.json missing or unreadable — fall back to directory name.
+    }
+    return basename(resolve(cwd)) || cwd;
+}
+function probeRecentPlans(cwd) {
+    const plansDir = join(cwd, 'docs', 'plans');
+    try {
+        const entries = readdirSync(plansDir, { withFileTypes: true });
+        const mdFiles = [];
+        for (const entry of entries) {
+            if (!entry.isFile() || !entry.name.endsWith('.md'))
+                continue;
+            try {
+                const st = statSync(join(plansDir, entry.name));
+                mdFiles.push({ name: entry.name, mtimeMs: st.mtimeMs });
+            }
+            catch {
+                // ignore unreadable file
+            }
+        }
+        mdFiles.sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name));
+        return mdFiles.slice(0, RECENT_PLANS_CAP).map((f) => `docs/plans/${f.name}`);
+    }
+    catch {
+        return [];
+    }
+}
+async function probeTopErrorCodes(cwd) {
+    try {
+        const telemetry = await readTelemetry({ cwd });
+        if (!telemetry)
+            return [];
+        return Object.entries(telemetry.counts)
+            .filter(([, count]) => typeof count === 'number' && count > 0)
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, TOP_ERROR_CODES_CAP)
+            .map(([code, count]) => ({ code, count }));
+    }
+    catch {
+        return [];
+    }
+}
 /**
  * Probe `.pi-flywheel/completion/<beadId>.json` for each in-flight bead.
  *
@@ -649,6 +715,9 @@ function glyphForHint(severity) {
 function renderObserveText(report) {
     const lines = [];
     lines.push(`flywheel observe — ${report.cwd} (${report.elapsedMs}ms${report.doctor?.cached ? ', doctor cached' : ''})`);
+    if (report.projectName) {
+        lines.push(`  project: ${report.projectName}`);
+    }
     if (report.git.unavailable) {
         lines.push(`  git: unavailable`);
     }
@@ -666,6 +735,12 @@ function renderObserveText(report) {
     lines.push(`  agent-mail: ${report.agentMail.reachable ? 'reachable' : `unreachable${report.agentMail.warning ? ' — ' + report.agentMail.warning : ''}`}`);
     lines.push(`  ntm: ${report.ntm.available ? `available${report.ntm.panes ? ` (${report.ntm.panes.length} panes)` : ''}` : 'not on PATH'}`);
     lines.push(`  artifacts: ${report.artifacts.wizard.length} WIZARD_*.md, scratch=[${report.artifacts.flywheelScratch.join(', ') || 'none'}]`);
+    if (report.recentPlans) {
+        lines.push(`  plans: ${report.recentPlans.length > 0 ? report.recentPlans.join(', ') : 'none'}`);
+    }
+    if (report.topErrorCodes && report.topErrorCodes.length > 0) {
+        lines.push(`  error-counts: ${report.topErrorCodes.map((e) => `${e.code}=${e.count}`).join(', ')}`);
+    }
     if (report.doctor && !report.doctor.unavailable) {
         lines.push(`  doctor: ${report.doctor.overall ?? '?'}${report.doctor.cached ? ` (cached ${Math.round((report.doctor.ageMs ?? 0) / 1000)}s)` : ' (fresh)'}`);
     }
@@ -692,16 +767,19 @@ export async function runObserve(ctx, args) {
     try {
         // Checkpoint is sync + cheap; read it first so attestation probes can use
         // its activeBeadIds as their input. Artifacts is sync too.
+        const projectName = readProjectName(ctx.cwd);
+        const recentPlans = probeRecentPlans(ctx.cwd);
         const checkpoint = readCheckpointSection(ctx.cwd);
         const artifacts = probeArtifacts(ctx.cwd);
         const activeBeadIds = checkpoint.activeBeadIds ?? [];
-        const [git, beads, agentMail, ntm, doctor, attestations] = await Promise.all([
+        const [git, beads, agentMail, ntm, doctor, attestations, topErrorCodes] = await Promise.all([
             probeGit(ctx),
             probeBeads(ctx),
             probeAgentMail(ctx),
             probeNtm(ctx),
             getCachedOrFreshDoctor(ctx, startMs),
             probeAttestations(ctx.cwd, activeBeadIds, startMs),
+            probeTopErrorCodes(ctx.cwd),
         ]);
         // Convergence + kill-switch (B-AC2): both are best-effort sync reads of
         // small files at the repo root and well under the probe budget. Any parse
@@ -742,6 +820,9 @@ export async function runObserve(ctx, args) {
         const partial = {
             version: 1,
             cwd: ctx.cwd,
+            projectName,
+            recentPlans,
+            topErrorCodes,
             timestamp: new Date(startMs).toISOString(),
             elapsedMs,
             git,
