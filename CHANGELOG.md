@@ -8,7 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Pi replaces Codex as the second lane in deep plan and implementation swarms. The user picks each Pi lane's model from the models their own Pi logins can run (Grok, Muse, GLM, ChatGPT and others) and the live Vercel AI Gateway list, and can switch the Gemini lane off.
+## [3.21.0] - 2026-10-19
+
+Pi replaces Codex as the second lane in deep plan and implementation swarms. The user picks each Pi lane's model from the models their own Pi logins can run (Grok, Muse, GLM, ChatGPT and others) and the live Vercel AI Gateway list, and can switch the Gemini lane off. Batch reviews now file every finding as a bead and never stop the swarm to ask the operator.
 
 ### Added
 
