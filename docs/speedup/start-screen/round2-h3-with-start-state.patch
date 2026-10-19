@@ -1,0 +1,328 @@
+diff --git a/commands/start.md b/commands/start.md
+index 56e835e..62afa9f 100644
+--- a/commands/start.md
++++ b/commands/start.md
+@@ -3,7 +3,7 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
+ argument-hint: "[goal-or-options]"
+ ---
+ 
+-**First action:** When the flywheel tools are deferred, load every tool the opening screen uses with one `ToolSearch` query, `select:mcp__plugin_agent-flywheel_agent-flywheel__flywheel_get_skill,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_doctor,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_observe,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_memory,AskUserQuestion` (use the names this session lists when its prefix differs), so Step 0 never stops to search again. Then call `flywheel_get_skill({ name: "agent-flywheel:start" })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:start` name as `skills/start/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model. Do NOT inline the menu/routing logic — the skill at `skills/start/SKILL.md` is the single source of truth.
++**First action:** When the flywheel tools are deferred, load every tool the opening screen uses with one `ToolSearch` query, `select:mcp__plugin_agent-flywheel_agent-flywheel__flywheel_get_skill,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_doctor,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_observe,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_memory,AskUserQuestion` (use the names this session lists when its prefix differs), so Step 0 never stops to search again. Then call `flywheel_get_skill({ name: "agent-flywheel:start", withStartState: true, cwd })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:start` name as `skills/start/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model. Do NOT inline the menu/routing logic — the skill at `skills/start/SKILL.md` is the single source of truth.
+ 
+ # `/agent-flywheel:start` — thin pointer to the canonical skill
+ 
+@@ -14,7 +14,7 @@ This slash command delegates to the canonical start-skill at `skills/start/SKILL
+ 1. Fetch the canonical skill body via the MCP tool:
+ 
+    ```
+-   flywheel_get_skill({ name: "agent-flywheel:start" })
++   flywheel_get_skill({ name: "agent-flywheel:start", withStartState: true, cwd })
+    ```
+ 
+    Then follow the returned `body` as the skill, treating `$ARGUMENTS` as the skill's input. `$ARGUMENTS` forwards anything the user typed after `/agent-flywheel:start` (a goal sentence, a path, `--mode single-branch`, etc.) — the skill's `0.preflight` step classifies it.
+diff --git a/mcp-server/src/__tests__/tools/get-skill.test.ts b/mcp-server/src/__tests__/tools/get-skill.test.ts
+index a8775b0..151048e 100644
+--- a/mcp-server/src/__tests__/tools/get-skill.test.ts
++++ b/mcp-server/src/__tests__/tools/get-skill.test.ts
+@@ -289,3 +289,90 @@ describe('flywheel_get_skill ignores caller cwd (c9l regression)', () => {
+     }
+   });
+ });
++
++// ─── Step 0b preload via withStartState (agent-flywheel-plugin-lnr) ──────────
++
++describe('flywheel_get_skill withStartState', () => {
++  it('omits startState when withStartState is absent or false', async () => {
++    const content = '---\nname: agent-flywheel:start\ndescription: test\n---\nStart body\n';
++    writeAndBundleSkill(tmp, 'agent-flywheel:start', content);
++
++    const ctx = makeCtx(tmp.dir);
++    const result = await runGetSkill(ctx, { cwd: tmp.dir, name: 'agent-flywheel:start' });
++    const data = (result.structuredContent as Record<string, unknown>)?.data as Record<string, unknown>;
++    expect(data?.startState).toBeUndefined();
++  });
++
++  it('populates startState (doctor, observe, memory) when withStartState: true on agent-flywheel:start', async () => {
++    const content = '---\nname: agent-flywheel:start\ndescription: test\n---\nStart body\n';
++    writeAndBundleSkill(tmp, 'agent-flywheel:start', content);
++    writeFileSync(join(tmp.dir, 'package.json'), JSON.stringify({ name: 'start-state-proj' }));
++
++    const exec = async (cmd: string, args: readonly string[]) => {
++      if (cmd === 'cm' && args[0] === '--version') {
++        return { code: 0, stdout: 'cm 0.2.14\n', stderr: '' };
++      }
++      if (cmd === 'cm' && args[0] === 'context') {
++        return {
++          code: 0,
++          stdout: JSON.stringify({
++            data: {
++              relevantBullets: [
++                { id: 'b-1', category: 'review', finalScore: 9.0, content: 'First sentence. Second sentence.' },
++              ],
++            },
++          }),
++          stderr: '',
++        };
++      }
++      return { code: 1, stdout: '', stderr: 'stubbed failure' };
++    };
++    const ctx = { ...makeCtx(tmp.dir), exec };
++
++    const result = await runGetSkill(ctx, {
++      cwd: tmp.dir,
++      name: 'agent-flywheel:start',
++      withStartState: true,
++    });
++    expect(result.isError).toBeFalsy();
++    const data = (result.structuredContent as Record<string, unknown>)?.data as Record<string, unknown>;
++    const startState = data?.startState as {
++      doctor: { report: { cwd: string }; firstRun: boolean } | null;
++      observe: { projectName?: string } | null;
++      memory: { sessionLearnings: string | null; realityCheck: string | null };
++    };
++    expect(startState).toBeDefined();
++    expect(startState.doctor?.report.cwd).toBe(tmp.dir);
++    expect(startState.observe?.projectName).toBe('start-state-proj');
++    expect(startState.memory.sessionLearnings).toContain('First sentence.');
++    expect(startState.memory.realityCheck).toContain('First sentence.');
++  });
++
++  it('nulls a failing sub-probe (e.g. memory when cm is absent) without failing the skill load', async () => {
++    const content = '---\nname: agent-flywheel:start\ndescription: test\n---\nStart body\n';
++    writeAndBundleSkill(tmp, 'agent-flywheel:start', content);
++
++    const exec = async () => ({ code: 127, stdout: '', stderr: 'command not found' });
++    const ctx = { ...makeCtx(tmp.dir), exec };
++
++    const result = await runGetSkill(ctx, {
++      cwd: tmp.dir,
++      name: 'agent-flywheel:start',
++      withStartState: true,
++    });
++    expect(result.isError).toBeFalsy();
++    const data = (result.structuredContent as Record<string, unknown>)?.data as Record<string, unknown>;
++    const startState = data?.startState as {
++      doctor: unknown;
++      observe: unknown;
++      memory: { sessionLearnings: string | null; realityCheck: string | null };
++    };
++    expect(startState).toBeDefined();
++    expect(startState.doctor).not.toBeNull();
++    expect(startState.observe).not.toBeNull();
++    expect(startState.memory).toEqual({
++      sessionLearnings: null,
++      realityCheck: null,
++    });
++  });
++});
+diff --git a/mcp-server/src/server.ts b/mcp-server/src/server.ts
+index 3ac79cc..6d59c3c 100644
+--- a/mcp-server/src/server.ts
++++ b/mcp-server/src/server.ts
+@@ -511,7 +511,7 @@ const PRIMARY_TOOLS = [
+   },
+   {
+     name: 'flywheel_get_skill',
+-    description: 'Return a skill\'s frontmatter + body in one round-trip. Backed by a deterministic build-time bundle with 4-layer drift defense (manifest integrity check, per-entry stale warn, FW_SKILL_BUNDLE=off bypass, transparent disk fallback). Pass name as `<plugin>:<skill-name>` (e.g. `agent-flywheel:start`, `agent-flywheel:start_planning`). Returns `{ name, frontmatter, body, source: "bundle"|"disk", staleWarn? }`.',
++    description: 'Return a skill\'s frontmatter + body in one round-trip. Backed by a deterministic build-time bundle with 4-layer drift defense (manifest integrity check, per-entry stale warn, FW_SKILL_BUNDLE=off bypass, transparent disk fallback). Pass name as `<plugin>:<skill-name>` (e.g. `agent-flywheel:start`, `agent-flywheel:start_planning`). Returns `{ name, frontmatter, body, source: "bundle"|"disk", staleWarn? }`. When `withStartState: true` is passed for `agent-flywheel:start`, also runs Step 0b state collection (doctor, observe, and CASS learnings) in parallel and returns `data.startState`.',
+     inputSchema: {
+       type: 'object',
+       properties: {
+@@ -521,6 +521,10 @@ const PRIMARY_TOOLS = [
+           description: 'Skill identifier in `<plugin>:<skill-name>` form, e.g. `agent-flywheel:start`.',
+           pattern: '^[a-z0-9_-]+:[a-z0-9_-]+$',
+         },
++        withStartState: {
++          type: 'boolean',
++          description: 'Opt-in for `agent-flywheel:start`: run Step 0b doctor, observe, and memory searches in parallel and attach `data.startState`.',
++        },
+       },
+       required: ['cwd', 'name'],
+     },
+diff --git a/mcp-server/src/tools/get-skill.ts b/mcp-server/src/tools/get-skill.ts
+index 1becf81..dc74fdf 100644
+--- a/mcp-server/src/tools/get-skill.ts
++++ b/mcp-server/src/tools/get-skill.ts
+@@ -12,8 +12,11 @@ import { z } from "zod";
+ 
+ import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
+ import { getSkill, type GetSkillResult } from "../skills-bundle.js";
+-import type { McpToolResult, ToolContext } from "../types.js";
++import type { DoctorReport, McpToolResult, ToolContext } from "../types.js";
+ import { VERSION } from "../version.js";
++import { runDoctor } from "./doctor-tool.js";
++import { runMemory } from "./memory-tool.js";
++import { runObserve, type FlywheelObserveReport } from "./observe.js";
+ import { makeToolResult } from "./shared.js";
+ 
+ const GetSkillInputSchema = z.object({
+@@ -21,10 +24,24 @@ const GetSkillInputSchema = z.object({
+   name: z
+     .string()
+     .regex(/^[a-z0-9_-]+:[a-z0-9_-]+$/, "Use <plugin>:<skill-name> form"),
++  withStartState: z.boolean().optional(),
+ });
+ 
+ export type GetSkillArgs = z.infer<typeof GetSkillInputSchema>;
+ 
++export interface StartStateSnapshot {
++  doctor: {
++    report: DoctorReport;
++    preflightBanner: string | null;
++    firstRun: boolean;
++  } | null;
++  observe: FlywheelObserveReport | null;
++  memory: {
++    sessionLearnings: string | null;
++    realityCheck: string | null;
++  };
++}
++
+ type GetSkillStructuredContent = {
+   tool: "flywheel_get_skill";
+   version: 1;
+@@ -35,9 +52,88 @@ type GetSkillStructuredContent = {
+     skill: GetSkillResult;
+     /** The running plugin's version, so the start screen needs no shell call to print it. */
+     pluginVersion: string;
++    /** Preloaded Step 0b state when `withStartState: true` is passed for `agent-flywheel:start`. */
++    startState?: StartStateSnapshot;
+   };
+ };
+ 
++async function collectStartState(
++  ctx: ToolContext,
++  cwd: string,
++): Promise<StartStateSnapshot> {
++  const stateCtx: ToolContext = { ...ctx, cwd };
++
++  const doctorPromise = (async (): Promise<StartStateSnapshot["doctor"]> => {
++    try {
++      const res = await runDoctor(stateCtx, { cwd });
++      if (res.isError) return null;
++      const sc = res.structuredContent as
++        | {
++            status?: string;
++            data?: {
++              report?: DoctorReport;
++              preflightBanner?: string | null;
++              firstRun?: boolean;
++            };
++          }
++        | undefined;
++      if (sc?.status !== "ok" || !sc.data?.report) return null;
++      return {
++        report: sc.data.report,
++        preflightBanner: sc.data.preflightBanner ?? null,
++        firstRun: Boolean(sc.data.firstRun),
++      };
++    } catch {
++      return null;
++    }
++  })();
++
++  const observePromise = (async (): Promise<FlywheelObserveReport | null> => {
++    try {
++      const res = await runObserve(stateCtx, { cwd });
++      if (res.isError) return null;
++      const sc = res.structuredContent as
++        | { status?: string; data?: { report?: FlywheelObserveReport } }
++        | undefined;
++      if (sc?.status !== "ok" || !sc.data?.report) return null;
++      return sc.data.report;
++    } catch {
++      return null;
++    }
++  })();
++
++  const memoryQuery = async (query: string): Promise<string | null> => {
++    try {
++      const res = await runMemory(stateCtx, {
++        cwd,
++        operation: "search",
++        query,
++        history: 0,
++      });
++      if (res.isError) return null;
++      return res.content[0]?.text ?? null;
++    } catch {
++      return null;
++    }
++  };
++
++  const [doctor, observe, sessionLearnings, realityCheck] = await Promise.all([
++    doctorPromise,
++    observePromise,
++    memoryQuery("session learnings flywheel"),
++    memoryQuery("reality-check session learnings gap analysis"),
++  ]);
++
++  return {
++    doctor,
++    observe,
++    memory: {
++      sessionLearnings,
++      realityCheck,
++    },
++  };
++}
++
+ function renderSkillText(result: GetSkillResult): string {
+   const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}, plugin v${VERSION}]`;
+   return `${header}\n\n${result.body}`;
+@@ -60,19 +156,28 @@ export async function runGetSkill(
+     });
+   }
+ 
+-  const { name } = parsed.data;
++  const { cwd, name, withStartState } = parsed.data;
++  const shouldIncludeState = Boolean(withStartState && name === "agent-flywheel:start");
+ 
+   try {
+     // NOTE: do NOT pass ctx.cwd as repoRoot. The caller's project directory
+     // has no skills bundle. Skills always resolve from the plugin install
+     // root (CLAUDE_PLUGIN_ROOT or auto-detected from this module's location).
+-    const result = await getSkill(name);
++    const [result, startState] = await Promise.all([
++      getSkill(name),
++      shouldIncludeState ? collectStartState(ctx, cwd) : Promise.resolve(undefined),
++    ]);
+     const structured: GetSkillStructuredContent = {
+       tool: "flywheel_get_skill",
+       version: 1,
+       status: "ok",
+       phase: "idle",
+-      data: { kind: "skill", skill: result, pluginVersion: VERSION },
++      data: {
++        kind: "skill",
++        skill: result,
++        pluginVersion: VERSION,
++        ...(startState !== undefined ? { startState } : {}),
++      },
+     };
+     return makeToolResult(renderSkillText(result), structured);
+   } catch (err: unknown) {
+diff --git a/skills/start/SKILL.md b/skills/start/SKILL.md
+index c5e314b..fdcc697 100644
+--- a/skills/start/SKILL.md
++++ b/skills/start/SKILL.md
+@@ -52,7 +52,7 @@ Use `v?` when version resolution fails.
+ 
+ ### 0.banner: show this first
+ 
+-**Resolve `VERSION` first, then print the banner.** Use `v?` when resolution failed; never print a stale hardcoded version. Print it as the text of the same message that makes the Step 0b calls, so the operator sees it while state detection runs.
++**Resolve `VERSION` first, then print the banner.** Use `v?` when resolution failed; never print a stale hardcoded version. When `data.startState` was returned by `flywheel_get_skill`, print this line at the very top of the welcome message (above the 0c box); otherwise print it as the text of the same message that makes the Step 0b calls, so the operator sees it while state detection runs.
+ 
+ ```
+ ░▒▓ CLAUDE // AGENT-FLYWHEEL v<VERSION> ▓▒░
+@@ -137,7 +137,9 @@ Route the selected mode:
+ 
+ ### 0b. Detect state
+ 
+-Make the four calls below in one message, in parallel, alongside the 0.banner text. Each one answers on its own, so none waits for another, and Step 0 needs no other tool call before the menu.
++When the `flywheel_get_skill` result that loaded this skill already includes `data.startState`, use it directly (`DOCTOR_REPORT = data.startState.doctor?.report ?? null`, `PREFLIGHT_BANNER = data.startState.doctor?.preflightBanner ?? null`, `IS_FIRST_RUN = data.startState.doctor?.firstRun ?? false`, `MCP_DEGRADED = data.startState.doctor === null`, the observe report from `data.startState.observe`, and the CASS learnings from `data.startState.memory.sessionLearnings` and `data.startState.memory.realityCheck`) — skip the Step 0b tool calls below (calling only a part that came back `null`) and render Step 0c and Step 0d immediately in this turn.
++
++Otherwise, make the four calls below in one message, in parallel, alongside the 0.banner text. Each one answers on its own, so none waits for another, and Step 0 needs no other tool call before the menu.
+ 
+ 1. **Doctor.** Call `flywheel_doctor({ cwd })`. Cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. On failure, set the first two values to `null`, `IS_FIRST_RUN = false`, and `MCP_DEGRADED = true`.
+ 2. **Session, beads, git, Agent Mail, project, plans, and error counts.** Call `flywheel_observe({ cwd })`. Its report holds `projectName`, the checkpoint's phase and goal (`checkpoint.phase`, `checkpoint.selectedGoal`), exact bead counts (`beads.counts.open`, `in_progress`, `blocked`, `closed`), the branch and HEAD (`git.branch`, `git.head`), `agentMail.reachable`, the newest three plan paths (`recentPlans`), and the top three nonzero error codes (`topErrorCodes`). Do not call `Bash`, `Read`, or `Glob` for `package.json`, `docs/plans/*.md`, or `.pi-flywheel/error-counts.json` unless `flywheel_observe` errors (on error, fall back to reading `package.json` or the directory name, globbing `docs/plans/*.md`, and reading `.pi-flywheel/error-counts.json`). When `agentMail.reachable` is false, set `AGENT_MAIL_DOWN = true` and show `Agent Mail: offline`. Single-agent routes remain available.
