@@ -3,7 +3,6 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runDoctorChecks, computeOverallSeverity, countCriticalFails, diffVersionTriple, readManifestVersion, DOCTOR_CHECK_NAMES, parseCodexConfigTopLevelModel, isCodexIncompatibleModel, countLocalTelemetryRescuesWithin30Days, } from '../../tools/doctor.js';
-import { GEMINI_MODEL_ALLOWLIST, isGeminiModelAllowed, parseGeminiModelFromOutput, } from '../../model-detection.js';
 // ─── Shared helpers ───────────────────────────────────────────────────────
 const DAY_MS = 24 * 60 * 60 * 1000;
 function makeTmpCwd() {
@@ -90,6 +89,7 @@ function allGreenStubs() {
             respond: ok(''),
         },
         // Swarm-agent CLI detection (claude/pi/gemini at 1:1:1, codex fallback).
+        // The Gemini lane is Pi on the gateway, so it needs no gemini binary.
         {
             match: (cmd, args) => cmd === 'which' && args[0] === 'claude',
             respond: ok('/usr/local/bin/claude'),
@@ -97,10 +97,6 @@ function allGreenStubs() {
         {
             match: (cmd, args) => cmd === 'which' && args[0] === 'codex',
             respond: ok('/usr/local/bin/codex'),
-        },
-        {
-            match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
-            respond: ok('/usr/local/bin/gemini'),
         },
         {
             match: (cmd, args) => cmd === 'which' && args[0] === 'pi',
@@ -751,37 +747,6 @@ describe('codex_config_compat (integrated)', () => {
         }
     });
 });
-// ─── gemini_model_compat ──────────────────────────────────────────────────
-describe('parseGeminiModelFromOutput (pure)', () => {
-    it('extracts the first gemini-* identifier from a version blob', () => {
-        expect(parseGeminiModelFromOutput('gemini 3.1.0 (model: gemini-3.1-flash-preview)'))
-            .toBe('gemini-3.1-flash-preview');
-    });
-    it('lower-cases the matched identifier', () => {
-        expect(parseGeminiModelFromOutput('Model: Gemini-3.1-Flash-Preview'))
-            .toBe('gemini-3.1-flash-preview');
-    });
-    it('returns null when no gemini-* identifier is present', () => {
-        expect(parseGeminiModelFromOutput('cli version 1.2.3')).toBeNull();
-    });
-    it('returns null on empty input', () => {
-        expect(parseGeminiModelFromOutput('')).toBeNull();
-    });
-});
-describe('isGeminiModelAllowed', () => {
-    it('accepts the documented allowlist entry', () => {
-        for (const model of GEMINI_MODEL_ALLOWLIST) {
-            expect(isGeminiModelAllowed(model)).toBe(true);
-        }
-    });
-    it('rejects unknown gemini models', () => {
-        expect(isGeminiModelAllowed('gemini-2.0-pro')).toBe(false);
-        expect(isGeminiModelAllowed('gemini-3.0-flash')).toBe(false);
-    });
-    it('is case-insensitive and trims whitespace', () => {
-        expect(isGeminiModelAllowed('  Gemini-3.1-Flash-Preview  ')).toBe(true);
-    });
-});
 describe('pi_cli and swarm_model_ratio', () => {
     async function sweep(stubs) {
         const cwd = makeTmpCwd();
@@ -792,6 +757,7 @@ describe('pi_cli and swarm_model_ratio', () => {
             });
             return {
                 pi: report.checks.find((c) => c.name === 'pi_cli'),
+                gemini: report.checks.find((c) => c.name === 'gemini_cli'),
                 ratio: report.checks.find((c) => c.name === 'swarm_model_ratio'),
                 swarm: report.swarm,
             };
@@ -801,15 +767,19 @@ describe('pi_cli and swarm_model_ratio', () => {
         }
     }
     it('green with the Claude:Pi:Gemini ratio when Pi is installed and authed', async () => {
-        const { pi, ratio, swarm } = await sweep([]);
+        const { pi, gemini, ratio, swarm } = await sweep([]);
         expect(pi.severity).toBe('green');
         expect(pi.message).toBe('pi cli at /usr/local/bin/pi');
+        expect(gemini).toMatchObject({
+            severity: 'green',
+            message: 'gemini lane (vercel-ai-gateway/google/gemini-4-argon on pi) at /usr/local/bin/pi',
+        });
         expect(ratio.severity).toBe('green');
         expect(ratio.message).toBe('claude+pi+gemini available; ratio 1:1:1 achievable; codex fallback available');
         expect(swarm).toEqual({ label: 'cc:pi:gmi 2:2:2', spawnFlags: '--cc=2 --pi=2 --gmi=2' });
     });
-    it('yellow "not ready" when pi is on PATH but the gateway auth check fails', async () => {
-        const { pi, ratio, swarm } = await sweep([
+    it('yellow "not ready" for Pi and Gemini when pi is on PATH but the gateway auth check fails', async () => {
+        const { pi, gemini, ratio, swarm } = await sweep([
             {
                 match: (cmd, args) => cmd === 'pi' && args[0] === 'auth',
                 respond: { result: { code: 1, stdout: '{"status":"not_ready","provider":"vercel-ai-gateway","reason":"credentials_not_configured"}', stderr: '' } },
@@ -817,19 +787,32 @@ describe('pi_cli and swarm_model_ratio', () => {
         ]);
         expect(pi.severity).toBe('yellow');
         expect(pi.message).toBe('pi cli not ready (pi auth check: vercel-ai-gateway not_ready (credentials_not_configured))');
+        expect(gemini).toMatchObject({
+            severity: 'yellow',
+            message: 'gemini lane (vercel-ai-gateway/google/gemini-4-argon on pi) not ready (pi auth check: vercel-ai-gateway not_ready (credentials_not_configured))',
+        });
         expect(ratio.severity).toBe('yellow');
-        expect(ratio.message).toContain('pi missing; ratio 1:0:1 achievable; codex fallback available');
-        expect(swarm).toEqual({ label: 'cc:gmi:cod 2:2:2', spawnFlags: '--cc=2 --gmi=2 --cod=2' });
+        expect(ratio.message).toBe('claude available; pi+gemini missing; ratio 1:0:0 achievable; codex fallback available');
+        expect(swarm).toEqual({ label: 'cc:cod 2:4', spawnFlags: '--cc=2 --cod=4' });
     });
-    it('yellow "not installed" when which finds no pi', async () => {
-        const { pi } = await sweep([
+    it('yellow "not installed" when which finds no pi, and the Gemini lane goes with it', async () => {
+        const { pi, gemini, swarm } = await sweep([
             {
                 match: (cmd, args) => cmd === 'which' && args[0] === 'pi',
                 respond: { result: { code: 1, stdout: '', stderr: '' } },
             },
+            {
+                match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
+                respond: { result: { code: 0, stdout: '/usr/local/bin/gemini\n', stderr: '' } },
+            },
         ]);
         expect(pi.severity).toBe('yellow');
         expect(pi.message).toContain('pi cli not installed');
+        expect(gemini).toMatchObject({
+            severity: 'yellow',
+            message: 'gemini lane (vercel-ai-gateway/google/gemini-4-argon on pi) needs pi on PATH (which pi exited 1)',
+        });
+        expect(swarm).toEqual({ label: 'cc:cod 2:4', spawnFlags: '--cc=2 --cod=4' });
     });
 });
 describe('a lane switched off in flywheel.config.yaml', () => {
@@ -882,98 +865,55 @@ describe('a lane switched off in flywheel.config.yaml', () => {
     });
 });
 describe('gemini_model_compat (integrated)', () => {
-    it('green when gemini cli is not installed (capability missing)', async () => {
+    const argon = {
+        id: 'google/gemini-4-argon',
+        name: 'Gemini 4 Argon',
+        type: 'language',
+        owned_by: 'google',
+        tags: ['tool-use', 'reasoning'],
+    };
+    async function compatWith(catalog) {
         const cwd = makeTmpCwd();
         try {
-            // Override the `which gemini` stub so the capability lookup reports
-            // gemini as absent — every other check stays green via allGreenStubs.
-            const stubs = [
-                {
-                    match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
-                    respond: { result: { code: 1, stdout: '', stderr: '' } },
-                },
-                ...allGreenStubs(),
-            ];
-            const report = await runDoctorChecks(cwd, undefined, {
-                exec: makeStubbedExec(stubs),
-                codexConfigPath: null,
-            });
-            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
-            expect(compat.severity).toBe('green');
-            expect(compat.message).toContain('not installed');
-        }
-        finally {
-            cleanup(cwd);
-        }
-    });
-    it('green when probe is disabled via geminiVersionOutput=null', async () => {
-        const cwd = makeTmpCwd();
-        try {
+            if (catalog) {
+                mkdirSync(join(cwd, '.pi-flywheel', 'cache'), { recursive: true });
+                writeFileSync(join(cwd, '.pi-flywheel', 'cache', 'gateway-models.json'), JSON.stringify({ version: 2, fetchedAt: '2026-10-19T12:00:00.000Z', catalog, tokenShare: {}, spendShare: {} }));
+            }
             const report = await runDoctorChecks(cwd, undefined, {
                 exec: makeStubbedExec(allGreenStubs()),
                 codexConfigPath: null,
-                geminiVersionOutput: null,
             });
-            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
-            expect(compat.severity).toBe('green');
-            expect(compat.message).toContain('disabled');
+            return { compat: report.checks.find((c) => c.name === 'gemini_model_compat'), swarm: report.swarm };
         }
         finally {
             cleanup(cwd);
         }
+    }
+    it('green and unchecked when no gateway catalog is cached yet', async () => {
+        const { compat, swarm } = await compatWith(null);
+        expect(compat).toMatchObject({
+            severity: 'green',
+            message: 'google/gemini-4-argon not checked — no cached gateway catalog yet (flywheel_pi_models writes one)',
+        });
+        expect(swarm).toEqual({ label: 'cc:pi:gmi 2:2:2', spawnFlags: '--cc=2 --pi=2 --gmi=2' });
     });
-    it('green when the advertised model is on the allowlist', async () => {
-        const cwd = makeTmpCwd();
-        try {
-            const report = await runDoctorChecks(cwd, undefined, {
-                exec: makeStubbedExec(allGreenStubs()),
-                codexConfigPath: null,
-                geminiVersionOutput: 'gemini 3.1.0 (gemini-3.1-flash-preview)',
-            });
-            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
-            expect(compat.severity).toBe('green');
-            expect(compat.message).toContain('gemini-3.1-flash-preview');
-            expect(compat.message).toContain('allowlist');
-        }
-        finally {
-            cleanup(cwd);
-        }
+    it('green when the cached catalog offers gemini-4-argon with tool use', async () => {
+        const { compat } = await compatWith([argon]);
+        expect(compat).toMatchObject({
+            severity: 'green',
+            message: 'google/gemini-4-argon offered by the gateway catalog cached 2026-10-19T12:00:00.000Z',
+        });
     });
-    it('yellow when the advertised model is outside the allowlist', async () => {
-        const cwd = makeTmpCwd();
-        try {
-            const report = await runDoctorChecks(cwd, undefined, {
-                exec: makeStubbedExec(allGreenStubs()),
-                codexConfigPath: null,
-                geminiVersionOutput: 'gemini 2.0.0 (gemini-2.0-pro)',
-            });
-            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
-            expect(compat.severity).toBe('yellow');
-            expect(compat.message).toContain('gemini-2.0-pro');
-            expect(compat.message).toContain('outside allowlist');
-            expect(compat.hint).toBeDefined();
-            expect(compat.hint.toLowerCase()).toContain('allowlist');
-            expect(report.swarm).toEqual({ label: 'cc:pi 2:4', spawnFlags: '--cc=2 --pi=4' });
-        }
-        finally {
-            cleanup(cwd);
-        }
-    });
-    it('green when the version output names no gemini model (advisory)', async () => {
-        const cwd = makeTmpCwd();
-        try {
-            const report = await runDoctorChecks(cwd, undefined, {
-                exec: makeStubbedExec(allGreenStubs()),
-                codexConfigPath: null,
-                geminiVersionOutput: 'cli version 1.2.3',
-            });
-            const compat = report.checks.find((c) => c.name === 'gemini_model_compat');
-            expect(compat.severity).toBe('green');
-            expect(compat.message).toContain('advisory');
-        }
-        finally {
-            cleanup(cwd);
-        }
+    it.each([
+        ['missing', [{ ...argon, id: 'google/gemini-3-pro', name: 'Gemini 3 Pro' }]],
+        ['deprecated', [{ ...argon, deprecated_at: 1_000_000 }]],
+        ['without tool use', [{ ...argon, tags: ['reasoning'] }]],
+    ])('yellow, and the swarm drops the Gemini lane, when argon is %s', async (_label, catalog) => {
+        const { compat, swarm } = await compatWith(catalog);
+        expect(compat.severity).toBe('yellow');
+        expect(compat.message).toBe('google/gemini-4-argon missing, deprecated, or without tool use in the gateway catalog cached 2026-10-19T12:00:00.000Z');
+        expect(compat.hint).toContain('flywheel_pi_models');
+        expect(swarm).toEqual({ label: 'cc:pi 2:4', spawnFlags: '--cc=2 --pi=4' });
     });
 });
 // ─── countCriticalFails + criticalFails wiring ─────────────────────────────
@@ -1165,63 +1105,6 @@ describe('npm_marketplace_version_drift check', () => {
             });
             const check = report.checks.find((c) => c.name === 'npm_marketplace_version_drift');
             expect(check.severity).toBe('green');
-        }
-        finally {
-            cleanup(cwd);
-        }
-    });
-});
-describe('gemini_model_compat probe cache', () => {
-    function geminiCacheHarness(cwd, versionCode) {
-        const bin = join(cwd, 'gemini');
-        writeFileSync(bin, '#!/bin/sh\n');
-        const probeCachePath = join(cwd, 'cache', 'doctor-probes.json');
-        const base = makeStubbedExec([
-            {
-                match: (cmd, args) => cmd === 'which' && args[0] === 'gemini',
-                respond: { result: { code: 0, stdout: `${bin}\n`, stderr: '' } },
-            },
-            ...allGreenStubs(),
-        ]);
-        let calls = 0;
-        const exec = async (cmd, args, opts) => {
-            if (cmd === 'gemini' && args[0] === '--version') {
-                calls++;
-                return { code: versionCode, stdout: 'gemini 2.0.0 (gemini-2.0-pro)', stderr: '' };
-            }
-            return base(cmd, args, opts);
-        };
-        const run = async () => {
-            const report = await runDoctorChecks(cwd, undefined, { exec, codexConfigPath: null, probeCachePath });
-            return report.checks.find((c) => c.name === 'gemini_model_compat');
-        };
-        return { bin, run, calls: () => calls };
-    }
-    it('reuses cached --version output until the binary changes', async () => {
-        const cwd = makeTmpCwd();
-        try {
-            const h = geminiCacheHarness(cwd, 0);
-            const first = await h.run();
-            const second = await h.run();
-            expect(h.calls()).toBe(1);
-            expect(second.severity).toBe('yellow');
-            expect(second.message).toBe(first.message);
-            writeFileSync(h.bin, '#!/bin/sh\n# upgraded\n');
-            await h.run();
-            expect(h.calls()).toBe(2);
-        }
-        finally {
-            cleanup(cwd);
-        }
-    });
-    it('does not cache a failed --version probe', async () => {
-        const cwd = makeTmpCwd();
-        try {
-            const h = geminiCacheHarness(cwd, 1);
-            await h.run();
-            const second = await h.run();
-            expect(h.calls()).toBe(2);
-            expect(second.message).toContain('exited 1');
         }
         finally {
             cleanup(cwd);

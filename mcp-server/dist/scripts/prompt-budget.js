@@ -202,13 +202,12 @@ function writeReport(filePath, report) {
 }
 async function loadRuntimeModules() {
     const sourceBase = IS_COMPILED ? ".." : "../src";
-    const [plan, review, approve, claude, codex, gemini, gates, memory] = await Promise.all([
+    const [plan, review, approve, claude, codex, gates, memory] = await Promise.all([
         import(`${sourceBase}/tools/plan.js`),
         import(`${sourceBase}/tools/review.js`),
         import(`${sourceBase}/tools/approve.js`),
         import(`${sourceBase}/adapters/claude-prompt.js`),
         import(`${sourceBase}/adapters/codex-prompt.js`),
-        import(`${sourceBase}/adapters/gemini-prompt.js`),
         import(`${sourceBase}/gates.js`),
         import(`${sourceBase}/memory.js`),
     ]);
@@ -218,7 +217,7 @@ async function loadRuntimeModules() {
         runApprove: approve.runApprove,
         adaptPromptForClaude: claude.adaptPromptForClaude,
         adaptPromptForCodex: codex.adaptPromptForCodex,
-        adaptPromptForGemini: gemini.adaptPromptForGemini,
+        adaptPromptForGemini: claude.adaptPromptForGemini,
         buildFreshEyesPrompt: gates.buildFreshEyesPrompt,
         resetCassDetection: memory.resetCassDetection,
     };
@@ -438,13 +437,13 @@ async function collectHotPathEntries(modules) {
             coordinatorName: "WindyBasin",
             projectKey: "fixture-project",
         };
-        for (const adapter of [
-            modules.adaptPromptForClaude(bead),
-            modules.adaptPromptForCodex(bead),
-            modules.adaptPromptForGemini(bead),
+        for (const [adapter, source] of [
+            [modules.adaptPromptForClaude(bead), "adapters/claude-prompt.ts"],
+            [modules.adaptPromptForCodex(bead), "adapters/codex-prompt.ts"],
+            [modules.adaptPromptForGemini(bead), "adapters/claude-prompt.ts#adaptPromptForGemini"],
         ]) {
             const dispatched = `${adapter.prompt}${"\n".repeat(adapter.trailingNewlines)}`;
-            entries.push(measureText(`adapter.${adapter.provider}.implementer`, "adapter", `adapters/${adapter.provider}-prompt.ts`, dispatched));
+            entries.push(measureText(`adapter.${adapter.provider}.implementer`, "adapter", source, dispatched));
         }
         const freshEyes = modules.buildFreshEyesPrompt({
             round: 1,

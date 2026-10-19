@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
@@ -40,19 +40,54 @@ function geminiOff(base = caps()) {
 }
 // ─── CLI detection ─────────────────────────────────────────────────────────
 describe('detectCliCapabilities', () => {
-    it('reports every CLI when which finds it and Pi has gateway credentials', async () => {
-        const exec = makeWhichExec({
+    it('reports every lane when which finds the CLIs and Pi has gateway credentials, running Gemini on pi', async () => {
+        const exec = vi.fn(makeWhichExec({
             claude: '/usr/local/bin/claude',
             codex: '/usr/local/bin/codex',
             gemini: '/usr/local/bin/gemini',
             pi: '/usr/local/bin/pi',
-        });
+        }));
         const result = await detectCliCapabilities(exec);
         expect(result.claude.available).toBe(true);
         expect(result.codex.available).toBe(true);
-        expect(result.gemini.available).toBe(true);
+        expect(result.gemini).toEqual({ provider: 'gemini', available: true, path: '/usr/local/bin/pi' });
         expect(result.pi.available).toBe(true);
         expect(result.claude.path).toBe('/usr/local/bin/claude');
+        expect(exec.mock.calls.some(([cmd, args]) => cmd === 'which' && args[0] === 'gemini')).toBe(false);
+    });
+    it('ignores an installed gemini CLI: the Gemini lane needs pi', async () => {
+        const exec = makeWhichExec({ claude: '/usr/local/bin/claude', gemini: '/opt/bin/gemini' });
+        const result = await detectCliCapabilities(exec);
+        expect(result.gemini).toEqual({ provider: 'gemini', available: false, reason: 'which pi exited 1' });
+    });
+    it('needs the gateway for the Gemini lane even when Pi runs on a direct login', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'model-diversity-gemini-'));
+        try {
+            mkdirSync(join(cwd, '.pi-flywheel'));
+            writeFileSync(join(cwd, '.pi-flywheel', 'pi-models.json'), JSON.stringify({ version: 2, picks: { implementer: { piModels: ['xai/grok-4.7'], chosenAt: '2026-10-19T00:00:00.000Z' } } }));
+            const exec = async (cmd, args) => {
+                if (cmd === 'which') {
+                    return args[0] === 'pi' || args[0] === 'claude'
+                        ? { code: 0, stdout: `/usr/local/bin/${args[0]}\n`, stderr: '' }
+                        : { code: 1, stdout: '', stderr: '' };
+                }
+                const provider = args[args.indexOf('--provider') + 1];
+                return provider === 'xai'
+                    ? { code: 0, stdout: '{"status":"ready","provider":"xai","authType":"oauth"}\n', stderr: '' }
+                    : { code: 1, stdout: `{"status":"not_ready","provider":"${provider}","reason":"credentials_not_configured"}\n`, stderr: '' };
+            };
+            const result = await detectCliCapabilities(exec, { cwd });
+            expect(result.pi.available).toBe(true);
+            expect(result.gemini).toEqual({
+                provider: 'gemini',
+                available: false,
+                path: '/usr/local/bin/pi',
+                reason: 'pi auth check: vercel-ai-gateway not_ready (credentials_not_configured)',
+            });
+        }
+        finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
     it('reports Pi as unavailable, keeping its path, when the gateway auth check fails', async () => {
         const exec = makeWhichExec({ claude: '/usr/local/bin/claude', pi: '/usr/local/bin/pi' }, false);
@@ -65,13 +100,12 @@ describe('detectCliCapabilities', () => {
         const exec = makeWhichExec({
             claude: '/usr/local/bin/claude',
             codex: false,
-            gemini: '/opt/bin/gemini',
         });
         const result = await detectCliCapabilities(exec);
         expect(result.claude.available).toBe(true);
         expect(result.codex.available).toBe(false);
         expect(result.codex.reason).toBeTruthy();
-        expect(result.gemini.available).toBe(true);
+        expect(result.gemini.available).toBe(false);
         expect(result.pi.available).toBe(false);
     });
     it('reports a lane switched off in flywheel.config.yaml as disabled without probing it', async () => {
@@ -82,7 +116,7 @@ describe('detectCliCapabilities', () => {
             const result = await detectCliCapabilities(exec, { cwd });
             expect(result.gemini).toEqual({ provider: 'gemini', available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' });
             expect(result.pi.available).toBe(true);
-            expect(exec.mock.calls.some(([cmd, args]) => cmd === 'which' && args[0] === 'gemini')).toBe(false);
+            expect(exec.mock.calls.filter(([cmd, args]) => cmd === 'which' && args[0] === 'pi')).toHaveLength(1);
         }
         finally {
             rmSync(cwd, { recursive: true, force: true });
@@ -118,7 +152,7 @@ describe('splitBeadsByProvider', () => {
             { provider: 'codex', beadIds: ['b3', 'b4'] },
         ]);
         expect(plan.warnings).toEqual([
-            'pi CLI not available (pi not on PATH); reassigned 2 bead(s) to codex',
+            'pi lane not available (pi not on PATH); reassigned 2 bead(s) to codex',
         ]);
         expect(plan.ratio).toBe('2:0:2');
         expect(plan.degraded).toBe(true);
@@ -138,7 +172,7 @@ describe('splitBeadsByProvider', () => {
             { provider: 'pi', beadIds: ['b3', 'b4', 'b5', 'b6'] },
         ]);
         expect(plan.warnings).toEqual([
-            'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to pi',
+            'gemini lane not available (gemini not on PATH); reassigned 2 bead(s) to pi',
         ]);
         expect(plan.ratio).toBe('2:4:0');
     });
@@ -158,7 +192,7 @@ describe('splitBeadsByProvider', () => {
             { provider: 'claude', beadIds: ['b1', 'b2'] },
             { provider: 'codex', beadIds: ['b3', 'b4', 'b5', 'b6'] },
         ]);
-        expect(plan.warnings).toEqual(['pi CLI not available (pi not on PATH); reassigned 2 bead(s) to codex']);
+        expect(plan.warnings).toEqual(['pi lane not available (pi not on PATH); reassigned 2 bead(s) to codex']);
         expect(plan.degraded).toBe(true);
     });
     it('missing Pi and Gemini hands both shares to Codex', () => {
@@ -168,8 +202,8 @@ describe('splitBeadsByProvider', () => {
             { provider: 'codex', beadIds: ['b3', 'b4', 'b5', 'b6'] },
         ]);
         expect(plan.warnings).toEqual([
-            'pi CLI not available (pi not on PATH); reassigned 2 bead(s) to codex',
-            'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to codex',
+            'pi lane not available (pi not on PATH); reassigned 2 bead(s) to codex',
+            'gemini lane not available (gemini not on PATH); reassigned 2 bead(s) to codex',
         ]);
         expect(plan.ratio).toBe('2:0:0');
     });
@@ -261,12 +295,13 @@ describe('adaptPromptFor', () => {
         expect(out.prompt).toContain('COMPLETION_REPORT');
         expect(out.prompt).toContain("program='codex'");
     });
-    it('gemini adapter emits role framing + STOP guard', () => {
+    it('gemini adapter is a Pi pane on gemini-4-argon, so Agent Mail goes through the am CLI', () => {
         const out = adaptPromptFor('gemini', ctx);
         expect(out.provider).toBe('gemini');
-        expect(out.prompt).toContain('# ROLE');
-        expect(out.prompt).toContain('STOP');
-        expect(out.prompt).toContain("program='gemini-cli'");
+        expect(out.trailingNewlines).toBe(1);
+        expect(out.prompt).toContain("0a. am macros start-session --project 'agent-flywheel-plugin' --program pi --model gemini-4-argon --agent-name 'CoralDune'");
+        expect(out.prompt).not.toContain('macro_start_session(');
+        expect(out.prompt).not.toContain('gemini-cli');
     });
     it('pi adapter routes Agent Mail through the am CLI because Pi panes load no project MCP servers', () => {
         const out = adaptPromptFor('pi', { ...ctx, title: "Fix Bob's parser" });

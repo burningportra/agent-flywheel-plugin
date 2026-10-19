@@ -17,7 +17,8 @@ export declare const CURRENT_MODEL_IDS: {
     readonly haiku: "anthropic/claude-haiku-5-5";
     readonly fable: "anthropic/claude-fable-5-1";
 };
-export declare const CURRENT_GEMINI_MODEL_ID = "gemini-3.1-flash-preview";
+/** The only Gemini model the flywheel runs, through Pi on the Vercel AI Gateway. */
+export declare const CURRENT_GEMINI_MODEL_ID = "gemini-4-argon";
 export declare const DEEP_PLAN_MODELS: {
     readonly correctness: "opus";
     readonly ergonomics: "sonnet";
@@ -78,13 +79,4 @@ export declare const MODEL_ROUTING_TIERS: {
  */
 export declare function detectAvailableModels(availableModelIds?: string[]): DetectedModels;
 export declare function getRefinementModel(round: number): AgentModelAlias;
-export declare const GEMINI_MODEL_ALLOWLIST: readonly string[];
-export declare function isGeminiModelAllowed(model: string): boolean;
-/**
- * Extract the first `gemini-…` model identifier from a CLI output blob
- * (e.g. `gemini --version` stdout). Returns null when no match is found.
- * The match is case-insensitive but the returned identifier is lowercased
- * so callers can compare it to {@link GEMINI_MODEL_ALLOWLIST} directly.
- */
-export declare function parseGeminiModelFromOutput(output: string): string | null;
 //# sourceMappingURL=model-detection.d.ts.map

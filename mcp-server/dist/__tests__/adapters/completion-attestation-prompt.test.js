@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { adaptPromptForClaude } from '../../adapters/claude-prompt.js';
+import { adaptPromptForClaude, adaptPromptForGemini } from '../../adapters/claude-prompt.js';
 import { adaptPromptForCodex, } from '../../adapters/codex-prompt.js';
-import { adaptPromptForGemini } from '../../adapters/gemini-prompt.js';
 import { CompletionReportSchemaV1 } from '../../completion-report.js';
 const context = {
     beadId: 'agent-flywheel-plugin-test-bead',

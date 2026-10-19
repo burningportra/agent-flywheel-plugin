@@ -16,7 +16,8 @@ export const CURRENT_MODEL_IDS = {
     haiku: 'anthropic/claude-haiku-5-5',
     fable: 'anthropic/claude-fable-5-1',
 };
-export const CURRENT_GEMINI_MODEL_ID = 'gemini-3.1-flash-preview';
+/** The only Gemini model the flywheel runs, through Pi on the Vercel AI Gateway. */
+export const CURRENT_GEMINI_MODEL_ID = 'gemini-4-argon';
 export const DEEP_PLAN_MODELS = {
     correctness: AGENT_MODEL_ALIASES.opus,
     ergonomics: AGENT_MODEL_ALIASES.sonnet,
@@ -210,29 +211,5 @@ function formatDetectedModels(detected) {
         lines.push(`- ${model}`);
     }
     return lines.join("\n");
-}
-// ─── Gemini CLI model allowlist (v3.17.0) ─────────────────────────────────
-//
-// The gemini CLI rejects spawn requests when its configured model is outside
-// a tight allowlist (the 2026-05-15 reality-check captured a spawn failure
-// driven by an unsupported model identifier). Used by the doctor's
-// `gemini_model_compat` check (bead claude-orchestrator-37n6) so the
-// pre-flight gate (bead claude-orchestrator-2wcd) can skip `--gmi` lanes
-// before they ever reach `ntm spawn`.
-export const GEMINI_MODEL_ALLOWLIST = Object.freeze([
-    CURRENT_GEMINI_MODEL_ID,
-]);
-export function isGeminiModelAllowed(model) {
-    return GEMINI_MODEL_ALLOWLIST.includes(model.trim().toLowerCase());
-}
-/**
- * Extract the first `gemini-…` model identifier from a CLI output blob
- * (e.g. `gemini --version` stdout). Returns null when no match is found.
- * The match is case-insensitive but the returned identifier is lowercased
- * so callers can compare it to {@link GEMINI_MODEL_ALLOWLIST} directly.
- */
-export function parseGeminiModelFromOutput(output) {
-    const match = output.match(/gemini-[0-9][0-9a-z.-]*/i);
-    return match ? match[0].toLowerCase() : null;
 }
 //# sourceMappingURL=model-detection.js.map

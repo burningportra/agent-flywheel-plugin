@@ -16,10 +16,10 @@ describe('model detection', () => {
     it('recognizes current Anthropic and Gemini model ids without duplicating provider prefixes', () => {
         const detected = detectAvailableModels([
             'anthropic/claude-opus-5-5',
-            'google/gemini-3.1-flash-preview',
+            'google/gemini-4-argon',
         ]);
         expect(detected.correctnessModel).toBe('anthropic/claude-opus-5-5');
-        expect(detected.freshPerspectiveModel).toBe('google/gemini-3.1-flash-preview');
+        expect(detected.freshPerspectiveModel).toBe('google/gemini-4-argon');
     });
 });
 //# sourceMappingURL=model-detection.test.js.map

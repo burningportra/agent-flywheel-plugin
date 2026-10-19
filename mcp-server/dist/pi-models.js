@@ -10,9 +10,13 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { writeAtomic } from './atomic-write.js';
+import { CURRENT_GEMINI_MODEL_ID } from './model-detection.js';
 export const PI_GATEWAY_PROVIDER = 'vercel-ai-gateway';
 export const GATEWAY_CATALOG_URL = 'https://ai-gateway.vercel.sh/v1/models';
 export const GATEWAY_LEADERBOARD_URL = 'https://vercel.com/api/ai/leaderboard-export?dataset=models&modality=text&format=json';
+/** The swarm's Gemini lane is Pi running this model on the gateway; no other Gemini model runs anywhere. */
+export const GEMINI_GATEWAY_ID = `google/${CURRENT_GEMINI_MODEL_ID}`;
+export const GEMINI_LANE_MODEL = `${PI_GATEWAY_PROVIDER}/${GEMINI_GATEWAY_ID}`;
 export const PI_LANE_ROLES = ['robustness', 'ergonomics', 'implementer'];
 export const PI_ROLE_PROFILE = {
     robustness: 'frontier',
@@ -122,6 +126,12 @@ function isDeprecated(model, now) {
         : Date.parse(model.deprecated_at);
     return Number.isFinite(at) && at <= now.getTime();
 }
+/** Gemini runs only as {@link CURRENT_GEMINI_MODEL_ID}, its dated snapshots and speed variants included. */
+function isOtherGemini(id) {
+    const slug = slugOf(id).toLowerCase();
+    return slug.startsWith('gemini-')
+        && familyKey(slug.replace(SPEED_VARIANT_SUFFIX, '')) !== CURRENT_GEMINI_MODEL_ID;
+}
 /** Agent lanes need tool calls; batch, free, and excluded-lab models don't fit a live pane. */
 export function isLaneEligible(model, now) {
     const tags = model.tags ?? [];
@@ -130,6 +140,7 @@ export function isLaneEligible(model, now) {
         && !tags.includes('free')
         && !/-(batch|free)$/.test(model.id)
         && !EXCLUDED_LABS.has(labOf(model))
+        && !isOtherGemini(model.id)
         && !isDeprecated(model, now)
         && GATEWAY_MODEL_ID_PATTERN.test(model.id);
 }
@@ -453,7 +464,7 @@ export function resolvePiModelAnswer(answer, sources) {
         return { ok: true, piModel, name: candidate.name };
     }
     const direct = sources.directModels.find((entry) => `${entry.provider}/${entry.model}` === text);
-    if (direct)
+    if (direct && !isOtherGemini(direct.model))
         return { ok: true, piModel: text, name: direct.model };
     const bare = text.startsWith(`${PI_GATEWAY_PROVIDER}/`) ? text.slice(PI_GATEWAY_PROVIDER.length + 1) : text;
     const eligible = sources.catalog.filter((model) => isLaneEligible(model, sources.now));
@@ -540,6 +551,17 @@ export async function loadGatewaySnapshot(exec, opts) {
         // An unwritable cache only costs a refetch next time.
     }
     return { snapshot, stale: false };
+}
+/**
+ * Whether the catalog the last `flywheel_pi_models` call cached still offers
+ * the Gemini lane's model to agent panes. Null when nothing is cached.
+ */
+export async function readGeminiLaneListing(cwd, now) {
+    const cached = await readJson(cwd, CACHE_RELATIVE_PATH, GatewaySnapshotSchema);
+    if (!cached)
+        return null;
+    const model = cached.catalog.find((entry) => entry.id === GEMINI_GATEWAY_ID);
+    return { listed: model !== undefined && isLaneEligible(model, now), fetchedAt: cached.fetchedAt };
 }
 /**
  * `pi auth check` costs no model call. It refreshes an expired OAuth token the

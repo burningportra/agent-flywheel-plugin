@@ -55,7 +55,8 @@ function makeCtx(stateOverrides = {}, execCalls = [], capabilityCalls = availabl
     };
     return { ctx, state };
 }
-function availableCliCalls(gemini = true, pi = true) {
+/** The Gemini lane is Pi on the gateway; `gateway: false` leaves Pi only the xai login a picks file names. */
+function availableCliCalls(gateway = true, pi = true) {
     return [
         {
             cmd: 'which',
@@ -69,13 +70,6 @@ function availableCliCalls(gemini = true, pi = true) {
         },
         {
             cmd: 'which',
-            args: ['gemini'],
-            result: gemini
-                ? { code: 0, stdout: '/bin/gemini\n', stderr: '' }
-                : { code: 1, stdout: '', stderr: 'gemini not found' },
-        },
-        {
-            cmd: 'which',
             args: ['pi'],
             result: pi
                 ? { code: 0, stdout: '/bin/pi\n', stderr: '' }
@@ -84,7 +78,14 @@ function availableCliCalls(gemini = true, pi = true) {
         {
             cmd: 'pi',
             args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--json'],
-            result: { code: 0, stdout: 'ready\n', stderr: '' },
+            result: gateway
+                ? { code: 0, stdout: 'ready\n', stderr: '' }
+                : { code: 1, stdout: '{"status":"not_ready","reason":"credentials_not_configured"}\n', stderr: '' },
+        },
+        {
+            cmd: 'pi',
+            args: ['auth', 'check', '--provider', 'xai', '--json'],
+            result: { code: 0, stdout: '{"status":"ready","authType":"oauth"}\n', stderr: '' },
         },
     ];
 }
@@ -294,25 +295,34 @@ describe('runAdvanceWave', () => {
         const lanes = data.nextWave.prompts.map((prompt) => prompt.lane);
         expect(lanes).toEqual(['cc', 'cc', 'pi', 'pi', 'gmi']);
     });
-    it('reassigns a missing Gemini share to Pi', async () => {
+    it('reassigns a missing Gemini share to Pi when only a Pi login works', async () => {
         const nextBeads = Array.from({ length: 6 }, (_, index) => makeBead({
             id: `fallback-${index + 1}`,
             title: `Fallback ${index + 1}`,
         }));
-        const { ctx } = makeCtx({}, [brShowClosed('prev-1'), brReadyCall(nextBeads)], availableCliCalls(false));
-        const result = await runAdvanceWave(ctx, {
-            cwd: '/fake/project',
-            closedBeadIds: ['prev-1'],
-            maxNextWave: 6,
-        });
-        const data = result.structuredContent.data;
-        expect(data.nextWave.lanes).toEqual([
-            { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
-            {
-                lane: 'pi',
-                beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
-            },
-        ]);
+        const cwd = await mkdtemp(path.join(tmpdir(), 'advance-wave-xai-pick-'));
+        try {
+            await mkdir(path.join(cwd, '.pi-flywheel'));
+            await writeFile(path.join(cwd, '.pi-flywheel', 'pi-models.json'), JSON.stringify({ version: 2, picks: { implementer: { piModels: ['xai/grok-4.7'], chosenAt: '2026-10-19T00:00:00.000Z' } } }));
+            const { ctx } = makeCtx({}, [brShowClosed('prev-1'), brReadyCall(nextBeads)], availableCliCalls(false));
+            ctx.cwd = cwd;
+            const result = await runAdvanceWave(ctx, {
+                cwd,
+                closedBeadIds: ['prev-1'],
+                maxNextWave: 6,
+            });
+            const data = result.structuredContent.data;
+            expect(data.nextWave.lanes).toEqual([
+                { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
+                {
+                    lane: 'pi',
+                    beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
+                },
+            ]);
+        }
+        finally {
+            await rm(cwd, { recursive: true, force: true });
+        }
     });
     it('reassigns missing Gemini and Pi shares to Codex', async () => {
         const nextBeads = Array.from({ length: 6 }, (_, index) => makeBead({

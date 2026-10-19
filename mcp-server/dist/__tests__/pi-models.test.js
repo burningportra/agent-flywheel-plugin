@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildPiCandidates, buildPiModelQuestions, checkPiLaneReady, checkPiProviderAuth, discoverPiRoutes, GATEWAY_CATALOG_URL, GATEWAY_LEADERBOARD_URL, isLaneEligible, loadGatewaySnapshot, matchGatewayModel, parsePiModelList, rankPiModels, readPiModelPicks, resolvePiModelAnswer, summarizeShare, writePiModelPicks, } from '../pi-models.js';
+import { buildPiCandidates, buildPiModelQuestions, checkPiLaneReady, checkPiProviderAuth, discoverPiRoutes, GATEWAY_CATALOG_URL, GATEWAY_LEADERBOARD_URL, GEMINI_LANE_MODEL, isLaneEligible, loadGatewaySnapshot, matchGatewayModel, parsePiModelList, rankPiModels, readGeminiLaneListing, readPiModelPicks, resolvePiModelAnswer, summarizeShare, writePiModelPicks, } from '../pi-models.js';
 const NOW = new Date('2026-10-19T12:00:00.000Z');
 const DAY_S = 86_400;
 const nowS = NOW.getTime() / 1000;
@@ -111,6 +111,15 @@ describe('isLaneEligible', () => {
     it('accepts a tool-calling model with a plain id, and one whose deprecation is still ahead', () => {
         expect(isLaneEligible(CATALOG[0], NOW)).toBe(true);
         expect(isLaneEligible(model('zai/glm-5.2', 'GLM 5.2', { deprecated_at: '2027-01-01T00:00:00Z' }), NOW)).toBe(true);
+    });
+    it('offers gemini-4-argon, with its dated snapshots and speed variants, as the only Gemini model', () => {
+        const eligible = (id) => isLaneEligible(model(id, id), NOW);
+        expect(['google/gemini-4-argon', 'google/gemini-4-argon-1017', 'google/gemini-4-argon-fast'].map(eligible))
+            .toEqual([true, true, true]);
+        expect(['google/gemini-3-pro', 'google/gemini-3.1-flash-preview', 'google/gemini-4-argon-lite', 'vertex/Gemini-4-Argonaut'].map(eligible))
+            .toEqual([false, false, false, false]);
+        expect(eligible('google/gemma-4')).toBe(true);
+        expect(GEMINI_LANE_MODEL).toBe('vercel-ai-gateway/google/gemini-4-argon');
     });
 });
 describe('summarizeShare', () => {
@@ -304,6 +313,17 @@ describe('resolvePiModelAnswer', () => {
         expect(resolvePiModelAnswer('openai/gpt-6-luna-batch', gatewayOnly)).toEqual({ ok: false, suggestions: [] });
         expect(resolvePiModelAnswer('bad/id:high', gatewayOnly)).toMatchObject({ ok: false });
     });
+    it('refuses every Gemini model but gemini-4-argon, on the gateway and on a login', () => {
+        const withGemini = {
+            ...gatewayOnly,
+            directModels: [{ provider: 'google', model: 'gemini-3-pro' }, { provider: 'google', model: 'gemini-4-argon' }],
+            catalog: [...CATALOG, model('google/gemini-3-pro', 'Gemini 3 Pro'), model('google/gemini-4-argon', 'Gemini 4 Argon')],
+        };
+        expect(resolvePiModelAnswer('google/gemini-3-pro', withGemini)).toMatchObject({ ok: false });
+        expect(resolvePiModelAnswer('Gemini 3 Pro', withGemini)).toMatchObject({ ok: false });
+        expect(resolvePiModelAnswer('google/gemini-4-argon', withGemini)).toEqual({ ok: true, piModel: 'google/gemini-4-argon', name: 'gemini-4-argon' });
+        expect(resolvePiModelAnswer('Gemini 4 Argon', withGemini)).toEqual({ ok: true, piModel: GEMINI_LANE_MODEL, name: 'Gemini 4 Argon' });
+    });
     it('suggests eligible models that contain every word of an unknown answer', () => {
         expect(resolvePiModelAnswer('gpt astra', gatewayOnly)).toEqual({
             ok: false,
@@ -458,6 +478,30 @@ describe('discoverPiRoutes', () => {
         expect(peak.get('acme')).toBe(4);
         expect(routes.directRoutes).toHaveLength(6);
         expect(routes.gatewayReady).toBe(false);
+    });
+});
+describe('readGeminiLaneListing', () => {
+    let cwd;
+    beforeEach(async () => {
+        cwd = await mkdtemp(join(tmpdir(), 'pi-models-gemini-'));
+    });
+    afterEach(async () => {
+        await rm(cwd, { recursive: true, force: true });
+    });
+    async function cache(catalog) {
+        await mkdir(join(cwd, '.pi-flywheel', 'cache'), { recursive: true });
+        await writeFile(join(cwd, '.pi-flywheel', 'cache', 'gateway-models.json'), JSON.stringify({ version: 2, fetchedAt: NOW.toISOString(), catalog, tokenShare: {}, spendShare: {} }));
+    }
+    it('is null with no cached catalog', async () => {
+        expect(await readGeminiLaneListing(cwd, NOW)).toBeNull();
+    });
+    it('reports whether the cached catalog offers gemini-4-argon to agent lanes', async () => {
+        await cache([model('google/gemini-4-argon', 'Gemini 4 Argon')]);
+        expect(await readGeminiLaneListing(cwd, NOW)).toEqual({ listed: true, fetchedAt: NOW.toISOString() });
+        await cache([model('google/gemini-4-argon', 'Gemini 4 Argon', { deprecated_at: '2026-10-01T00:00:00Z' })]);
+        expect(await readGeminiLaneListing(cwd, NOW)).toEqual({ listed: false, fetchedAt: NOW.toISOString() });
+        await cache([model('google/gemini-4-argon-1017', 'Gemini 4 Argon 1017')]);
+        expect(await readGeminiLaneListing(cwd, NOW)).toEqual({ listed: false, fetchedAt: NOW.toISOString() });
     });
 });
 describe('gateway snapshot loading', () => {

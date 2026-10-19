@@ -475,7 +475,7 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
         coordinatorName,
     });
     if (dispatch.prompts.length !== ready.length) {
-        return makeApproveError('No implementation CLI is available for the first wave.', state.phase, 'beads', 'cli_not_available', { warnings: dispatch.warnings }, 'Install at least one of claude, codex, gemini, or pi, then retry flywheel_approve_beads.');
+        return makeApproveError('No implementation CLI is available for the first wave.', state.phase, 'beads', 'cli_not_available', { warnings: dispatch.warnings }, 'Install at least one of claude, codex, or pi, then retry flywheel_approve_beads.');
     }
     const promptByBeadId = new Map(dispatch.prompts.map((prompt) => [prompt.beadId, prompt]));
     const promptFor = (beadId) => {

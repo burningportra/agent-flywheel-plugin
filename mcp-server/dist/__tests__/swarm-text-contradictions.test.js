@@ -88,24 +88,25 @@ describe('swarm doc contradictions (AGENTS.md NTM pane priority)', () => {
         }
         expect(offenders).toEqual([]);
     });
-    it('_planning.md review-round recipe spawns 1:1:1, addresses panes by --type=, and gives each pane its own per-pane revision file', () => {
+    it('_planning.md review-round recipe spawns 1:1:1 through swarm-spawn.js, addresses panes by printed index, and gives each pane its own per-pane revision file', () => {
         const planningPath = resolve(skillsDir, 'start', '_planning.md');
         const text = readFileSync(planningPath, 'utf8');
         const idx = text.indexOf('plan-review-round-');
         expect(idx).toBeGreaterThan(-1);
         const window = text.slice(idx, idx + 2000);
-        expect(window).toMatch(/--cc=1\s+--cod=1\s+--gmi=1/);
-        // Address panes by provider type (index-agnostic — a --no-user spawn with
-        // pane-base-index 0 numbers panes 0..N-1, so an index loop starting at 1
-        // skips the cc pane). --type= is correct; --panes=1,2,3 is wrong here.
-        expect(window).toMatch(/--type=cc/);
-        expect(window).toMatch(/--type=cod/);
-        expect(window).toMatch(/--type=gmi/);
+        // The Gemini reviewer is Pi on gemini-4-argon, which only swarm-spawn.js
+        // starts; ntm's own gmi lane would run the gemini CLI.
+        expect(window).toMatch(/swarm-spawn\.js" "\$NTM_PROJECT" --label plan-review-round-<N> --cc=1\s+--cod=1\s+--gmi=1/);
+        expect(window).not.toMatch(/ntm spawn[^\n]*--gmi=/);
+        // ntm types the Gemini pane `unknown`, so --type=gmi would miss it. The
+        // printed index is right whatever the session's pane-base-index.
+        expect(window).toMatch(/--panes="\$INDEX"/);
+        expect(window).not.toMatch(/--type=gmi"?\s/);
         expect(window).not.toMatch(/--pane-name/);
         // Guard the specific regression WindyBasin flagged: the --panes=1,2,3 loop.
         expect(window).not.toMatch(/for\s+PANE\s+in\s+1\s+2\s+3/);
         expect(window).not.toMatch(/--panes="?\$?PANE/);
-        expect(window).toMatch(/-round-<N>-/); // per-pane revision filenames
+        expect(window).toMatch(/-round-<N>-\$\{LANE\}/); // per-pane revision filenames
     });
     it('_planning.md review-round recipe does not claim ntm only accepts a short flag list (it has more flags)', () => {
         const planningPath = resolve(skillsDir, 'start', '_planning.md');

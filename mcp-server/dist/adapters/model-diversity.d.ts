@@ -2,12 +2,15 @@
  * Swarm-agent model diversity — Claude : Pi : Gemini at 1:1:1, with Codex
  * as the fallback that takes Pi's share. Pi runs on a model the user picks
  * through `flywheel_pi_models`, on one of their own logins or the Vercel AI
- * Gateway. A lane switched off under `lanes:` in flywheel.config.yaml hands
- * its share down the same fallback order without counting as degraded.
+ * Gateway. The Gemini lane is Pi too, always on gemini-4-argon through the
+ * gateway; the gemini CLI never runs. A lane switched off under `lanes:` in
+ * flywheel.config.yaml hands its share down the same fallback order without
+ * counting as degraded.
  *
  * Responsibilities:
- *   1. Detect CLI availability (`which claude codex gemini pi`, plus Pi's
- *      route credentials and the lane switches in flywheel.config.yaml).
+ *   1. Detect CLI availability (`which claude codex pi`, plus the route
+ *      credentials of the Pi and Gemini lanes and the lane switches in
+ *      flywheel.config.yaml).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so

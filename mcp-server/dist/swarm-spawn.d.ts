@@ -1,22 +1,26 @@
 /**
  * `swarm-spawn` starts a flywheel swarm: `ntm spawn` for the lanes NTM runs
- * (cc, cod, gmi), then one tmux pane per Pi lane in the same session window,
- * because ntm has no Pi agent type. It prints every pane's lane and tmux
- * index as JSON so the coordinator can address Pi panes with
- * `ntm --robot-send --panes=<index>`.
+ * (cc, cod), then one tmux pane per Pi or Gemini pane in the same session
+ * window, because ntm has no Pi agent type. Gemini panes are Pi on
+ * gemini-4-argon; ntm's own gmi lane would start the gemini CLI. It prints
+ * every pane's lane and tmux index as JSON so the coordinator can address
+ * those panes with `ntm --robot-send --panes=<index>`.
  */
 import { type ExecFn } from './exec.js';
-declare const NTM_LANES: readonly ["cc", "cod", "gmi"];
+declare const NTM_LANES: readonly ["cc", "cod"];
 export type NtmLane = (typeof NTM_LANES)[number];
-export type SwarmLane = NtmLane | 'pi';
+export type PiPaneLane = 'pi' | 'gmi';
+export type SwarmLane = NtmLane | PiPaneLane;
 export interface SwarmSpawnArgs {
     project: string;
     label: string;
     /** Raw NTM lane values (`2` or `2:opus`), passed through to ntm. */
     ntmLanes: Partial<Record<NtmLane, string>>;
     piCount: number;
-    /** One model per Pi pane; the last one repeats when there are more panes than models. */
+    /** Pi panes cycle through these models. */
     piModels: string[];
+    /** Gemini panes, each Pi on {@link GEMINI_LANE_MODEL}. */
+    gmiCount: number;
     piName: string;
     ntmArgs: string[];
     cwd: string;
@@ -43,7 +47,15 @@ export declare function parseSwarmSpawnArgs(argv: readonly string[], cwd: string
 };
 export declare function buildNtmSpawnArgs(args: SwarmSpawnArgs): string[];
 export declare function buildPiPaneCommand(piBin: string, model: string, name: string): string[];
-export declare function classifyPanes(listing: string, piPanes: ReadonlyMap<string, string>): SwarmPane[];
+interface PiPane {
+    lane: PiPaneLane;
+    model: string;
+    /** Pi session name. */
+    name: string;
+    /** `__pi_gmi_` rather than `__gmi_`: ntm treats `__gmi_N` as a gemini CLI pane and would respawn it as one. */
+    title: string;
+}
+export declare function classifyPanes(listing: string, piPanes: ReadonlyMap<string, Pick<PiPane, 'lane' | 'model'>>): SwarmPane[];
 export declare function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<SwarmSpawnResult>;
 export interface SwarmSpawnDeps {
     exec?: ExecFn;

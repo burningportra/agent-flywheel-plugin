@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import * as path from "node:path";
+import { GEMINI_LANE_MODEL } from "../../pi-models.js";
 const ALL_LANES = ["cc", "cod", "gmi", "pi"];
 /**
  * Canonical PANE001 override markers.
@@ -243,6 +244,18 @@ function scanLine(source, lineIndex, line, canonical, file) {
             column: 1,
             message: `ntm spawn has no pi lane (ntm rejects --pi=${counts["pi"]} with "unknown flag: --pi")`,
             hint: 'Spawn Pi lanes with node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> --label <label> --pi=N --pi-model=<model>, which runs ntm spawn for the other lanes.',
+        };
+    }
+    // No override either: the Gemini lane never runs the gemini CLI.
+    if (rawNtm && (counts["gmi"] ?? 0) > 0) {
+        return {
+            ruleId: "PANE001",
+            severity: "error",
+            file,
+            line: lineIndex + 1,
+            column: 1,
+            message: `ntm spawn --gmi=${counts["gmi"]} starts the gemini CLI; the Gemini lane runs only ${GEMINI_LANE_MODEL} on Pi`,
+            hint: `Spawn Gemini panes with node "\${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> --label <label> --gmi=N, which runs each one as Pi on ${GEMINI_LANE_MODEL}.`,
         };
     }
     const verdict = validateLaneCounts(counts, canonical);

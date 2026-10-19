@@ -9,7 +9,9 @@ import type { Rule, RuleContext } from "../types.js";
  * `swarm-spawn.js` invocation with a non-canonical lane mix and no nearby
  * override marker, the rule fires an `error`-severity PANE001 finding. ntm
  * has no Pi agent type, so `--pi=N` on a plain `ntm spawn` line is always a
- * finding: Pi lanes go through `swarm-spawn.js`.
+ * finding: Pi lanes go through `swarm-spawn.js`. So is `--gmi=N`, because
+ * ntm's gmi lane starts the gemini CLI, and the Gemini lane runs only
+ * gemini-4-argon on Pi, which `swarm-spawn.js --gmi=N` spawns.
  *
  * Override markers (recognised within ±6 lines of the offending line) let
  * a skill intentionally diverge — e.g. `_deslop.md`'s "5-Cod swarm —

@@ -1,12 +1,14 @@
 /**
- * Claude prompt adapter.
+ * Prompt adapter for terminal-agent panes: Claude, and the Pi panes of the
+ * Pi and Gemini lanes.
  *
  * Claude is the baseline — its prompt mirrors the existing Step 7
  * template in `skills/start/_implement.md` so behavior is unchanged for
- * Claude panes when model diversity is enabled. Kept as its own file so
- * the three providers expose a symmetric interface.
+ * Claude panes when model diversity is enabled. Pi and Gemini panes get the
+ * same steps with Agent Mail through the `am` CLI.
  */
 import { buildPreCompletionQualityGate } from './completion-attestation-prompt.js';
+import { CURRENT_GEMINI_MODEL_ID } from '../model-detection.js';
 const AGENT_MAIL_SAFETY = 'Do NOT run `am doctor repair`, `am doctor archive-normalize`, or delete `.mailbox.activity.lock`; if Agent Mail looks busy/unhealthy, report it to the coordinator and ask them to run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.';
 function shellQuote(value) {
     return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -121,6 +123,15 @@ export function adaptPromptForPi(bead) {
         provider: 'pi',
         program: 'pi',
         model: 'pi',
+        agentMail: 'cli',
+    });
+}
+/** The Gemini lane is a Pi pane running {@link CURRENT_GEMINI_MODEL_ID}. */
+export function adaptPromptForGemini(bead) {
+    return adaptPromptForTerminal(bead, {
+        provider: 'gemini',
+        program: 'pi',
+        model: CURRENT_GEMINI_MODEL_ID,
         agentMail: 'cli',
     });
 }

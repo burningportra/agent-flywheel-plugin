@@ -263,7 +263,7 @@ export async function runAdvanceWave(ctx, args) {
     if (dispatch.prompts.length !== waveCandidates.length) {
         return makeToolError('flywheel_advance_wave', state.phase, 'cli_not_available', 'No implementation CLI is available for the next wave.', {
             details: { warnings: dispatch.warnings },
-            hint: 'Install at least one of claude, codex, gemini, or pi, then retry flywheel_advance_wave.',
+            hint: 'Install at least one of claude, codex, or pi, then retry flywheel_advance_wave.',
         });
     }
     const outcome = {

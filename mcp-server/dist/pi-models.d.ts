@@ -11,6 +11,9 @@ import type { ExecFn } from './exec.js';
 export declare const PI_GATEWAY_PROVIDER = "vercel-ai-gateway";
 export declare const GATEWAY_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
 export declare const GATEWAY_LEADERBOARD_URL = "https://vercel.com/api/ai/leaderboard-export?dataset=models&modality=text&format=json";
+/** The swarm's Gemini lane is Pi running this model on the gateway; no other Gemini model runs anywhere. */
+export declare const GEMINI_GATEWAY_ID = "google/gemini-4-argon";
+export declare const GEMINI_LANE_MODEL = "vercel-ai-gateway/google/gemini-4-argon";
 export declare const PI_LANE_ROLES: readonly ["robustness", "ergonomics", "implementer"];
 export type PiLaneRole = (typeof PI_LANE_ROLES)[number];
 /**
@@ -216,6 +219,14 @@ export declare function loadGatewaySnapshot(exec: ExecFn, opts: {
     now: Date;
     refresh?: boolean;
 }): Promise<LoadedSnapshot>;
+/**
+ * Whether the catalog the last `flywheel_pi_models` call cached still offers
+ * the Gemini lane's model to agent panes. Null when nothing is cached.
+ */
+export declare function readGeminiLaneListing(cwd: string, now: Date): Promise<{
+    listed: boolean;
+    fetchedAt: string;
+} | null>;
 export interface ProviderAuth {
     provider: string;
     ready: boolean;

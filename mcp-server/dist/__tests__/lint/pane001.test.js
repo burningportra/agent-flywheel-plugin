@@ -214,7 +214,7 @@ describe("PANE001 — rule.check (cross-file scan)", () => {
         const dir = freshDir("pane001-skill-md-");
         const skillsRoot = path.join(dir, "skills", "start");
         mkdirSync(skillsRoot, { recursive: true });
-        const skillMdSrc = "# SKILL.md\n\n```bash\nntm spawn proj --label x --cc=3 --cod=1 --gmi=1\n```\n";
+        const skillMdSrc = "# SKILL.md\n\n```bash\nntm spawn proj --label x --cc=3 --cod=1\n```\n";
         const doc = { source: skillMdSrc, filePath: "skills/start/SKILL.md" };
         const findings = await pane001.check(doc, {
             filePath: "skills/start/SKILL.md",
@@ -417,6 +417,12 @@ describe("PANE001 — cc:pi:gem canonical from the repo AGENTS.md", () => {
         const findings = await scan("# PANE001-OVERRIDE: testing\nntm spawn proj --label x --no-user --cc=2 --pi=2 --gmi=2");
         expect(findings).toHaveLength(1);
         expect(findings[0].message).toBe('ntm spawn has no pi lane (ntm rejects --pi=2 with "unknown flag: --pi")');
+        expect(findings[0].hint).toContain("swarm-spawn.js");
+    });
+    it.each(["--gmi=1", "--gem=1"])("flags %s on a raw ntm spawn even next to an override marker, because ntm's gmi lane is the gemini CLI", async (flag) => {
+        const findings = await scan(`# PANE001-OVERRIDE: testing\nntm spawn proj --label x --no-user --cc=1 --cod=1 ${flag}`);
+        expect(findings).toHaveLength(1);
+        expect(findings[0].message).toBe("ntm spawn --gmi=1 starts the gemini CLI; the Gemini lane runs only vercel-ai-gateway/google/gemini-4-argon on Pi");
         expect(findings[0].hint).toContain("swarm-spawn.js");
     });
     it("finds no drift in the repo's own start skills", async () => {

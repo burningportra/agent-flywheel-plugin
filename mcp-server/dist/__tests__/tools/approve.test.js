@@ -31,7 +31,8 @@ function parsePromptCompletionReport(prompt) {
         .replaceAll('<ISO-8601 timestamp>', '2026-10-15T14:00:00.000Z');
     return CompletionReportSchemaV1.parse(JSON.parse(materialized));
 }
-function availableCliCalls(gemini = true, pi = true) {
+/** The Gemini lane is Pi on the gateway; `gateway: false` leaves Pi only the xai login a picks file names. */
+function availableCliCalls(gateway = true, pi = true) {
     return [
         {
             cmd: 'which',
@@ -45,13 +46,6 @@ function availableCliCalls(gemini = true, pi = true) {
         },
         {
             cmd: 'which',
-            args: ['gemini'],
-            result: gemini
-                ? { code: 0, stdout: '/bin/gemini\n', stderr: '' }
-                : { code: 1, stdout: '', stderr: 'gemini not found' },
-        },
-        {
-            cmd: 'which',
             args: ['pi'],
             result: pi
                 ? { code: 0, stdout: '/bin/pi\n', stderr: '' }
@@ -60,9 +54,23 @@ function availableCliCalls(gemini = true, pi = true) {
         {
             cmd: 'pi',
             args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--json'],
-            result: { code: 0, stdout: 'ready\n', stderr: '' },
+            result: gateway
+                ? { code: 0, stdout: 'ready\n', stderr: '' }
+                : { code: 1, stdout: '{"status":"not_ready","reason":"credentials_not_configured"}\n', stderr: '' },
+        },
+        {
+            cmd: 'pi',
+            args: ['auth', 'check', '--provider', 'xai', '--json'],
+            result: { code: 0, stdout: '{"status":"ready","authType":"oauth"}\n', stderr: '' },
         },
     ];
+}
+/** A cwd whose saved Pi pick runs on the xai login, so Pi stays ready without the gateway. */
+function cwdWithXaiPick() {
+    const cwd = mkdtempSync(join(tmpdir(), 'approve-xai-pick-'));
+    mkdirSync(join(cwd, '.pi-flywheel'));
+    writeFileSync(join(cwd, '.pi-flywheel', 'pi-models.json'), JSON.stringify({ version: 2, picks: { implementer: { piModels: ['xai/grok-4.7'], chosenAt: '2026-10-19T00:00:00.000Z' } } }));
+    return cwd;
 }
 function unavailableCliCalls() {
     return ['claude', 'codex', 'gemini', 'pi'].map((provider) => ({
@@ -538,7 +546,7 @@ describe('runApprove', () => {
             expect(prompt.prompt).toContain(`.pi-flywheel/completion/${prompt.beadId}.json`);
             expect(prompt.prompt).toContain(`"beadId": "${prompt.beadId}"`);
             expect(prompt.prompt).toContain(`"agentName": "${prompt.agentName}"`);
-            expect(prompt.prompt).toContain(prompt.lane === 'pi' ? "--to 'WindyBasin'" : "send_message to 'WindyBasin'");
+            expect(prompt.prompt).toContain(prompt.lane === 'pi' || prompt.lane === 'gmi' ? "--to 'WindyBasin'" : "send_message to 'WindyBasin'");
             expect(prompt.prompt).not.toContain('AGENTS.md');
             expect(parsePromptCompletionReport(prompt.prompt)).toMatchObject({
                 beadId: prompt.beadId,
@@ -546,24 +554,30 @@ describe('runApprove', () => {
             });
         }
     });
-    it('returns 2/4 wave-one lanes with Pi taking the Gemini share when Gemini is unavailable', async () => {
+    it('returns 2/4 wave-one lanes with Pi taking the Gemini share when only a Pi login works', async () => {
         const beads = Array.from({ length: 6 }, (_, index) => makeBead({
             id: `fallback-${index + 1}`,
             title: `Fallback ${index + 1}`,
             description: `Implement fallback ${index + 1}.\nHOW: src/fallback-${index + 1}.ts`,
         }));
-        const { ctx } = makeCtx({}, makeExecCalls(beads), '/fake/cwd', availableCliCalls(false));
-        const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
-        const structured = result.structuredContent;
-        expect(structured.data.lanes).toEqual([
-            { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
-            {
-                lane: 'pi',
-                beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
-            },
-        ]);
+        const cwd = cwdWithXaiPick();
+        try {
+            const { ctx } = makeCtx({}, makeExecCalls(beads), cwd, availableCliCalls(false));
+            const result = await runApprove(ctx, { cwd, action: 'start' });
+            const structured = result.structuredContent;
+            expect(structured.data.lanes).toEqual([
+                { lane: 'cc', beadIds: ['fallback-1', 'fallback-2'] },
+                {
+                    lane: 'pi',
+                    beadIds: ['fallback-3', 'fallback-4', 'fallback-5', 'fallback-6'],
+                },
+            ]);
+        }
+        finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
-    it('hands the Pi share to Codex when Pi is not on PATH', async () => {
+    it('hands the Pi and Gemini shares to Codex when Pi is not on PATH', async () => {
         const beads = Array.from({ length: 6 }, (_, index) => makeBead({
             id: `nopi-${index + 1}`,
             title: `No Pi ${index + 1}`,
@@ -574,12 +588,14 @@ describe('runApprove', () => {
         const structured = result.structuredContent;
         expect(structured.data.lanes).toEqual([
             { lane: 'cc', beadIds: ['nopi-1', 'nopi-2'] },
-            { lane: 'gmi', beadIds: ['nopi-5', 'nopi-6'] },
-            { lane: 'cod', beadIds: ['nopi-3', 'nopi-4'] },
+            { lane: 'cod', beadIds: ['nopi-3', 'nopi-4', 'nopi-5', 'nopi-6'] },
         ]);
         expect(structured.data.dispatch).toEqual({
             degraded: true,
-            warnings: ['pi CLI not available (which pi exited 1); reassigned 2 bead(s) to codex'],
+            warnings: [
+                'pi lane not available (which pi exited 1); reassigned 2 bead(s) to codex',
+                'gemini lane not available (which pi exited 1); reassigned 2 bead(s) to codex',
+            ],
         });
     });
     it('does not mutate the implementation state when no provider is available', async () => {

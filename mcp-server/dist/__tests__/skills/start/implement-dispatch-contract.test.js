@@ -25,8 +25,8 @@ describe('server-owned wave-one implementer dispatch', () => {
         expect(content).toContain('--cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>');
         expect(content).toContain('flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })');
         expect(content).toContain('data.piModels.implementer');
-        // ntm 1.36.1 rejects --pi on a raw spawn.
-        expect(content).not.toMatch(/ntm spawn[^\n]*--pi=/);
+        // ntm 1.36.1 rejects --pi on a raw spawn, and its gmi lane is the gemini CLI.
+        expect(content).not.toMatch(/ntm spawn[^\n]*--(pi|gmi)=/);
     });
     it('keeps the pane-addressing invariants', () => {
         const content = read('skills/start/_implement.md');
