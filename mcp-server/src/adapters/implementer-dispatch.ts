@@ -40,6 +40,10 @@ export interface BuildImplementerDispatchArgs {
   readonly coordinatorName: string;
   readonly signal?: AbortSignal;
   readonly capabilities?: CapabilitiesMap;
+  /** Agent Mail project key; a swarm host's clone when the panes run there. Defaults to `cwd`. */
+  readonly projectKey?: string;
+  readonly probeScope?: string;
+  readonly verifyClaudeLogin?: boolean;
 }
 
 const NTM_LANE = {
@@ -94,6 +98,8 @@ export async function buildImplementerDispatch(
   const capabilities = args.capabilities ?? await detectCliCapabilities(args.exec, {
     cwd: args.cwd,
     signal: args.signal,
+    probeScope: args.probeScope,
+    verifyClaudeLogin: args.verifyClaudeLogin,
   });
   const plan = splitBeadsByProvider(
     args.beads.map((bead) => bead.id),
@@ -114,7 +120,7 @@ export async function buildImplementerDispatch(
     for (const beadId of lane.beadIds) assignmentByBead.set(beadId, lane.provider);
   }
 
-  const projectKey = args.cwd;
+  const projectKey = args.projectKey ?? args.cwd;
   const agentNames = allocateAgentNames(args.beads.length, projectKey);
   const complexity: Record<string, BeadComplexity> = {};
   const prompts: ImplementerPrompt[] = args.beads.map((bead, index) => {

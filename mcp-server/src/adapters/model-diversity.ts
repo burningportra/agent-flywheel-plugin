@@ -89,7 +89,14 @@ const PROVIDER_BINARIES: Record<ModelProvider, string> = {
  */
 export async function detectCliCapabilities(
   exec: ExecFn,
-  opts: { timeout?: number; cwd?: string; signal?: AbortSignal } = {},
+  opts: {
+    timeout?: number;
+    cwd?: string;
+    signal?: AbortSignal;
+    probeScope?: string;
+    /** On another Mac, cc panes need a login there; this session's own login proves nothing. */
+    verifyClaudeLogin?: boolean;
+  } = {},
 ): Promise<CapabilitiesMap> {
   const timeout = opts.timeout ?? 1500;
   const lanes = loadFlywheelConfig(opts.cwd ?? process.cwd()).lanes;
@@ -131,7 +138,7 @@ export async function detectCliCapabilities(
   const probePi = async (): Promise<CliCapability> => {
     const found = await probe('pi');
     if (!found.available) return found;
-    const auth = await checkPiLaneReady(exec, { cwd: opts.cwd, signal: opts.signal, timeout: 10_000 });
+    const auth = await checkPiLaneReady(exec, { cwd: opts.cwd, signal: opts.signal, timeout: 10_000, probeScope: opts.probeScope });
     return auth.ready
       ? found
       : { ...found, available: false, reason: `pi auth check: ${auth.detail}` };
@@ -151,8 +158,20 @@ export async function detectCliCapabilities(
       : { ...found, available: false, reason: `pi auth check: ${auth.provider} ${auth.detail}` };
   };
 
+  const probeClaude = async (): Promise<CliCapability> => {
+    const found = await probe('claude');
+    if (!found.available || !opts.verifyClaudeLogin) return found;
+    try {
+      const status = await exec('claude', ['auth', 'status'], { timeout: 15_000, cwd: opts.cwd, signal: opts.signal });
+      if (/"loggedIn"\s*:\s*true/.test(status.stdout)) return found;
+      return { ...found, available: false, reason: 'claude is not logged in there (claude auth status)' };
+    } catch (err) {
+      return { ...found, available: false, reason: `claude auth status: ${errMsg(err)}` };
+    }
+  };
+
   const [claude, codex, gemini, pi] = await Promise.all([
-    probe('claude'),
+    probeClaude(),
     probe('codex'),
     probeGemini(),
     probePi(),

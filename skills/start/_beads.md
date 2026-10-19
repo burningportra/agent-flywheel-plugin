@@ -65,7 +65,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- **Start implementing** → call `flywheel_approve_beads({ action: "start", coordinatorName: "<current Agent Mail name>" })`. If it returns bead-creation instructions instead of a score, create the beads and repeat the same call.
+- **Start implementing** → run the swarm-host gate in `_offload.md` (`flywheel_get_skill({ name: "agent-flywheel:start_offload" })`), then call `flywheel_approve_beads({ action: "start", coordinatorName: "<current Agent Mail name>" })`. If it returns bead-creation instructions instead of a score, create the beads and repeat the same call.
 - **Polish further** → call `action: "polish"`, show the updated `br list`, and repeat this gate.
 - **Reject** → call `action: "reject"` and return to Step 3.
 

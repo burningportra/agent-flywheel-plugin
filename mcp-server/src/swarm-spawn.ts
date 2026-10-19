@@ -11,6 +11,7 @@ import process from 'node:process';
 
 import { makeExec, type ExecFn } from './exec.js';
 import { GEMINI_LANE_MODEL } from './pi-models.js';
+import { makeSshExec, readSwarmHost } from './swarm-host.js';
 
 const NTM_LANES = ['cc', 'cod'] as const;
 export type NtmLane = (typeof NTM_LANES)[number];
@@ -276,7 +277,16 @@ export async function runCli(argv: string[], deps: SwarmSpawnDeps = {}): Promise
     stderr(`swarm-spawn: ${parsed.error}\n\n${usageText()}\n`);
     return 2;
   }
-  const result = await spawnSwarm(parsed.args, deps.exec ?? makeExec(cwd));
+  // A swarm host recorded by flywheel_swarm_host puts the panes on that Mac, in its clone.
+  const host = await readSwarmHost(cwd);
+  if (host && parsed.args.project !== host.ntmProject) {
+    stderr(`swarm-spawn: this checkout's swarm runs on ${host.name}, whose ntm project is ${host.ntmProject}, not ${parsed.args.project}\n`);
+    return 2;
+  }
+  const local = deps.exec ?? makeExec(cwd);
+  const result = host
+    ? await spawnSwarm({ ...parsed.args, cwd: host.repoPath }, makeSshExec(local, host, host.repoPath))
+    : await spawnSwarm(parsed.args, local);
   stdout(`${JSON.stringify(result, null, 2)}\n`);
   return result.errors.length === 0 ? 0 : 1;
 }

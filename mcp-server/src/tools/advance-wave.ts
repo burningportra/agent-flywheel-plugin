@@ -18,6 +18,7 @@ import {
   planSlugFromIdentifier,
 } from './convergence-tool.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
+import { collectWave, handOffWave, resolveSwarmLane, type SwarmHostHandoff } from '../swarm-host.js';
 import {
   applyBatchReviewVerdict,
   batchReviewsEnabled,
@@ -89,6 +90,8 @@ export interface AdvanceWaveOutcome {
   };
   /** Batch reviews this call found in `pendingBatchReviews`: beads filed from
    *  verdicts that landed, and ranges still waiting on their reviewer. */
+  /** Set when the swarm runs on another Mac: whether this wave's commits and beads reached it. */
+  swarmHost?: SwarmHostHandoff;
   batchReviews?: {
     filed: Array<{ shaRange: string; beadIds: string[] }>;
     pending: string[];
@@ -229,6 +232,17 @@ export async function runAdvanceWave(
       'Error: closedBeadIds must be a non-empty array of bead IDs from the completed wave.',
       { hint: 'Pass closedBeadIds as a non-empty string array — the wave of beads to verify before advancing.' },
     );
+  }
+
+  // Step 0: the wave ran on a swarm host, so its commits, bead closes, and reports come back first.
+  const lane = await resolveSwarmLane(cwd, exec);
+  const collected = lane.host ? await collectWave({ cwd, exec, signal }, lane.host) : undefined;
+  if (collected && !collected.ok) {
+    return makeToolError('flywheel_advance_wave', state.phase, collected.code, collected.message, {
+      hint: collected.hint,
+      retryable: collected.code === 'cli_failure' || collected.reason === 'host_unreachable',
+      details: { reason: collected.reason, ...collected.details },
+    });
   }
 
   // Step 1: verify the completed wave
@@ -404,11 +418,14 @@ export async function runAdvanceWave(
   const waveCandidates = ready.slice(0, maxWave);
 
   const dispatch = await buildImplementerDispatch({
-    exec,
+    exec: lane.exec,
     cwd,
     signal,
     beads: waveCandidates,
     coordinatorName: args.coordinatorName ?? 'Coordinator',
+    projectKey: lane.projectKey,
+    probeScope: lane.probeScope,
+    verifyClaudeLogin: lane.verifyClaudeLogin,
   });
   if (dispatch.prompts.length !== waveCandidates.length) {
     return makeToolError(
@@ -423,6 +440,7 @@ export async function runAdvanceWave(
     );
   }
 
+  const swarmHost = lane.host ? await handOffWave({ cwd, exec, signal }, lane.host) : undefined;
   const outcome: AdvanceWaveOutcome = {
     verification,
     nextWave: {
@@ -433,6 +451,7 @@ export async function runAdvanceWave(
     needsEvidence,
     convergence: convergenceRec,
     ...batchFields,
+    ...(swarmHost ? { swarmHost } : {}),
   };
 
   const lines = [
@@ -461,6 +480,11 @@ export async function runAdvanceWave(
     );
   }
   if (dispatch.warnings.length > 0) lines.push(...dispatch.warnings.map((warning) => `Warning: ${warning}`));
+  if (swarmHost) {
+    lines.push(swarmHost.synced
+      ? `Swarm host ${swarmHost.name}: ${swarmHost.detail}.`
+      : `⚠️  The swarm host ${swarmHost.name} didn't get this wave: ${swarmHost.detail}`);
+  }
   lines.push(`Next wave: ${waveCandidates.length} bead(s) dispatched across ${dispatch.lanes.length} lane(s).`);
   lines.push(...dispatch.prompts.map((prompt) => (
     `  - ${prompt.beadId} → ${prompt.lane} (${dispatch.complexity[prompt.beadId]})`

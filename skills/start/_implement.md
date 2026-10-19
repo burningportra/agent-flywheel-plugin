@@ -103,7 +103,7 @@ During each tend cycle:
 4. Print a tick only when pane state, inbox count, or commits change.
 5. Call `ScheduleWakeup(270s, …)` and end the turn while work continues.
 
-> **Tend-cycle note**: `br list` (no flags) shows only `open` and `in_progress`. To check this cycle's completion count, use `br list --status closed --json`. Common false-alarm pattern: orchestrator sees commits but `br list` shows 0 closed → assumes implementer is committing without closing → wastes a tend cycle on a phantom problem.
+> **Tend-cycle note**: `br list` (no flags) shows only `open` and `in_progress`. To check this cycle's completion count, use `br list --status closed --json`. Without it, commits next to 0 closed beads look like implementers skipping the close.
 
 Use `--robot-is-working`, `--robot-agent-health`, `--robot-tail`, and `--robot-send` for live state. `ntm status`, `ntm activity`, and `ntm health` use cached timestamps. `ntm view`, `ntm dashboard`, and `ntm palette` are human interfaces and do not belong in automation.
 
@@ -123,6 +123,8 @@ exit 0
 ```
 
 ### Dispatch the wave
+
+When `_offload.md` moved the swarm to another Mac, its `$RUN` rules apply to every pane command in this file.
 
 For wave one, reuse the `approveResult` returned by `_beads.md`. Only call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")` when no launch response exists. Assign `approveResult.structuredContent.data` to `START_DATA`; it contains `data.lanes` and `data.prompts`. Later waves use `nextWave.lanes` and `nextWave.prompts`. The server owns provider fallback, agent names, adapter selection, the completion gate, and trailing newlines.
 

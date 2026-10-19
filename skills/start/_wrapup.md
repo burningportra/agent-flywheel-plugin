@@ -1,5 +1,7 @@
 # Wrap-up and post-flywheel: Steps 9.45, 9.5, 10, 11, 12
 
+When `_offload.md` moved the swarm to another Mac, call `flywheel_swarm_host({ cwd, action: "release" })` first, so the alignment check, grading, and commit review read the swarm's final work. If its last pull fails, show the message and hint, fix it, and release again.
+
 ## Step 9.45: Check alignment before wrap-up
 
 Skip this gate when fewer than three beads closed or this session already recorded a `reality-check-<date>` entry. Otherwise ask:

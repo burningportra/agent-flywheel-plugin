@@ -78,7 +78,11 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 # planners (Claude plus two Pi panes on frontier models you pick),
 # splits it into beads, and asks you to approve.
 
-# After approval, it asks which models the Pi panes run, then
+# After approval, if another Mac on your network answers SSH (a
+# MacBook Air, say), it asks where the swarm runs. On that Mac the
+# panes work in a clone, and each wave's commits, bead closes, and
+# completion reports sync back before the wave is verified.
+# Then it asks which models the Pi panes run, and
 # spawns the swarm (ntm for cc, tmux panes for Pi, and Pi panes on
 # gemini-4-argon for the Gemini lane; the gemini CLI never runs):
 node mcp-server/dist/scripts/swarm-spawn.js agent-flywheel --label impl \
@@ -314,7 +318,9 @@ A switched-off lane's share moves down the substitution ladder without a degrade
 | `.pi-flywheel/profile-cache.json` | Repo-profile cache, keyed on git HEAD. |
 | `.pi-flywheel/tender-events.log` | Tender-daemon event log (NDJSON). |
 | `.pi-flywheel/pi-models.json` | The Pi models you last picked per role. |
-| `.pi-flywheel/cache/pi-route-probes.json` | Which models your Pi logins can run, rechecked daily. |
+| `.pi-flywheel/cache/pi-route-probes.json` | Which models your Pi logins can run, rechecked daily. A swarm host's probes go in `pi-route-probes.<host>.json`. |
+| `.pi-flywheel/swarm-host.json` | The Mac this checkout's swarm runs on, while one is chosen. `flywheel_swarm_host` writes and removes it. |
+| `~/.config/agent-flywheel/swarm-hosts.json` | Macs you ran a swarm on before, so they show up even when Bonjour misses them. |
 | `docs/plans/` | Plan artifacts from deep-plan + duel-plan sessions. |
 | `docs/duels/` | Duel synthesis reports. |
 | `docs/solutions/` | Distilled session learnings (durable memory). |
@@ -429,6 +435,7 @@ Logs go to stderr as one JSON object per line. Stdout is reserved for the MCP JS
 - **Multi-agent fan-out depends on NTM.** Without NTM, parallelism falls back to single-agent serial. Single-agent flows still work but lose the swarm speed-up.
 - **Heavy dependency tree.** A full install pulls br + bv + ntm + agent-mail + dcg + cass + cm. `/flywheel-setup` and the ACFS stack make this one command, but it's still a real install footprint.
 - **Adversarial duels need ≥ 2 healthy CLIs.** `/dueling-idea-wizards` requires Claude + at least one of {Codex, Gemini}. With only Claude available, the flywheel offers a "Deep" or "Triangulated" fallback row instead.
+- **A swarm on another Mac needs SSH and the same CLIs there.** The other Mac needs Remote Login on, this Mac's key in its `authorized_keys`, and git, ntm, tmux, br, am, and rsync. Claude Code keeps its login in the Keychain, which SSH sessions can't read, so cc panes run there only after `claude setup-token` with `CLAUDE_CODE_OAUTH_TOKEN` exported in that Mac's `~/.zshenv`; until then its swarm runs on Pi and Codex. A closed lid on battery sleeps it mid-wave.
 - **Built for solo / small-team flow.** Compound engineering across many concurrent humans isn't the design center. The bead graph is the coordination surface, not Git PR review.
 
 ---

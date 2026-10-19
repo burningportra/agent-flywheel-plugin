@@ -34,13 +34,13 @@
     },
     {
       "file": "src/tender-daemon.ts",
-      "name": "startTenderDaemon",
-      "reason": "Called inside src/tender-daemon.ts by runCli (which is itself dynamically imported from scripts/tender-daemon.ts) and unit-tested through loadDaemonModule in src/__tests__/tender-daemon.test.ts. Export is required by the test loader."
-    },
-    {
-      "file": "src/tender-daemon.ts",
       "name": "runCli",
       "reason": "Dynamically imported by scripts/tender-daemon.ts via `const { runCli } = await import(modulePath)`. reachability.mjs follows the dynamic specifier for file reachability but does not record the destructured symbol as an import."
+    },
+    {
+      "file": "src/swarm-host.ts",
+      "name": "runSwarmHostCli",
+      "reason": "Dynamically imported by scripts/swarm-host.ts via `const { runSwarmHostCli } = await import(modulePath)`. reachability.mjs follows the dynamic specifier for file reachability but does not record the destructured symbol as an import."
     }
   ]
 }

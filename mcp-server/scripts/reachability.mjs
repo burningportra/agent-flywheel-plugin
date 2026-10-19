@@ -9,7 +9,7 @@ import ts from "typescript";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(SCRIPT_DIR, "..");
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
-const EXPLICIT_SCRIPT_ROOTS = ["scripts/launch-server.mjs", "scripts/tender-daemon.ts", "scripts/swarm-spawn.ts"];
+const EXPLICIT_SCRIPT_ROOTS = ["scripts/launch-server.mjs", "scripts/tender-daemon.ts", "scripts/swarm-spawn.ts", "scripts/swarm-host.ts"];
 
 function parseArgs(argv) {
   const options = {

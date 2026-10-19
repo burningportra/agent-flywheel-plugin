@@ -5,13 +5,13 @@ description: Launch a parallel swarm of agents to implement multiple beads simul
 
 Launch a parallel swarm of implementation agents. $ARGUMENTS
 
-> **NTM-first contract (MANDATORY).** All multi-agent fan-out goes through `ntm spawn` + `ntm --robot-send`. Do NOT use raw `Task`/`Agent()`, background CLIs, or direct `tmux` for impl agents. Before spawning anything, invoke the `/vibing-with-ntm` skill — it carries the project-tested marching-orders prompts, work-claim/reservation conventions, and pane-tending loops you don't have time to recreate. The only `Agent()` call permitted in this skill is for fresh-eyes reviewers in Step 9 (short-lived, benefits from subagent isolation).
+> **NTM-first contract (MANDATORY).** All multi-agent fan-out goes through `ntm spawn` + `ntm --robot-send`. Do NOT use raw `Task`/`Agent()`, background CLIs, or direct `tmux` for impl agents. Before spawning anything, invoke the `/vibing-with-ntm` skill — it carries the project-tested marching-orders prompts, work-claim/reservation conventions, and pane-tending loops you don't have time to recreate. The only `Agent()` call permitted in this skill is for fresh-eyes reviewers in Step 9.
 >
 > **NTM-unavailable fallback only.** If `which ntm` fails OR `ntm deps -v` reports a broken stack, surface a one-line warning, ask the user before downgrading, and only then fall back to the `Agent()` form preserved at the bottom of this skill. NTM-unavailable should be a rare, user-acknowledged degradation — never a silent default.
 
 0. **Invoke `/vibing-with-ntm`.** Use the `Skill` tool with `vibing-with-ntm`. Follow its guidance for session bootstrap (NTM project resolution, Agent Mail, beads claim) and pane-tending (looper cadence, stuck-pane ladder, completion polling). The rest of this skill assumes its conventions are loaded.
 
-1. Call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`. Assign `START_DATA = result.structuredContent.data`. Its `data.lanes` groups the beads by lane, and `data.prompts` holds one server-built prompt per ready bead.
+1. Run the swarm-host gate in `skills/start/_offload.md`, then call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`. Assign `START_DATA = result.structuredContent.data`. Its `data.lanes` groups the beads by lane, and `data.prompts` holds one server-built prompt per ready bead.
 
 2. If `START_DATA.readyCount === 0`, say "No beads are ready for implementation. Run /agent-flywheel:start to create a plan first."
 
@@ -34,7 +34,7 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    If `START_DATA.dispatch.degraded` is true, show its warnings before spawning.
 
 6. **Monitor swarm (per `/vibing-with-ntm` tending loop):**
-   - Schedule the looper at the cadence set by `/vibing-with-ntm` (typically `ScheduleWakeup(270s, …)`); poll `fetch_inbox` and `ntm --robot-is-working` between wakes. For an operator-readable view of remaining work, `ntm work triage --by-track` wraps `bv` and groups by track; for next-bead dispatch to idle panes, prefer `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` over an ad-hoc `--robot-send`.
+   - Schedule the looper at the cadence set by `/vibing-with-ntm`; poll `fetch_inbox` and `ntm --robot-is-working` between wakes. For an operator-readable view of remaining work, `ntm work triage --by-track` wraps `bv` and groups by track; for next-bead dispatch to idle panes, prefer `ntm assign "$NTM_PROJECT" --auto --strategy=dependency` over an ad-hoc `--robot-send`.
    - **Alternative — `ntm controller`:** for long-running swarms, spawn `ntm controller "$NTM_PROJECT" --agent-type=cc` in pane 0 to offload supervision to a dedicated coordinator agent (built-in `--robot-snapshot`/`--robot-attention` loop). Main session can exit cleanly; tender-daemon stays running; recovery via stuck-pane ladder if the controller pane dies.
    - If an agent goes idle without reporting completion, nudge it: `SendMessage(to: "impl-<bead-id>", message: "Please report your current status and any blockers.")`. Escalate per the stuck-pane ladder in `_implement.md` — nudge → context-handoff restart → force-stop.
    - Use `TaskList` to see overall swarm task status; use `ntm --robot-restart-pane` to recycle a wedged pane (preserves bead state via Agent Mail handoff). Prefer `ntm --robot-smart-restart` first — it refuses if the pane is actually working.

@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **A swarm can run on another Mac on the local network.** After the user picks Start implementing, `flywheel_swarm_host` finds Macs that answer SSH over Bonjour, plus ones chosen before, and asks where the swarm runs, recommending the one with the lightest load per core. This session keeps coordinating: questions, plugin tools, reviews, and cycle state stay on this Mac, and only third-party CLIs run on the other one.
+  - `action: "choose"` makes a clone named `<repo>-offload` under that Mac's ntm `projects_base`, pushes this checkout's commits and beads to it, registers the coordinator in its Agent Mail, marks the clone trusted for Claude Code there, and keeps the Mac awake with `caffeinate`. It returns the lanes that work there and `data.run`, the prefix that runs a command in the clone.
+  - `flywheel_approve_beads(action: "start")` and `flywheel_advance_wave` push each wave to the clone. `flywheel_advance_wave` pulls the wave's commits, bead changes, and completion reports into this checkout before it verifies, and stops with `blocked_state` on a merge conflict or uncommitted pane edits instead of verifying stale work. Commits fast-forward or merge, and beads merge three ways with `br sync --merge --force`.
+  - Prompts carry the clone as the Agent Mail project, `flywheel_pi_models` checks implementer models against that Mac's Pi logins, and `swarm-spawn.js` and `tender-daemon.js` run there on their own. The Claude lane counts only when `claude auth status` reports a login there, since SSH sessions can't read the Keychain.
+  - The clone is a sparse checkout without `.beads/`, so pushes never collide with a committed bead export and panes never commit their own copy.
+  - `action: "sync"` pulls, then pushes, and `action: "release"` pulls one last time, stops the keep-awake, and switches back to this Mac. `skills/start/_offload.md` holds the gate, and `_beads.md`, `flywheel-swarm`, `_implement.md`, `_inflight_prompt.md`, and `_wrapup.md` point to it.
+
 ## [3.22.0] - 2026-10-19
 
 The Gemini lane runs gemini-4-argon through Pi on the Vercel AI Gateway, and the gemini CLI never starts.

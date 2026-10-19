@@ -17,6 +17,7 @@ import {
   type TenderDaemonState,
 } from "./tender.js";
 import { createLogger, type Logger } from "./logger.js";
+import { makeSshExec, readSwarmHost } from "./swarm-host.js";
 
 const execAsync = promisify(execCb);
 
@@ -367,7 +368,17 @@ export async function startTenderDaemon(
   const loggerFactory = deps.createLoggerFn ?? createLogger;
   const log = loggerFactory("tender-daemon");
 
-  const exec = makeExecFn(args.project);
+  // A swarm on another Mac: its panes, ntm, and Agent Mail answer there, while the log stays here.
+  const host = await readSwarmHost(args.project);
+  const exec = host ? makeSshExec(makeExecFn(args.project), host, host.repoPath) : makeExecFn(args.project);
+  const projectKey = host?.repoPath ?? args.project;
+  const runCommand: RunCommandFn = host
+    ? async (command, opts) => {
+      const result = await exec('/bin/sh', ['-c', command], { timeout: opts.timeout, signal: opts.signal });
+      if (result.code !== 0) throw Object.assign(new Error(`exit ${result.code}`), result);
+      return { stdout: result.stdout, stderr: result.stderr };
+    }
+    : runCommandFn;
   const logfile = path.isAbsolute(args.logfile)
     ? args.logfile
     : path.join(args.project, args.logfile);
@@ -392,7 +403,7 @@ export async function startTenderDaemon(
   const doPoll = async (): Promise<void> => {
     const pollTs = Date.now();
 
-    const inboxRaw = await fetchInboxFn(exec as ExecFn, args.project, args.agent, {
+    const inboxRaw = await fetchInboxFn(exec as ExecFn, projectKey, args.agent, {
       limit: 200,
       includeBodies: false,
     });
@@ -402,13 +413,13 @@ export async function startTenderDaemon(
 
     const quotedSession = shellQuote(args.session);
     const robotRaw = await runNtmCommand(
-      runCommandFn,
+      runCommand,
       `ntm --robot-is-working ${quotedSession}`,
       { cwd: args.project, timeout: args.ntmTimeoutMs },
       log,
     );
     const healthRaw = await runNtmCommand(
-      runCommandFn,
+      runCommand,
       `ntm --robot-agent-health ${quotedSession}`,
       { cwd: args.project, timeout: args.ntmTimeoutMs },
       log,

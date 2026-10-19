@@ -47,7 +47,7 @@ Route the chosen option immediately. Skip the gate only when the user pre-author
 
 ## Operator spec (apply while executing the prompt above)
 
-1. **Load the ladder.** Invoke `/ntm` and `/vibing-with-ntm` via the `Skill` tool before any pane spawn. They carry the orchestrator decision tree, OC cards, and stuck-pane ladder.
+1. **Load the ladder.** Invoke `/ntm` and `/vibing-with-ntm` via the `Skill` tool before any pane spawn. They carry the orchestrator decision tree, OC cards, and stuck-pane ladder. Then run the `_offload.md` gate; on another Mac, apply its in-flight notes.
 
 2. **Resolve readiness.** Run `_implement.md` **Pre-flight: resolve NTM readiness** and reuse its `DOCTOR_REPORT`, `NTM_AVAILABLE`, and `NTM_PROJECT`. Set `SWARM_FLAGS = DOCTOR_REPORT.swarm.spawnFlags`. The server already applied the substitution ladder, the `lanes:` switches, and the Gemini model check, so `--cc=2 --pi=4` means Gemini is out. Do not re-call `which` or the doctor, and do not add a lane the flags leave out. A report without a `swarm` field means the sweep was cut short or no lane is usable, so rerun the pre-flight once, then stop and report. If `SWARM_FLAGS` is `--cc=6` and the operator has not approved all-cc, surface the degraded-mode `AskUserQuestion`.
 

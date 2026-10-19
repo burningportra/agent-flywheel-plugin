@@ -22,6 +22,7 @@ import {
   type PiModelCandidate,
   type PiModelProfile,
 } from '../pi-models.js';
+import { resolveSwarmLane } from '../swarm-host.js';
 import type { McpToolResult, ToolContext } from '../types.js';
 import { makeToolResult } from './shared.js';
 
@@ -135,11 +136,17 @@ export async function runPiModels(ctx: ToolContext, input: unknown): Promise<Mcp
     });
   }
   const { snapshot } = loaded;
-  const routes = await discoverPiRoutes(ctx.exec, snapshot, {
+  // Implementers run where the swarm runs, so their models must work on that Mac's logins.
+  const askedRoles = args.action === 'list' ? (args.roles ?? ['implementer']) : Object.keys(args.picks ?? {});
+  const lane = askedRoles.length > 0 && askedRoles.every((role) => role === 'implementer')
+    ? await resolveSwarmLane(ctx.cwd, ctx.exec)
+    : { exec: ctx.exec, probeScope: undefined };
+  const routes = await discoverPiRoutes(lane.exec, snapshot, {
     cwd: ctx.cwd,
     signal: ctx.signal,
     now,
     refresh: args.refresh,
+    probeScope: lane.probeScope,
   });
   const candidates = buildPiCandidates(snapshot, { now, directRoutes: routes.directRoutes, gatewayReady: routes.gatewayReady });
   if (candidates.length === 0) {
@@ -230,7 +237,7 @@ export async function runPiModels(ctx: ToolContext, input: unknown): Promise<Mcp
   }
 
   const chosenProviders = [...new Set(Object.values(resolved).flatMap((models) => models?.map(providerOf) ?? []))];
-  const auths = await Promise.all(chosenProviders.map((provider) => checkPiProviderAuth(ctx.exec, provider, { cwd: ctx.cwd, signal: ctx.signal })));
+  const auths = await Promise.all(chosenProviders.map((provider) => checkPiProviderAuth(lane.exec, provider, { cwd: ctx.cwd, signal: ctx.signal })));
   const notReady = auths.filter((auth) => !auth.ready);
   try {
     await writePiModelPicks(ctx.cwd, resolved, now);

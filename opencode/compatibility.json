@@ -265,10 +265,6 @@
       "reason": "The existing coordinator wake-loop prose is semantic v2 debt; exact paths and counts prevent this allowance from admitting added calls.",
       "allowedOccurrences": [
         {
-          "path": "skills/flywheel-swarm/SKILL.md",
-          "count": 1
-        },
-        {
           "path": "skills/start/_implement.md",
           "count": 4
         }
