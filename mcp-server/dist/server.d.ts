@@ -61,6 +61,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -202,6 +203,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -265,6 +267,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -345,6 +348,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -464,6 +468,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -549,6 +554,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -616,6 +622,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -697,6 +704,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -770,6 +778,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -821,6 +830,11 @@ export declare const TOOLS: ({
             };
             refreshRoot: {
                 type: string;
+                description: string;
+            };
+            history: {
+                type: string;
+                minimum: number;
                 description: string;
             };
             goal?: undefined;
@@ -938,6 +952,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
@@ -1039,6 +1054,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1108,6 +1124,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1167,6 +1184,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1235,6 +1253,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1298,6 +1317,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1364,6 +1384,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1438,6 +1459,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1500,6 +1522,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1594,6 +1617,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1657,6 +1681,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
@@ -1722,6 +1747,7 @@ export declare const TOOLS: ({
             content?: undefined;
             entryId?: undefined;
             refreshRoot?: undefined;
+            history?: undefined;
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;

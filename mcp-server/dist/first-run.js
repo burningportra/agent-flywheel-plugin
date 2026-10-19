@@ -13,6 +13,11 @@
  *   4. `.pi-orchestrator/` directory exists (legacy / orchestrator state)
  *   5. CASS returned ≥1 entry for this cwd (`cassSearch().length > 0`)
  *
+ * The three filesystem signals are checked first, and a hit returns without
+ * spawning `br` or `cass`. Otherwise both probes run, and the answer comes
+ * as soon as either reports history, since `cass search ""` can take
+ * seconds on a large index.
+ *
  * `brList` and `cassSearch` are injected so tests can run hermetically
  * without spawning the real CLIs; production callers should pass bounded
  * wrappers around `br list --all --limit 1 --json` and project-scoped
@@ -21,14 +26,15 @@
 import { stat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 export async function isFirstRun(opts) {
-    const signals = await Promise.all([
+    const local = await Promise.all([
         exists(join(opts.cwd, ".pi-flywheel/checkpoint.json")),
-        opts.brList().then((d) => d.length > 0).catch(() => false),
         hasAnyPlanMarkdown(opts.cwd),
         exists(join(opts.cwd, ".pi-orchestrator")),
-        opts.cassSearch().then((d) => d.length > 0).catch(() => false),
     ]);
-    return !signals.some(Boolean);
+    if (local.some(Boolean))
+        return false;
+    const seen = await Promise.any([opts.brList(), opts.cassSearch()].map((probe) => probe.then((rows) => (rows.length > 0 ? true : Promise.reject(new Error("no history")))))).catch(() => false);
+    return !seen;
 }
 async function exists(p) {
     try {

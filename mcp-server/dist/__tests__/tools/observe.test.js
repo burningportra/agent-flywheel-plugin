@@ -175,6 +175,74 @@ describe('flywheel_observe — br unavailable', () => {
         }
     });
 });
+describe('flywheel_observe — bead counts', () => {
+    const brCount = (cmd, args) => cmd === 'br' && args[0] === 'count';
+    const brList = (cmd, args) => cmd === 'br' && args[0] === 'list';
+    const brReady = (cmd, args) => cmd === 'br' && args[0] === 'ready';
+    const readyRows = JSON.stringify([{ id: 'b-1', title: 'Ready one', status: 'open', priority: 1 }]);
+    it('takes exact per-status totals from br count, blocked included, without listing beads', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const calls = [];
+            const stubbed = makeStubbedExec([
+                {
+                    match: brCount,
+                    respond: ok(JSON.stringify({
+                        total: 2998,
+                        groups: [
+                            { group: 'blocked', count: 7 },
+                            { group: 'closed', count: 2982 },
+                            { group: 'in_progress', count: 2 },
+                            { group: 'open', count: 7 },
+                        ],
+                    })),
+                },
+                { match: brReady, respond: ok(readyRows) },
+                ...gracefulDegradeStubs(),
+            ]);
+            const exec = (cmd, args, opts) => {
+                calls.push(`${cmd} ${args[0]}`);
+                return stubbed(cmd, args, opts);
+            };
+            const result = await runObserve(makeCtx(cwd, exec), { cwd });
+            const sc = result.structuredContent;
+            expect(sc.data.report.beads.counts).toEqual({
+                open: 7, in_progress: 2, blocked: 7, closed: 2982, deferred: 0, total: 2998,
+            });
+            expect(sc.data.report.beads.ready.map((r) => r.id)).toEqual(['b-1']);
+            expect(calls).not.toContain('br list');
+            expect(result.content[0]?.text).toContain('7 blocked, 2982 closed');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('falls back to counting br list rows when br count is unavailable', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            const exec = makeStubbedExec([
+                { match: brCount, respond: { code: 2, stdout: '', stderr: "unrecognized subcommand 'count'" } },
+                {
+                    match: brList,
+                    respond: ok(JSON.stringify([
+                        { id: 'b-1', title: 'One', status: 'open', priority: 1 },
+                        { id: 'b-2', title: 'Two', status: 'in_progress', priority: 2 },
+                    ])),
+                },
+                { match: brReady, respond: ok(readyRows) },
+                ...gracefulDegradeStubs(),
+            ]);
+            const result = await runObserve(makeCtx(cwd, exec), { cwd });
+            const sc = result.structuredContent;
+            expect(sc.data.report.beads.initialized).toBe(true);
+            expect(sc.data.report.beads.counts).toMatchObject({ open: 1, in_progress: 1, total: 2 });
+            expect(sc.data.report.beads.ready.map((r) => r.id)).toEqual(['b-1']);
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+});
 // ─── Acceptance #5: agent-mail unreachable degrades gracefully ────────────
 describe('flywheel_observe — agent-mail unreachable', () => {
     it('reports agentMail.reachable=false when the curl probe fails', async () => {

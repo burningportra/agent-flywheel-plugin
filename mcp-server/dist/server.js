@@ -341,6 +341,11 @@ const PRIMARY_TOOLS = [
                     type: 'string',
                     description: 'Optional override for the docs/solutions/ root scanned by operation=refresh_learnings. Defaults to <cwd>/docs/solutions.',
                 },
+                history: {
+                    type: 'integer',
+                    minimum: 0,
+                    description: 'History snippets for operation=search (cm context --history). 0 skips the session-history search, which can take seconds on a large index.',
+                },
             },
             required: ['cwd'],
         },

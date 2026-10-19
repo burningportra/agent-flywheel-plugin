@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
 import { getSkill } from "../skills-bundle.js";
+import { VERSION } from "../version.js";
 import { makeToolResult } from "./shared.js";
 const GetSkillInputSchema = z.object({
     cwd: z.string(),
@@ -18,7 +19,7 @@ const GetSkillInputSchema = z.object({
         .regex(/^[a-z0-9_-]+:[a-z0-9_-]+$/, "Use <plugin>:<skill-name> form"),
 });
 function renderSkillText(result) {
-    const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}]`;
+    const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}, plugin v${VERSION}]`;
     return `${header}\n\n${result.body}`;
 }
 export async function runGetSkill(ctx, args) {
@@ -45,7 +46,7 @@ export async function runGetSkill(ctx, args) {
             version: 1,
             status: "ok",
             phase: "idle",
-            data: { kind: "skill", skill: result },
+            data: { kind: "skill", skill: result, pluginVersion: VERSION },
         };
         return makeToolResult(renderSkillText(result), structured);
     }

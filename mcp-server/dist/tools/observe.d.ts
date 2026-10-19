@@ -54,6 +54,7 @@ export declare const FlywheelObserveReportSchema: z.ZodObject<{
         counts: z.ZodObject<{
             open: z.ZodNumber;
             in_progress: z.ZodNumber;
+            blocked: z.ZodOptional<z.ZodNumber>;
             closed: z.ZodNumber;
             deferred: z.ZodNumber;
             total: z.ZodNumber;

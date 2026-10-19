@@ -134,6 +134,29 @@ describe('runMemory', () => {
         expect(result.content[0].text).toContain('b-123');
         expect(result.content[0].text).toContain('Auth middleware refactor note');
     });
+    it('passes history through to cm context so a caller can skip the history search', async () => {
+        const contextResponse = JSON.stringify({
+            success: true,
+            data: { relevantBullets: [{ id: 'b-9', content: 'Rule only' }], antiPatterns: [], historySnippets: [] },
+        });
+        const { ctx } = makeCtx([
+            cmVersionCall(true),
+            {
+                cmd: 'cm',
+                args: ['context', 'session learnings', '--json', '--history', '0'],
+                result: { code: 0, stdout: contextResponse, stderr: '' },
+            },
+        ]);
+        const result = await runMemory(ctx, { cwd: '/fake/cwd', query: 'session learnings', history: 0 });
+        expect(result.isError).toBeFalsy();
+        expect(result.content[0].text).toContain('Rule only');
+    });
+    it('rejects a history count that is not a non-negative integer', async () => {
+        const { ctx } = makeCtx([cmVersionCall(true)]);
+        const result = await runMemory(ctx, { cwd: '/fake/cwd', query: 'session learnings', history: -1 });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent.data.error.code).toBe('invalid_input');
+    });
     it('returns message when search finds no matches', async () => {
         const { ctx } = makeCtx([
             cmVersionCall(true),

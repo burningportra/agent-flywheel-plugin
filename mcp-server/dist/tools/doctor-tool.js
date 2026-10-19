@@ -106,12 +106,14 @@ async function searchCassForFirstRun(ctx) {
 export async function runDoctor(ctx, args) {
     try {
         void args;
-        const firstRun = await isFirstRun({
-            cwd: ctx.cwd,
-            brList: () => listBeadsForFirstRun(ctx),
-            cassSearch: () => searchCassForFirstRun(ctx),
-        });
-        const report = await runDoctorChecks(ctx.cwd, ctx.signal);
+        const [firstRun, report] = await Promise.all([
+            isFirstRun({
+                cwd: ctx.cwd,
+                brList: () => listBeadsForFirstRun(ctx),
+                cassSearch: () => searchCassForFirstRun(ctx),
+            }),
+            runDoctorChecks(ctx.cwd, ctx.signal),
+        ]);
         const preflightBanner = renderPreflightBanner(report);
         const structured = {
             tool: 'flywheel_doctor',

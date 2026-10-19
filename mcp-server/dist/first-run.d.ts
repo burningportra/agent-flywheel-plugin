@@ -13,6 +13,11 @@
  *   4. `.pi-orchestrator/` directory exists (legacy / orchestrator state)
  *   5. CASS returned ≥1 entry for this cwd (`cassSearch().length > 0`)
  *
+ * The three filesystem signals are checked first, and a hit returns without
+ * spawning `br` or `cass`. Otherwise both probes run, and the answer comes
+ * as soon as either reports history, since `cass search ""` can take
+ * seconds on a large index.
+ *
  * `brList` and `cassSearch` are injected so tests can run hermetically
  * without spawning the real CLIs; production callers should pass bounded
  * wrappers around `br list --all --limit 1 --json` and project-scoped
