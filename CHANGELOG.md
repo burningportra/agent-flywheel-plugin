@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.23.0] - 2026-10-19
+
+A swarm can run on another Mac on the local network while this session coordinates.
+
 ### Added
 
 - **A swarm can run on another Mac on the local network.** After the user picks Start implementing, `flywheel_swarm_host` finds Macs that answer SSH over Bonjour, plus ones chosen before, and asks where the swarm runs, recommending the one with the lightest load per core. This session keeps coordinating: questions, plugin tools, reviews, and cycle state stay on this Mac, and only third-party CLIs run on the other one.
