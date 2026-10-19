@@ -137,12 +137,11 @@ Route the selected mode:
 
 ### 0b. Detect state
 
-Make every call below in one message, in parallel, alongside the 0.banner text. Each one answers on its own, so none waits for another, and Step 0 needs no other tool call before the menu.
+Make the four calls below in one message, in parallel, alongside the 0.banner text. Each one answers on its own, so none waits for another, and Step 0 needs no other tool call before the menu.
 
 1. **Doctor.** Call `flywheel_doctor({ cwd })`. Cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. On failure, set the first two values to `null`, `IS_FIRST_RUN = false`, and `MCP_DEGRADED = true`.
-2. **Session, beads, git, and Agent Mail.** Call `flywheel_observe({ cwd })`. Its report holds the checkpoint's phase and goal (`checkpoint.phase`, `checkpoint.selectedGoal`), exact bead counts (`beads.counts.open`, `in_progress`, `blocked`, `closed`), the branch and HEAD (`git.branch`, `git.head`), and `agentMail.reachable`. When `agentMail.reachable` is false, set `AGENT_MAIL_DOWN = true` and show `Agent Mail: offline`. Single-agent routes remain available.
+2. **Session, beads, git, Agent Mail, project, plans, and error counts.** Call `flywheel_observe({ cwd })`. Its report holds `projectName`, the checkpoint's phase and goal (`checkpoint.phase`, `checkpoint.selectedGoal`), exact bead counts (`beads.counts.open`, `in_progress`, `blocked`, `closed`), the branch and HEAD (`git.branch`, `git.head`), `agentMail.reachable`, the newest three plan paths (`recentPlans`), and the top three nonzero error codes (`topErrorCodes`). Do not call `Bash`, `Read`, or `Glob` for `package.json`, `docs/plans/*.md`, or `.pi-flywheel/error-counts.json` unless `flywheel_observe` errors (on error, fall back to reading `package.json` or the directory name, globbing `docs/plans/*.md`, and reading `.pi-flywheel/error-counts.json`). When `agentMail.reachable` is false, set `AGENT_MAIL_DOWN = true` and show `Agent Mail: offline`. Single-agent routes remain available.
 3. **CASS memory.** Call `flywheel_memory({ cwd, operation: "search", query: "session learnings flywheel", history: 0 })` and `flywheel_memory({ cwd, operation: "search", query: "reality-check session learnings gap analysis", history: 0 })`. `history: 0` keeps the recorded learnings and skips the session-history search, which can take seconds. Skip an unavailable CASS service.
-4. **Files.** Glob `docs/plans/*.md` for Step 0d's plan detection, read `.pi-flywheel/error-counts.json` for 0c's error-code trends, and read the working directory's `package.json` for the project name, falling back to the directory name.
 
 Read `DOCTOR_REPORT.ntm` for the NTM display. Before a spawn route, run `_implement.md` **Pre-flight: resolve NTM readiness** to recompute `NTM_AVAILABLE` and `NTM_PROJECT`. The repo profile waits for Step 2, which calls `flywheel_profile` itself.
 
@@ -207,7 +206,7 @@ Display three to five relevant CASS learnings when available:
 > **From prior sessions:**
 > - <top 3-5 most relevant learnings, anti-patterns, or gotchas>
 
-From the `.pi-flywheel/error-counts.json` read in Step 0b, show the top three nonzero codes:
+From `topErrorCodes` in the Step 0b observe report (or `.pi-flywheel/error-counts.json` on fallback), show the top three nonzero codes:
 
 > **Error-code trends (last 10 sessions):**
 > - `<code_1>` — <count> occurrence(s)
@@ -241,7 +240,7 @@ AskUserQuestion(questions: [{
 
 ### 0d. Present the main menu
 
-**Plan detection.** From the Step 0b Glob of `docs/plans/*.md`, newest first, capture the top 3 as `RECENT_PLAN_PATHS` (relative paths). If none exist, set `RECENT_PLAN_PATHS = []`. This list is surfaced inline in the printed block whenever "Pick up existing plan" is shown so operators can copy-paste a path directly.
+**Plan detection.** Take `RECENT_PLAN_PATHS = recentPlans` from the Step 0b observe report (up to 3 newest `docs/plans/*.md` relative paths, or `[]` if none exist; glob `docs/plans/*.md` only on fallback). This list is surfaced inline in the printed block whenever "Pick up existing plan" is shown so operators can copy-paste a path directly.
 
 Build `RECENT_PLANS_BLOCK` once from that list:
 
