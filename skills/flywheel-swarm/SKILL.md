@@ -11,11 +11,11 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 
 0. **Invoke `/vibing-with-ntm`.** Use the `Skill` tool with `vibing-with-ntm`. Follow its guidance for session bootstrap (NTM project resolution, Agent Mail, beads claim) and pane-tending (looper cadence, stuck-pane ladder, completion polling). The rest of this skill assumes its conventions are loaded.
 
-1. Call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`. Read `data.lanes` and `data.prompts`, then assign `START_DATA = result.structuredContent.data`. It contains one grouped lane assignment and one server-built prompt per ready bead.
+1. Call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`. Assign `START_DATA = result.structuredContent.data`. Its `data.lanes` groups the beads by lane, and `data.prompts` holds one server-built prompt per ready bead.
 
 2. If `START_DATA.readyCount === 0`, say "No beads are ready for implementation. Run /agent-flywheel:start to create a plan first."
 
-3. Bootstrap Agent Mail, create `swarm-<goal-slug>`, and resolve `$NTM_PROJECT` through the readiness procedure in `_implement.md`. Use the lane counts exactly as returned. The server has already applied provider availability and fallback.
+3. Bootstrap Agent Mail, create `swarm-<goal-slug>`, and resolve `$NTM_PROJECT` through the readiness procedure in `_implement.md`. Use the lane counts exactly as returned, since the server already applied lane availability and fallback.
 
 4. Create one task per `START_DATA.prompts[]` record. Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. When `N_pi` is above 0, call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })`, ask `data.questions[0]` with `AskUserQuestion`, call it again with `action: "choose"` and the answer as `picks.implementer`, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. Stop if `list` fails or `piReady` is false. Then spawn the returned counts:
    ```bash
@@ -23,13 +23,13 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
      --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>
    ```
-   Drop `--pi` and `--pi-model` when `N_pi` is 0. The script runs `ntm spawn` for the NTM lanes, adds the Pi panes, and prints `{ session, panes: [{ lane, index, paneId }], errors }`. Address panes by the printed `index` with `--panes=N`. Singular `--pane=N` broadcasts to every pane, and ntm reports Pi panes as type `unknown`, so don't add `--type`. On a non-zero exit, show `errors` to the user.
+   Drop `--pi` and `--pi-model` when `N_pi` is 0. The script runs `ntm spawn` for the cc and cod lanes, adds the pi and gmi panes as Pi (gmi on `gemini-4-argon`), and prints `{ session, panes: [{ lane, index, paneId }], errors }`. Address panes by the printed `index` with `--panes=N`. Singular `--pane=N` broadcasts to every pane, and ntm reports Pi panes as type `unknown`, so don't add `--type`. On a non-zero exit, show `errors` to the user.
 
 5. Send every prompt unchanged to its assigned pane:
    ```bash
    ntm --robot-send="$IMPL_SESSION" --panes=<next unused index in the record's lane> --msg="<START_DATA.prompts[i].prompt>"
    ```
-   Send each record once in array order, to the next unused pane in its `lane`. Pi prompts reach Agent Mail through the `am` CLI. The prompt already contains Agent Mail bootstrap, file reservations, provider-specific instructions, the pre-completion gate, a bead-specific `CompletionReport` JSON example, and trailing newlines. Save each task id, pane index, and `agentName` for tending and restart.
+   Send each record once in array order, to the next unused pane in its `lane`. Pi and gmi prompts reach Agent Mail through the `am` CLI. The prompt already contains Agent Mail bootstrap, file reservations, provider-specific instructions, the pre-completion gate, a bead-specific `CompletionReport` JSON example, and trailing newlines. Save each task id, pane index, and `agentName` for tending and restart.
 
    If `START_DATA.dispatch.degraded` is true, show its warnings before spawning.
 

@@ -45,7 +45,6 @@ describe('doctor NTM readiness', () => {
     const report = await runDoctorChecks(cwd, undefined, {
       exec: ntmExec(`projects_base = "${projectsBase}"\n`),
       codexConfigPath: null,
-      probeCachePath: null,
     });
 
     expect(report.ntm).toMatchObject({
@@ -62,7 +61,6 @@ describe('doctor NTM readiness', () => {
     const report = await runDoctorChecks(cwd, undefined, {
       exec: ntmExec(`projects_base = "${projectsBase}"\n`),
       codexConfigPath: null,
-      probeCachePath: null,
     });
 
     expect(report.ntm).toEqual({
@@ -82,7 +80,6 @@ describe('doctor NTM readiness', () => {
     const report = await runDoctorChecks(cwd, undefined, {
       exec: ntmExec(`projects_base = "${projectsBase}"\n`),
       codexConfigPath: null,
-      probeCachePath: null,
     });
     const row = report.checks.find(
       (check) => check.name === 'projects_base_misconfig',
@@ -102,7 +99,6 @@ describe('doctor NTM readiness', () => {
     const report = await runDoctorChecks(cwd, undefined, {
       exec: ntmExec('theme = "dark"\n'),
       codexConfigPath: null,
-      probeCachePath: null,
     });
 
     expect(report.ntm).toEqual({

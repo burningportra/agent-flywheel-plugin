@@ -1,18 +1,21 @@
 /**
  * `swarm-spawn` starts a flywheel swarm: `ntm spawn` for the lanes NTM runs
- * (cc, cod, gmi), then one tmux pane per Pi lane in the same session window,
- * because ntm has no Pi agent type. It prints every pane's lane and tmux
- * index as JSON so the coordinator can address Pi panes with
- * `ntm --robot-send --panes=<index>`.
+ * (cc, cod), then one tmux pane per Pi or Gemini pane in the same session
+ * window, because ntm has no Pi agent type. Gemini panes are Pi on
+ * gemini-4-argon; ntm's own gmi lane would start the gemini CLI. It prints
+ * every pane's lane and tmux index as JSON so the coordinator can address
+ * those panes with `ntm --robot-send --panes=<index>`.
  */
 
 import process from 'node:process';
 
 import { makeExec, type ExecFn } from './exec.js';
+import { GEMINI_LANE_MODEL } from './pi-models.js';
 
-const NTM_LANES = ['cc', 'cod', 'gmi'] as const;
+const NTM_LANES = ['cc', 'cod'] as const;
 export type NtmLane = (typeof NTM_LANES)[number];
-export type SwarmLane = NtmLane | 'pi';
+export type PiPaneLane = 'pi' | 'gmi';
+export type SwarmLane = NtmLane | PiPaneLane;
 
 /** `provider/id` with an optional nested id, e.g. `vercel-ai-gateway/deepseek/deepseek-v4.1-flash-1017`. */
 const PI_MODEL_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/;
@@ -26,8 +29,10 @@ export interface SwarmSpawnArgs {
   /** Raw NTM lane values (`2` or `2:opus`), passed through to ntm. */
   ntmLanes: Partial<Record<NtmLane, string>>;
   piCount: number;
-  /** One model per Pi pane; the last one repeats when there are more panes than models. */
+  /** Pi panes cycle through these models. */
   piModels: string[];
+  /** Gemini panes, each Pi on {@link GEMINI_LANE_MODEL}. */
+  gmiCount: number;
   piName: string;
   ntmArgs: string[];
   cwd: string;
@@ -53,9 +58,10 @@ function usageText(): string {
     '                   [--pi=N --pi-model=<provider/model> [--pi-model=...]] [--pi-name=<prefix>]',
     '                   [-- <extra ntm spawn flags>]',
     '',
-    'Runs ntm spawn --no-user --stagger-mode=smart for the cc/cod/gmi lanes, then adds',
-    'N Pi panes to the session with tmux split-window, cycling through the models. Each Pi pane runs',
-    '`pi --model <model> --thinking high --no-approve` and prints',
+    'Runs ntm spawn --no-user --stagger-mode=smart for the cc/cod lanes, then adds',
+    'the Pi panes to the session with tmux split-window, cycling through the models, and the',
+    `Gemini panes, which are Pi on ${GEMINI_LANE_MODEL}. Each runs`,
+    '`pi --model <model> --thinking high --no-approve`. Prints',
     '{"session","panes":[{"lane","index","paneId","model"}]}.',
   ].join('\n');
 }
@@ -110,20 +116,25 @@ export function parseSwarmSpawnArgs(
   const piValue = values.get('pi')?.at(-1) ?? '0';
   if (!/^\d+$/.test(piValue)) return { ok: false, error: `--pi=${piValue} is not a count` };
   const piCount = Number(piValue);
+  const gmiValue = values.get('gmi')?.at(-1) ?? '0';
+  if (!/^\d+$/.test(gmiValue)) {
+    return { ok: false, error: `--gmi=${gmiValue} is not a count; Gemini panes always run ${GEMINI_LANE_MODEL}` };
+  }
+  const gmiCount = Number(gmiValue);
   const piModels = (values.get('pi-model') ?? []).flatMap((value) => value.split(',')).filter(Boolean);
   for (const model of piModels) {
     if (!PI_MODEL_PATTERN.test(model)) return { ok: false, error: `--pi-model=${model} is not a provider/model id` };
   }
   if (piCount > 0 && piModels.length === 0) return { ok: false, error: '--pi needs at least one --pi-model' };
   if (Object.keys(ntmLanes).length === 0) {
-    return { ok: false, error: 'at least one of --cc, --cod, --gmi must be above 0; ntm creates the session the Pi panes join' };
+    return { ok: false, error: 'at least one of --cc, --cod must be above 0; ntm creates the session the Pi and Gemini panes join' };
   }
   const piName = values.get('pi-name')?.at(-1) ?? label;
   if (!/^[A-Za-z0-9._-]+$/.test(piName)) return { ok: false, error: '--pi-name allows letters, digits, . _ -' };
 
   return {
     ok: true,
-    args: { project: positional[0]!, label, ntmLanes, piCount, piModels, piName, ntmArgs, cwd },
+    args: { project: positional[0]!, label, ntmLanes, piCount, piModels, gmiCount, piName, ntmArgs, cwd },
   };
 }
 
@@ -144,19 +155,44 @@ export function buildPiPaneCommand(piBin: string, model: string, name: string): 
   return [piBin, '--model', model, '--thinking', 'high', '--no-approve', '--name', name];
 }
 
-const NTM_TITLE_PATTERN = /__(cc|cod|gmi)_\d+$/;
+const NTM_TITLE_PATTERN = /__(cc|cod)_\d+$/;
+
+interface PiPane {
+  lane: PiPaneLane;
+  model: string;
+  /** Pi session name. */
+  name: string;
+  /** `__pi_gmi_` rather than `__gmi_`: ntm treats `__gmi_N` as a gemini CLI pane and would respawn it as one. */
+  title: string;
+}
+
+function planPiPanes(args: SwarmSpawnArgs, session: string): PiPane[] {
+  const pi = Array.from({ length: args.piCount }, (_, i): PiPane => ({
+    lane: 'pi',
+    model: args.piModels[i % args.piModels.length]!,
+    name: `${args.piName}-${i + 1}`,
+    title: `${session}__pi_${i + 1}`,
+  }));
+  const gmi = Array.from({ length: args.gmiCount }, (_, i): PiPane => ({
+    lane: 'gmi',
+    model: GEMINI_LANE_MODEL,
+    name: `${args.piName}-gmi-${i + 1}`,
+    title: `${session}__pi_gmi_${i + 1}`,
+  }));
+  return [...pi, ...gmi];
+}
 
 export function classifyPanes(
   listing: string,
-  piPanes: ReadonlyMap<string, string>,
+  piPanes: ReadonlyMap<string, Pick<PiPane, 'lane' | 'model'>>,
 ): SwarmPane[] {
   return listing
     .split('\n')
     .filter((line) => line.trim().length > 0)
     .map((line) => {
       const [index = '', paneId = '', title = ''] = line.split('\t');
-      const model = piPanes.get(paneId);
-      if (model !== undefined) return { lane: 'pi' as const, index: Number(index), paneId, title, model };
+      const pane = piPanes.get(paneId);
+      if (pane !== undefined) return { lane: pane.lane, index: Number(index), paneId, title, model: pane.model };
       const lane = NTM_TITLE_PATTERN.exec(title)?.[1] as NtmLane | undefined;
       return { lane: lane ?? ('unknown' as const), index: Number(index), paneId, title };
     });
@@ -174,12 +210,13 @@ export async function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<Sw
     }
   };
 
+  const planned = planPiPanes(args, session);
   let piBin = 'pi';
-  if (args.piCount > 0) {
+  if (planned.length > 0) {
     const which = await run('which', ['pi']);
     const path = which.stdout.trim().split('\n')[0] ?? '';
     if (which.code !== 0 || path.length === 0) {
-      return { session, panes: [], errors: ['pi is not on PATH; drop --pi or install Pi'] };
+      return { session, panes: [], errors: ['pi is not on PATH; drop --pi and --gmi or install Pi'] };
     }
     piBin = path;
   }
@@ -193,10 +230,9 @@ export async function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<Sw
     return { session, panes: [], errors: [`ntm spawn finished but tmux has no session ${session}`] };
   }
 
-  const piPanes = new Map<string, string>();
-  for (let i = 0; i < args.piCount; i++) {
-    const model = args.piModels[i % args.piModels.length]!;
-    const command = buildPiPaneCommand(piBin, model, `${args.piName}-${i + 1}`);
+  const piPanes = new Map<string, PiPane>();
+  for (const pane of planned) {
+    const command = buildPiPaneCommand(piBin, pane.model, pane.name);
     const split = ['split-window', '-t', target, '-c', args.cwd, '-P', '-F', '#{pane_id}', ...command];
     let created = await run('tmux', split);
     if (created.code !== 0) {
@@ -205,13 +241,13 @@ export async function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<Sw
     }
     const paneId = created.stdout.trim();
     if (created.code !== 0 || !paneId.startsWith('%')) {
-      errors.push(`tmux split-window for Pi pane ${i + 1} failed: ${created.stderr.trim()}`);
+      errors.push(`tmux split-window for ${pane.name} failed: ${created.stderr.trim()}`);
       continue;
     }
-    piPanes.set(paneId, model);
+    piPanes.set(paneId, pane);
     await run('tmux', ['set-option', '-p', '-t', paneId, 'remain-on-exit', 'on']);
     await run('tmux', ['set-option', '-p', '-t', paneId, 'allow-set-title', 'off']);
-    await run('tmux', ['select-pane', '-t', paneId, '-T', `${session}__pi_${i + 1}`]);
+    await run('tmux', ['select-pane', '-t', paneId, '-T', pane.title]);
     await run('tmux', ['select-layout', '-t', target, 'tiled']);
   }
 

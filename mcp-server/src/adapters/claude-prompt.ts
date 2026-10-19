@@ -1,10 +1,11 @@
 /**
- * Claude prompt adapter.
+ * Prompt adapter for terminal-agent panes: Claude, and the Pi panes of the
+ * Pi and Gemini lanes.
  *
  * Claude is the baseline — its prompt mirrors the existing Step 7
  * template in `skills/start/_implement.md` so behavior is unchanged for
- * Claude panes when model diversity is enabled. Kept as its own file so
- * the three providers expose a symmetric interface.
+ * Claude panes when model diversity is enabled. Pi and Gemini panes get the
+ * same steps with Agent Mail through the `am` CLI.
  */
 
 import type {
@@ -12,13 +13,14 @@ import type {
   BeadDispatchContext,
 } from './codex-prompt.js';
 import { buildPreCompletionQualityGate } from './completion-attestation-prompt.js';
+import { CURRENT_GEMINI_MODEL_ID } from '../model-detection.js';
 
 export type { AdaptedPrompt, BeadDispatchContext };
 
 interface TerminalPromptIdentity {
-  readonly provider: 'claude' | 'pi';
+  readonly provider: 'claude' | 'pi' | 'gemini';
   readonly program: 'claude-code' | 'pi';
-  readonly model: 'claude' | 'pi';
+  readonly model: string;
   /** Pi panes run with `--no-approve`, which skips project MCP servers, so they reach Agent Mail through the `am` CLI. */
   readonly agentMail: 'mcp' | 'cli';
 }
@@ -170,6 +172,18 @@ export function adaptPromptForPi(
     provider: 'pi',
     program: 'pi',
     model: 'pi',
+    agentMail: 'cli',
+  });
+}
+
+/** The Gemini lane is a Pi pane running {@link CURRENT_GEMINI_MODEL_ID}. */
+export function adaptPromptForGemini(
+  bead: BeadDispatchContext,
+): AdaptedPrompt {
+  return adaptPromptForTerminal(bead, {
+    provider: 'gemini',
+    program: 'pi',
+    model: CURRENT_GEMINI_MODEL_ID,
     agentMail: 'cli',
   });
 }

@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import * as path from "node:path";
 import type { Document, Finding, Rule, RuleContext } from "../types.js";
+import { GEMINI_LANE_MODEL } from "../../pi-models.js";
 
 /**
  * PANE001 — NTM pane-priority drift between AGENTS.md canonical rule and
@@ -12,7 +13,9 @@ import type { Document, Finding, Rule, RuleContext } from "../types.js";
  * `swarm-spawn.js` invocation with a non-canonical lane mix and no nearby
  * override marker, the rule fires an `error`-severity PANE001 finding. ntm
  * has no Pi agent type, so `--pi=N` on a plain `ntm spawn` line is always a
- * finding: Pi lanes go through `swarm-spawn.js`.
+ * finding: Pi lanes go through `swarm-spawn.js`. So is `--gmi=N`, because
+ * ntm's gmi lane starts the gemini CLI, and the Gemini lane runs only
+ * gemini-4-argon on Pi, which `swarm-spawn.js --gmi=N` spawns.
  *
  * Override markers (recognised within ±6 lines of the offending line) let
  * a skill intentionally diverge — e.g. `_deslop.md`'s "5-Cod swarm —
@@ -315,6 +318,18 @@ function scanLine(
       column: 1,
       message: `ntm spawn has no pi lane (ntm rejects --pi=${counts["pi"]} with "unknown flag: --pi")`,
       hint: 'Spawn Pi lanes with node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> --label <label> --pi=N --pi-model=<model>, which runs ntm spawn for the other lanes.',
+    };
+  }
+  // No override either: the Gemini lane never runs the gemini CLI.
+  if (rawNtm && (counts["gmi"] ?? 0) > 0) {
+    return {
+      ruleId: "PANE001",
+      severity: "error",
+      file,
+      line: lineIndex + 1,
+      column: 1,
+      message: `ntm spawn --gmi=${counts["gmi"]} starts the gemini CLI; the Gemini lane runs only ${GEMINI_LANE_MODEL} on Pi`,
+      hint: `Spawn Gemini panes with node "\${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> --label <label> --gmi=N, which runs each one as Pi on ${GEMINI_LANE_MODEL}.`,
     };
   }
   const verdict = validateLaneCounts(counts, canonical);

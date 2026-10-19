@@ -93,7 +93,7 @@ type ToolRunner = (
 ) => Promise<ToolResultLike>;
 
 interface AdaptedPromptLike {
-  provider: "claude" | "codex" | "gemini";
+  provider: "claude" | "codex" | "gemini" | "pi";
   prompt: string;
   trailingNewlines: 1 | 2;
 }
@@ -345,13 +345,12 @@ function writeReport(filePath: string, report: PromptBudgetReport): void {
 
 async function loadRuntimeModules(): Promise<RuntimeModules> {
   const sourceBase = IS_COMPILED ? ".." : "../src";
-  const [plan, review, approve, claude, codex, gemini, gates, memory] = await Promise.all([
+  const [plan, review, approve, claude, codex, gates, memory] = await Promise.all([
     import(`${sourceBase}/tools/plan.js`),
     import(`${sourceBase}/tools/review.js`),
     import(`${sourceBase}/tools/approve.js`),
     import(`${sourceBase}/adapters/claude-prompt.js`),
     import(`${sourceBase}/adapters/codex-prompt.js`),
-    import(`${sourceBase}/adapters/gemini-prompt.js`),
     import(`${sourceBase}/gates.js`),
     import(`${sourceBase}/memory.js`),
   ]);
@@ -361,7 +360,7 @@ async function loadRuntimeModules(): Promise<RuntimeModules> {
     runApprove: approve.runApprove as ToolRunner,
     adaptPromptForClaude: claude.adaptPromptForClaude as RuntimeModules["adaptPromptForClaude"],
     adaptPromptForCodex: codex.adaptPromptForCodex as RuntimeModules["adaptPromptForCodex"],
-    adaptPromptForGemini: gemini.adaptPromptForGemini as RuntimeModules["adaptPromptForGemini"],
+    adaptPromptForGemini: claude.adaptPromptForGemini as RuntimeModules["adaptPromptForGemini"],
     buildFreshEyesPrompt: gates.buildFreshEyesPrompt as RuntimeModules["buildFreshEyesPrompt"],
     resetCassDetection: memory.resetCassDetection as () => void,
   };
@@ -630,19 +629,14 @@ async function collectHotPathEntries(modules: RuntimeModules): Promise<BudgetEnt
       coordinatorName: "WindyBasin",
       projectKey: "fixture-project",
     };
-    for (const adapter of [
-      modules.adaptPromptForClaude(bead),
-      modules.adaptPromptForCodex(bead),
-      modules.adaptPromptForGemini(bead),
-    ]) {
+    for (const [adapter, source] of [
+      [modules.adaptPromptForClaude(bead), "adapters/claude-prompt.ts"],
+      [modules.adaptPromptForCodex(bead), "adapters/codex-prompt.ts"],
+      [modules.adaptPromptForGemini(bead), "adapters/claude-prompt.ts#adaptPromptForGemini"],
+    ] as const) {
       const dispatched = `${adapter.prompt}${"\n".repeat(adapter.trailingNewlines)}`;
       entries.push(
-        measureText(
-          `adapter.${adapter.provider}.implementer`,
-          "adapter",
-          `adapters/${adapter.provider}-prompt.ts`,
-          dispatched,
-        ),
+        measureText(`adapter.${adapter.provider}.implementer`, "adapter", source, dispatched),
       );
     }
 

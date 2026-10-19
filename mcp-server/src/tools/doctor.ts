@@ -13,12 +13,10 @@
  */
 
 import { statSync, readdirSync, readFileSync, realpathSync, existsSync, type Dirent } from 'node:fs';
-import { readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newestMtime } from './shared.js';
-import { writeAtomic } from '../atomic-write.js';
 import { makeExec, type ExecFn } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
 import { createLogger } from '../logger.js';
@@ -36,11 +34,7 @@ import { getAdapter } from '../adapters/platform/index.js';
 import type { HookAdapter, WorktreeScanRoot } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
-import {
-  GEMINI_MODEL_ALLOWLIST,
-  isGeminiModelAllowed,
-  parseGeminiModelFromOutput,
-} from '../model-detection.js';
+import { GEMINI_GATEWAY_ID, GEMINI_LANE_MODEL, readGeminiLaneListing } from '../pi-models.js';
 import {
   readConvergenceFromDisk,
   planSlugFromIdentifier,
@@ -68,9 +62,6 @@ const PER_CHECK_TIMEOUT_MS = 2000;
 const TOTAL_SWEEP_BUDGET_MS = 10_000;
 /** Max concurrent child processes. */
 const MAX_CONCURRENCY = 6;
-/** Backstop TTL for cached probe output. The binary-identity key catches
- * reinstalls; the TTL covers shims whose file doesn't change on upgrade. */
-const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Worktree dirs older than this and already merged to main are stale. */
 const STALE_WORKTREE_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -104,12 +95,10 @@ export const DOCTOR_CHECK_NAMES = [
   'swarm_model_ratio',
   // Codex companion app-server / ChatGPT-account compat (bead `cif`).
   'codex_config_compat',
-  // Gemini CLI model allowlist (bead claude-orchestrator-37n6, v3.17.0).
-  // Yellow when `gemini --version` advertises a model outside
-  // {@link GEMINI_MODEL_ALLOWLIST}; green when gemini is absent, when its
-  // version output does not name a model, or when the named model is in the
-  // allowlist. The B15 pre-flight gate (claude-orchestrator-2wcd) consults
-  // this row before spawning `--gmi` panes.
+  // The Gemini lane's one model (gemini-4-argon on the Vercel AI Gateway).
+  // Yellow when the gateway catalog cached by `flywheel_pi_models` no longer
+  // offers it to agent panes; green when it does or nothing is cached yet.
+  // The swarm mix drops the Gemini lane while this row is yellow.
   'gemini_model_compat',
   // Codex-rescue handoff observability (bead `agent-flywheel-plugin-1qn`).
   'rescues_last_30d',
@@ -161,7 +150,7 @@ const POSTMORTEM_CHECKPOINT_STALE_HINT =
 const CODEX_CONFIG_GPT5_HINT =
   'Comment out the `model = "..."` line in ~/.codex/config.toml. The codex-companion app-server path uses OpenAI API auth and rejects gpt-5*/gpt-5-codex on ChatGPT-account auth even though `codex exec` accepts them. Removing the override lets the app-server pick its built-in default.';
 const GEMINI_MODEL_COMPAT_HINT =
-  'Update the gemini CLI to a release that advertises a model on the allowlist (currently gemini-3.1-flash-preview), or skip `--gmi` panes until the B15 pre-flight gate routes around this.';
+  'The Gemini lane runs only gemini-4-argon. Refresh the catalog with `flywheel_pi_models({ cwd, action: "list", refresh: true })`; if the gateway has retired the model, switch the lane off with `lanes: { gemini: false }` in flywheel.config.yaml. Swarms leave the Gemini lane out until this row is green.';
 const VERSION_DRIFT_HINT =
   'Run `/flywheel-setup` (or `cd mcp-server && npm run version-sync`) to align the manifests. Warn-only — drift does not block the run.';
 // v3.13.0 outcome-grading hints (verbatim from synthesized plan §"Doctor — Hint strings").
@@ -188,14 +177,6 @@ export interface DoctorOptions {
   /** Override path to ~/.codex/config.toml (tests). Pass a fixture path or
    * `null` to skip reading. Defaults to `~/.codex/config.toml`. */
   codexConfigPath?: string | null;
-  /** Override the `gemini --version` output (tests). When defined, bypasses
-   * the exec probe entirely — pass `null` to assert the "no version output"
-   * branch, or a string to feed the parser directly. */
-  geminiVersionOutput?: string | null;
-  /** Override the on-disk probe cache (`gemini --version` output keyed on the
-   * binary's identity). Defaults to
-   * `$XDG_CACHE_HOME/agent-flywheel/doctor-probes.json`; `null` disables it. */
-  probeCachePath?: string | null;
   /** Override path to the marketplace plugin manifest (tests). Defaults to
    * `<cwd>/.claude-plugin/plugin.json`. Pass `null` to treat as missing. */
   marketplaceManifestPath?: string | null;
@@ -221,8 +202,6 @@ export async function runDoctorChecks(
   const totalBudgetMs = options.totalBudgetMs ?? TOTAL_SWEEP_BUDGET_MS;
   const maxConcurrency = options.maxConcurrency ?? MAX_CONCURRENCY;
   const exec = options.exec ?? makeExec(cwd);
-  const probeCachePath =
-    options.probeCachePath === undefined ? defaultProbeCachePath() : options.probeCachePath;
 
   const startMs = now();
   const timestamp = new Date(startMs).toISOString();
@@ -307,17 +286,7 @@ export async function runDoctorChecks(
           ? join(homedir(), '.codex', 'config.toml')
           : options.codexConfigPath,
       ),
-    () =>
-      checkGeminiModelCompat(
-        exec,
-        cwd,
-        combined,
-        perCheckTimeoutMs,
-        now,
-        swarmCapsPromise,
-        options.geminiVersionOutput,
-        probeCachePath,
-      ),
+    () => checkGeminiModelCompat(cwd, combined, now, swarmCapsPromise),
     () => checkRescuesLast30d(cmExec, cwd, combined, perCheckTimeoutMs, now),
     () =>
       checkVersionTriple(cwd, combined, now, {
@@ -413,7 +382,7 @@ export async function runDoctorChecks(
   };
 }
 
-/** A Gemini CLI whose model `gemini_model_compat` rejects can't take a swarm lane. */
+/** A Gemini lane whose model `gemini_model_compat` flags can't take a swarm lane. */
 function withGeminiModelCheck(caps: CapabilitiesMap, checks: DoctorCheck[]): CapabilitiesMap {
   const compat = checks.find((c) => c.name === 'gemini_model_compat');
   if (!caps.gemini.available || compat === undefined || compat.severity === 'green') return caps;
@@ -1306,6 +1275,7 @@ async function checkSwarmModelCli(
   try {
     const caps = await capsPromise;
     const cap = caps[provider];
+    const subject = provider === 'gemini' ? `gemini lane (${GEMINI_LANE_MODEL} on pi)` : `${provider} cli`;
     if (cap.disabled) {
       return {
         name: checkName,
@@ -1319,16 +1289,14 @@ async function checkSwarmModelCli(
       return {
         name: checkName,
         severity: 'green',
-        message: cap.path
-          ? `${provider} cli at ${cap.path}`
-          : `${provider} cli present`,
+        message: cap.path ? `${subject} at ${cap.path}` : `${subject} present`,
         durationMs: now() - start,
       };
     }
     return {
       name: checkName,
       severity: 'yellow',
-      message: `${provider} cli ${cap.path ? 'not ready' : 'not installed'}${cap.reason ? ` (${cap.reason})` : ''}`,
+      message: `${subject} ${cap.path ? 'not ready' : provider === 'gemini' ? 'needs pi on PATH' : 'not installed'}${cap.reason ? ` (${cap.reason})` : ''}`,
       hint: CLI_NOT_AVAILABLE_HINT,
       durationMs: now() - start,
     };
@@ -1525,112 +1493,50 @@ async function checkCodexConfigCompat(
 }
 
 /**
- * `gemini_model_compat` — probe the gemini CLI and compare its advertised
- * model identifier against {@link GEMINI_MODEL_ALLOWLIST}.
- *
- * Severity ladder (advisory only — never red):
- *   - green when gemini is absent (no probe possible), the version output
- *     does not name a model, the version probe fails, or the named model
- *     is on the allowlist.
- *   - yellow when a model is named and it is **not** on the allowlist.
- *
- * Tests inject `geminiVersionOutput` to skip the exec call entirely.
+ * `gemini_model_compat` — whether the gateway catalog cached by the last
+ * `flywheel_pi_models` call still offers {@link GEMINI_GATEWAY_ID} to agent
+ * panes. Reads the cache only, so it costs no network call. Never red.
  */
 async function checkGeminiModelCompat(
-  exec: ExecFn,
   cwd: string,
   signal: AbortSignal,
-  timeout: number,
   now: () => number,
   capsPromise: Promise<CapabilitiesMap>,
-  geminiVersionOutput: string | null | undefined,
-  probeCachePath: string | null,
 ): Promise<DoctorCheck> {
   const start = now();
   if (signal.aborted) return abortedCheck('gemini_model_compat');
   try {
-    let output: string;
-    if (geminiVersionOutput !== undefined) {
-      if (geminiVersionOutput === null) {
-        return {
-          name: 'gemini_model_compat',
-          severity: 'green',
-          message: 'gemini version probe disabled (geminiVersionOutput=null)',
-          durationMs: now() - start,
-        };
-      }
-      output = geminiVersionOutput;
-    } else {
-      const caps = await capsPromise;
-      if (caps.gemini.disabled) {
-        return {
-          name: 'gemini_model_compat',
-          severity: 'green',
-          message: 'gemini lane disabled in flywheel.config.yaml — nothing to validate',
-          disabled: true,
-          durationMs: now() - start,
-        };
-      }
-      if (!caps.gemini.available) {
-        return {
-          name: 'gemini_model_compat',
-          severity: 'green',
-          message: 'gemini cli not installed — nothing to validate',
-          durationMs: now() - start,
-        };
-      }
-      // `gemini --version` boots a ~850 ms node bundle, and its output only
-      // changes when the binary does, so reuse it while the binary is unchanged.
-      const identity =
-        probeCachePath && caps.gemini.path ? await binaryIdentity(caps.gemini.path) : null;
-      const entries = identity && probeCachePath ? await readProbeCache(probeCachePath) : {};
-      const hit = entries[GEMINI_VERSION_CACHE_KEY];
-      const age = hit ? now() - hit.cachedAt : -1;
-      if (identity && hit?.identity === identity && age >= 0 && age < PROBE_CACHE_TTL_MS) {
-        output = hit.output;
-      } else {
-        const res = await exec('gemini', ['--version'], { timeout, cwd, signal });
-        if (res.code !== 0) {
-          return {
-            name: 'gemini_model_compat',
-            severity: 'green',
-            message: `gemini --version exited ${res.code} — model not determinable (advisory)`,
-            durationMs: now() - start,
-          };
-        }
-        output = `${res.stdout}\n${res.stderr}`;
-        if (identity && probeCachePath) {
-          const file: ProbeCacheFile = {
-            version: 1,
-            entries: { ...entries, [GEMINI_VERSION_CACHE_KEY]: { identity, output, cachedAt: now() } },
-          };
-          await writeAtomic(probeCachePath, JSON.stringify(file)).catch((err: unknown) => {
-            log.debug('probe cache write failed', { path: probeCachePath, err: errMsg(err) });
-          });
-        }
-      }
-    }
-    const model = parseGeminiModelFromOutput(output);
-    if (model === null) {
+    const caps = await capsPromise;
+    if (caps.gemini.disabled) {
       return {
         name: 'gemini_model_compat',
         severity: 'green',
-        message: 'gemini --version did not advertise a model identifier — advisory',
+        message: 'gemini lane disabled in flywheel.config.yaml — nothing to validate',
+        disabled: true,
         durationMs: now() - start,
       };
     }
-    if (isGeminiModelAllowed(model)) {
+    const listing = await readGeminiLaneListing(cwd, new Date(now()));
+    if (listing === null) {
       return {
         name: 'gemini_model_compat',
         severity: 'green',
-        message: `gemini cli model="${model}" — in allowlist`,
+        message: `${GEMINI_GATEWAY_ID} not checked — no cached gateway catalog yet (flywheel_pi_models writes one)`,
+        durationMs: now() - start,
+      };
+    }
+    if (listing.listed) {
+      return {
+        name: 'gemini_model_compat',
+        severity: 'green',
+        message: `${GEMINI_GATEWAY_ID} offered by the gateway catalog cached ${listing.fetchedAt}`,
         durationMs: now() - start,
       };
     }
     return {
       name: 'gemini_model_compat',
       severity: 'yellow',
-      message: `gemini cli model="${model}" — outside allowlist (${GEMINI_MODEL_ALLOWLIST.join(', ')})`,
+      message: `${GEMINI_GATEWAY_ID} missing, deprecated, or without tool use in the gateway catalog cached ${listing.fetchedAt}`,
       hint: GEMINI_MODEL_COMPAT_HINT,
       durationMs: now() - start,
     };
@@ -1638,55 +1544,9 @@ async function checkGeminiModelCompat(
     return {
       name: 'gemini_model_compat',
       severity: 'green',
-      message: `gemini cli probe failed: ${errMsg(err)} — advisory`,
+      message: `gemini model check failed: ${errMsg(err)} — advisory`,
       durationMs: now() - start,
     };
-  }
-}
-
-const GEMINI_VERSION_CACHE_KEY = 'gemini --version';
-
-interface ProbeCacheEntry {
-  identity: string;
-  output: string;
-  cachedAt: number;
-}
-
-interface ProbeCacheFile {
-  version: 1;
-  entries: Record<string, ProbeCacheEntry>;
-}
-
-function defaultProbeCachePath(): string {
-  const base = process.env.XDG_CACHE_HOME || join(homedir(), '.cache');
-  return join(base, 'agent-flywheel', 'doctor-probes.json');
-}
-
-/** Identity of the file a PATH entry resolves to; a reinstall changes the
- * inode and ctime even when npm preserves the tarball's mtime. */
-async function binaryIdentity(binPath: string): Promise<string | null> {
-  try {
-    const real = await realpath(binPath);
-    const st = await stat(real);
-    return `${real}:${st.ino}:${st.size}:${st.mtimeMs}:${st.ctimeMs}`;
-  } catch {
-    return null;
-  }
-}
-
-async function readProbeCache(cachePath: string): Promise<Record<string, ProbeCacheEntry>> {
-  try {
-    const parsed = JSON.parse(await readFile(cachePath, 'utf8')) as Partial<ProbeCacheFile>;
-    if (parsed.version !== 1 || typeof parsed.entries !== 'object' || parsed.entries === null) return {};
-    const entries: Record<string, ProbeCacheEntry> = {};
-    for (const [key, e] of Object.entries(parsed.entries)) {
-      if (typeof e?.identity === 'string' && typeof e.output === 'string' && typeof e.cachedAt === 'number') {
-        entries[key] = e;
-      }
-    }
-    return entries;
-  } catch {
-    return {};
   }
 }
 

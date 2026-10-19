@@ -2,12 +2,15 @@
  * Swarm-agent model diversity — Claude : Pi : Gemini at 1:1:1, with Codex
  * as the fallback that takes Pi's share. Pi runs on a model the user picks
  * through `flywheel_pi_models`, on one of their own logins or the Vercel AI
- * Gateway. A lane switched off under `lanes:` in flywheel.config.yaml hands
- * its share down the same fallback order without counting as degraded.
+ * Gateway. The Gemini lane is Pi too, always on gemini-4-argon through the
+ * gateway; the gemini CLI never runs. A lane switched off under `lanes:` in
+ * flywheel.config.yaml hands its share down the same fallback order without
+ * counting as degraded.
  *
  * Responsibilities:
- *   1. Detect CLI availability (`which claude codex gemini pi`, plus Pi's
- *      route credentials and the lane switches in flywheel.config.yaml).
+ *   1. Detect CLI availability (`which claude codex pi`, plus the route
+ *      credentials of the Pi and Gemini lanes and the lane switches in
+ *      flywheel.config.yaml).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so
@@ -22,10 +25,9 @@ import type { ExecFn } from '../exec.js';
 import type { SwarmMix } from '../types.js';
 import { errMsg } from '../errors.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
-import { checkPiLaneReady } from '../pi-models.js';
-import { adaptPromptForClaude, adaptPromptForPi } from './claude-prompt.js';
+import { checkPiLaneReady, checkPiProviderAuth, GEMINI_LANE_MODEL, providerOf } from '../pi-models.js';
+import { adaptPromptForClaude, adaptPromptForGemini, adaptPromptForPi } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
-import { adaptPromptForGemini } from './gemini-prompt.js';
 import type { AdaptedPrompt, BeadDispatchContext } from './codex-prompt.js';
 
 export type ModelProvider = 'claude' | 'codex' | 'gemini' | 'pi';
@@ -74,7 +76,7 @@ export interface DispatchPlan {
 const PROVIDER_BINARIES: Record<ModelProvider, string> = {
   claude: 'claude',
   codex: 'codex',
-  gemini: 'gemini',
+  gemini: 'pi',
   pi: 'pi',
 };
 
@@ -135,10 +137,24 @@ export async function detectCliCapabilities(
       : { ...found, available: false, reason: `pi auth check: ${auth.detail}` };
   };
 
+  // The Gemini lane needs the gateway credentials its one model runs on.
+  const probeGemini = async (): Promise<CliCapability> => {
+    const found = await probe('gemini');
+    if (!found.available) return found;
+    const auth = await checkPiProviderAuth(exec, providerOf(GEMINI_LANE_MODEL), {
+      cwd: opts.cwd,
+      signal: opts.signal,
+      timeout: 10_000,
+    });
+    return auth.ready
+      ? found
+      : { ...found, available: false, reason: `pi auth check: ${auth.provider} ${auth.detail}` };
+  };
+
   const [claude, codex, gemini, pi] = await Promise.all([
     probe('claude'),
     probe('codex'),
-    probe('gemini'),
+    probeGemini(),
     probePi(),
   ]);
   return { claude, codex, gemini, pi };
@@ -228,7 +244,7 @@ export function splitBeadsByProvider(
 
     if (provider !== preferred && !caps[preferred].disabled) {
       warnings.push(
-        `${preferred} CLI not available${caps[preferred].reason ? ` (${caps[preferred].reason})` : ''}; reassigned ${ids.length} bead(s) to ${provider}`,
+        `${preferred} lane not available${caps[preferred].reason ? ` (${caps[preferred].reason})` : ''}; reassigned ${ids.length} bead(s) to ${provider}`,
       );
     }
   }

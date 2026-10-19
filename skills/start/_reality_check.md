@@ -116,13 +116,7 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 
 ### 4b. Spawn the swarm
 
-Pick the Pi model and spawn as in `_inflight_prompt.md` step 3, with a different label: `node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label reality-check-closure --cc=2 --pi=2 --pi-model="$PI_IMPL_MODEL" --pi-name=closure --gmi=2`. Address panes by the `index` values it prints.
-
-**Pane-type priority** (per AGENTS.md "NTM pane priority"): mixed `cc:pi:gem` 1:1:1 is the canonical default. Apply the lane shape produced by the shared provider-readiness step:
-
-1. Missing `pi` (non-green `pi_cli`) → reassign to `--cod=` (`--cc=2 --cod=2 --gmi=2`).
-2. Missing `gmi` (`gemini_cli` non-green or disabled, or `gemini_model_compat` non-green) → reassign to `--pi=` (`--cc=2 --pi=4`), or to `--cod=` when Pi is out too (`--cc=2 --cod=4`).
-3. All three peers unavailable → cc-only floor (`--cc=6`), explicit-override mode; log the degradation.
+Set `SWARM_FLAGS = DOCTOR_REPORT.swarm.spawnFlags`, pick the Pi model, and spawn as in `_inflight_prompt.md` steps 2 and 3, with a different label: `node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label reality-check-closure $SWARM_FLAGS --pi-model="$PI_IMPL_MODEL" --pi-name=closure`, dropping `--pi-model` when `SWARM_FLAGS` has no Pi lane. The server already applied AGENTS.md "NTM pane priority", the substitution ladder, the `lanes:` switches, and the Gemini model check, so don't add a lane the flags leave out. `--cc=6` is the cc-only floor; log the degradation. Address panes by the `index` values the script prints.
 
 
 ### 4c. Supervision (3-min looper default; ntm controller alternative)

@@ -672,7 +672,7 @@ async function handleStart(
       'beads',
       'cli_not_available',
       { warnings: dispatch.warnings },
-      'Install at least one of claude, codex, gemini, or pi, then retry flywheel_approve_beads.',
+      'Install at least one of claude, codex, or pi, then retry flywheel_approve_beads.',
     );
   }
 

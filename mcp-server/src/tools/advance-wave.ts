@@ -418,7 +418,7 @@ export async function runAdvanceWave(
       'No implementation CLI is available for the next wave.',
       {
         details: { warnings: dispatch.warnings },
-        hint: 'Install at least one of claude, codex, gemini, or pi, then retry flywheel_advance_wave.',
+        hint: 'Install at least one of claude, codex, or pi, then retry flywheel_advance_wave.',
       },
     );
   }

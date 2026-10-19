@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ExecFn } from '../exec.js';
+import { GEMINI_LANE_MODEL } from '../pi-models.js';
 import {
   buildNtmSpawnArgs,
   buildPiPaneCommand,
@@ -32,6 +33,7 @@ describe('parseSwarmSpawnArgs', () => {
         ntmLanes: { cc: '1' },
         piCount: 3,
         piModels: [DEEPSEEK, GLM, 'openrouter/qwen/qwen4-coder'],
+        gmiCount: 0,
         piName: 'deep-plan',
         ntmArgs: ['--auto-restart'],
         cwd: '/repo',
@@ -44,7 +46,7 @@ describe('parseSwarmSpawnArgs', () => {
 
     expect(parsed).toMatchObject({
       ok: true,
-      args: { ntmLanes: { cc: '2:opus', gmi: '2' }, piCount: 0, piModels: [], piName: 'impl-x', ntmArgs: [] },
+      args: { ntmLanes: { cc: '2:opus' }, piCount: 0, piModels: [], gmiCount: 2, piName: 'impl-x', ntmArgs: [] },
     });
   });
 
@@ -60,7 +62,9 @@ describe('parseSwarmSpawnArgs', () => {
     [['proj', '--label=x', '--cc=1', '--pi=2'], '--pi needs at least one --pi-model'],
     [['proj', '--label=x', '--cc=1', '--pi=1', '--pi-model=glm-5.3'], '--pi-model=glm-5.3 is not a provider/model id'],
     [['proj', '--label=x', '--cc=1', '--pi=1', '--pi-model=a/b;rm'], '--pi-model=a/b;rm is not a provider/model id'],
-    [['proj', '--label=x', '--pi=2', `--pi-model=${GLM}`], 'at least one of --cc, --cod, --gmi must be above 0; ntm creates the session the Pi panes join'],
+    [['proj', '--label=x', '--pi=2', `--pi-model=${GLM}`], 'at least one of --cc, --cod must be above 0; ntm creates the session the Pi and Gemini panes join'],
+    [['proj', '--label=x', '--gmi=2'], 'at least one of --cc, --cod must be above 0; ntm creates the session the Pi and Gemini panes join'],
+    [['proj', '--label=x', '--cc=1', '--gmi=2:flash'], `--gmi=2:flash is not a count; Gemini panes always run ${GEMINI_LANE_MODEL}`],
     [['proj', '--label=x', '--cc=1', '--pi-name=a/b'], '--pi-name allows letters, digits, . _ -'],
   ])('rejects %j', (argv, error) => {
     expect(parse(argv)).toEqual({ ok: false, error });
@@ -85,6 +89,7 @@ function args(overrides: Partial<SwarmSpawnArgs> = {}): SwarmSpawnArgs {
     ntmLanes: { cc: '1' },
     piCount: 2,
     piModels: [DEEPSEEK, GLM],
+    gmiCount: 0,
     piName: 'deep-plan',
     ntmArgs: [],
     cwd: '/repo',
@@ -93,9 +98,9 @@ function args(overrides: Partial<SwarmSpawnArgs> = {}): SwarmSpawnArgs {
 }
 
 describe('command builders', () => {
-  it('spawns NTM lanes in cc, cod, gmi order with --no-user and smart stagger before passthrough flags', () => {
-    expect(buildNtmSpawnArgs(args({ ntmLanes: { gmi: '2', cc: '2' }, ntmArgs: ['--auto-restart'] }))).toEqual([
-      'spawn', 'proj', '--label', 'deep-plan-x', '--no-user', '--cc=2', '--gmi=2', '--stagger-mode=smart', '--auto-restart',
+  it('spawns NTM lanes in cc, cod order with --no-user and smart stagger before passthrough flags, never gmi', () => {
+    expect(buildNtmSpawnArgs(args({ ntmLanes: { cod: '2', cc: '2' }, gmiCount: 2, ntmArgs: ['--auto-restart'] }))).toEqual([
+      'spawn', 'proj', '--label', 'deep-plan-x', '--no-user', '--cc=2', '--cod=2', '--stagger-mode=smart', '--auto-restart',
     ]);
   });
 
@@ -105,18 +110,25 @@ describe('command builders', () => {
     ]);
   });
 
-  it('labels Pi panes by id and NTM panes by title', () => {
+  it('labels Pi and Gemini panes by id and NTM panes by title', () => {
     const listing = [
       '0\t%45\tproj--deep-plan-x__cc_1',
       '1\t%46\tπ deep-plan-1',
-      '2\t%47\tzsh',
+      '2\t%47\tproj--deep-plan-x__pi_gmi_1',
+      '3\t%48\tproj--deep-plan-x__gmi_1',
+      '4\t%49\tzsh',
       '',
     ].join('\n');
 
-    expect(classifyPanes(listing, new Map([['%46', DEEPSEEK]]))).toEqual([
+    expect(classifyPanes(listing, new Map([
+      ['%46', { lane: 'pi' as const, model: DEEPSEEK }],
+      ['%47', { lane: 'gmi' as const, model: GEMINI_LANE_MODEL }],
+    ]))).toEqual([
       { lane: 'cc', index: 0, paneId: '%45', title: 'proj--deep-plan-x__cc_1' },
       { lane: 'pi', index: 1, paneId: '%46', title: 'π deep-plan-1', model: DEEPSEEK },
-      { lane: 'unknown', index: 2, paneId: '%47', title: 'zsh' },
+      { lane: 'gmi', index: 2, paneId: '%47', title: 'proj--deep-plan-x__pi_gmi_1', model: GEMINI_LANE_MODEL },
+      { lane: 'unknown', index: 3, paneId: '%48', title: 'proj--deep-plan-x__gmi_1' },
+      { lane: 'unknown', index: 4, paneId: '%49', title: 'zsh' },
     ]);
   });
 });
@@ -126,6 +138,7 @@ type Handler = (cmd: string, cmdArgs: string[]) => { code: number; stdout?: stri
 function fakeTmux(overrides: Handler = () => undefined) {
   let nextPane = 46;
   const created: string[] = [];
+  const titles = new Map<string, string>();
   const exec = vi.fn<ExecFn>(async (cmd, cmdArgs) => {
     const override = overrides(cmd, cmdArgs);
     if (override) return { stdout: '', stderr: '', ...override };
@@ -136,8 +149,9 @@ function fakeTmux(overrides: Handler = () => undefined) {
       created.push(paneId);
       return { code: 0, stdout: `${paneId}\n`, stderr: '' };
     }
+    if (cmd === 'tmux' && cmdArgs[0] === 'select-pane') titles.set(cmdArgs[2]!, cmdArgs[4]!);
     if (cmd === 'tmux' && cmdArgs[0] === 'list-panes') {
-      const lines = ['0\t%45\tproj--deep-plan-x__cc_1', ...created.map((id, i) => `${i + 1}\t${id}\tproj--deep-plan-x__pi_${i + 1}`)];
+      const lines = ['0\t%45\tproj--deep-plan-x__cc_1', ...created.map((id, i) => `${i + 1}\t${id}\t${titles.get(id) ?? 'π'}`)];
       return { code: 0, stdout: `${lines.join('\n')}\n`, stderr: '' };
     }
     return { code: 0, stdout: '', stderr: '' };
@@ -177,6 +191,41 @@ describe('spawnSwarm', () => {
     for (const [, , opts] of exec.mock.calls) expect(opts?.timeout).toBeGreaterThan(0);
   });
 
+  it('adds Gemini panes as Pi on gemini-4-argon after the Pi panes, titled so ntm does not take them for gemini CLI panes', async () => {
+    const { exec, calls } = fakeTmux();
+
+    const result = await spawnSwarm(args({ piCount: 1, gmiCount: 2 }), exec);
+
+    expect(result).toEqual({
+      session: 'proj--deep-plan-x',
+      errors: [],
+      panes: [
+        { lane: 'cc', index: 0, paneId: '%45', title: 'proj--deep-plan-x__cc_1' },
+        { lane: 'pi', index: 1, paneId: '%46', title: 'proj--deep-plan-x__pi_1', model: DEEPSEEK },
+        { lane: 'gmi', index: 2, paneId: '%47', title: 'proj--deep-plan-x__pi_gmi_1', model: GEMINI_LANE_MODEL },
+        { lane: 'gmi', index: 3, paneId: '%48', title: 'proj--deep-plan-x__pi_gmi_2', model: GEMINI_LANE_MODEL },
+      ],
+    });
+    expect(calls('split-window')[1]).toEqual([
+      'split-window', '-t', 'proj--deep-plan-x:0', '-c', '/repo', '-P', '-F', '#{pane_id}',
+      '/opt/bin/pi', '--model', 'vercel-ai-gateway/google/gemini-4-argon', '--thinking', 'high', '--no-approve', '--name', 'deep-plan-gmi-1',
+    ]);
+    expect(exec).toHaveBeenCalledWith(
+      'ntm',
+      ['spawn', 'proj', '--label', 'deep-plan-x', '--no-user', '--cc=1', '--stagger-mode=smart'],
+      expect.anything(),
+    );
+  });
+
+  it('probes for pi when only Gemini panes need it', async () => {
+    const { exec } = fakeTmux((cmd) => (cmd === 'which' ? { code: 1 } : undefined));
+
+    expect((await spawnSwarm(args({ piCount: 0, piModels: [], gmiCount: 1 }), exec)).errors).toEqual([
+      'pi is not on PATH; drop --pi and --gmi or install Pi',
+    ]);
+    expect(exec).not.toHaveBeenCalledWith('ntm', expect.anything(), expect.anything());
+  });
+
   it('skips the Pi probe and splits when there are no Pi lanes', async () => {
     const { exec, calls } = fakeTmux();
 
@@ -193,7 +242,7 @@ describe('spawnSwarm', () => {
     expect(await spawnSwarm(args(), exec)).toEqual({
       session: 'proj--deep-plan-x',
       panes: [],
-      errors: ['pi is not on PATH; drop --pi or install Pi'],
+      errors: ['pi is not on PATH; drop --pi and --gmi or install Pi'],
     });
     expect(exec).not.toHaveBeenCalledWith('ntm', expect.anything(), expect.anything());
   });
@@ -239,9 +288,9 @@ describe('spawnSwarm', () => {
 
     const result = await spawnSwarm(args(), exec);
 
-    expect(result.errors).toEqual(['tmux split-window for Pi pane 1 failed: no space for new pane']);
+    expect(result.errors).toEqual(['tmux split-window for deep-plan-1 failed: no space for new pane']);
     expect(result.panes.filter((pane) => pane.lane === 'pi')).toEqual([
-      { lane: 'pi', index: 1, paneId: '%46', title: 'proj--deep-plan-x__pi_1', model: GLM },
+      { lane: 'pi', index: 1, paneId: '%46', title: 'proj--deep-plan-x__pi_2', model: GLM },
     ]);
   });
 
@@ -286,6 +335,13 @@ describe('runCli', () => {
       panes: [{ lane: 'cc', index: 0 }, { lane: 'pi', index: 1, model: GLM }],
       errors: [],
     });
+
+    const gemini = io();
+    expect(await runCli(['proj', '--label=deep-plan-x', '--cc=1', '--gmi=1'], { ...gemini.deps, exec: fakeTmux().exec })).toBe(0);
+    expect(JSON.parse(gemini.out.join('')).panes).toEqual([
+      { lane: 'cc', index: 0, paneId: '%45', title: 'proj--deep-plan-x__cc_1' },
+      { lane: 'gmi', index: 1, paneId: '%46', title: 'proj--deep-plan-x__pi_gmi_1', model: GEMINI_LANE_MODEL },
+    ]);
 
     const failed = io();
     const noPi = fakeTmux((cmd) => (cmd === 'which' ? { code: 1 } : undefined));

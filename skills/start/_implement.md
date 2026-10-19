@@ -156,11 +156,11 @@ If a returned lane includes Gemini and `gemini_model_compat` is non-green, surfa
 
 ```
 AskUserQuestion(questions: [{
-  question: "Doctor flagged gemini_model_compat (configured gemini model is outside the documented allowlist). How to handle the gem lane?",
+  question: "Doctor flagged gemini_model_compat: the cached Vercel AI Gateway catalog no longer offers gemini-4-argon, the only model the Gemini lane runs. How to handle the Gemini lane?",
   header: "Gemini",
   options: [
-    { label: "Abort and fix config (Recommended)", description: "Stop before spawning so the Gemini configuration can be corrected without discarding the server-owned lane assignment." },
-    { label: "Continue anyway", description: "Spawn gem panes despite known incompatibility — they will likely reject the configured model and exit." }
+    { label: "Abort and refresh (Recommended)", description: "Stop before spawning, refresh the catalog with flywheel_pi_models({ cwd, action: \"list\", refresh: true }), and rerun the doctor without discarding the server-owned lane assignment." },
+    { label: "Continue anyway", description: "Spawn the Gemini panes anyway — Pi exits if the gateway rejects gemini-4-argon." }
   ],
   multiSelect: false
 }])
@@ -175,7 +175,7 @@ When `NTM_AVAILABLE=true`, count the panes per lane from the returned lanes: `N_
 1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })` and pass `data.questions[0]` to `AskUserQuestion` unchanged. It is multi-select, and its first options are the user's last picks.
 2. Call `flywheel_pi_models({ cwd, action: "choose", picks: { implementer: "<answer>" } })` with the answer string unchanged, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. It holds one model, or a comma-separated list that `swarm-spawn.js` alternates across the Pi panes. An `invalid_input` result lists close ids in `error.details.suggestions`; ask again with those. If `list` fails or `piReady` is false, tell the user that the Pi lanes can't start and stop before spawning.
 
-ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc, gmi, and cod lanes and adds the Pi panes to the same session with tmux:
+ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc and cod lanes and adds the Pi panes to the same session with tmux. It runs the gmi panes as Pi on `gemini-4-argon`, since ntm's gmi lane starts the gemini CLI:
 
 ```bash
 SESSION="${NTM_PROJECT}--impl-<goal-slug>"
@@ -191,7 +191,7 @@ Process prompt records in array order. Send each record unchanged to the next un
 ntm --robot-send="$SESSION" --panes=<index of the next unused pane in this lane> --msg="<matching data.prompts[].prompt>"
 ```
 
-Use `--panes=N` with numeric indices. `--pane=N` (singular) is silently broadcast to ALL panes. Don't add `--type`: ntm reports Pi panes as type `unknown`, and pane metadata may not exist yet during startup. Pi prompts reach Agent Mail through the `am` CLI because Pi panes run with `--no-approve` and load no project MCP servers.
+Use `--panes=N` with numeric indices. `--pane=N` (singular) is silently broadcast to ALL panes. Don't add `--type`: ntm reports Pi panes as type `unknown`, and pane metadata may not exist yet during startup. Pi and gmi prompts reach Agent Mail through the `am` CLI because Pi panes run with `--no-approve` and load no project MCP servers.
 
 Use `ntm --robot-send`; `ntm send` can abort at the CASS dedup prompt. Surface `data.dispatch.warnings` or `nextWave.warnings` before spawning.
 

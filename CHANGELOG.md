@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Gemini runs only as gemini-4-argon, through Pi.** The swarm's Gemini lane started the gemini CLI on whatever model the CLI or ntm was configured for (`gemini-3-pro-preview` in a default ntm config). It is now Pi on `vercel-ai-gateway/google/gemini-4-argon`, and the gemini CLI never starts.
+  - `swarm-spawn.js --gmi=N` adds N Pi panes on gemini-4-argon instead of passing `--gmi` to ntm. They are titled `<session>__pi_gmi_<n>`, because ntm types a `__gmi_<n>` pane as a gemini CLI agent and would respawn it as one, and the script reports them with `lane: "gmi"`. `--gmi=N:<model>` is rejected.
+  - The Gemini lane counts as available when `pi` is on PATH and `pi auth check` reports the Vercel AI Gateway ready. An installed gemini CLI no longer counts, and a Pi lane on a direct login doesn't make the Gemini lane ready.
+  - Gemini implementer prompts are Pi terminal prompts that reach Agent Mail through the `am` CLI, with `--model gemini-4-argon` on `am macros start-session`.
+  - `flywheel_pi_models` neither ranks nor accepts any other Gemini model, from the gateway or from a Google login. Gemma and gemini-4-argon's dated snapshots and speed variants still pass.
+  - `gemini_model_compat` no longer runs `gemini --version`. It reads the gateway catalog that `flywheel_pi_models` caches and turns yellow when the catalog no longer offers `google/gemini-4-argon` with tool use, and the doctor's swarm mix leaves the Gemini lane out while it does. The `geminiVersionOutput` and `probeCachePath` doctor options are gone with the probe.
+  - The planning-workflow review round spawns its Gemini reviewer through `swarm-spawn.js` and addresses panes by index, since `--type=gmi` no longer reaches it. PANE001 rejects `--gmi=` on a raw `ntm spawn`, as it already did `--pi=`.
+
 ## [3.21.1] - 2026-10-19
 
 The start menu and the in-flight swarm use the lanes the doctor says this host can run, so a switched-off Gemini lane no longer shows up.

@@ -95,9 +95,8 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   // app-server falls through to its built-in default on ChatGPT-account
   // auth. Mutating, reversible (timestamped .bak.<ts> sibling).
   codex_config_compat: codexConfigCompatHandler,
-  // claude-orchestrator-37n6 (v3.17.0) — gemini CLI version is user-managed;
-  // no automated remediation. B15 (claude-orchestrator-2wcd) pre-flight gate
-  // consults the doctor row and skips `--gmi` panes when this is yellow.
+  // The gateway's model list is not ours to fix; the swarm mix drops the
+  // Gemini lane while this row is yellow.
   gemini_model_compat: null,
   rescues_last_30d: null,
   npm_marketplace_version_drift: null,

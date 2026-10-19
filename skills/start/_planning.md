@@ -273,22 +273,20 @@ For **planning-workflow**, invoke `/planning-workflow`. Run sequential review ro
 
 For Ambitious mode, put the charter in the draft and every review prompt. This route registers the final file through `planFile`.
 
-Set `PLAN_PATH=docs/plans/<date>-<goal-slug>-planning-workflow.md` for a new planning-workflow plan. During Step 5.6 refinement, set `PLAN_PATH=state.planDocument` instead. Address panes with `--type=cc`, `--type=cod`, and `--type=gmi` because a `--no-user` session can start at pane index 0. Each provider writes a separate revision file.
+Set `PLAN_PATH=docs/plans/<date>-<goal-slug>-planning-workflow.md` for a new planning-workflow plan. During Step 5.6 refinement, set `PLAN_PATH=state.planDocument` instead. Spawn through `swarm-spawn.js`, which runs the Gemini reviewer as Pi on gemini-4-argon, and address each pane by the `index` the script prints for its lane. A `--no-user` session can start at pane index 0, and ntm reports the Gemini pane as type `unknown`, so `--type=gmi` would not reach it. Each lane writes a separate revision file.
 
 ```
 : "${PLAN_PATH:?Set PLAN_PATH before starting a review round}"
 SESSION="${NTM_PROJECT}--plan-review-round-<N>"
 # PANE001-OVERRIDE: review rounds keep one cc, cod and gmi reviewer; AGENTS.md "Deep plan exception".
-ntm spawn "$NTM_PROJECT" --label plan-review-round-<N> --no-user --cc=1 --cod=1 --gmi=1 --stagger-mode=smart
-# Provider selectors: --type=cc, --type=cod, --type=gmi
-for TYPE in cc cod gmi; do
-  ntm --robot-send="$SESSION" --type="$TYPE" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at $PLAN_PATH. Write YOUR revised plan to ${PLAN_PATH%.md}-round-<N>-${TYPE}.md; do not touch the canonical plan file."
-done
+node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label plan-review-round-<N> --cc=1 --cod=1 --gmi=1
+# Then, for each printed pane, with LANE set to its lane (cc, cod, gmi) and INDEX to its index:
+ntm --robot-send="$SESSION" --panes="$INDEX" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at $PLAN_PATH. Write YOUR revised plan to ${PLAN_PATH%.md}-round-<N>-${LANE}.md; do not touch the canonical plan file."
 ```
 
-When the doctor's `gemini_cli` row has `disabled: true`, leave out `--gmi=1` and the `gmi` loop entry, and reconcile two revision files instead of three.
+Leave out `--gmi=1` when the doctor's `gemini_cli` row has `disabled: true` or isn't green, or when `gemini_model_compat` is yellow, and reconcile two revision files instead of three.
 
-Run `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition`, reconcile the three `-round-<N>-{cc,cod,gmi}.md` files into `$PLAN_PATH`, then start the next round. Stop when changes become minor or after five rounds. For a new plan, register `$PLAN_PATH` with `flywheel_plan({ cwd, mode: "deep", planFile: PLAN_PATH })` and run Step 5.55. For refinement, return to Plan ready.
+Run `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition` for the cc and cod panes. ntm doesn't track the Gemini pane's state, so wait for its `-round-<N>-gmi.md` file instead. Reconcile the three `-round-<N>-{cc,cod,gmi}.md` files into `$PLAN_PATH`, then start the next round. Stop when changes become minor or after five rounds. For a new plan, register `$PLAN_PATH` with `flywheel_plan({ cwd, mode: "deep", planFile: PLAN_PATH })` and run Step 5.55. For refinement, return to Plan ready.
 
 **Deep plan**:
 

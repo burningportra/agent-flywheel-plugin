@@ -18,7 +18,7 @@ function capabilities(gemini = true, pi = true): CapabilitiesMap {
     claude: { provider: 'claude', available: true, path: '/bin/claude' },
     codex: { provider: 'codex', available: true, path: '/bin/codex' },
     gemini: gemini
-      ? { provider: 'gemini', available: true, path: '/bin/gemini' }
+      ? { provider: 'gemini', available: true, path: '/bin/pi' }
       : { provider: 'gemini', available: false, reason: 'not installed' },
     pi: pi
       ? { provider: 'pi', available: true, path: '/bin/pi' }
@@ -63,7 +63,7 @@ function completionReportExample(prompt: string): unknown {
 }
 
 function assertCompletionGate(prompt: ImplementerPrompt): void {
-  if (prompt.lane === 'pi') {
+  if (prompt.lane === 'pi' || prompt.lane === 'gmi') {
     expect(prompt.prompt).toContain("--project '/workspace/project'");
     expect(prompt.prompt).toContain(`--agent-name '${prompt.agentName}'`);
     expect(prompt.prompt).toContain("--to 'WindyBasin'");
@@ -115,6 +115,7 @@ describe('buildImplementerDispatch', () => {
     expect(dispatch.prompts[2]?.prompt).toContain('am macros start-session');
     expect(dispatch.prompts[4]?.prompt.endsWith('\n')).toBe(true);
     expect(dispatch.prompts[4]?.prompt.endsWith('\n\n')).toBe(false);
+    expect(dispatch.prompts[4]?.prompt).toContain('--program pi --model gemini-4-argon');
   });
 
   it('reassigns the missing Gemini share to Pi without changing Claude share', async () => {
@@ -135,7 +136,7 @@ describe('buildImplementerDispatch', () => {
     ]);
     expect(dispatch.degraded).toBe(true);
     expect(dispatch.warnings).toEqual([
-      'gemini CLI not available (not installed); reassigned 2 bead(s) to pi',
+      'gemini lane not available (not installed); reassigned 2 bead(s) to pi',
     ]);
   });
 

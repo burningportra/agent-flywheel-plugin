@@ -79,7 +79,8 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 # splits it into beads, and asks you to approve.
 
 # After approval, it asks which models the Pi panes run, then
-# spawns the swarm (ntm for cc and gmi, tmux panes for Pi):
+# spawns the swarm (ntm for cc, tmux panes for Pi, and Pi panes on
+# gemini-4-argon for the Gemini lane; the gemini CLI never runs):
 node mcp-server/dist/scripts/swarm-spawn.js agent-flywheel --label impl \
   --cc=2 --pi=2 --pi-model=<provider>/<model> --gmi=2
 
