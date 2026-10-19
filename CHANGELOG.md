@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.22.0] - 2026-10-19
+
+The Gemini lane runs gemini-4-argon through Pi on the Vercel AI Gateway, and the gemini CLI never starts.
+
 ### Changed
 
 - **Gemini runs only as gemini-4-argon, through Pi.** The swarm's Gemini lane started the gemini CLI on whatever model the CLI or ntm was configured for (`gemini-3-pro-preview` in a default ntm config). It is now Pi on `vercel-ai-gateway/google/gemini-4-argon`, and the gemini CLI never starts.
