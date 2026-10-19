@@ -75,13 +75,13 @@ scan ──> discover ──> plan ──> implement ──> review ──> wrap
 
 # Pick "Set a goal". Type the goal. Pick "Full flywheel".
 # The flywheel runs /brainstorming, generates a plan via 3 parallel
-# planners (Claude plus two Pi panes on gateway models you pick),
+# planners (Claude plus two Pi panes on frontier models you pick),
 # splits it into beads, and asks you to approve.
 
-# After approval, it asks which gateway model the Pi panes run, then
+# After approval, it asks which models the Pi panes run, then
 # spawns the swarm (ntm for cc and gmi, tmux panes for Pi):
 node mcp-server/dist/scripts/swarm-spawn.js agent-flywheel --label impl \
-  --cc=2 --pi=2 --pi-model=vercel-ai-gateway/<model> --gmi=2
+  --cc=2 --pi=2 --pi-model=<provider>/<model> --gmi=2
 
 # Each pane gets a marching-orders message via Agent Mail. The
 # tender daemon nudges stalled panes. When all beads close,
@@ -292,6 +292,17 @@ Pre-conditions: ntm + ≥ 2 of {cc, cod, gmi} healthy (run `/flywheel-doctor` to
 | `FW_SKILL_BUNDLE` | on | `=off` bypasses the bundled skills loader (forces disk reads — useful when editing skills live). |
 | `ORCH_LOG_LEVEL` | `warn` | Same as `FW_LOG_LEVEL`; legacy alias. |
 
+### flywheel.config.yaml
+
+The flywheel reads `~/.config/agent-flywheel/flywheel.config.yaml` (or `$XDG_CONFIG_HOME/agent-flywheel/`), then `flywheel.config.yaml` at the repo root, and a key set in the repo file wins. To keep a CLI you don't use out of every swarm, switch its lane off:
+
+```yaml
+lanes:
+  gemini: false   # Gemini's share goes to Pi; codex and pi take the same switch
+```
+
+A switched-off lane's share moves down the substitution ladder without a degraded-swarm warning, and `/flywheel-doctor` shows it as disabled rather than missing.
+
 ### Runtime files
 
 | Path | Purpose |
@@ -301,6 +312,8 @@ Pre-conditions: ntm + ≥ 2 of {cc, cod, gmi} healthy (run `/flywheel-doctor` to
 | `.pi-flywheel/completion/<beadId>.json` | Per-bead completion attestation (v3.15.0+). |
 | `.pi-flywheel/profile-cache.json` | Repo-profile cache, keyed on git HEAD. |
 | `.pi-flywheel/tender-events.log` | Tender-daemon event log (NDJSON). |
+| `.pi-flywheel/pi-models.json` | The Pi models you last picked per role. |
+| `.pi-flywheel/cache/pi-route-probes.json` | Which models your Pi logins can run, rechecked daily. |
 | `docs/plans/` | Plan artifacts from deep-plan + duel-plan sessions. |
 | `docs/duels/` | Duel synthesis reports. |
 | `docs/solutions/` | Distilled session learnings (durable memory). |
@@ -375,8 +388,9 @@ claude --plugin-dir .
 | Role | Model |
 |---|---|
 | Correctness plan agent | `claude-opus-4-7` |
-| Ergonomics plan agent | Pi on a Vercel AI Gateway model you pick (`claude-sonnet-4-6` without Pi) |
-| Robustness plan agent | Pi on a Vercel AI Gateway model you pick (`codex` without Pi) |
+| Ergonomics plan agent | Pi on a frontier model you pick from your Pi logins or the Vercel AI Gateway (`claude-sonnet-4-6` without Pi) |
+| Robustness plan agent | Pi on a frontier model you pick from your Pi logins or the Vercel AI Gateway (`codex` without Pi) |
+| Pi implementation panes | One or two balanced models you pick, alternated across the Pi panes |
 | Swarm implementation agents | `claude-haiku-4-5` (lightweight) |
 | Review agents | `claude-sonnet-4-6` |
 

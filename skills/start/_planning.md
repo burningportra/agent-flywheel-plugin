@@ -264,7 +264,7 @@ For **Duel plan**, call `flywheel_plan({ cwd, mode: "duel" })` and run the `/due
 Before invoking the duel skill:
 
 1. Run `_implement.md` **Pre-flight: resolve NTM readiness**. If `NTM_AVAILABLE=false`, use Deep and print `Duel-plan downgraded to Deep — NTM unavailable`.
-2. Run `which claude codex gemini 2>/dev/null`. These are the binaries behind `cc`, `cod`, and `gmi`; `which cc` matches `/usr/bin/cc`. Require two healthy providers or use Deep.
+2. Run `which claude codex gemini 2>/dev/null`. These are the binaries behind `cc`, `cod`, and `gmi`; `which cc` matches `/usr/bin/cc`. Count a provider as unhealthy when its doctor CLI row has `disabled: true`, which means the user switched that lane off in `flywheel.config.yaml`. Require two healthy providers or use Deep.
 3. Let the duel read the matching Phase 0.5 artifact through the normal brainstorm handoff.
 
 When the duel writes its output, register it with `flywheel_plan({ cwd, mode: "duel", planFile: "<output>" })`, then run Step 5.55.
@@ -286,6 +286,8 @@ for TYPE in cc cod gmi; do
 done
 ```
 
+When the doctor's `gemini_cli` row has `disabled: true`, leave out `--gmi=1` and the `gmi` loop entry, and reconcile two revision files instead of three.
+
 Run `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition`, reconcile the three `-round-<N>-{cc,cod,gmi}.md` files into `$PLAN_PATH`, then start the next round. Stop when changes become minor or after five rounds. For a new plan, register `$PLAN_PATH` with `flywheel_plan({ cwd, mode: "deep", planFile: PLAN_PATH })` and run Step 5.55. For refinement, return to Plan ready.
 
 **Deep plan**:
@@ -294,9 +296,9 @@ Run `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition`, reconcile
 
 > Run `_implement.md` **Pre-flight: resolve NTM readiness**, including after resume or compaction. Use NTM only when its final result sets `NTM_AVAILABLE=true`; otherwise use the `Agent()` fallback.
 
-> Claude takes correctness. Two Pi panes take robustness and ergonomics when `flywheel_plan` returns `runner: "pi-pane"` entries, which it does when `pi` is on PATH and `pi auth check --provider vercel-ai-gateway` reports ready. Gateway models change every few weeks, so ask the user which model each Pi planner runs:
+> Claude takes correctness. Two Pi panes take robustness and ergonomics when `flywheel_plan` returns `runner: "pi-pane"` entries, which it does when `pi` is on PATH and `pi auth check` reports ready for the gateway or one of the user's own Pi logins. The models a login can run and the gateway's top models both change every few weeks, so ask the user which model each Pi planner runs:
 >
-> 1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["robustness", "ergonomics"] })`. It ranks the live Vercel AI Gateway catalog by this week's token share and returns `data.questions[]`, one per role, with the user's last pick first.
+> 1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["robustness", "ergonomics"] })`. It ranks frontier models by list price, puts the user's own Pi logins (each checked by a cached one-word test call) ahead of the metered Vercel AI Gateway, and returns `data.questions[]`, one per role, with the user's last pick first. The first call of the day can take up to 90 seconds while it tests the logins.
 > 2. Pass both `data.questions` entries to one `AskUserQuestion` call unchanged.
 > 3. Call `flywheel_pi_models({ cwd, action: "choose", picks: { robustness: "<answer>", ergonomics: "<answer>" } })` with the chosen labels or typed model ids. Set `PI_ROBUSTNESS_MODEL` and `PI_ERGONOMICS_MODEL` from `data.piModels`. An `invalid_input` result lists close ids in `error.details.suggestions`; ask again with those.
 >

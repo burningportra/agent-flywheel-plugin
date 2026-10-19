@@ -110,7 +110,7 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 ### 4a. Pre-flight
 
 1. **Shared swarm pre-conditions.** Execute the **NTM and provider readiness**, **Agent Mail bootstrap**, **Disk-space guard**, and **Tender-daemon spawn** steps in `_inflight_prompt.md`. Its first step executes `_implement.md` **Pre-flight: resolve NTM readiness** and uses the final doctor result. An unavailable result takes the D1 single-agent fallback instead of continuing to §4b. This full-pipeline route uses the shared unattended lane downgrades because the depth choice already authorized the swarm.
-2. **Reality-check lane requirement.** Require a green `claude_cli` row. The shared substitution ladder handles non-green `pi` and `gmi` rows. If neither peer remains, surface the existing cc-only or abort choice.
+2. **Reality-check lane requirement.** Require a green `claude_cli` row. The shared substitution ladder handles non-green or disabled `pi` and `gmi` rows. If neither peer remains, surface the existing cc-only or abort choice.
 3. **Bead snapshot.** Run `br list --json` and `br ready --json`. Reopen any stalled in-progress bead under the rule in `_inflight_prompt.md`.
 4. **Build mutex.** Put `"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch build` in every implementation agent's STEP 2 prompt so the six panes do not compile at once. The coordinator expands `$CLAUDE_PLUGIN_ROOT` before pasting into the `--msg` string so the pane sees an absolute path. Do not use `flock`; macOS does not ship it. Repo-relative `scripts/build-mutex.sh` breaks in a user's project.
 
@@ -121,7 +121,7 @@ Pick the Pi model and spawn as in `_inflight_prompt.md` step 3, with a different
 **Pane-type priority** (per AGENTS.md "NTM pane priority"): mixed `cc:pi:gem` 1:1:1 is the canonical default. Apply the lane shape produced by the shared provider-readiness step:
 
 1. Missing `pi` (non-green `pi_cli`) → reassign to `--cod=` (`--cc=2 --cod=2 --gmi=2`).
-2. Missing `gmi` (or `gemini_model_compat` non-green) → reassign to `--pi=` (`--cc=2 --pi=4`), or to `--cod=` when Pi is out too (`--cc=2 --cod=4`).
+2. Missing `gmi` (`gemini_cli` non-green or disabled, or `gemini_model_compat` non-green) → reassign to `--pi=` (`--cc=2 --pi=4`), or to `--cod=` when Pi is out too (`--cc=2 --cod=4`).
 3. All three peers unavailable → cc-only floor (`--cc=6`), explicit-override mode; log the degradation.
 
 

@@ -22,11 +22,11 @@ When invoked with `--json`, the skill emits to stdout exactly the `structuredCon
 `/flywheel-duel` and the duel rows in start's Discover/Plan/Review menus need ntm + ≥2 healthy CLIs. The doctor's existing checks already cover this together:
 
 - `ntm_binary` — ntm CLI present and runnable.
-- `claude_cli` / `codex_cli` / `gemini_cli` — per-CLI installation + auth state.
+- `claude_cli` / `codex_cli` / `gemini_cli` — per-CLI installation + auth state. A lane the user switched off with `lanes.<name>: false` in `flywheel.config.yaml` shows green with `disabled: true`, and the server hands its share to the next lane on the ladder.
 - `pi_cli` — Pi on PATH with Vercel AI Gateway credentials (`pi auth check`). Swarms and deep plan use it; duels don't.
 - `swarm_model_ratio` — synthesis check reporting the achievable cc:pi:gmi ratio, with Codex as the fallback lane.
 
-If any two of `{claude_cli, codex_cli, gemini_cli}` are green AND `ntm_binary` is green, duels can run. If only one is green, the duel skill aborts in Phase 1 detection — fall back to single-agent paths (`/idea-wizard`, `mode=deep`, 5-agent fresh-eyes) until the other CLIs are healthy.
+If any two of `{claude_cli, codex_cli, gemini_cli}` are green without `disabled: true` AND `ntm_binary` is green, duels can run. If only one is green, the duel skill aborts in Phase 1 detection — fall back to single-agent paths (`/idea-wizard`, `mode=deep`, 5-agent fresh-eyes) until the other CLIs are healthy.
 
 ## When to invoke
 

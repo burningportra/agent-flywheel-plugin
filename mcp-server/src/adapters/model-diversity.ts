@@ -1,11 +1,13 @@
 /**
  * Swarm-agent model diversity — Claude : Pi : Gemini at 1:1:1, with Codex
- * as the fallback that takes Pi's share. Pi runs on a Vercel AI Gateway
- * model the user picks through `flywheel_pi_models`.
+ * as the fallback that takes Pi's share. Pi runs on a model the user picks
+ * through `flywheel_pi_models`, on one of their own logins or the Vercel AI
+ * Gateway. A lane switched off under `lanes:` in flywheel.config.yaml hands
+ * its share down the same fallback order without counting as degraded.
  *
  * Responsibilities:
  *   1. Detect CLI availability (`which claude codex gemini pi`, plus Pi's
- *      gateway credentials).
+ *      route credentials and the lane switches in flywheel.config.yaml).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so
@@ -18,7 +20,8 @@
 
 import type { ExecFn } from '../exec.js';
 import { errMsg } from '../errors.js';
-import { checkPiGatewayAuth, PI_GATEWAY_PROVIDER } from '../pi-models.js';
+import { loadFlywheelConfig } from '../flywheel-config.js';
+import { checkPiLaneReady } from '../pi-models.js';
 import { adaptPromptForClaude, adaptPromptForPi } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
 import { adaptPromptForGemini } from './gemini-prompt.js';
@@ -34,6 +37,8 @@ export interface CliCapability {
   readonly path?: string;
   /** Error text when unavailable (ENOENT or version probe failure). */
   readonly reason?: string;
+  /** True when the user switched this lane off in flywheel.config.yaml. */
+  readonly disabled?: boolean;
 }
 
 export interface CapabilitiesMap {
@@ -84,7 +89,13 @@ export async function detectCliCapabilities(
   opts: { timeout?: number; cwd?: string; signal?: AbortSignal } = {},
 ): Promise<CapabilitiesMap> {
   const timeout = opts.timeout ?? 1500;
+  const lanes = loadFlywheelConfig(opts.cwd ?? process.cwd()).lanes;
+  const switchedOff = (provider: ModelProvider): boolean =>
+    provider !== 'claude' && !lanes[provider];
   const probe = async (provider: ModelProvider): Promise<CliCapability> => {
+    if (switchedOff(provider)) {
+      return { provider, available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' };
+    }
     const bin = PROVIDER_BINARIES[provider];
     try {
       const res = await exec('which', [bin], {
@@ -113,14 +124,14 @@ export async function detectCliCapabilities(
     }
   };
 
-  // A Pi lane runs on the Vercel AI Gateway, so Pi counts only with its credentials.
+  // Pi counts only when a route it would run on has credentials.
   const probePi = async (): Promise<CliCapability> => {
     const found = await probe('pi');
     if (!found.available) return found;
-    const auth = await checkPiGatewayAuth(exec, { cwd: opts.cwd, signal: opts.signal, timeout: 3000 });
+    const auth = await checkPiLaneReady(exec, { cwd: opts.cwd, signal: opts.signal, timeout: 10_000 });
     return auth.ready
       ? found
-      : { ...found, available: false, reason: `pi auth check for ${PI_GATEWAY_PROVIDER}: ${auth.detail}` };
+      : { ...found, available: false, reason: `pi auth check: ${auth.detail}` };
   };
 
   const [claude, codex, gemini, pi] = await Promise.all([
@@ -156,6 +167,7 @@ const FALLBACK_PRIORITY = {
  * Contract:
  *   - sum(lane.beadIds.length) == beadIds.length
  *   - lanes contain only providers with `available === true`
+ *   - a disabled provider's share moves like a missing one's, silently
  *   - lane order is claude, pi, gemini, codex (stable; skipped entries omit)
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
@@ -180,7 +192,7 @@ export function splitBeadsByProvider(
     };
   }
 
-  const missing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available);
+  const missing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available && !caps[p].disabled);
   const degraded = missing.length > 0;
   const n = beadIds.length;
   const preferredCounts = new Map<ModelProvider, number>();
@@ -213,7 +225,7 @@ export function splitBeadsByProvider(
     if (!provider) continue;
     assigned.get(provider)?.push(...ids);
 
-    if (provider !== preferred) {
+    if (provider !== preferred && !caps[preferred].disabled) {
       warnings.push(
         `${preferred} CLI not available${caps[preferred].reason ? ` (${caps[preferred].reason})` : ''}; reassigned ${ids.length} bead(s) to ${provider}`,
       );
@@ -260,16 +272,19 @@ export function adaptPromptFor(
  * Describe the capabilities map in a doctor-ready one-liner.
  *   All-available → "claude+pi+gemini available; ratio 1:1:1 achievable"
  *   Missing pi    → "claude+gemini available; pi missing; ratio 1:0:1 achievable; codex fallback available"
+ *   Gemini off    → "claude+pi available; gemini disabled; ratio 1:1:0 achievable; codex fallback available"
  */
 export function describeCapabilities(caps: CapabilitiesMap): string {
   const avail = PRIMARY_PROVIDERS.filter((p) => caps[p].available);
-  const miss = PRIMARY_PROVIDERS.filter((p) => !caps[p].available);
+  const off = PRIMARY_PROVIDERS.filter((p) => caps[p].disabled);
+  const miss = PRIMARY_PROVIDERS.filter((p) => !caps[p].available && !caps[p].disabled);
   const ratio = PRIMARY_PROVIDERS.map((p) =>
     caps[p].available ? '1' : '0',
   ).join(':');
   const parts: string[] = [];
   parts.push(avail.length > 0 ? `${avail.join('+')} available` : 'no CLIs available');
   if (miss.length > 0) parts.push(`${miss.join('+')} missing`);
+  if (off.length > 0) parts.push(`${off.join('+')} disabled`);
   parts.push(`ratio ${ratio} achievable`);
   if (caps.codex.available) parts.push('codex fallback available');
   return parts.join('; ');

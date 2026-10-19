@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { describe, it, expect, vi } from 'vitest';
 import {
   detectCliCapabilities,
   splitBeadsByProvider,
@@ -24,8 +28,8 @@ function makeWhichExec(present: Record<string, string | false>, piAuth = true): 
   return async (cmd, args) => {
     if (cmd === 'pi' || cmd === present['pi']) {
       return piAuth && args[0] === 'auth'
-        ? { code: 0, stdout: 'ready\n', stderr: '' }
-        : { code: 1, stdout: 'not_ready\n', stderr: '' };
+        ? { code: 0, stdout: '{"status":"ready","provider":"vercel-ai-gateway","authType":"api_key"}\n', stderr: '' }
+        : { code: 1, stdout: '{"status":"not_ready","provider":"vercel-ai-gateway","reason":"credentials_not_configured"}\n', stderr: '' };
     }
     if (cmd !== 'which') {
       return { code: 1, stdout: '', stderr: 'unexpected cmd' };
@@ -57,6 +61,10 @@ function caps(
 
 const SIX = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'];
 
+function geminiOff(base: CapabilitiesMap = caps()): CapabilitiesMap {
+  return { ...base, gemini: { provider: 'gemini', available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' } };
+}
+
 // ─── CLI detection ─────────────────────────────────────────────────────────
 
 describe('detectCliCapabilities', () => {
@@ -80,7 +88,7 @@ describe('detectCliCapabilities', () => {
     const result = await detectCliCapabilities(exec);
     expect(result.pi.available).toBe(false);
     expect(result.pi.path).toBe('/usr/local/bin/pi');
-    expect(result.pi.reason).toBe('pi auth check for vercel-ai-gateway: not_ready');
+    expect(result.pi.reason).toBe('pi auth check: vercel-ai-gateway not_ready (credentials_not_configured)');
   });
 
   it('reports missing CLIs as unavailable with a reason', async () => {
@@ -95,6 +103,22 @@ describe('detectCliCapabilities', () => {
     expect(result.codex.reason).toBeTruthy();
     expect(result.gemini.available).toBe(true);
     expect(result.pi.available).toBe(false);
+  });
+
+  it('reports a lane switched off in flywheel.config.yaml as disabled without probing it', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'model-diversity-lanes-'));
+    try {
+      writeFileSync(join(cwd, 'flywheel.config.yaml'), 'lanes:\n  gemini: false\n');
+      const exec = vi.fn(makeWhichExec({ claude: '/usr/local/bin/claude', gemini: '/opt/bin/gemini', pi: '/usr/local/bin/pi' }));
+
+      const result = await detectCliCapabilities(exec, { cwd });
+
+      expect(result.gemini).toEqual({ provider: 'gemini', available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' });
+      expect(result.pi.available).toBe(true);
+      expect(exec.mock.calls.some(([cmd, args]) => cmd === 'which' && args[0] === 'gemini')).toBe(false);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it('does not throw when exec rejects — surfaces as unavailable', async () => {
@@ -159,6 +183,29 @@ describe('splitBeadsByProvider', () => {
       'gemini CLI not available (gemini not on PATH); reassigned 2 bead(s) to pi',
     ]);
     expect(plan.ratio).toBe('2:4:0');
+  });
+
+  it('a disabled Gemini hands its share to Pi without warning or degrading', () => {
+    const plan = splitBeadsByProvider(SIX, geminiOff());
+
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2'] },
+      { provider: 'pi', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+    ]);
+    expect(plan.warnings).toEqual([]);
+    expect(plan.degraded).toBe(false);
+    expect(plan.ratio).toBe('2:4:0');
+  });
+
+  it('a disabled Gemini still degrades when Pi is missing too', () => {
+    const plan = splitBeadsByProvider(SIX, geminiOff(caps({ pi: false })));
+
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2'] },
+      { provider: 'codex', beadIds: ['b3', 'b4', 'b5', 'b6'] },
+    ]);
+    expect(plan.warnings).toEqual(['pi CLI not available (pi not on PATH); reassigned 2 bead(s) to codex']);
+    expect(plan.degraded).toBe(true);
   });
 
   it('missing Pi and Gemini hands both shares to Codex', () => {
@@ -229,6 +276,9 @@ describe('splitBeadsByProvider', () => {
     );
     expect(describeCapabilities(caps({ pi: false, codex: false }))).toBe(
       'claude+gemini available; pi missing; ratio 1:0:1 achievable',
+    );
+    expect(describeCapabilities(geminiOff())).toBe(
+      'claude+pi available; gemini disabled; ratio 1:1:0 achievable; codex fallback available',
     );
   });
 });

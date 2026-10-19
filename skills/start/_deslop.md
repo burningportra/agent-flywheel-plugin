@@ -17,7 +17,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Single-pass (Recommended)", description: "One in-process invocation of /simplify-and-refactor-code-isomorphically. Fast; good for small/medium repos or initial exploration." },
     { label: "Single + fresh-eyes", description: "Single-pass, then a verbatim fresh-eyes review prompt to catch any isomorphism violations the first pass introduced." },
-    { label: "5-Cod swarm via NTM", description: "Spawn 5 Codex panes — codex-heavy mode is the deslop signature (per-pane prompts are codex-tuned) and an explicit override of the v3.21.0 cc:pi:gem 1:1:1 canonical. Each pane tackles a different code area; Claude (you) is controller running fresh-eyes review. Falls back to gmi, then pi, then cc when Codex is unavailable on this host (see AGENTS.md NTM pane priority). 5-min looper. Best for large repos." },
+    { label: "5-Cod swarm via NTM", description: "Spawn 5 Codex panes — codex-heavy mode is the deslop signature (per-pane prompts are codex-tuned) and an explicit override of the v3.21.0 cc:pi:gem 1:1:1 canonical. Each pane tackles a different code area; Claude (you) is controller running fresh-eyes review. Falls back to gmi, then pi, then cc when Codex is unavailable on this host, skipping a lane the doctor reports as disabled (see AGENTS.md NTM pane priority). 5-min looper. Best for large repos." },
     { label: "Iterative (10x via /repeatedly-apply-skill)", description: "Solo agent re-applies the skill 10 times with fresh-eyes review between passes. No NTM required. Good for slow-burn cleanup." }
   ],
   multiSelect: false

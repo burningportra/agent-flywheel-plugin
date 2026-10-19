@@ -54,7 +54,7 @@ function usageText(): string {
     '                   [-- <extra ntm spawn flags>]',
     '',
     'Runs ntm spawn --no-user --stagger-mode=smart for the cc/cod/gmi lanes, then adds',
-    'N Pi panes to the session with tmux split-window. Each Pi pane runs',
+    'N Pi panes to the session with tmux split-window, cycling through the models. Each Pi pane runs',
     '`pi --model <model> --thinking high --no-approve` and prints',
     '{"session","panes":[{"lane","index","paneId","model"}]}.',
   ].join('\n');
@@ -195,7 +195,7 @@ export async function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<Sw
 
   const piPanes = new Map<string, string>();
   for (let i = 0; i < args.piCount; i++) {
-    const model = args.piModels[Math.min(i, args.piModels.length - 1)]!;
+    const model = args.piModels[i % args.piModels.length]!;
     const command = buildPiPaneCommand(piBin, model, `${args.piName}-${i + 1}`);
     const split = ['split-window', '-t', target, '-c', args.cwd, '-P', '-F', '#{pane_id}', ...command];
     let created = await run('tmux', split);

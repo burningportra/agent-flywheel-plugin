@@ -170,10 +170,10 @@ In unattended runs, apply the recommended remediation. Stop if compatibility sta
 
 Load `/ntm` and `/vibing-with-ntm` before spawning. Follow `/vibing-with-ntm` for nudge escalation, the stuck-pane ladder, rate-limit probes, context handoff, and convergence termination.
 
-When `NTM_AVAILABLE=true`, count the panes per lane from the returned lanes: `N_cc`, `N_pi`, `N_gmi`, and `N_cod`. Codex lanes appear only when Pi or Gemini fell back. When `N_pi` is above 0, ask which gateway model the Pi panes run, because gateway models change every few weeks:
+When `NTM_AVAILABLE=true`, count the panes per lane from the returned lanes: `N_cc`, `N_pi`, `N_gmi`, and `N_cod`. Codex lanes appear only when Pi or Gemini fell back. When `N_pi` is above 0, ask which models the Pi panes run, because the models a login can run and the gateway's top models both change every few weeks:
 
-1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })` and pass `data.questions[0]` to `AskUserQuestion` unchanged. Its first option is the user's last pick.
-2. Call `flywheel_pi_models({ cwd, action: "choose", picks: { implementer: "<answer>" } })` and set `PI_IMPL_MODEL` from `data.piModels.implementer`. An `invalid_input` result lists close ids in `error.details.suggestions`; ask again with those. If `list` fails or `piReady` is false, tell the user that the Pi lanes can't start and stop before spawning.
+1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })` and pass `data.questions[0]` to `AskUserQuestion` unchanged. It is multi-select, and its first options are the user's last picks.
+2. Call `flywheel_pi_models({ cwd, action: "choose", picks: { implementer: "<answer>" } })` with the answer string unchanged, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. It holds one model, or a comma-separated list that `swarm-spawn.js` alternates across the Pi panes. An `invalid_input` result lists close ids in `error.details.suggestions`; ask again with those. If `list` fails or `piReady` is false, tell the user that the Pi lanes can't start and stop before spawning.
 
 ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc, gmi, and cod lanes and adds the Pi panes to the same session with tmux:
 

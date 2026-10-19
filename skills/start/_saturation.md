@@ -110,7 +110,7 @@ AskUserQuestion(questions: [{
   question: "<N> saturation beads created but the swarm is offline. How should I proceed?",
   header: "Dispatch",
   options: [
-    { label: "Re-spawn swarm and dispatch", description: "Spin up mixed cc:pi:gmi 1:1:1 (e.g. --cc=2 --pi=2 --gmi=2) through swarm-spawn.js per _inflight_prompt.md and AGENTS.md NTM pane priority; apply the substitution ladder (gmi→pi→cod→cc) if a provider is non-green" },
+    { label: "Re-spawn swarm and dispatch", description: "Spin up mixed cc:pi:gmi 1:1:1 (e.g. --cc=2 --pi=2 --gmi=2) through swarm-spawn.js per _inflight_prompt.md and AGENTS.md NTM pane priority; apply the substitution ladder (gmi→pi→cod→cc) if a provider is non-green or disabled" },
     { label: "Save for next session", description: "Beads are tagged and queued — they'll show up at next /start as 'open beads exist'" },
     { label: "Spawn smaller swarm", description: "Mixed 1:1:1 at smaller scale (e.g. --cc=1 --pi=1 --gmi=1) — sufficient if the saturation bead count is small; same substitution ladder applies" }
   ],

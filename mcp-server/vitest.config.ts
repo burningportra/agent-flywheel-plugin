@@ -7,8 +7,11 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
-    // Tests that run the real doctor would otherwise write its probe cache to ~/.cache.
-    env: { XDG_CACHE_HOME: join(tmpdir(), 'agent-flywheel-vitest-cache') },
+    // Keep tests off ~/.cache (the real doctor's probe cache) and ~/.config (the user's flywheel.config.yaml lanes).
+    env: {
+      XDG_CACHE_HOME: join(tmpdir(), 'agent-flywheel-vitest-cache'),
+      XDG_CONFIG_HOME: join(tmpdir(), 'agent-flywheel-vitest-config'),
+    },
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
