@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-// ── T11 mocks (must be hoisted before review.ts is imported) ──
-// These cover the modules `handleBatchReview` (T4) calls that aren't
-// reachable via the existing `createMockExec` harness: filesystem reads
-// of the verdict file, bead-synthesis side effects, and CASS notes.
+// ── batch_review mocks (must be hoisted before review.ts is imported) ──
+// These cover the modules `handleBatchReview` calls that aren't reachable
+// via the existing `createMockExec` harness: the verdict directory, filing
+// beads from a verdict, and CASS reads.
 // Non-batch_review code paths in review.ts do not touch these modules,
 // so the mocks are inert for the rest of the suite.
 vi.mock('node:fs', async () => {
@@ -19,9 +19,9 @@ vi.mock('node:fs', async () => {
         },
     };
 });
-vi.mock('../../commit-batch.js', () => ({
-    synthesizeBeadsFromFindings: vi.fn(),
-    rollbackSynthesizedBeads: vi.fn(async () => ({ deleted: [], closed: [], failed: [] })),
+vi.mock('../../commit-batch.js', async () => ({
+    ...await vi.importActual('../../commit-batch.js'),
+    applyBatchReviewVerdict: vi.fn(),
 }));
 vi.mock('../../memory.js', () => ({
     readMemory: vi.fn(() => ''),
@@ -30,8 +30,8 @@ vi.mock('../../memory.js', () => ({
 import { promises as fsPromises } from 'node:fs';
 import { runReview } from '../../tools/review.js';
 import { createMockExec, makeState } from '../helpers/mocks.js';
-import { synthesizeBeadsFromFindings, rollbackSynthesizedBeads } from '../../commit-batch.js';
-import { appendMemory, readMemory } from '../../memory.js';
+import { applyBatchReviewVerdict } from '../../commit-batch.js';
+import { readMemory } from '../../memory.js';
 // ─── Helpers ──────────────────────────────────────────────────
 function makeBead(overrides = {}) {
     return {
@@ -854,11 +854,10 @@ describe('runReview', () => {
             }
         });
     });
-    // ── T11 — action=batch_review verdict-handling branches ───────
-    // Covers the Phase-2 (verdict file present) paths of `handleBatchReview`:
-    //   blocking      → `synthesized_beads_pending` with bead IDs + mapping
-    //   pass          → `advance_wave` (no synth)
-    //   malformed     → `needs_attention` fallback + CASS note via appendMemory
+    // ── action=batch_review routing ───────────────────────────────
+    // `applyBatchReviewVerdict` (covered in commit-batch.test.ts) files the
+    // beads; these tests cover what the tool tells the coordinator for each
+    // outcome. None of them may hand the decision back to the operator.
     describe('batch_review action', () => {
         const SHA_RANGE = 'abc123..def456';
         function makeFinding(overrides = {}) {
@@ -871,166 +870,133 @@ describe('runReview', () => {
                 ...overrides,
             };
         }
-        function setVerdictFile(payload) {
-            vi.mocked(fsPromises.readFile).mockResolvedValueOnce(typeof payload === 'string' ? payload : JSON.stringify(payload));
+        function batchReview(stateOverrides = {}, execCalls = []) {
+            const harness = makeCtx(stateOverrides, execCalls);
+            const run = () => runReview(harness.ctx, { cwd: '/fake/cwd', beadId: '', action: 'batch_review', shaRange: SHA_RANGE });
+            return { ...harness, run };
         }
         beforeEach(() => {
-            vi.mocked(fsPromises.readFile).mockReset();
+            vi.mocked(applyBatchReviewVerdict).mockReset();
             vi.mocked(fsPromises.mkdir).mockReset();
-            vi.mocked(synthesizeBeadsFromFindings).mockReset();
-            vi.mocked(rollbackSynthesizedBeads).mockReset();
-            vi.mocked(appendMemory).mockReset();
-            vi.mocked(readMemory).mockReset();
-            // Restore sane defaults so unrelated paths in the run never hit real fs.
             vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
-            vi.mocked(rollbackSynthesizedBeads).mockResolvedValue({ deleted: [], closed: [], failed: [] });
-            vi.mocked(appendMemory).mockReturnValue(true);
+            vi.mocked(readMemory).mockReset();
             vi.mocked(readMemory).mockReturnValue('');
         });
-        it('dispatches one reviewer prompt with the exact verdict file as its findings channel', async () => {
-            const { ctx } = makeCtx({}, [
+        it('dispatches one reviewer without holding the swarm, and moves the baseline to the end of the range', async () => {
+            vi.mocked(applyBatchReviewVerdict).mockResolvedValueOnce({ kind: 'pending' });
+            const { run, state, saved } = batchReview({ lastBatchReviewSha: 'abc123' }, [
                 {
                     cmd: 'git',
                     args: ['diff', '--name-only', SHA_RANGE],
                     result: { code: 0, stdout: 'src/handler.ts\nsrc/handler.test.ts\n', stderr: '' },
                 },
             ]);
-            const result = await runReview(ctx, {
-                cwd: '/fake/cwd',
-                beadId: '',
-                action: 'batch_review',
-                shaRange: SHA_RANGE,
-            });
+            const result = await run();
             expect(result.isError).toBeUndefined();
             const text = result.content[0].text;
-            const structured = result.structuredContent;
-            const { prompt, verdictPath } = structured.data;
-            expect(structured.data.kind).toBe('batch_review_dispatch');
-            expect(structured.data.changedFiles).toEqual(['src/handler.ts', 'src/handler.test.ts']);
-            expect(verdictPath).toBe('/fake/cwd/.pi-flywheel/batch-reviews/abc123..def456.json');
-            expect(prompt).toContain(`\`${verdictPath}\``);
-            expect(prompt).toContain('The server reads only this file.');
-            expect(prompt).not.toContain('append a JSON object');
-            expect(prompt).not.toContain('spawn fresh reviewers');
-            expect(prompt).not.toContain('list_window_identities');
-            expect(prompt).not.toContain('ntm --robot-send');
-            expect(prompt.match(/Use ultrathink\./g)).toHaveLength(1);
-            expect(text).toContain(`## Reviewer prompt\n\n${prompt}`);
-            expect(text.split(prompt)).toHaveLength(2);
-            expect(text).toContain('ntm --robot-send');
+            const { data } = result.structuredContent;
+            expect(data.kind).toBe('batch_review_dispatch');
+            expect(data.changedFiles).toEqual(['src/handler.ts', 'src/handler.test.ts']);
+            expect(data.verdictPath).toBe('/fake/cwd/.pi-flywheel/batch-reviews/abc123..def456.json');
+            expect(data.prompt).toContain(`\`${data.verdictPath}\``);
+            expect(data.prompt).toContain('The server reads only this file.');
+            expect(data.prompt).toContain('Every finding becomes a bead');
+            expect(data.prompt).not.toContain('ntm --robot-send');
+            expect(data.prompt.match(/Use ultrathink\./g)).toHaveLength(1);
+            expect(text).toContain(`## Reviewer prompt\n\n${data.prompt}`);
+            expect(text.split(data.prompt)).toHaveLength(2);
+            expect(text).toContain("This review doesn't hold the next wave.");
             expect(text).toContain('not `ntm send`');
-            expect(text).toContain('Do not tear down responsive panes.');
-            expect(text).toContain('The tender daemon is already stopped.');
-            expect(text).toContain('One responsive pane reviews one bead.');
             expect(text).toContain('Agent(subagent_type="general-purpose")');
-            expect(text).toContain(verdictPath);
+            expect(text).not.toContain('tender daemon');
+            expect(state.lastBatchReviewSha).toBe('def456');
+            expect(state.pendingBatchReviews).toEqual([SHA_RANGE]);
+            expect(saved.at(-1)).toMatchObject({ lastBatchReviewSha: 'def456', pendingBatchReviews: [SHA_RANGE] });
         });
-        it('blocking verdict → synthesized_beads_pending with 3 findings (mixed severities) and finding-to-bead mapping', async () => {
+        it('reports the beads filed from the findings and sends the coordinator back to advance_wave', async () => {
             const findings = [
-                makeFinding({ severity: 'low', suggested_bead_title: 'Tidy log line', affected_files: ['src/log.ts'] }),
-                makeFinding({ severity: 'high', suggested_bead_title: 'Fix off-by-one', affected_files: ['src/iter.ts'] }),
-                makeFinding({ severity: 'critical', suggested_bead_title: 'Patch SQL injection', affected_files: ['src/query.ts'] }),
+                makeFinding({ severity: 'low', suggested_bead_title: 'Tidy log line' }),
+                makeFinding({ severity: 'high', suggested_bead_title: 'Fix off-by-one' }),
             ];
-            setVerdictFile({
-                status: 'blocking',
-                findings,
-                sha_range: SHA_RANGE,
+            vi.mocked(applyBatchReviewVerdict).mockResolvedValueOnce({
+                kind: 'filed',
+                verdict: { status: 'blocking', findings, sha_range: SHA_RANGE },
+                beadIds: ['bead-a', 'bead-b'],
             });
-            const fakeIds = [
-                'wonderful-bhaskara-3e2f85-aaa',
-                'wonderful-bhaskara-3e2f85-bbb',
-                'wonderful-bhaskara-3e2f85-ccc',
-            ];
-            vi.mocked(synthesizeBeadsFromFindings).mockResolvedValueOnce(fakeIds);
-            const { ctx } = makeCtx();
-            const result = await runReview(ctx, {
-                cwd: '/fake/cwd',
-                beadId: '',
-                action: 'batch_review',
-                shaRange: SHA_RANGE,
+            const { run, saved } = batchReview();
+            const result = await run();
+            const text = result.content[0].text;
+            expect(result.structuredContent).toMatchObject({
+                data: {
+                    kind: 'batch_review_verdict',
+                    filedBeadIds: ['bead-a', 'bead-b'],
+                    mapping: [
+                        { beadId: 'bead-a', finding: findings[0] },
+                        { beadId: 'bead-b', finding: findings[1] },
+                    ],
+                    nextStep: { kind: 'advance_wave' },
+                },
             });
-            expect(result.isError).toBeUndefined();
-            const structured = result.structuredContent;
-            expect(structured.data.kind).toBe('batch_review_verdict');
-            expect(structured.data.verdict.status).toBe('blocking');
-            expect(structured.data.nextStep.kind).toBe('synthesized_beads_pending');
-            expect(structured.data.nextStep.beadIds).toEqual(fakeIds);
-            // mapping is finding-index → bead-id, in order
-            expect(structured.data.nextStep.mapping).toHaveLength(3);
-            for (let i = 0; i < 3; i++) {
-                expect(structured.data.nextStep.mapping[i].beadId).toBe(fakeIds[i]);
-                expect(structured.data.nextStep.mapping[i].finding.severity).toBe(findings[i].severity);
-                expect(structured.data.nextStep.mapping[i].finding.suggested_bead_title).toBe(findings[i].suggested_bead_title);
-            }
-            expect(vi.mocked(synthesizeBeadsFromFindings)).toHaveBeenCalledTimes(1);
-            expect(vi.mocked(synthesizeBeadsFromFindings)).toHaveBeenCalledWith('/fake/cwd', expect.any(Object), findings, SHA_RANGE);
-            // No malformed-verdict CASS note on the happy path.
-            expect(vi.mocked(appendMemory)).not.toHaveBeenCalled();
+            expect(text).toContain('## Batch Review: BLOCKING');
+            expect(text).toContain('Filed 2 bead(s) from the findings, prioritized by severity: bead-a, bead-b.');
+            expect(text).toContain('call `flywheel_advance_wave` as usual');
+            expect(text).not.toMatch(/AskUserQuestion|Approve|Reject|prompt the user/);
+            expect(saved).toHaveLength(1);
         });
-        it('pass verdict → advance_wave, with no bead synthesis', async () => {
-            setVerdictFile({
-                status: 'pass',
-                findings: [],
-                sha_range: SHA_RANGE,
+        it('treats a needs_attention verdict the same way, and a clean pass as nothing to file', async () => {
+            vi.mocked(applyBatchReviewVerdict).mockResolvedValueOnce({
+                kind: 'filed',
+                verdict: { status: 'needs_attention', findings: [makeFinding()], sha_range: SHA_RANGE },
+                beadIds: ['bead-c'],
             });
-            const { ctx } = makeCtx();
-            const result = await runReview(ctx, {
-                cwd: '/fake/cwd',
-                beadId: '',
-                action: 'batch_review',
-                shaRange: SHA_RANGE,
+            const attention = await batchReview().run();
+            expect(attention.content[0].text).toContain('## Batch Review: NEEDS ATTENTION');
+            expect(attention.structuredContent).toMatchObject({ data: { filedBeadIds: ['bead-c'], nextStep: { kind: 'advance_wave' } } });
+            vi.mocked(applyBatchReviewVerdict).mockResolvedValueOnce({
+                kind: 'filed',
+                verdict: { status: 'pass', findings: [], sha_range: SHA_RANGE },
+                beadIds: [],
             });
-            expect(result.isError).toBeUndefined();
-            const structured = result.structuredContent;
-            expect(structured.data.kind).toBe('batch_review_verdict');
-            expect(structured.data.verdict.status).toBe('pass');
-            expect(structured.data.nextStep.kind).toBe('advance_wave');
-            // Hard assertion from the marching orders: no synthesis on pass.
-            expect(vi.mocked(synthesizeBeadsFromFindings)).not.toHaveBeenCalled();
-            expect(vi.mocked(appendMemory)).not.toHaveBeenCalled();
+            const pass = await batchReview().run();
+            expect(pass.content[0].text).toContain('No findings.');
+            expect(pass.structuredContent).toMatchObject({ data: { filedBeadIds: [], nextStep: { kind: 'advance_wave' } } });
         });
-        it('malformed Finding[] (missing severity) → Zod fails → needs_attention fallback + CASS note via appendMemory', async () => {
-            // First finding is missing the required `severity` field. JSON.parse
-            // succeeds (it's valid JSON); BatchReviewVerdictSchema.safeParse fails
-            // because FindingSchema requires `severity ∈ {low, medium, high, critical}`.
-            const malformedFinding = {
-                // severity intentionally omitted
-                summary: 'Boundary check missing on user input',
-                suggested_bead_title: 'Add bounds check to handler',
-                affected_files: ['src/handler.ts'],
-                evidence_excerpt: 'if (n > MAX) { /* never asserted */ }',
-            };
-            setVerdictFile({
-                status: 'blocking',
-                findings: [malformedFinding],
-                sha_range: SHA_RANGE,
+        it('shows the raw output of an unreadable verdict next to the re-review bead it filed', async () => {
+            vi.mocked(applyBatchReviewVerdict).mockResolvedValueOnce({
+                kind: 'malformed',
+                reason: 'Verdict JSON parse failed: Unexpected token',
+                rawSnippet: 'Here are my findings: the cache leaks.',
+                beadIds: ['bead-rereview'],
             });
-            const { ctx } = makeCtx();
-            const result = await runReview(ctx, {
-                cwd: '/fake/cwd',
-                beadId: '',
-                action: 'batch_review',
-                shaRange: SHA_RANGE,
+            const result = await batchReview().run();
+            const text = result.content[0].text;
+            expect(text).toContain('## Batch Review: UNREADABLE VERDICT');
+            expect(text).toContain('Verdict JSON parse failed: Unexpected token');
+            expect(text).toContain('Filed bead-rereview to re-review these commits.');
+            expect(text).toContain('Here are my findings: the cache leaks.');
+            expect(result.structuredContent).toMatchObject({
+                data: { malformed: true, filedBeadIds: ['bead-rereview'], nextStep: { kind: 'advance_wave' } },
             });
-            expect(result.isError).toBeUndefined();
-            const structured = result.structuredContent;
-            expect(structured.data.kind).toBe('batch_review_verdict');
-            expect(structured.data.malformed).toBe(true);
-            expect(structured.data.nextStep.kind).toBe('needs_attention');
-            expect(structured.data.nextStep.findings).toEqual([]);
-            // The schema-failure reason should mention severity (the missing field).
-            expect(structured.data.reason).toMatch(/schema|severity/i);
-            // Raw reviewer output is surfaced so a human still sees what landed.
-            expect(structured.data.rawVerdictSnippet).toContain('Boundary check missing');
-            // CASS note recorded under the 'batch-review' category.
-            expect(vi.mocked(appendMemory)).toHaveBeenCalledTimes(1);
-            const [appendCwd, appendContent, appendCategory] = vi.mocked(appendMemory).mock.calls[0];
-            expect(appendCwd).toBe('/fake/cwd');
-            expect(appendContent).toMatch(/malformed batch-review verdict/i);
-            expect(appendContent).toContain(SHA_RANGE);
-            expect(appendCategory).toBe('batch-review');
-            // No bead synthesis on schema failure.
-            expect(vi.mocked(synthesizeBeadsFromFindings)).not.toHaveBeenCalled();
+        });
+        it('saves the beads filed before a failure and says a repeat call resumes', async () => {
+            vi.mocked(applyBatchReviewVerdict).mockImplementationOnce(async (_cwd, state, range) => {
+                state.batchReviewSynthesizedBeads = { [range]: ['bead-a'] };
+                throw new Error('br create failed for finding 2/3 (high: Fix off-by-one): database is locked');
+            });
+            const { run, saved } = batchReview();
+            const result = await run();
+            expect(result.isError).toBe(true);
+            expect(result.structuredContent).toMatchObject({
+                data: {
+                    error: {
+                        code: 'internal_error',
+                        message: expect.stringContaining('database is locked'),
+                        hint: expect.stringContaining('files only the findings that have no bead yet'),
+                        details: { shaRange: SHA_RANGE, filedBeadIds: ['bead-a'] },
+                    },
+                },
+            });
+            expect(saved.at(-1)?.batchReviewSynthesizedBeads).toEqual({ [SHA_RANGE]: ['bead-a'] });
         });
     });
 });

@@ -34,8 +34,9 @@ describe("buildFreshEyesPrompt", () => {
             findingsPath: "/repo/.pi-flywheel/batch-reviews/abc123..def456.json",
             emitStructuredFindings: true,
         });
-        expect(Buffer.byteLength(prompt)).toBe(1715);
-        expect(sha256(prompt)).toBe("64232b5f4bc9f04a69c9127c922a6e6afb2ef16e08d082453c2342386317527c");
+        expect(Buffer.byteLength(prompt)).toBe(1708);
+        expect(sha256(prompt)).toBe("56e8abdd5a016479b837d78899443cade33075b44240a5ea00c8d22752b96109");
+        expect(prompt).toContain("Every finding becomes a bead, prioritized by severity, so list only real issues.");
         expect(prompt).toContain('"sha_range": "abc123..def456"');
         expect(prompt).toContain("`/repo/.pi-flywheel/batch-reviews/abc123..def456.json`");
         expect(prompt).toContain("The server reads only this file.");

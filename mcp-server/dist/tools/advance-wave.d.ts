@@ -33,19 +33,28 @@ export interface AdvanceWaveOutcome {
         reason: 'auto_approve_recommended' | 'below_threshold' | 'no_state' | 'kill_switch_off' | 'no_active_plan';
     };
     /**
-     * v3.17.0 fresh-eyes auto-trigger (plan
-     * `docs/plans/2026-05-13-fresh-eyes-auto-trigger.md`). When set, the
-     * coordinator MUST dispatch a fresh-eyes review over `lastBaselineSha..
-     * reviewSha` before advancing to the next wave. `nextWave` is `null` in
-     * this case and `waveComplete` is `false` — the wave isn't done until
-     * the review verdict lands.
+     * Set when `commitBatchThreshold` commits have landed since the batch-review
+     * baseline. The wave still advances: the coordinator dispatches `nextWave`
+     * as usual and sends one reviewer over `shaRange` alongside it, via
+     * `flywheel_review(action: "batch_review", shaRange)`.
      */
     nextStep?: {
         kind: 'batch_review_due';
-        /** HEAD sha captured at gate time (dispatch baseline — risk #3). */
+        /** HEAD at gate time, the end of the range. */
         reviewSha: string;
-        /** Prior baseline; undefined on the very first batch review of the session. */
-        lastBaselineSha?: string;
+        /** `lastBatchReviewSha`, or `cycleStartSha` before the first review. */
+        lastBaselineSha: string;
+        /** `<lastBaselineSha>..<reviewSha>`, ready to pass to `flywheel_review`. */
+        shaRange: string;
+    };
+    /** Batch reviews this call found in `pendingBatchReviews`: beads filed from
+     *  verdicts that landed, and ranges still waiting on their reviewer. */
+    batchReviews?: {
+        filed: Array<{
+            shaRange: string;
+            beadIds: string[];
+        }>;
+        pending: string[];
     };
 }
 export declare function runAdvanceWave(ctx: ToolContext, args: AdvanceWaveArgs): Promise<McpToolResult>;
