@@ -115,10 +115,10 @@ export type PerCriterionVerdict = z.infer<typeof PerCriterionVerdictSchema>;
 export declare const GraderVerdictSchemaV1: z.ZodObject<{
     version: z.ZodLiteral<1>;
     status: z.ZodEnum<{
+        failed: "failed";
         satisfied: "satisfied";
         needs_revision: "needs_revision";
         max_iterations_reached: "max_iterations_reached";
-        failed: "failed";
     }>;
     iteration: z.ZodNumber;
     perCriterion: z.ZodArray<z.ZodObject<{
@@ -133,8 +133,8 @@ export declare const GraderVerdictSchemaV1: z.ZodObject<{
     }, z.core.$strip>>;
     explanation: z.ZodString;
     modelUsed: z.ZodEnum<{
-        claude: "claude";
         codex: "codex";
+        claude: "claude";
     }>;
     durationMs: z.ZodNumber;
     timestamp: z.ZodString;

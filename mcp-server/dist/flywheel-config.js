@@ -1,5 +1,7 @@
 /**
- * Minimal loader for `flywheel.config.yaml` at the repo root.
+ * Minimal loader for `flywheel.config.yaml`. It reads the user-level file at
+ * `${XDG_CONFIG_HOME:-~/.config}/agent-flywheel/flywheel.config.yaml`, then the
+ * repo-root file, and a key set in the repo file wins.
  *
  * Only the fields B-AC2 introduces are read here. We intentionally do NOT add a
  * YAML dependency — the file is expected to be hand-edited and small, and a
@@ -10,6 +12,10 @@
  *
  *   convergence:
  *     gate_advance_wave: true   # default true
+ *   lanes:
+ *     gemini: true              # false keeps Gemini out of every swarm
+ *     codex: true
+ *     pi: true
  *
  * R-008 (agent-ergonomics audit pass 4) — strict-key validation with
  * Levenshtein-1 typo suggestions. Currently warn-only (collect warnings
@@ -17,21 +23,33 @@
  * path is: v3.x warns, v4.0 fails. This is the warn-only stage.
  */
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
+export const CONFIGURABLE_LANES = ['gemini', 'codex', 'pi'];
 /**
  * R-008 — known keys per nesting level. Adding a new field elsewhere
  * MUST update this map AND DEFAULT_CONFIG. Keep them lockstep.
  */
 const KNOWN_KEYS = {
-    '': ['convergence'],
+    '': ['convergence', 'lanes'],
     convergence: ['gate_advance_wave'],
+    lanes: CONFIGURABLE_LANES,
 };
 export const DEFAULT_CONFIG = {
     convergence: {
         gate_advance_wave: true,
     },
+    lanes: {
+        gemini: true,
+        codex: true,
+        pi: true,
+    },
 };
 const CONFIG_FILENAME = 'flywheel.config.yaml';
+export function userConfigPath() {
+    const base = process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config');
+    return path.join(base, 'agent-flywheel', CONFIG_FILENAME);
+}
 /**
  * Levenshtein distance between two short strings. Returns Infinity if
  * either input is suspiciously long (we only ever compare config keys,
@@ -183,19 +201,59 @@ function collectConfigWarnings(parsed) {
             });
         }
     }
-    // Type check on the recognized fields.
-    const conv = parsed.convergence;
-    if (conv && typeof conv === 'object') {
-        const gate = conv.gate_advance_wave;
-        if (gate !== undefined && typeof gate !== 'boolean') {
+    // Every recognized leaf is a boolean.
+    for (const [topKey, known] of Object.entries(KNOWN_KEYS)) {
+        const node = parsed[topKey];
+        if (topKey === '' || typeof node !== 'object' || node === null)
+            continue;
+        for (const subKey of known) {
+            const value = node[subKey];
+            if (value === undefined || typeof value === 'boolean')
+                continue;
             warnings.push({
                 kind: 'wrong_type',
-                path: 'convergence.gate_advance_wave',
-                message: `convergence.gate_advance_wave must be a boolean (true|false); got ${JSON.stringify(gate)}. Using default.`,
+                path: `${topKey}.${subKey}`,
+                message: `${topKey}.${subKey} must be a boolean (true|false); got ${JSON.stringify(value)}. Using default.`,
             });
         }
     }
     return warnings;
+}
+function readConfigLayer(configPath, tagFile) {
+    let raw;
+    try {
+        raw = readFileSync(configPath, 'utf8');
+    }
+    catch {
+        return { parsed: {}, warnings: [] };
+    }
+    const tag = (warning) => tagFile ? { ...warning, file: configPath } : warning;
+    try {
+        const parsed = parseTinyYaml(raw);
+        return { parsed, warnings: collectConfigWarnings(parsed).map(tag) };
+    }
+    catch (err) {
+        return {
+            parsed: {},
+            warnings: [tag({
+                    kind: 'unparseable_yaml',
+                    path: '',
+                    message: `Could not parse ${configPath}: ${err instanceof Error ? err.message : String(err)}. Using defaults.`,
+                })],
+        };
+    }
+}
+function pickBoolean(layers, topKey, subKey, fallback) {
+    let value = fallback;
+    for (const layer of layers) {
+        const node = layer.parsed[topKey];
+        if (typeof node !== 'object' || node === null)
+            continue;
+        const candidate = node[subKey];
+        if (typeof candidate === 'boolean')
+            value = candidate;
+    }
+    return value;
 }
 /**
  * R-008 — full loader returning config + warnings + source. The
@@ -204,43 +262,26 @@ function collectConfigWarnings(parsed) {
  */
 export function loadFlywheelConfigWithWarnings(cwd) {
     const configPath = path.join(cwd, CONFIG_FILENAME);
-    let raw;
-    try {
-        raw = readFileSync(configPath, 'utf8');
-    }
-    catch {
-        return { config: DEFAULT_CONFIG, warnings: [], source: configPath };
-    }
-    let parsed;
-    try {
-        parsed = parseTinyYaml(raw);
-    }
-    catch (err) {
-        return {
-            config: DEFAULT_CONFIG,
-            warnings: [
-                {
-                    kind: 'unparseable_yaml',
-                    path: '',
-                    message: `Could not parse ${configPath}: ${err instanceof Error ? err.message : String(err)}. Using defaults.`,
-                },
-            ],
-            source: configPath,
-        };
-    }
-    const warnings = collectConfigWarnings(parsed);
-    const convNode = parsed.convergence;
-    if (typeof convNode !== 'object' || convNode === null) {
-        return { config: DEFAULT_CONFIG, warnings, source: configPath };
-    }
-    const conv = convNode;
-    const gate = typeof conv.gate_advance_wave === 'boolean'
-        ? conv.gate_advance_wave
-        : DEFAULT_CONFIG.convergence.gate_advance_wave;
+    const userPath = userConfigPath();
+    const layers = [
+        ...(path.resolve(userPath) === path.resolve(configPath) ? [] : [readConfigLayer(userPath, true)]),
+        readConfigLayer(configPath, false),
+    ];
+    const config = {
+        convergence: {
+            gate_advance_wave: pickBoolean(layers, 'convergence', 'gate_advance_wave', DEFAULT_CONFIG.convergence.gate_advance_wave),
+        },
+        lanes: {
+            gemini: pickBoolean(layers, 'lanes', 'gemini', DEFAULT_CONFIG.lanes.gemini),
+            codex: pickBoolean(layers, 'lanes', 'codex', DEFAULT_CONFIG.lanes.codex),
+            pi: pickBoolean(layers, 'lanes', 'pi', DEFAULT_CONFIG.lanes.pi),
+        },
+    };
     return {
-        config: { convergence: { gate_advance_wave: gate } },
-        warnings,
+        config,
+        warnings: layers.flatMap((layer) => layer.warnings),
         source: configPath,
+        userSource: userPath,
     };
 }
 export function loadFlywheelConfig(cwd) {

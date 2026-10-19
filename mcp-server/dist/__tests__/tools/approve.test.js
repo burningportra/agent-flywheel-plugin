@@ -59,7 +59,7 @@ function availableCliCalls(gemini = true, pi = true) {
         },
         {
             cmd: 'pi',
-            args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--no-refresh'],
+            args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--json'],
             result: { code: 0, stdout: 'ready\n', stderr: '' },
         },
     ];

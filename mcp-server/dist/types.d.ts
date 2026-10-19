@@ -727,6 +727,7 @@ export declare const DoctorCheckSchema: z.ZodObject<{
     message: z.ZodString;
     hint: z.ZodOptional<z.ZodString>;
     durationMs: z.ZodOptional<z.ZodNumber>;
+    disabled: z.ZodOptional<z.ZodLiteral<true>>;
 }, z.core.$strip>;
 export type DoctorCheck = z.infer<typeof DoctorCheckSchema>;
 export declare const NtmReadinessSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
@@ -770,6 +771,7 @@ export declare const DoctorReportSchema: z.ZodObject<{
         message: z.ZodString;
         hint: z.ZodOptional<z.ZodString>;
         durationMs: z.ZodOptional<z.ZodNumber>;
+        disabled: z.ZodOptional<z.ZodLiteral<true>>;
     }, z.core.$strip>>;
     ntm: z.ZodOptional<z.ZodDiscriminatedUnion<[z.ZodObject<{
         NTM_AVAILABLE: z.ZodLiteral<true>;

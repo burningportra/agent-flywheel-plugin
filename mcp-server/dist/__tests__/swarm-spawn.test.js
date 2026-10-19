@@ -123,7 +123,7 @@ function fakeTmux(overrides = () => undefined) {
     return { exec, calls };
 }
 describe('spawnSwarm', () => {
-    it('spawns the NTM lanes, then one Pi pane per model with the last model repeating', async () => {
+    it('spawns the NTM lanes, then Pi panes that cycle through the models', async () => {
         const { exec, calls } = fakeTmux();
         const result = await spawnSwarm(args({ piCount: 3 }), exec);
         expect(result).toEqual({
@@ -133,7 +133,7 @@ describe('spawnSwarm', () => {
                 { lane: 'cc', index: 0, paneId: '%45', title: 'proj--deep-plan-x__cc_1' },
                 { lane: 'pi', index: 1, paneId: '%46', title: 'proj--deep-plan-x__pi_1', model: DEEPSEEK },
                 { lane: 'pi', index: 2, paneId: '%47', title: 'proj--deep-plan-x__pi_2', model: GLM },
-                { lane: 'pi', index: 3, paneId: '%48', title: 'proj--deep-plan-x__pi_3', model: GLM },
+                { lane: 'pi', index: 3, paneId: '%48', title: 'proj--deep-plan-x__pi_3', model: DEEPSEEK },
             ],
         });
         expect(exec).toHaveBeenCalledWith('ntm', ['spawn', 'proj', '--label', 'deep-plan-x', '--no-user', '--cc=1', '--stagger-mode=smart'], expect.objectContaining({ timeout: 180_000, cwd: '/repo' }));

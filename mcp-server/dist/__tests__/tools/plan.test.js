@@ -500,7 +500,7 @@ describe('runPlan', () => {
         });
         const piAuth = (ready) => ({
             cmd: 'pi',
-            args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--no-refresh'],
+            args: ['auth', 'check', '--provider', 'vercel-ai-gateway', '--json'],
             result: ready
                 ? { code: 0, stdout: 'ready\n', stderr: '' }
                 : { code: 1, stdout: 'not_ready\n', stderr: '' },

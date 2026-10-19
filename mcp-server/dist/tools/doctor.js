@@ -1056,6 +1056,15 @@ async function checkSwarmModelCli(checkName, provider, capsPromise, signal, now)
     try {
         const caps = await capsPromise;
         const cap = caps[provider];
+        if (cap.disabled) {
+            return {
+                name: checkName,
+                severity: 'green',
+                message: `${provider} lane disabled in flywheel.config.yaml`,
+                disabled: true,
+                durationMs: now() - start,
+            };
+        }
         if (cap.available) {
             return {
                 name: checkName,
@@ -1087,7 +1096,8 @@ async function checkSwarmModelCli(checkName, provider, capsPromise, signal, now)
 /**
  * 15. Synthesised swarm model ratio. Reports the Claude:Pi:Gemini
  * ratio achievable in this environment. Severity:
- *   - green when all three primary lanes are usable (1:1:1).
+ *   - green when every primary lane is usable or switched off in
+ *     flywheel.config.yaml, since a switched-off lane's share is meant to move.
  *   - yellow when at least one primary lane or the Codex fallback is usable.
  *   - red when no primary lane or Codex fallback is usable.
  */
@@ -1099,7 +1109,8 @@ async function checkSwarmModelRatio(capsPromise, signal, now) {
         const caps = await capsPromise;
         const description = describeCapabilities(caps);
         const primaryAvailableCount = PRIMARY_PROVIDERS.reduce((acc, p) => acc + (caps[p].available ? 1 : 0), 0);
-        if (primaryAvailableCount === PRIMARY_PROVIDERS.length) {
+        const unexpectedMissing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available && !caps[p].disabled);
+        if (unexpectedMissing.length === 0 && primaryAvailableCount > 0) {
             return {
                 name: 'swarm_model_ratio',
                 severity: 'green',
@@ -1284,6 +1295,15 @@ async function checkGeminiModelCompat(exec, cwd, signal, timeout, now, capsPromi
         }
         else {
             const caps = await capsPromise;
+            if (caps.gemini.disabled) {
+                return {
+                    name: 'gemini_model_compat',
+                    severity: 'green',
+                    message: 'gemini lane disabled in flywheel.config.yaml — nothing to validate',
+                    disabled: true,
+                    durationMs: now() - start,
+                };
+            }
             if (!caps.gemini.available) {
                 return {
                     name: 'gemini_model_compat',

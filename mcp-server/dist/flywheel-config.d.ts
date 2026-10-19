@@ -1,5 +1,7 @@
 /**
- * Minimal loader for `flywheel.config.yaml` at the repo root.
+ * Minimal loader for `flywheel.config.yaml`. It reads the user-level file at
+ * `${XDG_CONFIG_HOME:-~/.config}/agent-flywheel/flywheel.config.yaml`, then the
+ * repo-root file, and a key set in the repo file wins.
  *
  * Only the fields B-AC2 introduces are read here. We intentionally do NOT add a
  * YAML dependency — the file is expected to be hand-edited and small, and a
@@ -10,6 +12,10 @@
  *
  *   convergence:
  *     gate_advance_wave: true   # default true
+ *   lanes:
+ *     gemini: true              # false keeps Gemini out of every swarm
+ *     codex: true
+ *     pi: true
  *
  * R-008 (agent-ergonomics audit pass 4) — strict-key validation with
  * Levenshtein-1 typo suggestions. Currently warn-only (collect warnings
@@ -19,8 +25,16 @@
 export interface FlywheelConfigConvergence {
     gate_advance_wave: boolean;
 }
+/** Swarm lanes a user can switch off. Claude runs the coordinator, so it stays on. */
+export interface FlywheelConfigLanes {
+    gemini: boolean;
+    codex: boolean;
+    pi: boolean;
+}
+export declare const CONFIGURABLE_LANES: readonly ["gemini", "codex", "pi"];
 export interface FlywheelConfig {
     convergence: FlywheelConfigConvergence;
+    lanes: FlywheelConfigLanes;
 }
 /**
  * R-008 — single warning surfaced from the loader. Each reports a
@@ -34,14 +48,19 @@ export interface FlywheelConfigWarning {
     message: string;
     /** present for unknown_key when a Levenshtein-1 match exists */
     suggestion?: string;
+    /** the file the warning came from */
+    file?: string;
 }
 export interface FlywheelConfigResult {
     config: FlywheelConfig;
     warnings: FlywheelConfigWarning[];
-    /** absolute path that was attempted (whether or not it existed) */
+    /** absolute path of the repo file that was attempted (whether or not it existed) */
     source: string;
+    /** absolute path of the user-level file that was attempted */
+    userSource: string;
 }
 export declare const DEFAULT_CONFIG: FlywheelConfig;
+export declare function userConfigPath(): string;
 /**
  * R-008 — return the closest known key within Levenshtein distance 1, or
  * undefined if nothing is close enough. Used to suggest "did you mean".

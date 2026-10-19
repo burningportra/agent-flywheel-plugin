@@ -789,11 +789,11 @@ describe('pi_cli and swarm_model_ratio', () => {
         const { pi, ratio } = await sweep([
             {
                 match: (cmd, args) => cmd === 'pi' && args[0] === 'auth',
-                respond: { result: { code: 1, stdout: 'not_ready', stderr: '' } },
+                respond: { result: { code: 1, stdout: '{"status":"not_ready","provider":"vercel-ai-gateway","reason":"credentials_not_configured"}', stderr: '' } },
             },
         ]);
         expect(pi.severity).toBe('yellow');
-        expect(pi.message).toBe('pi cli not ready (pi auth check for vercel-ai-gateway: not_ready)');
+        expect(pi.message).toBe('pi cli not ready (pi auth check: vercel-ai-gateway not_ready (credentials_not_configured))');
         expect(ratio.severity).toBe('yellow');
         expect(ratio.message).toContain('pi missing; ratio 1:0:1 achievable; codex fallback available');
     });
@@ -806,6 +806,53 @@ describe('pi_cli and swarm_model_ratio', () => {
         ]);
         expect(pi.severity).toBe('yellow');
         expect(pi.message).toContain('pi cli not installed');
+    });
+});
+describe('a lane switched off in flywheel.config.yaml', () => {
+    it('reports Gemini as disabled and green, and keeps the swarm ratio green', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            writeFileSync(join(cwd, 'flywheel.config.yaml'), 'lanes:\n  gemini: false\n');
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec(allGreenStubs()),
+                codexConfigPath: null,
+            });
+            const check = (name) => report.checks.find((c) => c.name === name);
+            expect(check('gemini_cli')).toMatchObject({ severity: 'green', message: 'gemini lane disabled in flywheel.config.yaml', disabled: true });
+            expect(check('swarm_model_ratio')).toMatchObject({
+                severity: 'green',
+                message: 'claude+pi available; gemini disabled; ratio 1:1:0 achievable; codex fallback available',
+            });
+            expect(check('gemini_model_compat')).toMatchObject({
+                severity: 'green',
+                message: 'gemini lane disabled in flywheel.config.yaml — nothing to validate',
+                disabled: true,
+            });
+            expect(check('pi_cli')).not.toHaveProperty('disabled');
+        }
+        finally {
+            cleanup(cwd);
+        }
+    });
+    it('stays yellow when the lane that would take the share is missing', async () => {
+        const cwd = makeTmpCwd();
+        try {
+            writeFileSync(join(cwd, 'flywheel.config.yaml'), 'lanes:\n  gemini: false\n');
+            const report = await runDoctorChecks(cwd, undefined, {
+                exec: makeStubbedExec([
+                    { match: (cmd, args) => cmd === 'which' && args[0] === 'pi', respond: { result: { code: 1, stdout: '', stderr: '' } } },
+                    ...allGreenStubs(),
+                ]),
+                codexConfigPath: null,
+            });
+            expect(report.checks.find((c) => c.name === 'swarm_model_ratio')).toMatchObject({
+                severity: 'yellow',
+                message: 'claude available; pi missing; gemini disabled; ratio 1:0:0 achievable; codex fallback available',
+            });
+        }
+        finally {
+            cleanup(cwd);
+        }
     });
 });
 describe('gemini_model_compat (integrated)', () => {

@@ -1,11 +1,13 @@
 /**
  * Swarm-agent model diversity — Claude : Pi : Gemini at 1:1:1, with Codex
- * as the fallback that takes Pi's share. Pi runs on a Vercel AI Gateway
- * model the user picks through `flywheel_pi_models`.
+ * as the fallback that takes Pi's share. Pi runs on a model the user picks
+ * through `flywheel_pi_models`, on one of their own logins or the Vercel AI
+ * Gateway. A lane switched off under `lanes:` in flywheel.config.yaml hands
+ * its share down the same fallback order without counting as degraded.
  *
  * Responsibilities:
  *   1. Detect CLI availability (`which claude codex gemini pi`, plus Pi's
- *      gateway credentials).
+ *      route credentials and the lane switches in flywheel.config.yaml).
  *   2. Split N ready beads across available providers as floor(N/3) each
  *      with a priority-ordered remainder.
  *   3. Fall back gracefully when a CLI is missing and emit a warning so
@@ -26,6 +28,8 @@ export interface CliCapability {
     readonly path?: string;
     /** Error text when unavailable (ENOENT or version probe failure). */
     readonly reason?: string;
+    /** True when the user switched this lane off in flywheel.config.yaml. */
+    readonly disabled?: boolean;
 }
 export interface CapabilitiesMap {
     readonly claude: CliCapability;
@@ -71,6 +75,7 @@ export declare const PRIMARY_PROVIDERS: readonly ["claude", "pi", "gemini"];
  * Contract:
  *   - sum(lane.beadIds.length) == beadIds.length
  *   - lanes contain only providers with `available === true`
+ *   - a disabled provider's share moves like a missing one's, silently
  *   - lane order is claude, pi, gemini, codex (stable; skipped entries omit)
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
@@ -86,6 +91,7 @@ export declare function adaptPromptFor(provider: ModelProvider, ctx: BeadDispatc
  * Describe the capabilities map in a doctor-ready one-liner.
  *   All-available → "claude+pi+gemini available; ratio 1:1:1 achievable"
  *   Missing pi    → "claude+gemini available; pi missing; ratio 1:0:1 achievable; codex fallback available"
+ *   Gemini off    → "claude+pi available; gemini disabled; ratio 1:1:0 achievable; codex fallback available"
  */
 export declare function describeCapabilities(caps: CapabilitiesMap): string;
 //# sourceMappingURL=model-diversity.d.ts.map

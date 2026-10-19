@@ -980,7 +980,19 @@ export declare const TOOLS: ({
                         type: string;
                     };
                     implementer: {
-                        type: string;
+                        anyOf: ({
+                            type: string;
+                            items?: undefined;
+                            minItems?: undefined;
+                            maxItems?: undefined;
+                        } | {
+                            type: string;
+                            items: {
+                                type: string;
+                            };
+                            minItems: number;
+                            maxItems: number;
+                        })[];
                     };
                 };
             };

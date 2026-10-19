@@ -380,7 +380,7 @@ const PRIMARY_TOOLS = [
     },
     {
         name: 'flywheel_pi_models',
-        description: 'Pick models for Pi lanes from the live Vercel AI Gateway catalog and usage leaderboard. action="list" ranks tool-capable models by recent gateway token share and returns one AskUserQuestion payload per role in data.questions. action="choose" takes the answers keyed by role, resolves each to a vercel-ai-gateway/<id> model, runs pi auth check, remembers the picks in .pi-flywheel/pi-models.json, and returns data.piModels plus data.piReady.',
+        description: 'Pick models for Pi lanes from your own Pi logins (xai, meta, openai-codex, zai and others, each model verified by a cached test call) and the live Vercel AI Gateway catalog. action="list" ranks frontier models for the deep-plan roles by list price and balanced models for the implementer by gateway usage, puts logins ahead of metered gateway routes, and returns one AskUserQuestion payload per role in data.questions; the implementer question is multiSelect. action="choose" takes the answers keyed by role, resolves each to a `pi --model` value, runs pi auth check for each provider, remembers the picks in .pi-flywheel/pi-models.json, and returns data.piModels (the implementer value is comma-separated) plus data.piReady.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -398,16 +398,21 @@ const PRIMARY_TOOLS = [
                 },
                 picks: {
                     type: 'object',
-                    description: 'Required with action=choose. Maps a role to the chosen option label, catalog name, or gateway model id.',
+                    description: 'Required with action=choose. Maps a role to the chosen option label or `pi --model` value. The implementer takes up to 3, as an array or a comma-separated string.',
                     properties: {
                         robustness: { type: 'string' },
                         ergonomics: { type: 'string' },
-                        implementer: { type: 'string' },
+                        implementer: {
+                            anyOf: [
+                                { type: 'string' },
+                                { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 3 },
+                            ],
+                        },
                     },
                 },
                 refresh: {
                     type: 'boolean',
-                    description: 'Refetch even when the cached catalog is under an hour old.',
+                    description: 'Refetch the gateway catalog and re-run the login model probes even when the caches are fresh.',
                 },
             },
             required: ['cwd'],

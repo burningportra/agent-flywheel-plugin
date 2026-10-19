@@ -37,6 +37,8 @@ export const DoctorCheckSchema = z.object({
     message: z.string(),
     hint: z.string().optional(),
     durationMs: z.number().int().nonnegative().optional(),
+    /** The lane this row probes is switched off in flywheel.config.yaml: green, but not usable. */
+    disabled: z.literal(true).optional(),
 });
 export const NtmReadinessSchema = z.discriminatedUnion('NTM_AVAILABLE', [
     z.object({
