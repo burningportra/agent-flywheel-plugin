@@ -3,7 +3,7 @@ description: "Start or resume the full agentic coding flywheel. Drives the compl
 argument-hint: "[goal-or-options]"
 ---
 
-**First action:** Call `flywheel_get_skill({ name: "agent-flywheel:start" })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:start` name as `skills/start/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model. Do NOT inline the menu/routing logic — the skill at `skills/start/SKILL.md` is the single source of truth.
+**First action:** When the flywheel tools are deferred, load every tool the opening screen uses with one `ToolSearch` query, `select:mcp__plugin_agent-flywheel_agent-flywheel__flywheel_get_skill,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_doctor,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_observe,mcp__plugin_agent-flywheel_agent-flywheel__flywheel_memory,AskUserQuestion` (use the names this session lists when its prefix differs), so Step 0 never stops to search again. Then call `flywheel_get_skill({ name: "agent-flywheel:start" })` and follow its returned `body` as the skill, forwarding `$ARGUMENTS` as the skill's input. Do NOT use the `Skill` tool for this: the slash expands to this file and this file is registered under the same `agent-flywheel:start` name as `skills/start/SKILL.md`, so a `Skill` call that re-requests this command's own name comes back as "already loaded above" (what loaded is this pointer, not the skill), and SKILL.md's body never reaches the model. Do NOT inline the menu/routing logic — the skill at `skills/start/SKILL.md` is the single source of truth.
 
 # `/agent-flywheel:start` — thin pointer to the canonical skill
 
@@ -34,6 +34,6 @@ This slash command delegates to the canonical start-skill at `skills/start/SKILL
 
 ## Why this is now a thin pointer
 
-Prior to v3.6.3, this file was a verbatim duplicate of `skills/start/SKILL.md` (~415 LOC). Every menu/routing change had to be applied twice; in practice it was only ever applied to SKILL.md, so the slash command silently served stale menus. The visible symptom: users running `/agent-flywheel:start` saw v3.5.3-era options (`Quick fix`, the old 4-option fresh-start menu) even after cache-fresh installs of v3.6.0+. The skill body was correct; the slash-command body was stale.
+Prior to v3.6.3, this file was a verbatim duplicate of `skills/start/SKILL.md` (~415 LOC). Every menu/routing change had to be applied twice; in practice it was only ever applied to SKILL.md, so the slash command silently served stale menus.
 
 Single source of truth eliminates this class of bug for every future release.

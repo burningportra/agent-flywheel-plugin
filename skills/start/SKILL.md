@@ -43,22 +43,22 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 ### 0a. Detect version
 
-Read the version from `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json`. If that path is unavailable, use the newest cached plugin package:
+Take `VERSION` from the `plugin v<version>` tag in the header line of the `flywheel_get_skill` result that loaded this skill (the same value is in `data.pluginVersion`). Only when the skill came from disk without that tag, read it from `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json`, falling back to the newest cached plugin package:
 ```bash
 { [ -n "$CLAUDE_PLUGIN_ROOT" ] && cat "$CLAUDE_PLUGIN_ROOT/mcp-server/package.json"; } \
   || ls -t ~/.claude/plugins/cache/agent-flywheel/agent-flywheel/*/mcp-server/package.json 2>/dev/null | head -1 | xargs cat 2>/dev/null
 ```
-Extract the version and read the project name from the working directory's `package.json`, falling back to the directory name. Use `v?` when version resolution fails.
+Use `v?` when version resolution fails.
 
 ### 0.banner: show this first
 
-**Resolve `VERSION` first, then print the banner.** Step 0a is the only work before this first visible output. Use `v?` when resolution failed; never print a stale hardcoded version.
+**Resolve `VERSION` first, then print the banner.** Use `v?` when resolution failed; never print a stale hardcoded version. Print it as the text of the same message that makes the Step 0b calls, so the operator sees it while state detection runs.
 
 ```
 ░▒▓ CLAUDE // AGENT-FLYWHEEL v<VERSION> ▓▒░
 ```
 
-Print the code block, then continue with 0.preflight.
+Then continue with 0.preflight.
 
 ### 0.preflight — Captured user input
 
@@ -137,17 +137,14 @@ Route the selected mode:
 
 ### 0b. Detect state
 
-Call `flywheel_doctor({ cwd })` before another MCP tool. Cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. On failure, set the first two values to `null` and `IS_FIRST_RUN = false`.
+Make every call below in one message, in parallel, alongside the 0.banner text. Each one answers on its own, so none waits for another, and Step 0 needs no other tool call before the menu.
 
-After the doctor bootstrap, run checks 1-7 in parallel where possible:
+1. **Doctor.** Call `flywheel_doctor({ cwd })`. Cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. On failure, set the first two values to `null`, `IS_FIRST_RUN = false`, and `MCP_DEGRADED = true`.
+2. **Session, beads, git, and Agent Mail.** Call `flywheel_observe({ cwd })`. Its report holds the checkpoint's phase and goal (`checkpoint.phase`, `checkpoint.selectedGoal`), exact bead counts (`beads.counts.open`, `in_progress`, `blocked`, `closed`), the branch and HEAD (`git.branch`, `git.head`), and `agentMail.reachable`. When `agentMail.reachable` is false, set `AGENT_MAIL_DOWN = true` and show `Agent Mail: offline`. Single-agent routes remain available.
+3. **CASS memory.** Call `flywheel_memory({ cwd, operation: "search", query: "session learnings flywheel", history: 0 })` and `flywheel_memory({ cwd, operation: "search", query: "reality-check session learnings gap analysis", history: 0 })`. `history: 0` keeps the recorded learnings and skips the session-history search, which can take seconds. Skip an unavailable CASS service.
+4. **Files.** Glob `docs/plans/*.md` for Step 0d's plan detection, read `.pi-flywheel/error-counts.json` for 0c's error-code trends, and read the working directory's `package.json` for the project name, falling back to the directory name.
 
-1. **MCP tools.** Call `flywheel_profile({ cwd })` and cache a success for Step 2. Set `MCP_DEGRADED = true` on error. Deferred MCP tools make `ToolSearch` unreliable here.
-2. **Existing session.** Read `.pi-flywheel/checkpoint.json` when present and note its phase and goal.
-3. **Existing beads.** Run `br list --json 2>/dev/null` and count open, in-progress, and closed beads.
-4. **Git status.** Run `git log --oneline -1`.
-5. **CASS memory.** Search `session learnings flywheel`. Skip an unavailable CASS service.
-6. **Agent Mail.** Probe `http://127.0.0.1:8765/health/liveness` with a two-second limit. On failure set `AGENT_MAIL_DOWN = true` and show `Agent Mail: offline`. Single-agent routes remain available.
-7. **NTM.** Read `DOCTOR_REPORT.ntm` for display. Before a spawn route, run `_implement.md` **Pre-flight: resolve NTM readiness** to recompute `NTM_AVAILABLE` and `NTM_PROJECT`.
+Read `DOCTOR_REPORT.ntm` for the NTM display. Before a spawn route, run `_implement.md` **Pre-flight: resolve NTM readiness** to recompute `NTM_AVAILABLE` and `NTM_PROJECT`. The repo profile waits for Step 2, which calls `flywheel_profile` itself.
 
 If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the welcome banner marks the warning state and surfaces every yellow or red check. `IS_FIRST_RUN` is true only when all five server-side signals are absent: no checkpoint, beads, plan markdown, legacy orchestrator state, or project-scoped CASS history.
 
@@ -163,7 +160,7 @@ Display one welcome message:
  ║                                                  ║
  ║   Project: <project-name>                        ║
  ║   Branch:  <current-branch> @ <short-sha>        ║
- ║   Beads:   <N open> | <M in-progress> | <K done> ║
+ ║   Beads:   <N open> | <M in-progress> | <B blocked> | <K done> ║
  ║                                                  ║
  ╚══════════════════════════════════════════════════╝
 ```
@@ -210,14 +207,14 @@ Display three to five relevant CASS learnings when available:
 > **From prior sessions:**
 > - <top 3-5 most relevant learnings, anti-patterns, or gotchas>
 
-Search `error-code telemetry`, or read `.pi-flywheel/error-counts.json`, and show the top three nonzero codes:
+From the `.pi-flywheel/error-counts.json` read in Step 0b, show the top three nonzero codes:
 
 > **Error-code trends (last 10 sessions):**
 > - `<code_1>` — <count> occurrence(s)
 > - `<code_2>` — <count> occurrence(s)
 > - `<code_3>` — <count> occurrence(s)
 
-Search project-scoped memory for `reality-check session learnings gap analysis`. After at least three sessions, suggest a reality check when none ran in the last seven sessions:
+From the reality-check memory search in Step 0b, after at least three sessions, suggest a reality check when none ran in the last seven sessions:
 
 > **Suggestion:** It's been <X> sessions since the last reality-check pass — consider running `/agent-flywheel:flywheel-reality-check` (or pick "Reality check" from the menu) to verify the implementation still matches the project's vision before continuing.
 
@@ -244,7 +241,7 @@ AskUserQuestion(questions: [{
 
 ### 0d. Present the main menu
 
-**Plan detection (run before building the menu).** Glob `docs/plans/*.md` sorted by mtime descending; capture the top 3 as `RECENT_PLAN_PATHS` (relative paths). If none exist, set `RECENT_PLAN_PATHS = []`. This list is surfaced inline in the printed block whenever "Pick up existing plan" is shown so operators can copy-paste a path directly.
+**Plan detection.** From the Step 0b Glob of `docs/plans/*.md`, newest first, capture the top 3 as `RECENT_PLAN_PATHS` (relative paths). If none exist, set `RECENT_PLAN_PATHS = []`. This list is surfaced inline in the printed block whenever "Pick up existing plan" is shown so operators can copy-paste a path directly.
 
 Build `RECENT_PLANS_BLOCK` once from that list:
 
@@ -348,7 +345,7 @@ AskUserQuestion(questions: [{
 
 > **Menu visibility rule.** Before each four-option `AskUserQuestion`, print the state's complete menu. The operator reaches extra entries through Other or their slash commands.
 
-Print this block first (the `• Take the 5-min tour` row appears ONLY when `IS_FIRST_RUN === true` per Step 0b check 9):
+Print this block first (the `• Take the 5-min tour` row appears ONLY when `IS_FIRST_RUN === true` per Step 0b):
 
 ```
 Primary entry points:
@@ -516,7 +513,7 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
 
 **Triage chain (canonical order):** when any check below fails, guide the user through the three commands in this order — `/flywheel-doctor` first (read-only snapshot, always safe, cancellable, under 2s), then `/flywheel-setup` (apply fixes for what doctor found — installs binaries, registers MCP, starts Agent Mail, configures hooks), then `/flywheel-healthcheck` (deep periodic audit of codebase + bead graph + dependencies; run on a cadence, not for setup problems). Never recommend `/flywheel-setup` before `/flywheel-doctor` — doctor is the read-only snapshot that tells setup what to fix.
 
-**MCP tools missing** (flywheel_profile call failed or tool not found in step 0b):
+**MCP tools missing** (the `flywheel_doctor` call failed or the tool was not found in Step 0b):
 
 - Display in the banner: `MCP: not configured — run /flywheel-doctor for a snapshot, then /flywheel-setup to fix`
 - Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
@@ -528,7 +525,7 @@ The user pastes the URL in the "Other" field, or picks a mode first and provides
   - **Step 8:** Offer "Looks good" and "Self review" only (skip `flywheel_review`).
   - **Step 10:** Skip `flywheel_memory` — remind user that session learnings were not auto-persisted.
 
-**Agent Mail offline** (`AGENT_MAIL_DOWN = true` from step 0b check 6):
+**Agent Mail offline** (`AGENT_MAIL_DOWN = true` from Step 0b):
 
 - Display in the banner: `Agent Mail: offline — parallel agents will skip file reservations`
 - Continue without requiring `/flywheel-setup`. Only parallel coordination is degraded.
