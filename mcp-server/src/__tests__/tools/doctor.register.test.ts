@@ -164,12 +164,13 @@ describe('I4 — flywheel_doctor tool registration', () => {
     }
   });
 
-  it('returns firstRun:false after a checkpoint exists', async () => {
+  it('returns firstRun:false after a checkpoint exists, without a cass search', async () => {
     const cwd = makeTmpCwd();
     try {
       writeValidCheckpoint(cwd);
+      const exec = vi.fn(async () => ({ code: 1, stdout: '', stderr: 'not mocked' }));
       const ctx: ToolContext = {
-        exec: async () => ({ code: 1, stdout: '', stderr: 'not mocked' }),
+        exec,
         cwd,
         state: createInitialState(),
         saveState: () => {},
@@ -183,6 +184,7 @@ describe('I4 — flywheel_doctor tool registration', () => {
       };
 
       expect(sc.data.firstRun).toBe(false);
+      expect(exec).not.toHaveBeenCalledWith('cass', expect.anything(), expect.anything());
     } finally {
       cleanup(cwd);
     }
