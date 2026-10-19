@@ -70,6 +70,9 @@ export declare function detectCliCapabilities(exec: ExecFn, opts?: {
     timeout?: number;
     cwd?: string;
     signal?: AbortSignal;
+    probeScope?: string;
+    /** On another Mac, cc panes need a login there; this session's own login proves nothing. */
+    verifyClaudeLogin?: boolean;
 }): Promise<CapabilitiesMap>;
 export declare const PRIMARY_PROVIDERS: readonly ["claude", "pi", "gemini"];
 /**

@@ -136,8 +136,11 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
         ]);
         expect(summary.optional).toContain('reason');
     });
+    // Runs every tool's runner in turn, doctor's full sweep twice among them, so it gets 20 s.
     it('dispatches every advertised tool to a registered runner', async () => {
         const cwd = await mkdtemp(join(tmpdir(), 'flywheel-registration-'));
+        // Keeps the user's remembered swarm hosts (and their mDNS lookups) out of the run.
+        vi.stubEnv('XDG_CONFIG_HOME', cwd);
         const exec = vi.fn(async () => ({ code: 1, stdout: '', stderr: 'fixture failure' }));
         const handler = createCallToolHandler({
             makeExec: vi.fn(() => exec),
@@ -167,9 +170,10 @@ describe('flywheel_capabilities — payload shape against the live TOOLS list', 
             }
         }
         finally {
+            vi.unstubAllEnvs();
             await rm(cwd, { recursive: true, force: true });
         }
-    });
+    }, 20_000);
     it('every tool entry has required[] and optional[] arrays (possibly empty)', () => {
         for (const t of payload.data.mcp_tools) {
             expect(Array.isArray(t.required), `${t.name}.required`).toBe(true);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_HINTS, DEFAULT_RETRYABLE, DEFAULT_TRY_THIS, errMsg } from '../errors.js';
 import { GATEWAY_CATALOG_URL, GATEWAY_LEADERBOARD_URL, MAX_IMPLEMENTER_PICKS, PI_GATEWAY_PROVIDER, PI_LANE_ROLES, PI_ROLE_PROFILE, buildPiCandidates, buildPiModelQuestions, checkPiProviderAuth, discoverPiRoutes, loadGatewaySnapshot, providerOf, rankPiModels, readPiModelPicks, resolvePiModelAnswer, writePiModelPicks, } from '../pi-models.js';
+import { resolveSwarmLane } from '../swarm-host.js';
 import { makeToolResult } from './shared.js';
 const TOOL_NAME = 'flywheel_pi_models';
 const RoleSchema = z.enum(PI_LANE_ROLES);
@@ -99,11 +100,17 @@ export async function runPiModels(ctx, input) {
         });
     }
     const { snapshot } = loaded;
-    const routes = await discoverPiRoutes(ctx.exec, snapshot, {
+    // Implementers run where the swarm runs, so their models must work on that Mac's logins.
+    const askedRoles = args.action === 'list' ? (args.roles ?? ['implementer']) : Object.keys(args.picks ?? {});
+    const lane = askedRoles.length > 0 && askedRoles.every((role) => role === 'implementer')
+        ? await resolveSwarmLane(ctx.cwd, ctx.exec)
+        : { exec: ctx.exec, probeScope: undefined };
+    const routes = await discoverPiRoutes(lane.exec, snapshot, {
         cwd: ctx.cwd,
         signal: ctx.signal,
         now,
         refresh: args.refresh,
+        probeScope: lane.probeScope,
     });
     const candidates = buildPiCandidates(snapshot, { now, directRoutes: routes.directRoutes, gatewayReady: routes.gatewayReady });
     if (candidates.length === 0) {
@@ -190,7 +197,7 @@ export async function runPiModels(ctx, input) {
         resolved[role] = piModels;
     }
     const chosenProviders = [...new Set(Object.values(resolved).flatMap((models) => models?.map(providerOf) ?? []))];
-    const auths = await Promise.all(chosenProviders.map((provider) => checkPiProviderAuth(ctx.exec, provider, { cwd: ctx.cwd, signal: ctx.signal })));
+    const auths = await Promise.all(chosenProviders.map((provider) => checkPiProviderAuth(lane.exec, provider, { cwd: ctx.cwd, signal: ctx.signal })));
     const notReady = auths.filter((auth) => !auth.ready);
     try {
         await writePiModelPicks(ctx.cwd, resolved, now);

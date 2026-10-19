@@ -8,6 +8,7 @@ import { makeExec } from "./exec.js";
 import { errMsg } from "./errors.js";
 import { DEFAULT_TENDER_DAEMON_AGENT, DEFAULT_TENDER_DAEMON_INTERVAL_MS, makeTenderDaemonStoppedEvent, runTenderDaemonOnce, } from "./tender.js";
 import { createLogger } from "./logger.js";
+import { makeSshExec, readSwarmHost } from "./swarm-host.js";
 const execAsync = promisify(execCb);
 const DEFAULT_LOGFILE = ".pi-flywheel/tender-events.log";
 const DEFAULT_NTM_TIMEOUT_MS = 5_000;
@@ -273,7 +274,18 @@ export async function startTenderDaemon(args, deps = {}) {
     const runCommandFn = deps.runCommandFn ?? defaultRunCommand;
     const loggerFactory = deps.createLoggerFn ?? createLogger;
     const log = loggerFactory("tender-daemon");
-    const exec = makeExecFn(args.project);
+    // A swarm on another Mac: its panes, ntm, and Agent Mail answer there, while the log stays here.
+    const host = await readSwarmHost(args.project);
+    const exec = host ? makeSshExec(makeExecFn(args.project), host, host.repoPath) : makeExecFn(args.project);
+    const projectKey = host?.repoPath ?? args.project;
+    const runCommand = host
+        ? async (command, opts) => {
+            const result = await exec('/bin/sh', ['-c', command], { timeout: opts.timeout, signal: opts.signal });
+            if (result.code !== 0)
+                throw Object.assign(new Error(`exit ${result.code}`), result);
+            return { stdout: result.stdout, stderr: result.stderr };
+        }
+        : runCommandFn;
     const logfile = path.isAbsolute(args.logfile)
         ? args.logfile
         : path.join(args.project, args.logfile);
@@ -293,7 +305,7 @@ export async function startTenderDaemon(args, deps = {}) {
     };
     const doPoll = async () => {
         const pollTs = Date.now();
-        const inboxRaw = await fetchInboxFn(exec, args.project, args.agent, {
+        const inboxRaw = await fetchInboxFn(exec, projectKey, args.agent, {
             limit: 200,
             includeBodies: false,
         });
@@ -301,8 +313,8 @@ export async function startTenderDaemon(args, deps = {}) {
             .map((message) => normalizeMessage(message))
             .filter((message) => message !== null);
         const quotedSession = shellQuote(args.session);
-        const robotRaw = await runNtmCommand(runCommandFn, `ntm --robot-is-working ${quotedSession}`, { cwd: args.project, timeout: args.ntmTimeoutMs }, log);
-        const healthRaw = await runNtmCommand(runCommandFn, `ntm --robot-agent-health ${quotedSession}`, { cwd: args.project, timeout: args.ntmTimeoutMs }, log);
+        const robotRaw = await runNtmCommand(runCommand, `ntm --robot-is-working ${quotedSession}`, { cwd: args.project, timeout: args.ntmTimeoutMs }, log);
+        const healthRaw = await runNtmCommand(runCommand, `ntm --robot-agent-health ${quotedSession}`, { cwd: args.project, timeout: args.ntmTimeoutMs }, log);
         const snapshot = {
             session: args.session,
             pollTs,

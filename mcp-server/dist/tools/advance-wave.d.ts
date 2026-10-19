@@ -1,6 +1,7 @@
 import type { McpToolResult, ToolContext, AdvanceWaveArgs } from '../types.js';
 import type { VerifyBeadsOutcome } from './verify-beads.js';
 import { type ImplementerDispatch } from '../adapters/implementer-dispatch.js';
+import { type SwarmHostHandoff } from '../swarm-host.js';
 export interface AdvanceWaveOutcome {
     verification: VerifyBeadsOutcome;
     nextWave: ({
@@ -49,6 +50,8 @@ export interface AdvanceWaveOutcome {
     };
     /** Batch reviews this call found in `pendingBatchReviews`: beads filed from
      *  verdicts that landed, and ranges still waiting on their reviewer. */
+    /** Set when the swarm runs on another Mac: whether this wave's commits and beads reached it. */
+    swarmHost?: SwarmHostHandoff;
     batchReviews?: {
         filed: Array<{
             shaRange: string;

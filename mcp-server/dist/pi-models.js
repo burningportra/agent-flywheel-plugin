@@ -31,6 +31,8 @@ export const GATEWAY_MODEL_ID_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 const PI_ID_PART = /^[A-Za-z0-9._-]+$/;
 const CACHE_RELATIVE_PATH = join('.pi-flywheel', 'cache', 'gateway-models.json');
 const PROBE_CACHE_RELATIVE_PATH = join('.pi-flywheel', 'cache', 'pi-route-probes.json');
+/** Probes record one machine's logins, so a swarm host's go in their own file. */
+const probeCachePath = (scope) => scope ? join('.pi-flywheel', 'cache', `pi-route-probes.${scope}.json`) : PROBE_CACHE_RELATIVE_PATH;
 const PICKS_RELATIVE_PATH = join('.pi-flywheel', 'pi-models.json');
 const CACHE_FRESH_MS = 60 * 60 * 1000;
 const PROBE_FRESH_MS = 24 * 60 * 60 * 1000;
@@ -685,7 +687,7 @@ export async function discoverPiRoutes(exec, snapshot, opts) {
             .map((entry) => entry.model));
         return [...chosen, ...speed].map((model) => `${provider}/${model}`);
     });
-    const cache = await readJson(opts.cwd, PROBE_CACHE_RELATIVE_PATH, ProbeCacheSchema);
+    const cache = await readJson(opts.cwd, probeCachePath(opts.probeScope), ProbeCacheSchema);
     const probes = { ...(cache?.probes ?? {}) };
     const stale = targets.filter((piModel) => opts.refresh || !isProbeFresh(probes[piModel], opts.now));
     const budget = AbortSignal.any([
@@ -700,7 +702,7 @@ export async function discoverPiRoutes(exec, snapshot, opts) {
     })));
     if (stale.length > 0) {
         try {
-            await writeAtomic(join(opts.cwd, PROBE_CACHE_RELATIVE_PATH), `${JSON.stringify({ version: 1, probes }, null, 2)}\n`);
+            await writeAtomic(join(opts.cwd, probeCachePath(opts.probeScope)), `${JSON.stringify({ version: 1, probes }, null, 2)}\n`);
         }
         catch {
             // An unwritable cache only costs a re-probe next time.
@@ -744,7 +746,7 @@ export async function checkPiLaneReady(exec, opts) {
     const fromPicks = opts.cwd
         ? Object.values(await readPiModelPicks(opts.cwd)).flatMap((pick) => pick?.piModels.map(providerOf) ?? [])
         : [];
-    const probeCache = opts.cwd ? await readJson(opts.cwd, PROBE_CACHE_RELATIVE_PATH, ProbeCacheSchema) : null;
+    const probeCache = opts.cwd ? await readJson(opts.cwd, probeCachePath(opts.probeScope), ProbeCacheSchema) : null;
     const fromProbes = Object.entries(probeCache?.probes ?? {})
         .filter(([, probe]) => probe.ok)
         .map(([piModel]) => providerOf(piModel));

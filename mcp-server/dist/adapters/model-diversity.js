@@ -79,7 +79,7 @@ export async function detectCliCapabilities(exec, opts = {}) {
         const found = await probe('pi');
         if (!found.available)
             return found;
-        const auth = await checkPiLaneReady(exec, { cwd: opts.cwd, signal: opts.signal, timeout: 10_000 });
+        const auth = await checkPiLaneReady(exec, { cwd: opts.cwd, signal: opts.signal, timeout: 10_000, probeScope: opts.probeScope });
         return auth.ready
             ? found
             : { ...found, available: false, reason: `pi auth check: ${auth.detail}` };
@@ -98,8 +98,22 @@ export async function detectCliCapabilities(exec, opts = {}) {
             ? found
             : { ...found, available: false, reason: `pi auth check: ${auth.provider} ${auth.detail}` };
     };
+    const probeClaude = async () => {
+        const found = await probe('claude');
+        if (!found.available || !opts.verifyClaudeLogin)
+            return found;
+        try {
+            const status = await exec('claude', ['auth', 'status'], { timeout: 15_000, cwd: opts.cwd, signal: opts.signal });
+            if (/"loggedIn"\s*:\s*true/.test(status.stdout))
+                return found;
+            return { ...found, available: false, reason: 'claude is not logged in there (claude auth status)' };
+        }
+        catch (err) {
+            return { ...found, available: false, reason: `claude auth status: ${errMsg(err)}` };
+        }
+    };
     const [claude, codex, gemini, pi] = await Promise.all([
-        probe('claude'),
+        probeClaude(),
         probe('codex'),
         probeGemini(),
         probePi(),

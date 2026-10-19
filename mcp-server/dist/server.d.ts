@@ -67,6 +67,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -207,6 +208,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -269,6 +271,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -348,6 +351,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -466,6 +470,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -550,6 +555,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -616,6 +622,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -696,6 +703,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -768,6 +776,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -844,6 +853,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -931,6 +941,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1031,6 +1042,78 @@ export declare const TOOLS: ({
             phase?: undefined;
             errorEnvelope?: undefined;
             notes?: undefined;
+            pick?: undefined;
+            targetDir?: undefined;
+            pluginRoot?: undefined;
+            name?: undefined;
+            sinceDays?: undefined;
+            checkName?: undefined;
+            autoConfirm?: undefined;
+            planSlug?: undefined;
+            planPath?: undefined;
+            editIntent?: undefined;
+            reason?: undefined;
+            section?: undefined;
+        };
+        required: string[];
+    };
+} | {
+    name: string;
+    description: string;
+    inputSchema: {
+        type: string;
+        properties: {
+            cwd: {
+                type: string;
+                description: string;
+            };
+            action: {
+                type: string;
+                enum: string[];
+                default: string;
+                description: string;
+            };
+            pick: {
+                type: string;
+                description: string;
+            };
+            coordinatorName: {
+                type: string;
+                description: string;
+            };
+            goal?: undefined;
+            force?: undefined;
+            ideas?: undefined;
+            mode?: undefined;
+            ambition?: undefined;
+            planFile?: undefined;
+            planContent?: undefined;
+            source?: undefined;
+            advancedAction?: undefined;
+            remediation?: undefined;
+            until_convergence_score?: undefined;
+            max_rounds?: undefined;
+            beadId?: undefined;
+            parallelSafe?: undefined;
+            findingCount?: undefined;
+            crashed?: undefined;
+            beadIds?: undefined;
+            threshold?: undefined;
+            parallelism?: undefined;
+            skipEnv?: undefined;
+            closedBeadIds?: undefined;
+            maxNextWave?: undefined;
+            query?: undefined;
+            operation?: undefined;
+            content?: undefined;
+            entryId?: undefined;
+            refreshRoot?: undefined;
+            phase?: undefined;
+            errorEnvelope?: undefined;
+            notes?: undefined;
+            roles?: undefined;
+            picks?: undefined;
+            refresh?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1090,6 +1173,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1157,6 +1241,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             name?: undefined;
             sinceDays?: undefined;
             checkName?: undefined;
@@ -1219,6 +1304,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             sinceDays?: undefined;
@@ -1284,6 +1370,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1357,6 +1444,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1418,6 +1506,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1511,6 +1600,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1573,6 +1663,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;
@@ -1637,6 +1728,7 @@ export declare const TOOLS: ({
             roles?: undefined;
             picks?: undefined;
             refresh?: undefined;
+            pick?: undefined;
             targetDir?: undefined;
             pluginRoot?: undefined;
             name?: undefined;

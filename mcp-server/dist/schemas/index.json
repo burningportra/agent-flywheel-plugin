@@ -3,8 +3,8 @@
   "$id": "https://agent-flywheel.dev/schemas/index.json",
   "title": "flywheel input-schema manifest",
   "generated_by": "mcp-server/scripts/emit-schemas.ts",
-  "tool_count": 46,
-  "sha256": "1182ccb03be0bb4a47596a1105f6e06331f032ccb07e37ef89e95da3b353afcc",
+  "tool_count": 48,
+  "sha256": "2a4f246842ef908ea07a525c5688969760f765bd556536cf3744d190d3d879d1",
   "schemas": [
     {
       "tool": "flywheel_advance_wave",
@@ -89,6 +89,10 @@
     {
       "tool": "flywheel_select",
       "path": "schemas/inputs/flywheel_select.json"
+    },
+    {
+      "tool": "flywheel_swarm_host",
+      "path": "schemas/inputs/flywheel_swarm_host.json"
     },
     {
       "tool": "flywheel_synthesize_rubric",
@@ -181,6 +185,10 @@
     {
       "tool": "orch_select",
       "path": "schemas/inputs/orch_select.json"
+    },
+    {
+      "tool": "orch_swarm_host",
+      "path": "schemas/inputs/orch_swarm_host.json"
     },
     {
       "tool": "orch_synthesize_rubric",

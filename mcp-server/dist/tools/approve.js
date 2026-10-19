@@ -4,6 +4,7 @@ import { computeConvergenceScore, computeBeadQualityScore, formatBeadQualityScor
 import { getRefinementModel } from '../model-detection.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
 import { buildImplementerDispatch } from '../adapters/implementer-dispatch.js';
+import { handOffWave, resolveSwarmLane } from '../swarm-host.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { parseBrList } from '../parsers.js';
@@ -467,12 +468,16 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
             },
         }, makeNextToolStep('run_cli', 'Diagnose blocked beads with br ready or br dep cycles, then return to flywheel_approve_beads.'));
     }
+    const lane = await resolveSwarmLane(cwd, exec);
     const dispatch = await buildImplementerDispatch({
-        exec,
+        exec: lane.exec,
         cwd,
         signal,
         beads: ready,
         coordinatorName,
+        projectKey: lane.projectKey,
+        probeScope: lane.probeScope,
+        verifyClaudeLogin: lane.verifyClaudeLogin,
     });
     if (dispatch.prompts.length !== ready.length) {
         return makeApproveError('No implementation CLI is available for the first wave.', state.phase, 'beads', 'cli_not_available', { warnings: dispatch.warnings }, 'Install at least one of claude, codex, or pi, then retry flywheel_approve_beads.');
@@ -530,6 +535,11 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
     finally {
         releaseBeadMutex(mutexKey);
     }
+    // The panes read beads and code from the host's clone, so it gets the in_progress marks too.
+    const swarmHost = lane.host ? await handOffWave({ cwd, exec, signal }, lane.host) : undefined;
+    const hostNote = swarmHost && !swarmHost.synced
+        ? `\n\n⚠️ The swarm host ${swarmHost.name} didn't get this wave: ${swarmHost.detail}`
+        : '';
     // Headline polish metric: convergence is the truth signal (does another
     // round actually move the bead set?). Quality is a heuristic floor that
     // can plateau even when convergence is high — surface both, lead with
@@ -551,7 +561,7 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
     const hotspotNote = offerCoordinatorSerial ? `\n\n${formatHotspotSummary(matrix)}` : '';
     if (ready.length === 1) {
         const bead = ready[0];
-        return makeApproveResult(`**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}${programWarnings}
+        return makeApproveResult(`**Beads approved!** ${beads.length} total.${convergenceNote}${qualityNote}${roundHeader}${programWarnings}${hostNote}
 
 **NEXT: Send \`data.prompts[0].prompt\` as-is to the \`${promptFor(bead.id).lane}\` implementation lane, then call \`flywheel_review\` when it finishes.**
 
@@ -568,6 +578,7 @@ ${beadList}`, state.phase, 'beads', {
                     agentName: promptFor(bead.id).agentName,
                 }],
             ...dispatchData,
+            ...(swarmHost ? { swarmHost } : {}),
             ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
         }, makeNextToolStep('spawn_agents', 'Send the server-built prompt to one implementation pane, then call flywheel_review with its summary.'));
     }
@@ -594,7 +605,7 @@ ${beadList}`, state.phase, 'beads', {
             ],
         })
         : makeNextToolStep('spawn_agents', 'Spawn one implementation agent per ready bead, then call flywheel_review for each completed bead.');
-    return makeApproveResult(`**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}${hotspotNote}${programWarnings}
+    return makeApproveResult(`**Beads approved!** ${beads.length} total, ${ready.length} ready now.${convergenceNote}${qualityNote}${roundHeader}${hotspotNote}${programWarnings}${hostNote}
 
 **NEXT: Spawn the counts in \`data.lanes\`, send each \`data.prompts[].prompt\` as-is to its lane, then call \`flywheel_review\` for each completed bead.**
 
@@ -611,6 +622,7 @@ ${beadList}`, state.phase, 'beads', {
             agentName: promptFor(bead.id).agentName,
         })),
         ...dispatchData,
+        ...(swarmHost ? { swarmHost } : {}),
         ...getBeadApprovalData(ctx, beads, convergenceScore, matrix),
     }, nextStep);
 }

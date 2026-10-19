@@ -41,6 +41,8 @@ export async function buildImplementerDispatch(args) {
     const capabilities = args.capabilities ?? await detectCliCapabilities(args.exec, {
         cwd: args.cwd,
         signal: args.signal,
+        probeScope: args.probeScope,
+        verifyClaudeLogin: args.verifyClaudeLogin,
     });
     const plan = splitBeadsByProvider(args.beads.map((bead) => bead.id), capabilities);
     if (plan.lanes.length === 0) {
@@ -57,7 +59,7 @@ export async function buildImplementerDispatch(args) {
         for (const beadId of lane.beadIds)
             assignmentByBead.set(beadId, lane.provider);
     }
-    const projectKey = args.cwd;
+    const projectKey = args.projectKey ?? args.cwd;
     const agentNames = allocateAgentNames(args.beads.length, projectKey);
     const complexity = {};
     const prompts = args.beads.map((bead, index) => {

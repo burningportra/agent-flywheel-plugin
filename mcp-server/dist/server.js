@@ -28,6 +28,7 @@ import { runCapabilitiesWith } from './tools/capabilities.js';
 import { runRobotDocs, ROBOT_DOCS_SECTIONS } from './tools/robot-docs.js';
 import { runRescue } from './tools/rescue.js';
 import { runPiModels } from './tools/pi-models.js';
+import { runSwarmHost } from './tools/swarm-host.js';
 import { makeToolError } from './tools/shared.js';
 import { FlywheelError, makeFlywheelErrorResult } from './errors.js';
 import { resolveRealpath } from './utils/path-safety.js';
@@ -419,6 +420,25 @@ const PRIMARY_TOOLS = [
         },
     },
     {
+        name: 'flywheel_swarm_host',
+        description: 'Choose the Mac a swarm runs on: this one, or another Mac on the local network that answers SSH. action="list" finds Macs over Bonjour plus ones chosen before, probes each (cores, load, battery, ntm, tmux, br, am, git, Agent Mail), and returns data.question for AskUserQuestion, or null when none can take a swarm. action="choose" with the answer as pick prepares that Mac: a clone under its ntm projects_base named <repo>-offload, this checkout\'s commits and beads, the coordinator\'s Agent Mail identity, and a caffeinate that keeps it awake. It returns data.host (repoPath, ntmProject), data.swarm (the lane mix there) and data.run, the command prefix that runs a command in that clone. After that, flywheel_approve_beads(start) and flywheel_advance_wave push each wave to the Mac and pull its commits, bead changes and completion reports back before verifying, and swarm-spawn.js and tender-daemon.js run there on their own. action="sync" pulls then pushes; action="release" pulls one last time and switches back to this Mac.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                action: {
+                    type: 'string',
+                    enum: ['list', 'choose', 'sync', 'release'],
+                    default: 'list',
+                    description: 'list=find Macs and build the question, choose=prepare the picked one, sync=pull then push, release=final pull and switch back to this Mac',
+                },
+                pick: { type: 'string', description: 'Required with action=choose: an option label from data.question ("This Mac" or a Mac\'s name) or a hostname.' },
+                coordinatorName: { type: 'string', description: 'With action=choose: your Agent Mail name, registered in the host\'s Agent Mail so panes can mail you.' },
+            },
+            required: ['cwd'],
+        },
+    },
+    {
         name: 'flywheel_doctor',
         description: 'Run an 11-check health sweep of the flywheel environment: MCP connectivity, agent-mail liveness, required/optional CLIs (br/bv/ntm/cm), node version, git status, dist drift, orphaned worktrees, and checkpoint validity. Read-only — never mutates checkpoint or state. Returns a DoctorReport with per-check severity (green/yellow/red).',
         inputSchema: {
@@ -656,6 +676,7 @@ const PRIMARY_RUNNERS = {
     flywheel_observe: runObserve,
     flywheel_rescue: runRescue,
     flywheel_pi_models: runPiModels,
+    flywheel_swarm_host: runSwarmHost,
     flywheel_remediate: async (ctx, args) => {
         const parsed = RemediateInputSchema.parse(args);
         return runRemediate(parsed, ctx.exec, ctx.signal ?? new AbortController().signal);

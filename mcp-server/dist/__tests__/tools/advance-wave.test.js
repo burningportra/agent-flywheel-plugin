@@ -20,6 +20,7 @@ vi.mock('node:child_process', async () => {
 // binds the mock at module load time.
 const { runAdvanceWave } = await import('../../tools/advance-wave.js');
 const { writeCompletionReport } = await import('../../completion-report.js');
+const { writeSwarmHost } = await import('../../swarm-host.js');
 const { createMockExec, makeState } = await import('../helpers/mocks.js');
 // ─── Helpers ──────────────────────────────────────────────────
 function makeBead(overrides = {}) {
@@ -451,6 +452,29 @@ describe('runAdvanceWave — attestation gate', () => {
             delete process.env.FW_ATTESTATION_REQUIRED;
         else
             process.env.FW_ATTESTATION_REQUIRED = origRequired;
+    });
+    it('pulls from the swarm host before verifying, and stops when it cannot', async () => {
+        await writeSwarmHost(cwd, {
+            version: 1,
+            name: 'Air',
+            host: 'air.invalid',
+            address: '10.9.8.7',
+            user: 'kev',
+            identityFile: null,
+            repoPath: '/Users/kev/GitHub/demo-offload',
+            ntmProject: 'demo-offload',
+            localBranch: 'main',
+            keepAwakePid: null,
+            preparedAt: '2026-10-19T00:00:00.000Z',
+        });
+        const ctx = makeCtxAt(cwd, [
+            { cmd: 'git', args: ['symbolic-ref', '--quiet', '--short', 'HEAD'], result: { code: 0, stdout: 'feature\n', stderr: '' } },
+            brShowClosed('done-1'),
+            brReadyCall([makeBead({ id: 'next-1' })]),
+        ]);
+        const result = await runAdvanceWave(ctx, { cwd, closedBeadIds: ['done-1'] });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent.data.error).toMatchObject({ code: 'blocked_state', details: { reason: 'branch_changed' } });
     });
     it('default mode: warns but advances when attestation is missing (needsEvidence=true)', async () => {
         const nextBeads = [makeBead({ id: 'next-1' })];

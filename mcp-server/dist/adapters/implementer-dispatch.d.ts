@@ -27,6 +27,10 @@ export interface BuildImplementerDispatchArgs {
     readonly coordinatorName: string;
     readonly signal?: AbortSignal;
     readonly capabilities?: CapabilitiesMap;
+    /** Agent Mail project key; a swarm host's clone when the panes run there. Defaults to `cwd`. */
+    readonly projectKey?: string;
+    readonly probeScope?: string;
+    readonly verifyClaudeLogin?: boolean;
 }
 export declare function buildImplementerDispatch(args: BuildImplementerDispatchArgs): Promise<ImplementerDispatch>;
 //# sourceMappingURL=implementer-dispatch.d.ts.map

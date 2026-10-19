@@ -465,6 +465,15 @@ describe('discoverPiRoutes', () => {
         await discoverPiRoutes(nextDay.exec, SNAPSHOT, { cwd, now: new Date(NOW.getTime() + 25 * 60 * 60 * 1000) });
         expect(nextDay.probed()).toHaveLength(8);
     });
+    it('keeps a swarm host’s probes apart from this Mac’s', async () => {
+        await discoverPiRoutes(fake().exec, SNAPSHOT, { cwd, now: NOW, probeScope: 'air.local' });
+        const here = fake();
+        await discoverPiRoutes(here.exec, SNAPSHOT, { cwd, now: new Date(NOW.getTime() + 60_000) });
+        expect(here.probed()).toHaveLength(8);
+        const there = fake();
+        await discoverPiRoutes(there.exec, SNAPSHOT, { cwd, now: new Date(NOW.getTime() + 60_000), probeScope: 'air.local' });
+        expect(there.probed()).toEqual(['zai/glm-5.3-flash']);
+    });
     it('runs at most four probes at a time per login', async () => {
         const catalog = Array.from({ length: 6 }, (_, i) => model(`acme/m${i}`, `M${i}`, { released: ago(10 + i) }));
         const { exec, peak, probed } = piExec({

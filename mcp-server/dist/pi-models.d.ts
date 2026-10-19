@@ -269,6 +269,7 @@ export declare function discoverPiRoutes(exec: ExecFn, snapshot: RankingInput, o
     signal?: AbortSignal;
     now: Date;
     refresh?: boolean;
+    probeScope?: string;
 }): Promise<DiscoveredRoutes>;
 export declare function readPiModelPicks(cwd: string): Promise<PiModelPicks>;
 export declare function writePiModelPicks(cwd: string, updates: Partial<Record<PiLaneRole, string[]>>, now: Date): Promise<PiModelPicks>;
@@ -280,6 +281,7 @@ export declare function checkPiLaneReady(exec: ExecFn, opts: {
     cwd?: string;
     signal?: AbortSignal;
     timeout?: number;
+    probeScope?: string;
 }): Promise<{
     ready: boolean;
     detail: string;

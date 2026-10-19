@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import { readCheckpoint } from '../checkpoint.js';
 import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
+import { collectWave, handOffWave, resolveSwarmLane } from '../swarm-host.js';
 import { applyBatchReviewVerdict, batchReviewsEnabled, countCommitsSinceLastBatchReview, shouldTriggerBatchReview, } from '../commit-batch.js';
 import { filterBeadsForProgram, formatBeadProgramWarnings, goalBeadProgramLabel, resolveDispatchBeadProgramScope, } from './bead-program.js';
 const log = createLogger('advance-wave');
@@ -135,6 +136,16 @@ export async function runAdvanceWave(ctx, args) {
     if (!Array.isArray(args.closedBeadIds) || args.closedBeadIds.length === 0) {
         return makeToolError('flywheel_advance_wave', state.phase, 'invalid_input', 'Error: closedBeadIds must be a non-empty array of bead IDs from the completed wave.', { hint: 'Pass closedBeadIds as a non-empty string array — the wave of beads to verify before advancing.' });
     }
+    // Step 0: the wave ran on a swarm host, so its commits, bead closes, and reports come back first.
+    const lane = await resolveSwarmLane(cwd, exec);
+    const collected = lane.host ? await collectWave({ cwd, exec, signal }, lane.host) : undefined;
+    if (collected && !collected.ok) {
+        return makeToolError('flywheel_advance_wave', state.phase, collected.code, collected.message, {
+            hint: collected.hint,
+            retryable: collected.code === 'cli_failure' || collected.reason === 'host_unreachable',
+            details: { reason: collected.reason, ...collected.details },
+        });
+    }
     // Step 1: verify the completed wave
     const verifyResult = await runVerifyBeads(ctx, { cwd, beadIds: args.closedBeadIds });
     const verification = verifyResult.structuredContent?.data;
@@ -254,11 +265,14 @@ export async function runAdvanceWave(ctx, args) {
     const maxWave = args.maxNextWave ?? composition.total;
     const waveCandidates = ready.slice(0, maxWave);
     const dispatch = await buildImplementerDispatch({
-        exec,
+        exec: lane.exec,
         cwd,
         signal,
         beads: waveCandidates,
         coordinatorName: args.coordinatorName ?? 'Coordinator',
+        projectKey: lane.projectKey,
+        probeScope: lane.probeScope,
+        verifyClaudeLogin: lane.verifyClaudeLogin,
     });
     if (dispatch.prompts.length !== waveCandidates.length) {
         return makeToolError('flywheel_advance_wave', state.phase, 'cli_not_available', 'No implementation CLI is available for the next wave.', {
@@ -266,6 +280,7 @@ export async function runAdvanceWave(ctx, args) {
             hint: 'Install at least one of claude, codex, or pi, then retry flywheel_advance_wave.',
         });
     }
+    const swarmHost = lane.host ? await handOffWave({ cwd, exec, signal }, lane.host) : undefined;
     const outcome = {
         verification,
         nextWave: {
@@ -276,6 +291,7 @@ export async function runAdvanceWave(ctx, args) {
         needsEvidence,
         convergence: convergenceRec,
         ...batchFields,
+        ...(swarmHost ? { swarmHost } : {}),
     };
     const lines = [
         `Wave verified (${verification.verified.length}/${args.closedBeadIds.length} closed).`,
@@ -301,6 +317,11 @@ export async function runAdvanceWave(ctx, args) {
     }
     if (dispatch.warnings.length > 0)
         lines.push(...dispatch.warnings.map((warning) => `Warning: ${warning}`));
+    if (swarmHost) {
+        lines.push(swarmHost.synced
+            ? `Swarm host ${swarmHost.name}: ${swarmHost.detail}.`
+            : `⚠️  The swarm host ${swarmHost.name} didn't get this wave: ${swarmHost.detail}`);
+    }
     lines.push(`Next wave: ${waveCandidates.length} bead(s) dispatched across ${dispatch.lanes.length} lane(s).`);
     lines.push(...dispatch.prompts.map((prompt) => (`  - ${prompt.beadId} → ${prompt.lane} (${dispatch.complexity[prompt.beadId]})`)));
     lines.push(...reviewLines);
