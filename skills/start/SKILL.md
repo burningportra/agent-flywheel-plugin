@@ -201,10 +201,10 @@ AskUserQuestion(questions: [{
 
 **Run setup now** invokes setup and restarts Step 0. **Continue with degraded** opens the main menu. **Show me what's degraded** prints `DOCTOR_REPORT.checks` and repeats this gate.
 
-Display up to three relevant CASS learnings when available, each as one concise line (<= 120 chars, no multi-sentence rewrites):
+Display three relevant CASS learnings when three are available (fewer only when memory returned fewer), quoting each learning's first sentence verbatim from the memory result instead of rewriting it:
 
 > **From prior sessions:**
-> - <top 3 most relevant learnings, one short line each>
+> - <top 3 most relevant learnings, each learning's first sentence verbatim>
 
 From `topErrorCodes` in the Step 0b observe report (or `.pi-flywheel/error-counts.json` on fallback), show the top three nonzero codes:
 

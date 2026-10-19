@@ -85,7 +85,7 @@ describe("Step 0c yellow doctor surfacing (claude-orchestrator-6bxt)", () => {
       /Print a non-null `PREFLIGHT_BANNER` verbatim once above the menu/,
     );
     expect(skillBody).toMatch(
-      /Display up to three relevant CASS learnings when available, each as one concise line/,
+      /Display three relevant CASS learnings when three are available.*quoting each learning's first sentence verbatim/s,
     );
   });
 });
