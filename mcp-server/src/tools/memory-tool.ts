@@ -388,9 +388,17 @@ export async function runMemory(ctx: ToolContext, args: MemoryArgs): Promise<Mcp
 
   // Search with query — use `cm context` for task-aware semantic matching.
   // `cm similar` uses keyword mode and returns empty for most queries.
+  if (args.history !== undefined && !(Number.isInteger(args.history) && args.history >= 0)) {
+    return makeFlywheelErrorResult('flywheel_memory', phase, {
+      code: 'invalid_input',
+      message: `history must be a non-negative integer, got ${JSON.stringify(args.history)}.`,
+      hint: 'Pass history: 0 to skip the session-history search, or omit it to let cm pick the count.',
+    });
+  }
+  const historyArgs = args.history === undefined ? [] : ['--history', String(args.history)];
   let searchResult;
   try {
-    searchResult = await exec('cm', ['context', args.query.trim(), '--json'], { cwd, timeout: 10000, signal });
+    searchResult = await exec('cm', ['context', args.query.trim(), '--json', ...historyArgs], { cwd, timeout: 10000, signal });
   } catch (err: unknown) {
     return makeFlywheelErrorResult('flywheel_memory', phase, {
       code: 'cli_failure',

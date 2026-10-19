@@ -856,6 +856,11 @@ export interface MemoryArgs {
    * operation="refresh_learnings". Defaults to `<cwd>/docs/solutions`.
    */
   refreshRoot?: string;
+  /**
+   * History snippets for operation="search", passed as `cm context --history`.
+   * 0 skips the session-history search, which can take seconds on a large index.
+   */
+  history?: number;
 }
 export interface DoctorArgs { cwd: string }
 
