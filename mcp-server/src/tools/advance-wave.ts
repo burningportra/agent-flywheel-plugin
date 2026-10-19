@@ -1,4 +1,4 @@
-import type { McpToolResult, ToolContext, AdvanceWaveArgs, Bead } from '../types.js';
+import type { McpToolResult, ToolContext, AdvanceWaveArgs, Bead, FlywheelState } from '../types.js';
 import type { VerifyBeadsOutcome } from './verify-beads.js';
 import { runVerifyBeads } from './verify-beads.js';
 import { readyBeads } from '../beads.js';
@@ -18,7 +18,12 @@ import {
   planSlugFromIdentifier,
 } from './convergence-tool.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
-import { countCommitsSinceLastBatchReview, shouldTriggerBatchReview } from '../commit-batch.js';
+import {
+  applyBatchReviewVerdict,
+  batchReviewsEnabled,
+  countCommitsSinceLastBatchReview,
+  shouldTriggerBatchReview,
+} from '../commit-batch.js';
 import {
   filterBeadsForProgram,
   formatBeadProgramWarnings,
@@ -68,19 +73,25 @@ export interface AdvanceWaveOutcome {
       | 'no_active_plan';
   };
   /**
-   * v3.17.0 fresh-eyes auto-trigger (plan
-   * `docs/plans/2026-05-13-fresh-eyes-auto-trigger.md`). When set, the
-   * coordinator MUST dispatch a fresh-eyes review over `lastBaselineSha..
-   * reviewSha` before advancing to the next wave. `nextWave` is `null` in
-   * this case and `waveComplete` is `false` — the wave isn't done until
-   * the review verdict lands.
+   * Set when `commitBatchThreshold` commits have landed since the batch-review
+   * baseline. The wave still advances: the coordinator dispatches `nextWave`
+   * as usual and sends one reviewer over `shaRange` alongside it, via
+   * `flywheel_review(action: "batch_review", shaRange)`.
    */
   nextStep?: {
     kind: 'batch_review_due';
-    /** HEAD sha captured at gate time (dispatch baseline — risk #3). */
+    /** HEAD at gate time, the end of the range. */
     reviewSha: string;
-    /** Prior baseline; undefined on the very first batch review of the session. */
-    lastBaselineSha?: string;
+    /** `lastBatchReviewSha`, or `cycleStartSha` before the first review. */
+    lastBaselineSha: string;
+    /** `<lastBaselineSha>..<reviewSha>`, ready to pass to `flywheel_review`. */
+    shaRange: string;
+  };
+  /** Batch reviews this call found in `pendingBatchReviews`: beads filed from
+   *  verdicts that landed, and ranges still waiting on their reviewer. */
+  batchReviews?: {
+    filed: Array<{ shaRange: string; beadIds: string[] }>;
+    pending: string[];
   };
 }
 
@@ -147,6 +158,57 @@ async function computeConvergenceRecommendation(
     status: state.status,
     reason: 'below_threshold',
   };
+}
+
+async function applyLandedBatchReviews(
+  cwd: string,
+  state: FlywheelState,
+  signal: AbortSignal | undefined,
+): Promise<AdvanceWaveOutcome['batchReviews']> {
+  const ranges = state.pendingBatchReviews ?? [];
+  if (ranges.length === 0) return undefined;
+  const filed: Array<{ shaRange: string; beadIds: string[] }> = [];
+  const pending: string[] = [];
+  for (const shaRange of ranges) {
+    try {
+      const applied = await applyBatchReviewVerdict(cwd, state, shaRange, signal);
+      if (applied.kind === 'pending') pending.push(shaRange);
+      else filed.push({ shaRange, beadIds: applied.beadIds });
+    } catch (err: unknown) {
+      log.warn('batch review: filing beads failed; retrying on the next call', {
+        shaRange,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      pending.push(shaRange);
+    }
+  }
+  return { filed, pending };
+}
+
+async function findDueBatchReview(
+  cwd: string,
+  state: FlywheelState,
+  signal: AbortSignal | undefined,
+): Promise<AdvanceWaveOutcome['nextStep']> {
+  if (!batchReviewsEnabled(state)) return undefined;
+  const baseline = state.lastBatchReviewSha ?? state.cycleStartSha;
+  if (!baseline) {
+    log.warn('batch-review gate: no lastBatchReviewSha or cycleStartSha to count from; skipping gate');
+    return undefined;
+  }
+  try {
+    const count = await countCommitsSinceLastBatchReview(cwd, baseline, signal);
+    if (!shouldTriggerBatchReview(state, count)) return undefined;
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd, timeout: GIT_TIMEOUT_MS, signal });
+    const reviewSha = stdout.trim();
+    if (!reviewSha) return undefined;
+    return { kind: 'batch_review_due', reviewSha, lastBaselineSha: baseline, shaRange: `${baseline}..${reviewSha}` };
+  } catch (err: unknown) {
+    log.warn('batch-review gate: git failed; skipping gate', {
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return undefined;
+  }
 }
 
 function okResult(phase: string, text: string, data: AdvanceWaveOutcome): McpToolResult {
@@ -231,71 +293,29 @@ export async function runAdvanceWave(
     !required &&
     (verification.missingEvidence.length > 0 || verification.invalidEvidence.length > 0);
 
-  // Step 1.6: batch-review gate (v3.17.0 fresh-eyes auto-trigger).
-  // Compute commits LIVE via git rev-list (not from a stored counter — that
-  // field was deprecated after self-review surfaced gaps W5a/W5b: nothing
-  // wrote to `state.commitBatchCounter`, so the gate could never fire). When
-  // the live count has crossed `commitBatchThreshold`, preempt the next-wave
-  // dispatch and surface a `batch_review_due` nextStep. The coordinator runs
-  // the review over `lastBatchReviewSha..HEAD`, persists the verdict, and
-  // only then re-invokes `flywheel_advance_wave` — by which time the baseline
-  // has advanced and the gate naturally re-arms.
-  let commitsSinceBaseline = 0;
-  if (
-    typeof state.commitBatchThreshold === 'number' &&
-    state.commitBatchThreshold > 0
-  ) {
-    try {
-      commitsSinceBaseline = await countCommitsSinceLastBatchReview(
-        cwd,
-        state.lastBatchReviewSha,
-      );
-    } catch (err: unknown) {
-      log.warn('batch-review gate: countCommitsSinceLastBatchReview failed; skipping gate', {
-        err: err instanceof Error ? err.message : String(err),
-      });
-      commitsSinceBaseline = 0;
-    }
-  }
-  if (shouldTriggerBatchReview(state, commitsSinceBaseline)) {
-    let reviewSha: string;
-    try {
-      const r = await execFileAsync('git', ['rev-parse', 'HEAD'], {
-        cwd,
-        timeout: GIT_TIMEOUT_MS,
-      });
-      reviewSha = r.stdout.trim();
-    } catch (err: unknown) {
-      log.warn('batch-review gate: git rev-parse HEAD failed; skipping gate', {
-        err: err instanceof Error ? err.message : String(err),
-      });
-      reviewSha = '';
-    }
-    if (reviewSha) {
-      const outcome: AdvanceWaveOutcome = {
-        verification,
-        nextWave: null,
-        waveComplete: false,
-        needsEvidence,
-        convergence: convergenceRec,
-        nextStep: {
-          kind: 'batch_review_due',
-          reviewSha,
-          lastBaselineSha: state.lastBatchReviewSha,
-        },
-      };
-      const threshold = state.commitBatchThreshold ?? 0;
-      const rangeLabel = state.lastBatchReviewSha
-        ? `${state.lastBatchReviewSha.slice(0, 7)}..${reviewSha.slice(0, 7)}`
-        : `(initial)..${reviewSha.slice(0, 7)}`;
-      const text = [
-        `Wave verified (${verification.verified.length}/${args.closedBeadIds.length} closed).`,
-        `Batch-review threshold crossed: ${commitsSinceBaseline} ≥ ${threshold} commits since last baseline.`,
-        `Dispatch fresh-eyes review over ${rangeLabel} before the next wave.`,
-      ].join('\n');
-      return okResult(state.phase, text, outcome);
-    }
-  }
+  // Step 1.6: file beads from batch-review verdicts that landed since the last
+  // call, so they join this wave's frontier without the coordinator asking.
+  const batchReviews = await applyLandedBatchReviews(cwd, state, signal);
+  if (batchReviews) await saveState(state);
+
+  // Step 1.7: a due batch review rides along with the next wave instead of
+  // holding it.
+  const batchReviewDue = await findDueBatchReview(cwd, state, signal);
+  const reviewLines = [
+    ...(batchReviews?.filed ?? []).map(({ shaRange, beadIds }) => (
+      beadIds.length > 0
+        ? `Batch review ${shaRange}: filed ${beadIds.length} bead(s) from its findings: ${beadIds.join(', ')}.`
+        : `Batch review ${shaRange}: no findings.`
+    )),
+    ...(batchReviews?.pending ?? []).map((range) => `Batch review ${range}: waiting on the reviewer's verdict.`),
+    ...(batchReviewDue
+      ? [`Batch review due over ${batchReviewDue.shaRange}: call flywheel_review(action="batch_review", shaRange="${batchReviewDue.shaRange}") and hand its prompt to one reviewer while this wave runs.`]
+      : []),
+  ];
+  const batchFields: Pick<AdvanceWaveOutcome, 'nextStep' | 'batchReviews'> = {
+    ...(batchReviewDue ? { nextStep: batchReviewDue } : {}),
+    ...(batchReviews ? { batchReviews } : {}),
+  };
 
   // Step 2: get ready beads for the next wave
   let ready: Bead[];
@@ -369,10 +389,11 @@ export async function runAdvanceWave(
       waveComplete: true,
       needsEvidence,
       convergence: convergenceRec,
+      ...batchFields,
     };
     return okResult(
       state.phase,
-      `Wave verified. Queue drained — no more beads to dispatch.${formattedProgramWarnings}`,
+      [`Wave verified. Queue drained — no more beads to dispatch.${formattedProgramWarnings}`, ...reviewLines].join('\n'),
       outcome,
     );
   }
@@ -411,6 +432,7 @@ export async function runAdvanceWave(
     waveComplete: true,
     needsEvidence,
     convergence: convergenceRec,
+    ...batchFields,
   };
 
   const lines = [
@@ -443,6 +465,7 @@ export async function runAdvanceWave(
   lines.push(...dispatch.prompts.map((prompt) => (
     `  - ${prompt.beadId} → ${prompt.lane} (${dispatch.complexity[prompt.beadId]})`
   )));
+  lines.push(...reviewLines);
 
   return okResult(state.phase, lines.join('\n'), outcome);
 }

@@ -240,20 +240,19 @@ flywheel_advance_wave(cwd, closedBeadIds: [<wave-N full bead IDs>], coordinatorN
 ```
 
 - If `nextWave.prompts` exists, dispatch the returned prompts from `nextWave.lanes`, call `ScheduleWakeup(270s, …)`, and end the turn.
-- If `nextWave` is null and `waveComplete` is true, stop the tender daemon with `kill -TERM $tender_daemon_pid`, leave the tmux session available for inspection, and continue to Step 8 in `_review.md`.
+- If `nextWave` is null and `waveComplete` is true, finish any batch review below first. Then stop the tender daemon with `kill -TERM $tender_daemon_pid`, leave the tmux session available for inspection, and continue to Step 8 in `_review.md`.
 
 ### Handle commit-batch review steps
 
-Branch only on `structuredContent.data.nextStep.kind`:
+Review findings always become beads, and nothing in this loop asks the user. Beads filed from a review belong to the goal, so dispatch them with the rest of the ready queue.
 
-| `kind` | Action |
+| Signal | Action |
 |--------|--------|
-| `batch_review_due` | Call `flywheel_review(action="batch_review", shaRange="<lastBaselineSha>..<reviewSha>")`. Wait up to 10 minutes for its verdict. |
-| `advance_wave` | Call `flywheel_advance_wave`, then dispatch any returned `nextWave.prompts` from `nextWave.lanes`. |
-| `needs_attention` | Show the findings and ask **Continue waves / Synthesize beads / Pause to fix / Regress to plan**. |
-| `synthesized_beads_pending` | Show `beadIds` and `mapping`, then ask **Approve all / Approve subset / Reject all / Regress to plan**. Use `rollbackSynthesizedBeads` for every rejected id. |
+| `nextStep.kind` is `batch_review_due` on a `flywheel_advance_wave` result | Dispatch `nextWave.prompts` as usual. Then call `flywheel_review(action="batch_review", shaRange=<nextStep.shaRange>)` and give its `prompt` to one reviewer: a pane with no bead in flight, else an `Agent(subagent_type="general-purpose")` that only writes the verdict file. |
+| A `[batch-review] <range> verdict ready` message | Call `flywheel_review(action="batch_review", shaRange="<range>")` again. It files one bead per finding at a priority set by its severity, or one re-review bead for an unreadable verdict, and returns `nextStep.kind` `advance_wave`. |
+| `advance_wave` | Call `flywheel_advance_wave` with the last closed wave, then dispatch any returned `nextWave.prompts` from `nextWave.lanes`. |
 
-The server advances `lastBatchReviewSha` when it dispatches the review. Commits that arrive during review stay in the next window. On timeout, record `review_timeout`, reset the counter, and resume the post-wave gate.
+`flywheel_advance_wave` also files the beads for a verdict that lands before you call back, and lists ranges still waiting on a reviewer in `batchReviews.pending`. A review that never reports holds nothing up. If the queue drains while a range is pending, wait for its verdict before Step 8, because its beads are the next wave.
 
 ### Serialize generated build output
 

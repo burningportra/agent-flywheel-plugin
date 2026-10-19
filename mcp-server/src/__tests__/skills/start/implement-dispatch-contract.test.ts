@@ -47,16 +47,12 @@ describe('server-owned wave-one implementer dispatch', () => {
     expect(content).toContain("Don't add `--type`: ntm reports Pi panes as type `unknown`");
   });
 
-  it('branches on every server-owned batch-review next step kind', () => {
+  it('routes every batch-review step without asking the user', () => {
     const content = read('skills/start/_implement.md');
 
-    for (const kind of [
-      'batch_review_due',
-      'advance_wave',
-      'needs_attention',
-      'synthesized_beads_pending',
-    ]) {
+    for (const kind of ['batch_review_due', 'advance_wave']) {
       expect(content).toContain(`\`${kind}\``);
     }
+    expect(content).not.toMatch(/needs_attention|synthesized_beads_pending|Approve subset|Pause to fix/);
   });
 });

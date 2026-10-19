@@ -43,8 +43,9 @@ Write the JSON object below to \`${opts.findingsPath}\`. The server reads only t
 \`\`\`
 
 - Use \`status = "pass"\` when the diff is clean, and set \`findings = []\`.
-- Use \`status = "needs_attention"\` when findings exist but none warrants an automatic bead.
-- Use \`status = "blocking"\` when at least one finding is severe enough to become a bead. Every finding in the array becomes a \`br create\` input.`
+- Use \`status = "needs_attention"\` when every finding is low or medium.
+- Use \`status = "blocking"\` when at least one finding is high or critical.
+- Every finding becomes a bead, prioritized by severity, so list only real issues.`
     : "";
 
   return `## Fresh-eyes reviewer - Round ${round}${memoryContext}

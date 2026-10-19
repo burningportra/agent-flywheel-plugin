@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -644,9 +644,7 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
       new Error('execFile mock: not configured for this test');
   });
 
-  it('returns batch_review_due nextStep when live commit count crosses threshold', async () => {
-    // Live count via `git rev-list --count abc123..HEAD` returns 8 → meets threshold 8.
-    // Then `git rev-parse HEAD` returns the reviewSha.
+  it('flags a due batch review over the exact range and still dispatches the next wave', async () => {
     gitExecHandler = (cmd, args) => {
       expect(cmd).toBe('git');
       if (args[0] === 'rev-list') {
@@ -664,7 +662,7 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
         commitBatchThreshold: 8,
         lastBatchReviewSha: 'abc123',
       },
-      [brShowClosed('done-1')],
+      [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])],
     );
 
     const result = await runAdvanceWave(ctx, {
@@ -674,16 +672,40 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
 
     expect(result.isError).toBeUndefined();
     const data = (result.structuredContent as any).data;
-    expect(data.nextStep).toBeDefined();
-    expect(data.nextStep.kind).toBe('batch_review_due');
-    expect(data.nextStep.reviewSha).toBe('def456');
-    expect(data.nextStep.lastBaselineSha).toBe('abc123');
-    // Wave isn't fully done until the review verdict lands.
-    expect(data.nextWave).toBeNull();
-    expect(data.waveComplete).toBe(false);
-    // Two git calls: rev-list --count then rev-parse HEAD. No br ready.
-    expect(execFileMock).toHaveBeenCalledTimes(2);
-    expect(result.content[0].text).toContain('Batch-review threshold crossed');
+    expect(data.nextStep).toEqual({
+      kind: 'batch_review_due',
+      reviewSha: 'def456',
+      lastBaselineSha: 'abc123',
+      shaRange: 'abc123..def456',
+    });
+    expect(data.nextWave.beadIds).toEqual(['next-1']);
+    expect(data.waveComplete).toBe(true);
+    expect(result.content[0].text).toContain(
+      'Batch review due over abc123..def456: call flywheel_review(action="batch_review", shaRange="abc123..def456")',
+    );
+  });
+
+  it('counts from cycleStartSha before the first review, and skips the gate with no baseline at all', async () => {
+    gitExecHandler = (_cmd, args) => {
+      if (args[0] !== 'rev-list') return 'def456\n';
+      expect(args[2]).toBe('cyc000..HEAD');
+      return '9\n';
+    };
+    const first = makeCtx(
+      { commitBatchThreshold: 8, cycleStartSha: 'cyc000' },
+      [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])],
+    );
+    const firstResult = await runAdvanceWave(first.ctx, { cwd: '/fake/project', closedBeadIds: ['done-1'] });
+    expect((firstResult.structuredContent as any).data.nextStep.shaRange).toBe('cyc000..def456');
+
+    execFileMock.mockClear();
+    const none = makeCtx(
+      { commitBatchThreshold: 8 },
+      [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])],
+    );
+    const noneResult = await runAdvanceWave(none.ctx, { cwd: '/fake/project', closedBeadIds: ['done-1'] });
+    expect((noneResult.structuredContent as any).data.nextStep).toBeUndefined();
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 
   it('omits batch_review_due when live commit count is below the threshold', async () => {
@@ -775,5 +797,94 @@ describe('runAdvanceWave — batch-review gate (v3.17.0)', () => {
     expect(data.nextWave).not.toBeNull();
     expect(data.nextWave.beadIds).toEqual(['next-1']);
     expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe('pending batch reviews', () => {
+    let projectDir: string;
+
+    beforeEach(async () => {
+      projectDir = await mkdtemp(path.join(tmpdir(), 'advance-wave-batch-'));
+    });
+
+    afterEach(async () => {
+      await rm(projectDir, { recursive: true, force: true });
+    });
+
+    it('files beads from a verdict that landed and keeps waiting on one that has not', async () => {
+      const landed = 'aaa111..bbb222';
+      const waiting = 'bbb222..ccc333';
+      const verdictDir = path.join(projectDir, '.pi-flywheel', 'batch-reviews');
+      await mkdir(verdictDir, { recursive: true });
+      await writeFile(path.join(verdictDir, `${landed}.json`), JSON.stringify({
+        status: 'needs_attention',
+        sha_range: landed,
+        findings: [{
+          severity: 'low',
+          summary: 'log line repeats the bead id',
+          suggested_bead_title: 'Drop the duplicate bead id from the log line',
+          affected_files: ['src/log.ts'],
+          evidence_excerpt: 'log.info(id, id)',
+        }],
+      }));
+      const brCreates: string[][] = [];
+      gitExecHandler = (cmd, args) => {
+        expect(cmd).toBe('br');
+        brCreates.push([...args]);
+        return 'bead-from-review\n';
+      };
+      const saved: FlywheelState[] = [];
+      const { ctx, state } = makeCtx(
+        { pendingBatchReviews: [landed, waiting] },
+        [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'bead-from-review' })])],
+      );
+      ctx.cwd = projectDir;
+      ctx.saveState = (s: FlywheelState) => { saved.push(structuredClone(s)); };
+
+      const result = await runAdvanceWave(ctx, { cwd: projectDir, closedBeadIds: ['done-1'] });
+
+      const data = (result.structuredContent as any).data;
+      expect(brCreates).toHaveLength(1);
+      expect(brCreates[0]![brCreates[0]!.indexOf('--priority') + 1]).toBe('3');
+      expect(data.batchReviews).toEqual({
+        filed: [{ shaRange: landed, beadIds: ['bead-from-review'] }],
+        pending: [waiting],
+      });
+      expect(state.pendingBatchReviews).toEqual([waiting]);
+      expect(saved[0]?.pendingBatchReviews).toEqual([waiting]);
+      expect(data.nextWave.beadIds).toEqual(['bead-from-review']);
+      const text = result.content[0].text;
+      expect(text).toContain(`Batch review ${landed}: filed 1 bead(s) from its findings: bead-from-review.`);
+      expect(text).toContain(`Batch review ${waiting}: waiting on the reviewer's verdict.`);
+    });
+
+    it('keeps a range pending and still advances when br create fails', async () => {
+      const range = 'aaa111..bbb222';
+      const verdictDir = path.join(projectDir, '.pi-flywheel', 'batch-reviews');
+      await mkdir(verdictDir, { recursive: true });
+      await writeFile(path.join(verdictDir, `${range}.json`), JSON.stringify({
+        status: 'blocking',
+        sha_range: range,
+        findings: [{
+          severity: 'high',
+          summary: 'cache never expires',
+          suggested_bead_title: 'Expire cache entries',
+          affected_files: ['src/cache.ts'],
+          evidence_excerpt: 'ttl = Infinity',
+        }],
+      }));
+      gitExecHandler = () => new Error('database is locked');
+      const { ctx, state } = makeCtx(
+        { pendingBatchReviews: [range] },
+        [brShowClosed('done-1'), brReadyCall([makeBead({ id: 'next-1' })])],
+      );
+      ctx.cwd = projectDir;
+
+      const result = await runAdvanceWave(ctx, { cwd: projectDir, closedBeadIds: ['done-1'] });
+
+      const data = (result.structuredContent as any).data;
+      expect(data.batchReviews).toEqual({ filed: [], pending: [range] });
+      expect(state.pendingBatchReviews).toEqual([range]);
+      expect(data.nextWave.beadIds).toEqual(['next-1']);
+    });
   });
 });

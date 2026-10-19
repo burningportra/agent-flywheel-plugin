@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { FlywheelState, Finding, BatchReviewVerdict } from "../types.js";
 
@@ -66,13 +69,8 @@ vi.mock("node:child_process", () => ({
   execFile: execFileMock,
 }));
 
-vi.mock("../logger.js", () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+vi.mock("../memory.js", () => ({
+  appendMemory: vi.fn(() => true),
 }));
 
 // commit-batch.ts must be imported AFTER the vi.mock calls so the mocked
@@ -80,16 +78,25 @@ vi.mock("../logger.js", () => ({
 const {
   countCommitsSinceLastBatchReview,
   shouldTriggerBatchReview,
-  recordBatchReview,
-  synthesizeBeadsFromFindings,
-  rollbackSynthesizedBeads,
+  recordBatchReviewDispatch,
+  applyBatchReviewVerdict,
+  batchReviewVerdictPath,
 } = await import("../commit-batch.js");
+const { appendMemory } = await import("../memory.js");
+
+let cwd: string;
 
 beforeEach(() => {
   execFileMock.mockClear();
+  vi.mocked(appendMemory).mockClear();
   execHandler = () => {
     throw new Error("execFile mock invoked without a handler");
   };
+  cwd = mkdtempSync(join(tmpdir(), "commit-batch-"));
+});
+
+afterEach(() => {
+  rmSync(cwd, { recursive: true, force: true });
 });
 
 // ─── helpers ────────────────────────────────────────────────────────────
@@ -121,6 +128,35 @@ function finding(overrides: Partial<Finding> = {}): Finding {
   };
 }
 
+const RANGE = "aaa111..bbb222";
+
+function writeVerdict(body: unknown, range = RANGE): void {
+  const file = batchReviewVerdictPath(cwd, range);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, typeof body === "string" ? body : JSON.stringify(body));
+}
+
+function verdict(overrides: Partial<BatchReviewVerdict> = {}): BatchReviewVerdict {
+  return { status: "needs_attention", findings: [], sha_range: RANGE, ...overrides };
+}
+
+/** br stub: hands out <prefix>-1, <prefix>-2, … and records each create's args. */
+function brCreates(opts: { failOn?: number; prefix?: string } = {}): { calls: string[][] } {
+  const calls: string[][] = [];
+  execHandler = (cmd, args) => {
+    expect(cmd).toBe("br");
+    expect(args[0]).toBe("create");
+    calls.push([...args]);
+    if (calls.length === opts.failOn) return new Error("database is locked");
+    return `${opts.prefix ?? "bead"}-${calls.length}\n`;
+  };
+  return { calls };
+}
+
+function argAfter(args: string[], flag: string): string | undefined {
+  return args[args.indexOf(flag) + 1];
+}
+
 // ─── countCommitsSinceLastBatchReview ───────────────────────────────────
 
 describe("countCommitsSinceLastBatchReview", () => {
@@ -133,25 +169,6 @@ describe("countCommitsSinceLastBatchReview", () => {
     const n = await countCommitsSinceLastBatchReview("/repo", "abc123");
     expect(n).toBe(5);
     expect(execFileMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("falls back to total HEAD count when sha is undefined", async () => {
-    execHandler = (cmd, args) => {
-      expect(cmd).toBe("git");
-      expect(args).toEqual(["rev-list", "--count", "HEAD"]);
-      return "42\n";
-    };
-    const n = await countCommitsSinceLastBatchReview("/repo", undefined);
-    expect(n).toBe(42);
-  });
-
-  it("falls back to total HEAD count when sha is empty string", async () => {
-    execHandler = (_cmd, args) => {
-      expect(args).toEqual(["rev-list", "--count", "HEAD"]);
-      return "0\n";
-    };
-    const n = await countCommitsSinceLastBatchReview("/repo", "");
-    expect(n).toBe(0);
   });
 
   it("throws when git returns non-integer output", async () => {
@@ -173,296 +190,173 @@ describe("countCommitsSinceLastBatchReview", () => {
 
 describe("shouldTriggerBatchReview", () => {
   it("returns false when live count is below threshold", () => {
-    const s = baseState({ commitBatchThreshold: 8 });
-    expect(shouldTriggerBatchReview(s, 7)).toBe(false);
+    expect(shouldTriggerBatchReview(baseState({ commitBatchThreshold: 8 }), 7)).toBe(false);
   });
 
   it("returns true when live count equals threshold", () => {
-    const s = baseState({ commitBatchThreshold: 8 });
-    expect(shouldTriggerBatchReview(s, 8)).toBe(true);
+    expect(shouldTriggerBatchReview(baseState({ commitBatchThreshold: 8 }), 8)).toBe(true);
   });
 
   it("returns true when live count exceeds threshold", () => {
-    const s = baseState({ commitBatchThreshold: 8 });
-    expect(shouldTriggerBatchReview(s, 9)).toBe(true);
+    expect(shouldTriggerBatchReview(baseState({ commitBatchThreshold: 8 }), 20)).toBe(true);
   });
 
   it("returns false when threshold is 0 (feature disabled)", () => {
-    const s = baseState({ commitBatchThreshold: 0 });
-    expect(shouldTriggerBatchReview(s, 8)).toBe(false);
+    expect(shouldTriggerBatchReview(baseState({ commitBatchThreshold: 0 }), 100)).toBe(false);
   });
 
   it("returns false when threshold is undefined (feature unset)", () => {
-    const s = baseState();
-    expect(shouldTriggerBatchReview(s, 8)).toBe(false);
+    expect(shouldTriggerBatchReview(baseState(), 100)).toBe(false);
   });
 
   it("returns false when threshold is negative", () => {
-    const s = baseState({ commitBatchThreshold: -3 });
-    expect(shouldTriggerBatchReview(s, 8)).toBe(false);
+    expect(shouldTriggerBatchReview(baseState({ commitBatchThreshold: -1 }), 100)).toBe(false);
   });
 
   it("returns false when threshold is non-integer", () => {
-    const s = baseState({ commitBatchThreshold: 8.5 });
-    expect(shouldTriggerBatchReview(s, 8)).toBe(false);
+    expect(shouldTriggerBatchReview(baseState({ commitBatchThreshold: 2.5 }), 100)).toBe(false);
   });
 });
 
-// ─── recordBatchReview ───────────────────────────────────────────────────
+// ─── recordBatchReviewDispatch ───────────────────────────────────────────
 
-describe("recordBatchReview", () => {
-  const verdict = (status: BatchReviewVerdict["status"]): BatchReviewVerdict => ({
-    status,
-    findings: [],
-    sha_range: "old..new",
-  });
+describe("recordBatchReviewDispatch", () => {
+  it("moves the baseline to the end of the range and marks the range pending once", () => {
+    const state = baseState({ lastBatchReviewSha: "aaa111" });
 
-  it("resets counter and advances baseline on pass", () => {
-    const before = baseState({
-      commitBatchCounter: 8,
-      lastBatchReviewSha: "old",
-    });
-    const after = recordBatchReview(before, "new", verdict("pass"));
-    expect(after.commitBatchCounter).toBe(0);
-    expect(after.lastBatchReviewSha).toBe("new");
-    expect(after.batchReviewSynthesizedBeads).toBeUndefined();
-  });
+    recordBatchReviewDispatch(state, RANGE);
+    recordBatchReviewDispatch(state, RANGE);
 
-  it("does NOT mutate the input state (immutable contract)", () => {
-    const before = baseState({
-      commitBatchCounter: 8,
-      lastBatchReviewSha: "old",
-    });
-    const snapshot = { ...before };
-    recordBatchReview(before, "new", verdict("pass"));
-    expect(before.commitBatchCounter).toBe(snapshot.commitBatchCounter);
-    expect(before.lastBatchReviewSha).toBe(snapshot.lastBatchReviewSha);
-  });
-
-  it("initializes synthesized-beads slot on blocking verdict", () => {
-    const before = baseState({
-      commitBatchCounter: 8,
-      lastBatchReviewSha: "old",
-    });
-    const after = recordBatchReview(before, "new", verdict("blocking"));
-    expect(after.batchReviewSynthesizedBeads?.["old..new"]).toEqual([]);
-  });
-
-  it("preserves existing synthesized-beads entries on blocking verdict", () => {
-    const before = baseState({
-      commitBatchCounter: 8,
-      lastBatchReviewSha: "old",
-      batchReviewSynthesizedBeads: {
-        "older..old": ["wonderful-bhaskara-3e2f85-a1"],
-      },
-    });
-    const after = recordBatchReview(before, "new", verdict("blocking"));
-    expect(after.batchReviewSynthesizedBeads).toEqual({
-      "older..old": ["wonderful-bhaskara-3e2f85-a1"],
-      "old..new": [],
-    });
-  });
-
-  it("does not initialize synthesized-beads slot on needs_attention verdict", () => {
-    const before = baseState({ commitBatchCounter: 8 });
-    const after = recordBatchReview(before, "new", verdict("needs_attention"));
-    expect(after.batchReviewSynthesizedBeads).toBeUndefined();
+    expect(state.lastBatchReviewSha).toBe("bbb222");
+    expect(state.pendingBatchReviews).toEqual([RANGE]);
   });
 });
 
-// ─── synthesizeBeadsFromFindings ─────────────────────────────────────────
+// ─── applyBatchReviewVerdict ─────────────────────────────────────────────
 
-describe("synthesizeBeadsFromFindings", () => {
-  it("creates one bead per finding (all severities, no filter)", async () => {
-    const ids = [
-      "wonderful-bhaskara-3e2f85-aaa",
-      "wonderful-bhaskara-3e2f85-bbb",
-      "wonderful-bhaskara-3e2f85-ccc",
-      "wonderful-bhaskara-3e2f85-ddd",
-    ];
-    let i = 0;
-    execHandler = (cmd, args) => {
-      expect(cmd).toBe("br");
-      expect(args[0]).toBe("create");
-      expect(args).toContain("--silent");
-      return `${ids[i++]}\n`;
-    };
+describe("applyBatchReviewVerdict", () => {
+  it("reports pending and files nothing until the reviewer writes the verdict", async () => {
+    const state = baseState({ pendingBatchReviews: [RANGE] });
 
-    const findings: Finding[] = [
-      finding({ severity: "low", suggested_bead_title: "Low fix" }),
-      finding({ severity: "medium", suggested_bead_title: "Med fix" }),
-      finding({ severity: "high", suggested_bead_title: "High fix" }),
-      finding({ severity: "critical", suggested_bead_title: "Crit fix" }),
-    ];
-    const state = baseState();
-    const created = await synthesizeBeadsFromFindings(
-      "/repo",
-      state,
-      findings,
-      "old..new",
-    );
+    const applied = await applyBatchReviewVerdict(cwd, state, RANGE);
 
-    expect(created).toEqual(ids);
-    expect(state.batchReviewSynthesizedBeads).toBeDefined();
-    expect(state.batchReviewSynthesizedBeads!["old..new"]).toEqual(ids);
-    expect(execFileMock).toHaveBeenCalledTimes(4);
+    expect(applied).toEqual({ kind: "pending" });
+    expect(execFileMock).not.toHaveBeenCalled();
+    expect(state.pendingBatchReviews).toEqual([RANGE]);
+    expect(state.batchReviewSynthesizedBeads).toBeUndefined();
   });
 
-  it("passes auto-batch-review label and severity through to bead body", async () => {
-    const programLabel = "flywheel-goal:goal-a:ccba1a8c";
-    execHandler = (_cmd, args) => {
-      const labelsIdx = args.indexOf("--labels");
-      expect(args[labelsIdx + 1]).toBe(`auto-batch-review,${programLabel}`);
-      const titleIdx = args.indexOf("--title");
-      expect(args[titleIdx + 1]).toBe("Fix bug");
-      const descIdx = args.indexOf("--description");
-      const body = args[descIdx + 1];
-      expect(body).toContain("Severity: high");
-      expect(body).toContain("old..new");
-      expect(body).toContain("src/x.ts");
-      return "wonderful-bhaskara-3e2f85-zzz\n";
-    };
-    const state = baseState({
-      beadProgramScope: { kind: "tagged", label: programLabel },
-    });
-    await synthesizeBeadsFromFindings(
-      "/repo",
-      state,
-      [
-        finding({
-          severity: "high",
-          suggested_bead_title: "Fix bug",
-          summary: "the bug",
-          affected_files: ["src/x.ts"],
-          evidence_excerpt: "boom",
-        }),
+  it("files every finding whatever the status, at a priority that follows its severity", async () => {
+    const { calls } = brCreates();
+    writeVerdict(verdict({
+      status: "needs_attention",
+      findings: [
+        finding({ severity: "low", suggested_bead_title: "Low fix" }),
+        finding({ severity: "critical", suggested_bead_title: "Critical fix" }),
+        finding({ severity: "medium", suggested_bead_title: "Medium fix" }),
+        finding({ severity: "high", suggested_bead_title: "High fix" }),
       ],
-      "old..new",
-    );
-  });
+    }));
+    const state = baseState({ pendingBatchReviews: [RANGE, "ccc333..ddd444"] });
 
-  it("leaves a valid partial-rollback record on mid-batch br create failure", async () => {
-    const ids = [
-      "wonderful-bhaskara-3e2f85-aaa",
-      "wonderful-bhaskara-3e2f85-bbb",
-      "wonderful-bhaskara-3e2f85-ccc",
-    ];
-    let i = 0;
-    execHandler = () => {
-      if (i < 3) {
-        return `${ids[i++]}\n`;
-      }
-      return new Error("br create exploded");
-    };
+    const applied = await applyBatchReviewVerdict(cwd, state, RANGE);
 
-    const findings: Finding[] = [
-      finding({ suggested_bead_title: "A" }),
-      finding({ suggested_bead_title: "B" }),
-      finding({ suggested_bead_title: "C" }),
-      finding({ suggested_bead_title: "D" }),
-    ];
-    const state = baseState();
-    await expect(
-      synthesizeBeadsFromFindings("/repo", state, findings, "old..new"),
-    ).rejects.toThrow(/br create failed for finding 4\/4/);
-
-    // partial-rollback contract — caller can roll back the 3 successful IDs
-    expect(state.batchReviewSynthesizedBeads!["old..new"]).toEqual(ids);
-  });
-
-  it("validates each finding via FindingSchema before shelling out", async () => {
-    // Caller passes a finding missing `severity` (Zod required field).
-    const state = baseState();
-    const malformed = [
-      finding({ severity: undefined as unknown as Finding["severity"] }),
-    ];
-    await expect(
-      synthesizeBeadsFromFindings("/repo", state, malformed, "old..new"),
-    ).rejects.toThrow();
-    expect(execFileMock).not.toHaveBeenCalled();
-  });
-});
-
-// ─── rollbackSynthesizedBeads ────────────────────────────────────────────
-
-describe("rollbackSynthesizedBeads", () => {
-  it("deletes every bead when br delete succeeds", async () => {
-    const ids = ["w-1", "w-2", "w-3"];
-    execHandler = (cmd, args) => {
-      expect(cmd).toBe("br");
-      expect(args[0]).toBe("delete");
-      expect(args).toContain("--reason");
-      return "";
-    };
-    const result = await rollbackSynthesizedBeads("/repo", ids);
-    expect(result.deleted).toEqual(ids);
-    expect(result.closed).toEqual([]);
-    expect(result.failed).toEqual([]);
-    expect(execFileMock).toHaveBeenCalledTimes(3);
-  });
-
-  it("falls back to br update --status closed when delete fails", async () => {
-    const ids = ["w-1", "w-2"];
-    execHandler = (_cmd, args) => {
-      if (args[0] === "delete") return new Error("dependents block delete");
-      if (args[0] === "update") {
-        expect(args).toContain("--status");
-        expect(args).toContain("closed");
-        return "";
-      }
-      throw new Error("unexpected br invocation");
-    };
-    const result = await rollbackSynthesizedBeads("/repo", ids);
-    expect(result.deleted).toEqual([]);
-    expect(result.closed).toEqual(ids);
-    expect(result.failed).toEqual([]);
-    // 2 deletes attempted + 2 fallback updates = 4 calls
-    expect(execFileMock).toHaveBeenCalledTimes(4);
-  });
-
-  it("records failures when both delete AND close fall through, never throws", async () => {
-    const ids = ["w-1", "w-2"];
-    execHandler = (_cmd, args) => {
-      if (args[0] === "delete") return new Error("delete boom");
-      if (args[0] === "update") return new Error("update boom");
-      throw new Error("unexpected br invocation");
-    };
-    const result = await rollbackSynthesizedBeads("/repo", ids);
-    expect(result.deleted).toEqual([]);
-    expect(result.closed).toEqual([]);
-    expect(result.failed).toEqual(ids);
-  });
-
-  it("continues cleanup across mixed outcomes", async () => {
-    // bead 1: delete OK; bead 2: delete fails, close OK; bead 3: both fail.
-    const seq: string[] = [];
-    execHandler = (_cmd, args) => {
-      const action = args[0];
-      const id = args[1];
-      seq.push(`${action}:${id}`);
-      if (id === "w-1" && action === "delete") return "";
-      if (id === "w-2" && action === "delete") return new Error("dep");
-      if (id === "w-2" && action === "update") return "";
-      if (id === "w-3" && action === "delete") return new Error("dep");
-      if (id === "w-3" && action === "update") return new Error("locked");
-      throw new Error("unexpected");
-    };
-    const result = await rollbackSynthesizedBeads("/repo", ["w-1", "w-2", "w-3"]);
-    expect(result.deleted).toEqual(["w-1"]);
-    expect(result.closed).toEqual(["w-2"]);
-    expect(result.failed).toEqual(["w-3"]);
-    expect(seq).toEqual([
-      "delete:w-1",
-      "delete:w-2",
-      "update:w-2",
-      "delete:w-3",
-      "update:w-3",
+    expect(applied).toMatchObject({ kind: "filed", beadIds: ["bead-1", "bead-2", "bead-3", "bead-4"] });
+    expect(calls.map((args) => [argAfter(args, "--title"), argAfter(args, "--priority")])).toEqual([
+      ["Low fix", "3"],
+      ["Critical fix", "0"],
+      ["Medium fix", "2"],
+      ["High fix", "1"],
     ]);
+    expect(state.batchReviewSynthesizedBeads).toEqual({ [RANGE]: ["bead-1", "bead-2", "bead-3", "bead-4"] });
+    expect(state.pendingBatchReviews).toEqual(["ccc333..ddd444"]);
   });
 
-  it("returns empty arrays for an empty input (no calls made)", async () => {
-    const result = await rollbackSynthesizedBeads("/repo", []);
-    expect(result).toEqual({ deleted: [], closed: [], failed: [] });
+  it("labels each bead with the goal program and puts the finding in its description", async () => {
+    const programLabel = "flywheel-goal:goal-a:ccba1a8c";
+    const { calls } = brCreates();
+    writeVerdict(verdict({
+      status: "blocking",
+      findings: [finding({ severity: "high", summary: "the bug", affected_files: ["src/x.ts"], evidence_excerpt: "boom" })],
+    }));
+    const state = baseState({ beadProgramScope: { kind: "tagged", label: programLabel } });
+
+    await applyBatchReviewVerdict(cwd, state, RANGE);
+
+    expect(argAfter(calls[0]!, "--labels")).toBe(`auto-batch-review,${programLabel}`);
+    const body = argAfter(calls[0]!, "--description")!;
+    expect(body).toContain("the bug");
+    expect(body).toContain("Severity: high");
+    expect(body).toContain(RANGE);
+    expect(body).toContain("- src/x.ts");
+    expect(body).toContain("boom");
+  });
+
+  it("settles a clean pass without filing anything", async () => {
+    writeVerdict(verdict({ status: "pass" }));
+    const state = baseState({ pendingBatchReviews: [RANGE] });
+
+    const applied = await applyBatchReviewVerdict(cwd, state, RANGE);
+
+    expect(applied).toMatchObject({ kind: "filed", beadIds: [] });
     expect(execFileMock).not.toHaveBeenCalled();
+    expect(state.pendingBatchReviews).toEqual([]);
+  });
+
+  it("resumes after a failed br create without filing any finding twice", async () => {
+    writeVerdict(verdict({
+      findings: [
+        finding({ suggested_bead_title: "First" }),
+        finding({ suggested_bead_title: "Second" }),
+        finding({ suggested_bead_title: "Third" }),
+      ],
+    }));
+    const state = baseState({ pendingBatchReviews: [RANGE] });
+
+    brCreates({ failOn: 2 });
+    await expect(applyBatchReviewVerdict(cwd, state, RANGE)).rejects.toThrow(/br create failed for finding 2\/3.*database is locked/);
+    expect(state.batchReviewSynthesizedBeads).toEqual({ [RANGE]: ["bead-1"] });
+    expect(state.pendingBatchReviews).toEqual([RANGE]);
+
+    const retry = brCreates({ prefix: "retry" });
+    const applied = await applyBatchReviewVerdict(cwd, state, RANGE);
+    expect(retry.calls.map((args) => argAfter(args, "--title"))).toEqual(["Second", "Third"]);
+    expect(applied).toMatchObject({ kind: "filed", beadIds: ["bead-1", "retry-1", "retry-2"] });
+    expect(state.pendingBatchReviews).toEqual([]);
+
+    const again = brCreates();
+    await applyBatchReviewVerdict(cwd, state, RANGE);
+    expect(again.calls).toEqual([]);
+  });
+
+  it("files one re-review bead and one CASS note for a verdict that isn't JSON, however often it's applied", async () => {
+    const { calls } = brCreates();
+    writeVerdict("Here are my findings: the cache leaks.");
+    const state = baseState({ pendingBatchReviews: [RANGE] });
+
+    const applied = await applyBatchReviewVerdict(cwd, state, RANGE);
+    await applyBatchReviewVerdict(cwd, state, RANGE);
+
+    expect(applied).toMatchObject({ kind: "malformed", beadIds: ["bead-1"], rawSnippet: "Here are my findings: the cache leaks." });
+    expect(calls).toHaveLength(1);
+    expect(argAfter(calls[0]!, "--title")).toBe(`Re-review commits ${RANGE} (batch-review verdict unreadable)`);
+    expect(argAfter(calls[0]!, "--priority")).toBe("1");
+    expect(argAfter(calls[0]!, "--description")).toContain(`git diff ${RANGE}`);
+    expect(argAfter(calls[0]!, "--description")).toContain("the cache leaks");
+    expect(vi.mocked(appendMemory)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(appendMemory).mock.calls[0]![1]).toMatch(/malformed batch-review verdict \(sha range aaa111\.\.bbb222\): Verdict JSON parse failed/);
+    expect(state.pendingBatchReviews).toEqual([]);
+  });
+
+  it("treats a schema violation or a verdict for another range as unreadable", async () => {
+    brCreates();
+    writeVerdict({ status: "blocking", findings: [{ summary: "no severity" }], sha_range: RANGE });
+    const schemaState = baseState();
+    const schema = await applyBatchReviewVerdict(cwd, schemaState, RANGE);
+    expect(schema).toMatchObject({ kind: "malformed", reason: expect.stringContaining("BatchReviewVerdictSchema") });
+
+    writeVerdict(verdict({ sha_range: "eee555..fff666" }));
+    const mismatch = await applyBatchReviewVerdict(cwd, baseState(), RANGE);
+    expect(mismatch).toMatchObject({ kind: "malformed", reason: expect.stringContaining("eee555..fff666") });
   });
 });

@@ -623,15 +623,20 @@ export interface FlywheelState {
    *  feature; existing post-wave gate flow is unchanged. */
   commitBatchThreshold?: number;
 
-  /** Baseline SHA used by the next batch-review diff. Updated when a batch
-   *  review dispatches (set to HEAD at dispatch time, NOT after verdict, so
-   *  in-flight commits during the review don't double-trigger the next batch). */
+  /** Baseline SHA for the next batch-review diff, falling back to
+   *  `cycleStartSha` when unset. `recordBatchReviewDispatch` moves it to the
+   *  end of each range as the review goes out, so commits made while a review
+   *  runs count toward the next one instead of firing the gate again. */
   lastBatchReviewSha?: string;
 
-  /** Per-sha-range record of bead IDs auto-synthesized from blocking verdicts.
-   *  Key = `<from-sha>..<to-sha>`; value = ordered bead IDs created by
-   *  synthesizeBeadsFromFindings. Used for the rollback path
-   *  (rollbackSynthesizedBeads) when the user picks Reject all / Approve subset. */
+  /** Ranges (`<from-sha>..<to-sha>`) whose review went out and whose verdict
+   *  hasn't been applied yet. `flywheel_advance_wave` applies any of them
+   *  whose verdict file has landed. */
+  pendingBatchReviews?: string[];
+
+  /** Per-range bead IDs filed from a review's findings, in finding order.
+   *  `applyBatchReviewVerdict` resumes after the last recorded ID, so applying
+   *  a range twice never files a finding twice. */
   batchReviewSynthesizedBeads?: Record<string, string[]>;
 }
 

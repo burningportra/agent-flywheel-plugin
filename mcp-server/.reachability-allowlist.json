@@ -3,11 +3,6 @@
   "unreachableFiles": [],
   "unreachableExports": [
     {
-      "file": "src/commit-batch.ts",
-      "name": "recordBatchReview",
-      "reason": "Unit-tested through src/__tests__/commit-batch.test.ts; reachability treats test-only call sites as non-production, so the export appears unreachable even though it has coverage. Candidate for TEST_ONLY_EXPORT once the tracer widens its test-call heuristic."
-    },
-    {
       "file": "src/lint/config.ts",
       "name": "LintConfigSchema",
       "reason": "Re-exported through src/lint/index.ts for callers that load the lint public surface via namespace import. Kept as library API alongside the paired type export."

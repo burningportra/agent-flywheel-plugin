@@ -1,37 +1,37 @@
 import { execFile } from "node:child_process";
+import { promises as fs } from "node:fs";
+import * as path from "node:path";
 import { promisify } from "node:util";
-import type { FlywheelState, Finding, BatchReviewVerdict } from "./types.js";
-import { FindingSchema } from "./types.js";
-import { createLogger } from "./logger.js";
+import type { FlywheelState, Finding, BatchReviewVerdict, Severity } from "./types.js";
+import { BatchReviewVerdictSchema } from "./types.js";
+import { errMsg } from "./errors.js";
+import { appendMemory } from "./memory.js";
 
-const log = createLogger("commit-batch");
 const execFileAsync = promisify(execFile);
 
 const GIT_TIMEOUT_MS = 10_000;
 const BR_TIMEOUT_MS = 15_000;
-const REJECT_REASON = "rejected via batch-review approve/reject gate";
+const RAW_SNIPPET_CHARS = 2048;
+
+/** A bead filed from a finding gets P0 for critical down to P3 for low, so the swarm takes the worst first. */
+const PRIORITY_BY_SEVERITY: Record<Severity, string> = { critical: "0", high: "1", medium: "2", low: "3" };
 
 /**
- * Count commits since the batch-review baseline. Uses `git rev-list --count
- * <sha>..HEAD` via execFile (shell-injection-safe — sha is an argv element,
- * not a shell-interpolated string). If `sha` is empty/undefined, returns the
- * total HEAD commit count of the branch. Throws on git failure so callers
- * can decide whether to surface the error or skip the batch-review tick.
+ * Count commits since the batch-review baseline with `git rev-list --count
+ * <sha>..HEAD` via execFile (the sha is an argv element, never shell text).
+ * Throws on git failure so callers can decide whether to skip the gate.
  */
 export async function countCommitsSinceLastBatchReview(
   cwd: string,
-  sha: string | undefined,
+  sha: string,
+  signal?: AbortSignal,
 ): Promise<number> {
-  const args = sha && sha.length > 0
-    ? ["rev-list", "--count", `${sha}..HEAD`]
-    : ["rev-list", "--count", "HEAD"];
   let stdout: string;
   try {
-    const result = await execFileAsync("git", args, { cwd, timeout: GIT_TIMEOUT_MS });
+    const result = await execFileAsync("git", ["rev-list", "--count", `${sha}..HEAD`], { cwd, timeout: GIT_TIMEOUT_MS, signal });
     stdout = result.stdout;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`git rev-list failed in ${cwd}: ${msg}`);
+    throw new Error(`git rev-list failed in ${cwd}: ${errMsg(err)}`);
   }
   const trimmed = stdout.trim();
   const n = Number.parseInt(trimmed, 10);
@@ -41,97 +41,134 @@ export async function countCommitsSinceLastBatchReview(
   return n;
 }
 
-/**
- * Pure check: should the coordinator dispatch a batch review now? Returns
- * true iff the feature is enabled (`commitBatchThreshold` is a positive
- * integer) AND the live commit count has reached the threshold. 0/undefined
- * threshold disables the feature — the existing post-wave gate flow is
- * unchanged.
- *
- * The caller MUST compute `count` from `countCommitsSinceLastBatchReview(cwd,
- * state.lastBatchReviewSha)` and pass it in. This intentionally keeps the
- * boolean check pure-synchronous: callers handle the I/O for testability and
- * to make the data-flow visible in `advance-wave.ts` (we count commits at
- * gate-time, not from a stored counter — `state.commitBatchCounter` is
- * deprecated and unused by this function).
- */
+/** A 0, unset, or non-integer `commitBatchThreshold` turns batch reviews off. */
+export function batchReviewsEnabled(state: FlywheelState): boolean {
+  const threshold = state.commitBatchThreshold;
+  return typeof threshold === "number" && Number.isInteger(threshold) && threshold > 0;
+}
+
+/** True when batch reviews are on and `count` (from `countCommitsSinceLastBatchReview`) has reached the threshold. */
 export function shouldTriggerBatchReview(
   state: FlywheelState,
   count: number,
 ): boolean {
-  const threshold = state.commitBatchThreshold;
-  if (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold <= 0) {
-    return false;
-  }
-  return count >= threshold;
+  return batchReviewsEnabled(state) && count >= state.commitBatchThreshold!;
+}
+
+export function batchReviewVerdictPath(cwd: string, shaRange: string): string {
+  return path.join(cwd, ".pi-flywheel", "batch-reviews", `${shaRange}.json`);
 }
 
 /**
- * Record a dispatched batch review against the state. Returns a NEW state
- * object — the input is not mutated. Sets `lastBatchReviewSha` to the
- * snapshot sha (dispatch time, not verdict time — risk #3 in the plan),
- * resets `commitBatchCounter` to 0, and pre-initializes
- * `batchReviewSynthesizedBeads[verdict.sha_range]` to an empty array when
- * the verdict is blocking so the synthesize loop has a record to append to.
+ * Record that a review of `shaRange` went out. Only commits after its end sha
+ * count toward the next review, so the gate stays quiet while this one runs,
+ * and the range stays in `pendingBatchReviews` until its verdict is applied.
  */
-export function recordBatchReview(
-  state: FlywheelState,
-  sha: string,
-  verdict: BatchReviewVerdict,
-): FlywheelState {
-  const next: FlywheelState = {
-    ...state,
-    lastBatchReviewSha: sha,
-    commitBatchCounter: 0,
-  };
-  if (verdict.status === "blocking") {
-    const existing = state.batchReviewSynthesizedBeads ?? {};
-    next.batchReviewSynthesizedBeads = {
-      ...existing,
-      [verdict.sha_range]: existing[verdict.sha_range] ?? [],
-    };
-  }
-  return next;
+export function recordBatchReviewDispatch(state: FlywheelState, shaRange: string): void {
+  state.lastBatchReviewSha = shaRange.split("..")[1];
+  const pending = state.pendingBatchReviews ?? [];
+  if (!pending.includes(shaRange)) state.pendingBatchReviews = [...pending, shaRange];
 }
 
+export type AppliedBatchReview =
+  | { kind: "pending" }
+  | { kind: "filed"; verdict: BatchReviewVerdict; beadIds: string[] }
+  | { kind: "malformed"; reason: string; rawSnippet: string; beadIds: string[] };
+
 /**
- * Synthesize one bead per finding via `br create --silent` and record each
- * created ID in `state.batchReviewSynthesizedBeads[range]` immediately so a
- * mid-batch failure leaves a valid partial-rollback record. Mutates the
- * passed `state` (the record is the durable artifact callers rely on for
- * rollback). Throws on the first `br create` failure — callers MUST invoke
- * `rollbackSynthesizedBeads(cwd, state.batchReviewSynthesizedBeads[range])`
- * to clean up the partial set.
+ * Read the verdict for `shaRange` and file one bead per finding, whatever the
+ * verdict's status, or one re-review bead when the verdict can't be read.
  *
- * Every finding is validated against `FindingSchema` before the `br create`
- * shells out; a single invalid finding short-circuits the whole batch (the
- * caller falls back to `needs_attention` mode).
- *
- * All severities synthesize — no filter. (Alignment-check round 2 decision:
- * severity is preserved in the bead description for downstream prioritization
- * via the Approve subset gate.)
+ * Mutates `state`. Each bead id goes into `batchReviewSynthesizedBeads[shaRange]`
+ * as soon as br returns it, so a call that fails partway can simply be
+ * repeated: it files only the findings that don't have a bead yet, and a call
+ * on an applied range files nothing. The range leaves `pendingBatchReviews`
+ * once every finding has its bead. Throws when the verdict file can't be read
+ * or `br create` fails; the caller saves `state` either way.
  */
-export async function synthesizeBeadsFromFindings(
+export async function applyBatchReviewVerdict(
   cwd: string,
   state: FlywheelState,
+  shaRange: string,
+  signal?: AbortSignal,
+): Promise<AppliedBatchReview> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(batchReviewVerdictPath(cwd, shaRange), "utf-8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { kind: "pending" };
+    throw new Error(`Failed to read the batch-review verdict for ${shaRange}: ${errMsg(err)}`);
+  }
+
+  const parsed = parseVerdict(raw, shaRange);
+  if (!parsed.ok) {
+    if (!state.batchReviewSynthesizedBeads?.[shaRange]) {
+      try {
+        appendMemory(cwd, `malformed batch-review verdict (sha range ${shaRange}): ${parsed.reason}`, "batch-review");
+      } catch { /* CASS is best-effort */ }
+    }
+    const rawSnippet = raw.length > RAW_SNIPPET_CHARS ? `${raw.slice(0, RAW_SNIPPET_CHARS)}\n…(truncated)` : raw;
+    const beadIds = await fileFindingBeads(cwd, state, shaRange, [reReviewFinding(shaRange, parsed.reason, rawSnippet)], signal);
+    settle(state, shaRange);
+    return { kind: "malformed", reason: parsed.reason, rawSnippet, beadIds };
+  }
+
+  const beadIds = await fileFindingBeads(cwd, state, shaRange, parsed.verdict.findings, signal);
+  settle(state, shaRange);
+  return { kind: "filed", verdict: parsed.verdict, beadIds };
+}
+
+function parseVerdict(
+  raw: string,
+  shaRange: string,
+): { ok: true; verdict: BatchReviewVerdict } | { ok: false; reason: string } {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (err: unknown) {
+    return { ok: false, reason: `Verdict JSON parse failed: ${errMsg(err)}` };
+  }
+  const result = BatchReviewVerdictSchema.safeParse(json);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
+    return { ok: false, reason: `Verdict schema validation failed (BatchReviewVerdictSchema): ${issues}` };
+  }
+  if (result.data.sha_range !== shaRange) {
+    return { ok: false, reason: `Verdict sha_range "${result.data.sha_range}" does not match the path "${shaRange}"` };
+  }
+  return { ok: true, verdict: result.data };
+}
+
+function reReviewFinding(shaRange: string, reason: string, rawSnippet: string): Finding {
+  return {
+    severity: "high",
+    summary:
+      `Nobody has reviewed commits ${shaRange}, because the batch reviewer's verdict could not be read (${reason}). ` +
+      `Review \`git diff ${shaRange}\` with fresh eyes and file a bead with \`br create\` for each real issue.`,
+    suggested_bead_title: `Re-review commits ${shaRange} (batch-review verdict unreadable)`,
+    affected_files: [path.join(".pi-flywheel", "batch-reviews", `${shaRange}.json`)],
+    evidence_excerpt: rawSnippet,
+  };
+}
+
+async function fileFindingBeads(
+  cwd: string,
+  state: FlywheelState,
+  shaRange: string,
   findings: Finding[],
-  range: string,
+  signal: AbortSignal | undefined,
 ): Promise<string[]> {
-  if (!state.batchReviewSynthesizedBeads) {
-    state.batchReviewSynthesizedBeads = {};
-  }
-  if (!state.batchReviewSynthesizedBeads[range]) {
-    state.batchReviewSynthesizedBeads[range] = [];
-  }
+  const filed = state.batchReviewSynthesizedBeads?.[shaRange] ?? [];
+  state.batchReviewSynthesizedBeads = { ...state.batchReviewSynthesizedBeads, [shaRange]: filed };
   const programLabel = state.beadProgramScope?.kind === "tagged" ||
     state.beadProgramScope?.kind === "unresolved"
     ? state.beadProgramScope.label
     : undefined;
   const labels = ["auto-batch-review", programLabel].filter(Boolean).join(",");
-  const created: string[] = [];
-  for (let i = 0; i < findings.length; i++) {
-    const finding = FindingSchema.parse(findings[i]);
-    const body = formatFindingBody(finding, range);
+  for (let i = filed.length; i < findings.length; i++) {
+    const finding = findings[i]!;
     let stdout: string;
     try {
       const result = await execFileAsync(
@@ -140,89 +177,39 @@ export async function synthesizeBeadsFromFindings(
           "create",
           "--title", finding.suggested_bead_title,
           "--type", "task",
-          "--priority", "2",
-          "--description", body,
+          "--priority", PRIORITY_BY_SEVERITY[finding.severity],
+          "--description", formatFindingBody(finding, shaRange),
           "--labels", labels,
           "--silent",
         ],
-        { cwd, timeout: BR_TIMEOUT_MS },
+        { cwd, timeout: BR_TIMEOUT_MS, signal },
       );
       stdout = result.stdout;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `br create failed for finding ${i + 1}/${findings.length} (${finding.severity}: ${finding.suggested_bead_title}): ${msg}`,
+        `br create failed for finding ${i + 1}/${findings.length} (${finding.severity}: ${finding.suggested_bead_title}): ${errMsg(err)}`,
       );
     }
     const beadId = stdout.trim().split(/\s+/)[0] ?? "";
     if (!beadId) {
-      throw new Error(
-        `br create --silent returned empty stdout for finding ${i + 1}/${findings.length}`,
-      );
+      throw new Error(`br create --silent returned empty stdout for finding ${i + 1}/${findings.length}`);
     }
-    state.batchReviewSynthesizedBeads[range].push(beadId);
-    created.push(beadId);
+    filed.push(beadId);
   }
-  return created;
+  return [...filed];
 }
 
-/**
- * Tear down auto-synthesized beads when the user picks Reject all (or the
- * rejected subset of Approve subset). Primary path: `br delete <id>
- * --reason "<REJECT_REASON>"`. If delete fails (dependents, tombstone
- * conflict, etc.) the fallback is `br update <id> --status closed
- * --notes "<REJECT_REASON>"` so the graph reflects intent. Never throws —
- * collects per-bead outcomes so the caller can surface partial-failure
- * info to the operator.
- */
-export async function rollbackSynthesizedBeads(
-  cwd: string,
-  beadIds: string[],
-): Promise<{ deleted: string[]; closed: string[]; failed: string[] }> {
-  const deleted: string[] = [];
-  const closed: string[] = [];
-  const failed: string[] = [];
-  for (const id of beadIds) {
-    let deletedOk = false;
-    try {
-      await execFileAsync(
-        "br",
-        ["delete", id, "--reason", REJECT_REASON],
-        { cwd, timeout: BR_TIMEOUT_MS },
-      );
-      deleted.push(id);
-      deletedOk = true;
-    } catch (err: unknown) {
-      log.warn("br delete failed; will try close fallback", {
-        beadId: id,
-        err: err instanceof Error ? err.message : String(err),
-      });
-    }
-    if (deletedOk) continue;
-    try {
-      await execFileAsync(
-        "br",
-        ["update", id, "--status", "closed", "--notes", REJECT_REASON],
-        { cwd, timeout: BR_TIMEOUT_MS },
-      );
-      closed.push(id);
-    } catch (err: unknown) {
-      log.error("rollback: both delete and close failed", {
-        beadId: id,
-        err: err instanceof Error ? err.message : String(err),
-      });
-      failed.push(id);
-    }
-  }
-  return { deleted, closed, failed };
+function settle(state: FlywheelState, shaRange: string): void {
+  if (!state.pendingBatchReviews) return;
+  state.pendingBatchReviews = state.pendingBatchReviews.filter((range) => range !== shaRange);
 }
 
-function formatFindingBody(finding: Finding, range: string): string {
+function formatFindingBody(finding: Finding, shaRange: string): string {
   const files = finding.affected_files.map((f) => `- ${f}`).join("\n");
   return [
     finding.summary,
     "",
-    `Found during batch review (sha range ${range}).`,
+    `Found during batch review (sha range ${shaRange}).`,
     "",
     `Severity: ${finding.severity}`,
     "",
