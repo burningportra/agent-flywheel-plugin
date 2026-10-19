@@ -28,6 +28,7 @@ import {
   detectCliCapabilities,
   describeCapabilities,
   PRIMARY_PROVIDERS,
+  swarmMixFor,
   type CapabilitiesMap,
   type ModelProvider,
 } from '../adapters/model-diversity.js';
@@ -396,6 +397,7 @@ export async function runDoctorChecks(
 
   const criticalFails = countCriticalFails(checks);
   const ntm = deriveNtmReadiness(cwd, partial, checks, projectsBaseReadiness);
+  const swarm = partial ? undefined : swarmMixFor(withGeminiModelCheck(await swarmCapsPromise, checks));
 
   return {
     version: 1,
@@ -405,9 +407,17 @@ export async function runDoctorChecks(
     partial,
     checks,
     ntm,
+    ...(swarm ? { swarm } : {}),
     elapsedMs,
     timestamp,
   };
+}
+
+/** A Gemini CLI whose model `gemini_model_compat` rejects can't take a swarm lane. */
+function withGeminiModelCheck(caps: CapabilitiesMap, checks: DoctorCheck[]): CapabilitiesMap {
+  const compat = checks.find((c) => c.name === 'gemini_model_compat');
+  if (!caps.gemini.available || compat === undefined || compat.severity === 'green') return caps;
+  return { ...caps, gemini: { ...caps.gemini, available: false, reason: compat.message } };
 }
 
 /**

@@ -17,7 +17,7 @@ AskUserQuestion(questions: [{
   options: [
     { label: "Reality check only", description: "Run §2 — agent reads docs + investigates code + applies /reality-check-for-project exhaustively. Stop after the gap report. Best when you want to read the findings and decide manually." },
     { label: "Reality check + beads", description: "Run §2, then §3 — convert every gap into a granular self-contained bead graph via br, with comments capturing background/reasoning. Stops before implementation. (Recommended)" },
-    { label: "Full pipeline (check + beads + swarm)", description: "Run §2, then §3, then §4 — execute the gap-closure beads via NTM swarm (cc:pi:gem 2:2:2, 3-min looper; substitution ladder gmi→pi→cod→cc when a provider is unavailable, per AGENTS.md NTM pane priority). Best when you want to walk away and let it run." }
+    { label: "Full pipeline (check + beads + swarm)", description: "Run §2, then §3, then §4 — execute the gap-closure beads via an NTM swarm on the lanes this host can run (the doctor's swarm mix, with a 3-min looper). Best when you want to walk away and let it run." }
   ],
   multiSelect: false
 }])
@@ -105,7 +105,7 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 >
 > Then execute the remaining bead tasks you created, in dependency order.
 >
-> Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch a mixed cc:pi:gem 2:2:2 swarm (2 claude + 2 pi + 2 gemini panes, per AGENTS.md NTM pane priority — model-diversified is the canonical default; fall back via the substitution ladder gmi→pi→cod→cc when a provider is unavailable on this host) and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
+> Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch a six-pane swarm on the lanes in `DOCTOR_REPORT.swarm.spawnFlags`, which the server builds from AGENTS.md NTM pane priority, the substitution ladder, and the `lanes:` switches in flywheel.config.yaml, and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
 
 ### 4a. Pre-flight
 

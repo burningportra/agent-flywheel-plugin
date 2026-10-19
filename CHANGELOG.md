@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **The start menu names only the lanes a swarm will spawn.** The Auto-swarm option printed a fixed "cc:pi:gem 2:2:2" ("cc:cod:gem" before v3.21.0), so a host with Gemini switched off still saw a Gemini lane, and the coordinator worked out the real lanes from the doctor rows on its own. `flywheel_doctor` now returns `report.swarm`, the lanes a six-pane swarm gets on this host after the substitution ladder, the `lanes:` switches, and the Gemini model check, as a `label` (`cc:pi 2:4` with Gemini off) and the `spawnFlags` (`--cc=2 --pi=4`). The `/start` menu prints the label. The in-flight route, the reality-check pipeline, and the saturation re-spawn pass the flags to `swarm-spawn.js`. The field is left out when the sweep is cut short or no lane is usable.
+
 ## [3.21.0] - 2026-10-19
 
 Pi replaces Codex as the second lane in deep plan and implementation swarms. The user picks each Pi lane's model from the models their own Pi logins can run (Grok, Muse, GLM, ChatGPT and others) and the live Vercel AI Gateway list, and can switch the Gemini lane off. Batch reviews now file every finding as a bead and never stop the swarm to ask the operator.

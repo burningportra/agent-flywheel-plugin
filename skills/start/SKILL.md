@@ -257,6 +257,8 @@ Recent plans (mtime desc — copy-paste into Other when picking "Pick up existin
 
 Build the menu options dynamically based on detected state:
 
+Set `SWARM_MIX = DOCTOR_REPORT.swarm.label`. The server builds it from the lanes this host can run after the substitution ladder and the `lanes:` switches in flywheel.config.yaml, so a host with Gemini switched off reads `cc:pi 2:4`. Print it as given. When the report has no `swarm` field, set `SWARM_MIX = "model-diversified"`.
+
 After printing the selected state's menu block, append this glossary line once: `Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol`.
 
 **If a previous session exists** (checkpoint found with non-idle phase):
@@ -265,7 +267,7 @@ Print this block first (per the menu-visibility rule below):
 
 ```
 Primary entry points (active session: '<goal>' @ <phase>):
-  • Auto-swarm          — in-flight resume with cc:pi:gem 2:2:2 swarm (Recommended)
+  • Auto-swarm          — in-flight resume with a <SWARM_MIX> swarm (Recommended)
   • Resume session      — continue manually (no swarm)
   • Set a goal          — type a fresh goal in Other; appends to existing beads after drift confirm
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps to bead creation
@@ -292,7 +294,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Resume '<goal>' from <phase> with the canonical in-flight swarm route in Step 0e" },
+    { label: "Auto-swarm (Recommended)", description: "Resume '<goal>' from <phase> with a <SWARM_MIX> swarm through the in-flight route in Step 0e" },
     { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends to the current bead set after a drift confirmation. Does NOT discard the checkpoint" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps" }
@@ -307,7 +309,7 @@ Print this block first (per the menu-visibility rule below):
 
 ```
 Primary entry points (<N> open beads):
-  • Auto-swarm          — in-flight resume with cc:pi:gem 2:2:2 swarm (Recommended)
+  • Auto-swarm          — in-flight resume with a <SWARM_MIX> swarm (Recommended)
   • Work on beads       — refine / implement / inspect manually
   • Set a goal          — type a fresh goal in Other; appends new beads to the current set
   • Pick up existing plan — type a path to docs/plans/<file>.md in Other; merges into the current bead set
@@ -333,7 +335,7 @@ AskUserQuestion(questions: [{
   question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Dispatch the <N> open beads with the canonical in-flight swarm route in Step 0e" },
+    { label: "Auto-swarm (Recommended)", description: "Dispatch the <N> open beads to a <SWARM_MIX> swarm through the in-flight route in Step 0e" },
     { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
     { label: "Set a goal", description: "Type a fresh goal in Other — appends new beads to the existing set without discarding them" },
     { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then Step 5.45 surfaces (Validate / Approve / Refine / Scrap); validated gaps merge into the current bead set" }

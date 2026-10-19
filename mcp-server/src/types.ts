@@ -920,6 +920,19 @@ export const NtmReadinessSchema = z.discriminatedUnion('NTM_AVAILABLE', [
 ]);
 export type NtmReadiness = z.infer<typeof NtmReadinessSchema>;
 
+/**
+ * The lanes a six-pane swarm gets on this host, after the substitution
+ * ladder and the `lanes:` switches in flywheel.config.yaml. Menus print
+ * `label`, and swarm spawns pass `spawnFlags` to `swarm-spawn.js`.
+ */
+export const SwarmMixSchema = z.object({
+  /** Lane names, then pane counts: "cc:pi:gmi 2:2:2", or "cc:pi 2:4" with Gemini off. */
+  label: z.string(),
+  /** "--cc=2 --pi=2 --gmi=2", or "--cc=2 --pi=4" with Gemini off. */
+  spawnFlags: z.string(),
+});
+export type SwarmMix = z.infer<typeof SwarmMixSchema>;
+
 export const DoctorReportSchema = z.object({
   version: z.literal(1),
   cwd: z.string(),
@@ -933,6 +946,8 @@ export const DoctorReportSchema = z.object({
   partial: z.boolean().default(false),
   checks: z.array(DoctorCheckSchema),
   ntm: NtmReadinessSchema.optional(),
+  /** Absent when the sweep was cut short or no lane is usable. */
+  swarm: SwarmMixSchema.optional(),
   elapsedMs: z.number().int().nonnegative(),
   timestamp: z.string(),
 });

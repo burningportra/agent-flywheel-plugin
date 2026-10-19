@@ -100,6 +100,25 @@ describe('skills/start/SKILL.md — Step 0d menu options (claude-orchestrator-1o
     });
   }
 
+  it('names the Auto-swarm lanes from the doctor instead of a fixed lane mix', () => {
+    const step0d = skillBody.slice(skillBody.indexOf('### 0d.'), skillBody.indexOf('### 0e.'));
+    expect(step0d).toContain('SWARM_MIX = DOCTOR_REPORT.swarm.label');
+    for (const variant of VARIANTS.filter((v) => v.name !== 'fresh-start')) {
+      const section = sliceVariant(variant);
+      expect(section).toMatch(/• Auto-swarm +— in-flight resume with a <SWARM_MIX> swarm/);
+      expect(section).toMatch(/label: "Auto-swarm \(Recommended\)", description: "[^"]*a <SWARM_MIX> swarm/);
+    }
+    const lane = '(?:cc|pi|gmi|gem|cod)';
+    const fixedMix = new RegExp(`\\b${lane}(?::${lane})+ +\\d+(?::\\d+)+`);
+    // Inline code may show an example mix; the printed menus and options may not.
+    expect(step0d.replace(/`[^`\n]+`/g, '')).not.toMatch(fixedMix);
+
+    const inflight = readFileSync(resolve(SKILL_PATH, '../_inflight_prompt.md'), 'utf-8');
+    expect(inflight).toContain('`SWARM_FLAGS = DOCTOR_REPORT.swarm.spawnFlags`');
+    expect(inflight).toMatch(/swarm-spawn\.js" "\$NTM_PROJECT" --label inflight-resume \$SWARM_FLAGS /);
+    expect(inflight).not.toMatch(/--gmi=\d|2 gmi instances/);
+  });
+
   it('surfaces RECENT_PLAN_PATHS placeholder in every variant that offers Pick up existing plan', () => {
     for (const variant of VARIANTS) {
       const section = sliceVariant(variant);

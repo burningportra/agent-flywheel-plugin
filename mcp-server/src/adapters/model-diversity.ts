@@ -19,6 +19,7 @@
  */
 
 import type { ExecFn } from '../exec.js';
+import type { SwarmMix } from '../types.js';
 import { errMsg } from '../errors.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
 import { checkPiLaneReady } from '../pi-models.js';
@@ -243,6 +244,31 @@ export function splitBeadsByProvider(
   ).join(':');
 
   return { lanes, warnings, degraded, ratio };
+}
+
+/** Each lane's `swarm-spawn.js` flag name. */
+const SPAWN_LANE: Record<ModelProvider, string> = {
+  claude: 'cc',
+  pi: 'pi',
+  gemini: 'gmi',
+  codex: 'cod',
+};
+
+/**
+ * The lanes a swarm of `panes` panes gets on this host, split the way
+ * implementation waves split beads. Undefined when no lane is usable.
+ */
+export function swarmMixFor(caps: CapabilitiesMap, panes = 6): SwarmMix | undefined {
+  const slots = Array.from({ length: panes }, (_, i) => String(i));
+  const lanes = splitBeadsByProvider(slots, caps).lanes.map((lane) => ({
+    name: SPAWN_LANE[lane.provider],
+    panes: lane.beadIds.length,
+  }));
+  if (lanes.length === 0) return undefined;
+  return {
+    label: `${lanes.map((l) => l.name).join(':')} ${lanes.map((l) => l.panes).join(':')}`,
+    spawnFlags: lanes.map((l) => `--${l.name}=${l.panes}`).join(' '),
+  };
 }
 
 // ─── Prompt adaptation facade ─────────────────────────────────────────────
