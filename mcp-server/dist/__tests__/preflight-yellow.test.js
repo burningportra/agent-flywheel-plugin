@@ -59,7 +59,7 @@ describe("Step 0c yellow doctor surfacing (claude-orchestrator-6bxt)", () => {
     it("Step 0c keeps the welcome message concise without extra commentary or multi-sentence rewrites", () => {
         expect(skillBody).toMatch(/Display one concise welcome message using only the blocks below/);
         expect(skillBody).toMatch(/Print a non-null `PREFLIGHT_BANNER` verbatim once above the menu/);
-        expect(skillBody).toMatch(/Display up to three relevant CASS learnings when available, each as one concise line/);
+        expect(skillBody).toMatch(/Display three relevant CASS learnings when three are available.*quoting each learning's first sentence verbatim/s);
     });
 });
 //# sourceMappingURL=preflight-yellow.test.js.map
