@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.25.0] - 2026-10-20
+
+### Added
+
+- **Every goal the user types is deepened before planning.** Before `flywheel_select`, `/agent-flywheel:start` answers four questions about the goal: what a top professional would do that it doesn't ask for, the rawest material they'd start from, the methods and tools they'd use, and what other than the agent or the user would show the result is right. It then rewrites the goal to ask for exactly that at the same scope, and the user picks the rewrite or their own wording. This runs for a goal passed to `/start`, typed at **Set a goal**, or typed in Other on the goal menu, and is skipped for discovered ideas, goals built from existing beads, and plans. Accepted answers become a `## Depth` section in the Phase 0.5 brainstorm and seed the ambition charter's Depth section.
+
 ## [3.24.0] - 2026-10-19
 
 `/agent-flywheel:start` reaches its first decision in well under half the time, and its bead counts are exact. On a 2,998-bead fixture, interleaved A/B runs put the median at 84 s for v3.23.0 and 44 s after the first round of changes. The second round's changes each beat their own baseline, which puts the median at about 32–36 s. That last figure is an estimate, since those changes were measured against separate baselines. Method and numbers are in `docs/speedup/start-screen/report.md`.
