@@ -98,6 +98,9 @@ After all three answers, write the planner context to disk.
 - **Selected:** <label>
 - **Detail:** <description + any Other-field text>
 
+## Depth
+<Only when `DEPTH_NOTES` is set by SKILL.md Goal deepening: what a top professional would add, the raw material, the methods and tools, and the outside check.>
+
 ## Planner instructions
 
 Anchor the plan to the smallest version. Put the 10x version in a future-direction appendix. Include adjacent work only when the user selected "Bundle a related ask"; otherwise list it under explicit non-goals.
@@ -176,7 +179,7 @@ The ambition charter gives every planner the same altitude, depth, range, stretc
 
 1. **Draft the charter.** Read the goal, the optional Phase 0.5 brainstorm, and the repo profile. Fill the template in step 3.
    - **Altitude.** Write three rungs: the goal as asked, the outcome it serves, and a standing outcome that agents can maintain. Name the access required by the higher rung.
-   - **Depth.** Name what a top practitioner would add, the raw material and instruments they would use, and an outside check. Set a numeric stretch about an order of magnitude past the obvious target. Add one assumption with a raw-data check and one new fact the work should produce.
+   - **Depth.** Start from `DEPTH_NOTES` when Goal deepening set it. Name what a top practitioner would add, the raw material and instruments they would use, and an outside check. Set a numeric stretch about an order of magnitude past the obvious target. Add one assumption with a raw-data check and one new fact the work should produce.
    - **Range.** Restate the deliverable as verbs. Choose three to five relevant fields, including one adversarial field, and name one concrete method from each.
    - **Floor.** Define the version that ships first and an existence proof for the stretch, or write `none found`.
 2. **Let the user pick the rung and stretch target.** Fill the option descriptions with the drafted rungs and numbers:

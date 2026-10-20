@@ -99,14 +99,45 @@ Classify multi-paragraph input, Markdown sections, file-specific text, or an exi
     multiSelect: false
   }])
   ```
+  Every choice except Discard runs **Goal deepening** on `USER_INPUT` first and uses its result as the goal below.
   - **Yes, full flywheel** → call `flywheel_select` and continue at Step 5, including Phase 0.5 when its skip rule does not match.
-  - **Refine first** → run **Goal framing mode** with `RAW_GOAL = USER_INPUT`, then select the enriched goal and continue at Step 5.
+  - **Refine first** → run **Goal framing mode** with `RAW_GOAL` set to the deepened goal, then select the enriched goal and continue at Step 5.
   - **Plan only** → select the goal, run Step 5, and stop after bead creation.
   - **Discard** → show the default Step 0e menu.
 
-- Ambiguous → always run **Goal framing mode** first (Recommended default: Grill with docs), then route as goal-shaped after refinement.
+- Ambiguous → run **Goal deepening**, then **Goal framing mode** (Recommended default: Grill with docs), then route as goal-shaped after refinement.
 
 USER_INPUT still passes through the banner and an explicit menu choice.
+
+#### Goal deepening (every goal the user types)
+
+Run this once on each goal the user types (`USER_INPUT`, **Set a goal**, or Other in a goal menu), before Goal framing mode and `flywheel_select`. Skip it for a discovered idea picked from a menu, a goal synthesized from existing beads, and plan-shaped input. The aim is a deeper version of the same task, not a bigger one, so the rewrite keeps the goal's scope.
+
+1. **Answer four questions** from the goal text and what the repo profile or `flywheel_observe` already returned, a few lines each:
+   1. What would a top professional in this field do here that the goal doesn't ask for?
+   2. What is the rawest material they would start from instead of the digested version (the failing input, production logs, the spec, real user sessions, benchmark data rather than a summary of it)?
+   3. Which specific methods and tools would they use?
+   4. What, other than the agent or the user, would show the result is right (a test, benchmark, dataset, or user metric)?
+2. **Rewrite the goal** to ask for exactly that. Open it with a one-line restatement of the goal in the user's words, so `data.goalSlug` stays readable, then add the raw material, methods, and outside check as requirements.
+3. **Print the four answers and the rewrite**, then ask:
+
+```
+AskUserQuestion(questions: [{
+  question: "Deepened goal:\n\n<DEEPENED_GOAL>\n\nUse this version? Type your own edit in Other.",
+  header: "Deepen",
+  options: [
+    { label: "Use deepened goal", description: "Plan the rewrite: same scope, with the raw material, methods and outside check made explicit (Recommended)" },
+    { label: "Keep my wording", description: "Plan the goal exactly as typed and drop the four answers" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **Use deepened goal** → set `RAW_GOAL = DEEPENED_GOAL` and keep the four answers as `DEPTH_NOTES`.
+- **Keep my wording** → keep the typed goal and leave `DEPTH_NOTES` unset.
+- **Other** → use the typed text as the goal and keep `DEPTH_NOTES`.
+
+The 300-character concreteness check that decides whether framing runs reads the goal as the user typed it, since a deepened goal is longer by design. `_planning.md` Step 4.5c and the Step 5 ambition pass reuse `DEPTH_NOTES`.
 
 #### Goal framing mode (shared by Set a goal / Refine first / Ambiguous)
 
@@ -405,7 +436,7 @@ Use the server-provided recommendation for the non-tutorial rows. `IS_FIRST_RUN 
 | **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below before `flywheel_approve_beads` |
 | **New goal** | Delete checkpoint if exists, proceed to Step 2 |
 | **Scan & discover** | Proceed to Step 2 |
-| **Set a goal** | Read `<goal>` from Other. Run **Goal framing mode** unless it is concrete and at most 300 characters, then call `flywheel_select`, load `_planning.md`, and continue through Steps 4.5 and 5 in the same turn. Existing sessions append. Open bead sets merge. |
+| **Set a goal** | Read `<goal>` from Other and run **Goal deepening**. Run **Goal framing mode** unless it is concrete and at most 300 characters, then call `flywheel_select`, load `_planning.md`, and continue through Steps 4.5 and 5 in the same turn. Existing sessions append. Open bead sets merge. |
 | **Pick up existing plan** | Validate `<plan-path>` as an existing Markdown file, then derive a goal and call `flywheel_plan({ planFile: <plan-path>, source: "picked-up-existing-plan" })`. Enter **Step 5.45** before Step 5.5. Previous sessions run the drift check. Open bead sets confirm that new beads will merge. |
 | **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
 | **Quick fix** | Invoke `/flywheel-fix` |
@@ -618,7 +649,7 @@ AskUserQuestion(questions: [{
 ```
 
 - **"Discover ideas"** → proceed to Step 3
-- **"Set a goal"** → capture the goal (prompt via Other if needed), run **Goal framing mode** (Light / Grill with docs / Full brainstorm; skip only when concrete ≤300 chars), then **stay in the same turn** and call `flywheel_select` (Step 4) + enter Step 4.5 / Step 5 without waiting for user input (see "Stay-in-turn rule" below)
+- **"Set a goal"** → capture the goal (prompt via Other if needed), run **Goal deepening**, then **Goal framing mode** (Light / Grill with docs / Full brainstorm; skip only when concrete ≤300 chars), then **stay in the same turn** and call `flywheel_select` (Step 4) + enter Step 4.5 / Step 5 without waiting for user input (see "Stay-in-turn rule" below)
 - **"Re-scan"** → call `flywheel_profile` with `force: true`, then return to this menu
 
 #### Stay in turn between steps
@@ -673,7 +704,7 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-If the user selects "Other" and enters a custom goal, run **Goal framing mode** first (Recommended: Grill with docs when the custom goal is ambiguous or architectural; Light or Skip when already concrete). After framing returns `approved` (or was skipped) and the goal is refined, use `AskUserQuestion` to confirm scope:
+If the user selects "Other" and enters a custom goal, run **Goal deepening**, then **Goal framing mode** (Recommended: Grill with docs when the custom goal is ambiguous or architectural; Light or Skip when already concrete). After framing returns `approved` (or was skipped) and the goal is refined, use `AskUserQuestion` to confirm scope:
 
 ```
 AskUserQuestion(questions: [{
