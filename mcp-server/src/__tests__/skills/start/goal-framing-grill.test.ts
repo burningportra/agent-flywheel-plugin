@@ -46,8 +46,18 @@ describe('goal framing + grill-with-docs integration', () => {
     it('routes Refine first and Ambiguous through Goal framing mode', () => {
       expect(startBody).toContain('Pick a framing mode (Light / Grill with docs / Full brainstorm)');
       expect(startBody).toContain(
-        'always run **Goal framing mode** first (Recommended default: Grill with docs)',
+        'run **Goal deepening**, then **Goal framing mode** (Recommended default: Grill with docs)',
       );
+    });
+
+    it('deepens every typed goal before framing and selection', () => {
+      expect(startBody).toContain('#### Goal deepening');
+      expect(startBody.indexOf('#### Goal deepening')).toBeLessThan(
+        startBody.indexOf('#### Goal framing mode'),
+      );
+      expect(startBody).toMatch(/\|\s*\*\*Set a goal\*\*\s*\|[^\n]*Goal deepening/);
+      expect(startBody).toContain('Every choice except Discard runs **Goal deepening**');
+      expect(planningBody).toContain('`DEPTH_NOTES`');
     });
 
     it('references grill-with-docs skill path or get_skill name', () => {
