@@ -236,7 +236,8 @@ describe('runApprove', () => {
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).not.toContain('Could not parse');
     expect(state.activeBeadIds).toEqual([openBead.id]);
-    expect(result.content[0].text).toContain('Warning: Skipped bead odd-1 from br output: unknown status "wibble".');
+    const skippedWarnings = result.content[0].text.split('\n').filter((line: string) => line.startsWith('Warning: Skipped'));
+    expect(skippedWarnings).toEqual(['Warning: Skipped bead odd-1 from br output: unknown status "wibble".']);
   });
 
   // ── action=reject ────────────────────────────────────────────
