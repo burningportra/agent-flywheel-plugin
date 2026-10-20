@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.25.1] - 2026-10-20
+
+### Fixed
+
+- **The doctor's outcome-rubric and convergence tests no longer time out on a busy machine.** They ran the real 24-check doctor sweep, which runs `ntm`, `pi`, `codex`, `br`, `am`, and `tmux` with up to 2 s per check, so under load the sweep outlived vitest's 5 s test timeout and failed with `Test timed out in 5000ms`. Both checks only read files, so the tests now give the sweep a stub `exec` and finish in milliseconds.
+
 ## [3.25.0] - 2026-10-20
 
 ### Added
