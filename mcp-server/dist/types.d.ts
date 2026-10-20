@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BeadStatus } from './bead-status.js';
 export interface RepoProfile {
     name: string;
     languages: string[];
@@ -141,7 +142,7 @@ export interface Bead {
     id: string;
     title: string;
     description: string;
-    status: "open" | "in_progress" | "closed" | "deferred";
+    status: BeadStatus;
     priority: number;
     type?: string;
     issue_type?: string;

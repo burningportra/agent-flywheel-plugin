@@ -4,6 +4,7 @@ import { resilientExec, brExec, brExecJson } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
 import { errMsg } from "./errors.js";
 import { parseBvInsights, parseBvNextPicks, parseBvNextPick } from "./parsers.js";
+import { normalizeBrStatus } from "./bead-status.js";
 
 const log = createLogger("beads");
 
@@ -386,11 +387,6 @@ async function bvPlan(
 
 // ─── Beads Integration ────────────────────────────────────────
 
-function validateBeadStatus(s: unknown): Bead["status"] | null {
-  if (s === "open" || s === "in_progress" || s === "closed" || s === "deferred") return s;
-  return null;
-}
-
 function parseBead(raw: unknown): Bead | null {
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
@@ -399,7 +395,7 @@ function parseBead(raw: unknown): Bead | null {
     id: obj.id,
     title: obj.title,
     description: typeof obj.description === "string" ? obj.description : "",
-    status: validateBeadStatus(obj.status) ?? "open",
+    status: normalizeBrStatus(obj.status) ?? "open",
     priority: typeof obj.priority === "number" ? obj.priority : 0,
     type: typeof obj.type === "string" ? obj.type : "task",
     labels: Array.isArray(obj.labels) ? obj.labels.filter((l): l is string => typeof l === "string") : [],

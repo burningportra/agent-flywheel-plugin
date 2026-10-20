@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FlywheelError } from "./errors.js";
+import { BrStatusSchema } from "./bead-status.js";
 const TEMPLATE_METADATA_REGEX = /^Template:\s*([a-z][a-z0-9-]*(?:@\d+)?)\s*$/im;
 function extractTemplateFromDescription(description) {
     if (!description)
@@ -10,10 +11,10 @@ function extractTemplateFromDescription(description) {
 export const BrListRowSchema = z.object({
     id: z.string(),
     title: z.string().default(""),
-    status: z.enum(["open", "in_progress", "closed", "deferred"]).default("open"),
+    status: BrStatusSchema.default("open"),
     priority: z.number().int().optional(),
     labels: z.array(z.string()).optional(),
-    description: z.string().optional(),
+    description: z.string().nullish().transform((description) => description ?? undefined),
     template: z.string().optional(),
     created_ts: z.string().optional(),
     closed_ts: z.string().optional(),

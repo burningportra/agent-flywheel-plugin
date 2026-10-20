@@ -14,9 +14,9 @@
 import { z } from "zod";
 export declare const COMPLETION_REPORT_DIR = ".pi-flywheel/completion";
 export declare const CompletionStatusEnum: z.ZodEnum<{
-    partial: "partial";
-    blocked: "blocked";
     closed: "closed";
+    blocked: "blocked";
+    partial: "partial";
 }>;
 export type CompletionStatus = z.infer<typeof CompletionStatusEnum>;
 /**
@@ -32,9 +32,9 @@ export declare const CompletionReportSchemaV1: z.ZodObject<{
     agentName: z.ZodString;
     paneName: z.ZodOptional<z.ZodString>;
     status: z.ZodEnum<{
-        partial: "partial";
-        blocked: "blocked";
         closed: "closed";
+        blocked: "blocked";
+        partial: "partial";
     }>;
     changedFiles: z.ZodArray<z.ZodString>;
     commits: z.ZodArray<z.ZodString>;

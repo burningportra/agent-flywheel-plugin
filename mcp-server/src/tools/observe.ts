@@ -395,10 +395,7 @@ async function probeBeads(
   const counts = { ...emptyCounts };
   for (const row of parsed.rows) {
     counts.total += 1;
-    const status = row.status as keyof typeof counts;
-    if (status === 'open' || status === 'in_progress' || status === 'closed' || status === 'deferred') {
-      counts[status] += 1;
-    }
+    counts[row.status] += 1;
   }
 
   return {

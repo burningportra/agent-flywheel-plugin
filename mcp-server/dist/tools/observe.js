@@ -328,10 +328,7 @@ async function probeBeads(ctx) {
     const counts = { ...emptyCounts };
     for (const row of parsed.rows) {
         counts.total += 1;
-        const status = row.status;
-        if (status === 'open' || status === 'in_progress' || status === 'closed' || status === 'deferred') {
-            counts[status] += 1;
-        }
+        counts[row.status] += 1;
     }
     return {
         initialized: true,
