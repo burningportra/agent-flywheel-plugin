@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { ExecFn } from '../exec.js';
-import { parseBrList } from '../parsers.js';
+import { formatSkippedBrRows, parseBrList } from '../parsers.js';
 import type { Bead, BeadProgramScope } from '../types.js';
 
 export const FLYWHEEL_GOAL_LABEL_PREFIX = 'flywheel-goal:';
@@ -132,7 +132,7 @@ export async function resolveDispatchBeadProgramScope(
   return {
     ok: true,
     scope: program.scope,
-    warnings: program.warnings,
+    warnings: [...formatSkippedBrRows(parsed.skipped), ...program.warnings],
   };
 }
 

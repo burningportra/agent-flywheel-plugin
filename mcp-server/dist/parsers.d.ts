@@ -34,13 +34,13 @@ export interface ProfileCache {
 export declare const BeadSchema: z.ZodObject<{
     id: z.ZodString;
     title: z.ZodString;
-    description: z.ZodString;
-    status: z.ZodEnum<{
+    description: z.ZodPipe<z.ZodOptional<z.ZodNullable<z.ZodString>>, z.ZodTransform<string, string | null | undefined>>;
+    status: z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodEnum<{
         open: "open";
         in_progress: "in_progress";
         closed: "closed";
         deferred: "deferred";
-    }>;
+    }>>;
     priority: z.ZodNumber;
     type: z.ZodDefault<z.ZodOptional<z.ZodString>>;
     issue_type: z.ZodOptional<z.ZodString>;
@@ -73,7 +73,28 @@ export declare const CmResultSchema: z.ZodObject<{
     success: z.ZodOptional<z.ZodBoolean>;
     data: z.ZodOptional<z.ZodUnknown>;
 }, z.core.$loose>;
-export declare function parseBrList(raw: string): ParseResult<Bead[]>;
+/** A br output row that `parseBrList` left out, and why. */
+export interface SkippedBrRow {
+    /** Zero-based position in br's output. */
+    index: number;
+    id?: string;
+    reason: string;
+}
+export type BrListParseResult = {
+    ok: true;
+    data: Bead[];
+    skipped: SkippedBrRow[];
+} | {
+    ok: false;
+    error: string;
+};
+/**
+ * Reads `br list --json` / `br ready --json` row by row. br accepts more than
+ * the flywheel models, so one unreadable row is skipped and reported instead
+ * of failing the whole list.
+ */
+export declare function parseBrList(raw: string): BrListParseResult;
+export declare function formatSkippedBrRows(skipped: readonly SkippedBrRow[]): string[];
 export declare function parseBvInsights(raw: string): ParseResult<BvInsights>;
 export declare function parseBvNextPicks(raw: string): ParseResult<BvNextPick[]>;
 export declare function parseBvNextPick(raw: string): ParseResult<BvNextPick | null>;

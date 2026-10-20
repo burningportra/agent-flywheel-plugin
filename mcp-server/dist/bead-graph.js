@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { BrStatusSchema } from "./bead-status.js";
 // ─── Input Schemas ───────────────────────────────────────────
 const BeadListRowSchema = z
     .object({
     id: z.string(),
     title: z.string(),
-    status: z.enum(["open", "in_progress", "closed", "deferred"]),
+    status: BrStatusSchema,
     priority: z.number().optional(),
     labels: z.array(z.string()).optional(),
     dependencies: z.array(z.string()).optional(),

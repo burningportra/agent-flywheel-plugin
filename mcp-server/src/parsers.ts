@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type { Bead, BvInsights, BvNextPick } from "./types.js";
 import type { FlywheelFeedback } from "./feedback.js";
+import { BrStatusSchema, normalizeBrStatus } from "./bead-status.js";
 
 // ─── Result Type ────────────────────────────────────────────
 
@@ -43,8 +44,8 @@ export const BeadSchema = z
   .object({
     id: z.string(),
     title: z.string(),
-    description: z.string(),
-    status: z.enum(["open", "in_progress", "closed", "deferred"]),
+    description: z.string().nullish().transform((description) => description ?? ""),
+    status: BrStatusSchema,
     priority: z.number(),
     type: z.string().optional().default("task"),
     issue_type: z.string().optional(), // br v0.1.x uses issue_type instead of type
@@ -183,12 +184,45 @@ function formatZodError(error: z.ZodError): string {
 
 // ─── Parse Functions ────────────────────────────────────────
 
-export function parseBrList(raw: string): ParseResult<Bead[]> {
+/** A br output row that `parseBrList` left out, and why. */
+export interface SkippedBrRow {
+  /** Zero-based position in br's output. */
+  index: number;
+  id?: string;
+  reason: string;
+}
+
+export type BrListParseResult =
+  | { ok: true; data: Bead[]; skipped: SkippedBrRow[] }
+  | { ok: false; error: string };
+
+function parseBrRow(row: unknown, index: number): { bead: Bead } | { skipped: SkippedBrRow } {
+  if (typeof row !== "object" || row === null || Array.isArray(row)) {
+    return { skipped: { index, reason: "not an object" } };
+  }
+  const { id, status } = row as Record<string, unknown>;
+  if (typeof id !== "string") return { skipped: { index, reason: "no id" } };
+  if (normalizeBrStatus(status) === null) {
+    const reason = status === undefined ? "no status" : `unknown status ${JSON.stringify(status)}`;
+    return { skipped: { index, id, reason } };
+  }
+  const parsed = BeadSchema.safeParse(row);
+  return parsed.success
+    ? { bead: parsed.data as Bead }
+    : { skipped: { index, id, reason: formatZodError(parsed.error) } };
+}
+
+/**
+ * Reads `br list --json` / `br ready --json` row by row. br accepts more than
+ * the flywheel models, so one unreadable row is skipped and reported instead
+ * of failing the whole list.
+ */
+export function parseBrList(raw: string): BrListParseResult {
   const json = tryParseJson(raw);
   if (!json.ok) return json;
 
   // br v0.1.34+ returns `{issues: [...]}`; older versions returned a bare array.
-  const candidate = Array.isArray(json.data)
+  const candidate: unknown[] | null = Array.isArray(json.data)
     ? json.data
     : (json.data && typeof json.data === "object" && Array.isArray((json.data as any).issues))
       ? (json.data as any).issues
@@ -198,9 +232,22 @@ export function parseBrList(raw: string): ParseResult<Bead[]> {
     return { ok: false, error: "expected array or {issues:[]} object" };
   }
 
-  const arr = z.array(BeadSchema).safeParse(candidate);
-  if (!arr.success) return { ok: false, error: formatZodError(arr.error) };
-  return { ok: true, data: arr.data as Bead[] };
+  const data: Bead[] = [];
+  const skipped: SkippedBrRow[] = [];
+  candidate.forEach((row, index) => {
+    const result = parseBrRow(row, index);
+    if ("bead" in result) data.push(result.bead);
+    else skipped.push(result.skipped);
+  });
+  return { ok: true, data, skipped };
+}
+
+export function formatSkippedBrRows(skipped: readonly SkippedBrRow[]): string[] {
+  return skipped.map(({ index, id, reason }) =>
+    id === undefined
+      ? `Skipped row ${index + 1} of br output: ${reason}.`
+      : `Skipped bead ${id} from br output: ${reason}.`,
+  );
 }
 
 export function parseBvInsights(raw: string): ParseResult<BvInsights> {

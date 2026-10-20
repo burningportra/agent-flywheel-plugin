@@ -1,7 +1,8 @@
+import { type BeadStatus } from "./bead-status.js";
 export interface BeadNode {
     id: string;
     title: string;
-    status: "open" | "in_progress" | "closed" | "deferred";
+    status: BeadStatus;
     priority?: number;
     labels?: string[];
 }

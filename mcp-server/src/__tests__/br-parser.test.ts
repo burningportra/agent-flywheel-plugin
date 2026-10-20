@@ -40,3 +40,17 @@ describe('br-parser — calibration metadata', () => {
     expect(result.rows[0]).toMatchObject({ template: 'add-api-endpoint@1' });
   });
 });
+
+describe('br-parser — statuses and descriptions br accepts', () => {
+  it('reads completed as closed and a null description as absent, and still rejects an unknown status', () => {
+    const raw = JSON.stringify([
+      { id: 'bead-1', title: 'Done long ago', status: 'completed', description: null },
+      { id: 'bead-2', title: 'Odd', status: 'wibble' },
+    ]);
+
+    const result = parseBrList(raw);
+
+    expect(result.rows.map((row) => [row.id, row.status, row.description])).toEqual([['bead-1', 'closed', undefined]]);
+    expect(result.rejected).toBe(1);
+  });
+});

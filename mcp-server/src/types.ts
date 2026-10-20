@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BeadStatus } from './bead-status.js';
 
 // ─── Repo Profile ────────────────────────────────────────────
 export interface RepoProfile {
@@ -163,7 +164,7 @@ export interface Bead {
   id: string;
   title: string;
   description: string;
-  status: "open" | "in_progress" | "closed" | "deferred";
+  status: BeadStatus;
   priority: number; // 0-4
   type?: string;     // "task" | "feature" | "bug" etc. (optional: br v0.1.x uses issue_type)
   issue_type?: string; // br v0.1.x field name for type

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseBrList, parseBvInsights, parseBvNextPicks, parseBvNextPick, parseBrError, parseAgentMailResponse, parseCmResult, parseCmSearchResults, parseSophiaResult, parseProfileCache, parseFeedbackFile, } from '../parsers.js';
+import { formatSkippedBrRows, parseBrList, parseBvInsights, parseBvNextPicks, parseBvNextPick, parseBrError, parseAgentMailResponse, parseCmResult, parseCmSearchResults, parseSophiaResult, parseProfileCache, parseFeedbackFile, } from '../parsers.js';
 // ─── Helpers ───────────────────────────────────────────────
 function validBead(overrides = {}) {
     return {
@@ -93,9 +93,83 @@ describe('parseBrList', () => {
         const result = parseBrList(JSON.stringify({ id: 'bead-1' }));
         expect(result.ok).toBe(false);
     });
-    it('fails when array items miss required fields', () => {
-        const result = parseBrList(JSON.stringify([{ title: 'no id' }]));
-        expect(result.ok).toBe(false);
+    it('parses a well-formed bead exactly as before, with no skipped rows', () => {
+        const result = parseBrList(JSON.stringify([validBead()]));
+        expect(result).toEqual({
+            ok: true,
+            data: [
+                {
+                    id: 'bead-1',
+                    title: 'Test bead',
+                    description: 'A test',
+                    status: 'open',
+                    priority: 1,
+                    type: 'task',
+                    labels: ['test'],
+                },
+            ],
+            skipped: [],
+        });
+    });
+    it('accepts beads br stores without a description or with a status it never validates', () => {
+        const { description: _, ...noDescription } = validBead({ id: 'bead-2' });
+        const raw = JSON.stringify([
+            validBead(),
+            noDescription,
+            validBead({ id: 'bead-3', description: null }),
+            validBead({ id: 'bead-4', status: 'completed' }),
+        ]);
+        const result = parseBrList(raw);
+        expect(result.ok).toBe(true);
+        if (!result.ok)
+            return;
+        expect(result.data.map((b) => [b.id, b.status, b.description])).toEqual([
+            ['bead-1', 'open', 'A test'],
+            ['bead-2', 'open', ''],
+            ['bead-3', 'open', ''],
+            ['bead-4', 'closed', 'A test'],
+        ]);
+        expect(result.skipped).toEqual([]);
+    });
+    it.each([
+        ['done', 'closed'],
+        ['blocked', 'open'],
+        ['pinned', 'deferred'],
+    ])('maps br status %s to %s', (raw, expected) => {
+        const result = parseBrList(JSON.stringify([validBead({ status: raw })]));
+        expect(result.ok && result.data[0].status).toBe(expected);
+    });
+    it('skips a bead with an unknown status and names it, keeping the rest', () => {
+        const raw = JSON.stringify([validBead(), validBead({ id: 'bead-odd', status: 'wibble' }), validBead({ id: 'bead-3' })]);
+        const result = parseBrList(raw);
+        expect(result.ok).toBe(true);
+        if (!result.ok)
+            return;
+        expect(result.data.map((b) => b.id)).toEqual(['bead-1', 'bead-3']);
+        expect(result.skipped).toEqual([{ index: 1, id: 'bead-odd', reason: 'unknown status "wibble"' }]);
+        expect(formatSkippedBrRows(result.skipped)).toEqual([
+            'Skipped bead bead-odd from br output: unknown status "wibble".',
+        ]);
+    });
+    it('skips rows with no id or that are not objects, keeping the rest', () => {
+        const raw = JSON.stringify([{ title: 'no id', status: 'open' }, validBead(), 'junk']);
+        const result = parseBrList(raw);
+        expect(result.ok).toBe(true);
+        if (!result.ok)
+            return;
+        expect(result.data.map((b) => b.id)).toEqual(['bead-1']);
+        expect(result.skipped).toEqual([
+            { index: 0, reason: 'no id' },
+            { index: 2, reason: 'not an object' },
+        ]);
+        expect(formatSkippedBrRows(result.skipped)).toEqual([
+            'Skipped row 1 of br output: no id.',
+            'Skipped row 3 of br output: not an object.',
+        ]);
+    });
+    it('does not treat a status named like an Object prototype key as known', () => {
+        const result = parseBrList(JSON.stringify([validBead({ status: 'constructor' })]));
+        expect(result.ok && result.skipped).toEqual([{ index: 0, id: 'bead-1', reason: 'unknown status "constructor"' }]);
     });
 });
 // ─── parseBvInsights ───────────────────────────────────────

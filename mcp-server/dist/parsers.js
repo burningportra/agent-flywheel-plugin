@@ -5,13 +5,14 @@
  * Each parse function returns a discriminated union `ParseResult<T>`.
  */
 import { z } from "zod";
+import { BrStatusSchema, normalizeBrStatus } from "./bead-status.js";
 // ─── Zod Schemas ────────────────────────────────────────────
 export const BeadSchema = z
     .object({
     id: z.string(),
     title: z.string(),
-    description: z.string(),
-    status: z.enum(["open", "in_progress", "closed", "deferred"]),
+    description: z.string().nullish().transform((description) => description ?? ""),
+    status: BrStatusSchema,
     priority: z.number(),
     type: z.string().optional().default("task"),
     issue_type: z.string().optional(), // br v0.1.x uses issue_type instead of type
@@ -133,7 +134,27 @@ function formatZodError(error) {
         .map((i) => `${i.path.join(".")}: ${i.message}`)
         .join(", ");
 }
-// ─── Parse Functions ────────────────────────────────────────
+function parseBrRow(row, index) {
+    if (typeof row !== "object" || row === null || Array.isArray(row)) {
+        return { skipped: { index, reason: "not an object" } };
+    }
+    const { id, status } = row;
+    if (typeof id !== "string")
+        return { skipped: { index, reason: "no id" } };
+    if (normalizeBrStatus(status) === null) {
+        const reason = status === undefined ? "no status" : `unknown status ${JSON.stringify(status)}`;
+        return { skipped: { index, id, reason } };
+    }
+    const parsed = BeadSchema.safeParse(row);
+    return parsed.success
+        ? { bead: parsed.data }
+        : { skipped: { index, id, reason: formatZodError(parsed.error) } };
+}
+/**
+ * Reads `br list --json` / `br ready --json` row by row. br accepts more than
+ * the flywheel models, so one unreadable row is skipped and reported instead
+ * of failing the whole list.
+ */
 export function parseBrList(raw) {
     const json = tryParseJson(raw);
     if (!json.ok)
@@ -147,10 +168,21 @@ export function parseBrList(raw) {
     if (candidate === null) {
         return { ok: false, error: "expected array or {issues:[]} object" };
     }
-    const arr = z.array(BeadSchema).safeParse(candidate);
-    if (!arr.success)
-        return { ok: false, error: formatZodError(arr.error) };
-    return { ok: true, data: arr.data };
+    const data = [];
+    const skipped = [];
+    candidate.forEach((row, index) => {
+        const result = parseBrRow(row, index);
+        if ("bead" in result)
+            data.push(result.bead);
+        else
+            skipped.push(result.skipped);
+    });
+    return { ok: true, data, skipped };
+}
+export function formatSkippedBrRows(skipped) {
+    return skipped.map(({ index, id, reason }) => id === undefined
+        ? `Skipped row ${index + 1} of br output: ${reason}.`
+        : `Skipped bead ${id} from br output: ${reason}.`);
 }
 export function parseBvInsights(raw) {
     const json = tryParseJson(raw);

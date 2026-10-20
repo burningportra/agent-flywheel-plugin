@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { parseBrList } from '../parsers.js';
+import { formatSkippedBrRows, parseBrList } from '../parsers.js';
 export const FLYWHEEL_GOAL_LABEL_PREFIX = 'flywheel-goal:';
 export function slugifyGoal(goal) {
     return goal
@@ -78,7 +78,7 @@ export async function resolveDispatchBeadProgramScope(exec, cwd, scope, expected
     return {
         ok: true,
         scope: program.scope,
-        warnings: program.warnings,
+        warnings: [...formatSkippedBrRows(parsed.skipped), ...program.warnings],
     };
 }
 export function filterBeadsForProgram(beads, scope) {

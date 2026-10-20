@@ -7,7 +7,7 @@ import { buildImplementerDispatch } from '../adapters/implementer-dispatch.js';
 import { handOffWave, resolveSwarmLane } from '../swarm-host.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
-import { parseBrList } from '../parsers.js';
+import { formatSkippedBrRows, parseBrList } from '../parsers.js';
 import { computeHotspotMatrix } from '../plan-simulation.js';
 import { createLogger } from '../logger.js';
 import { normalizeText } from '../utils/text-normalize.js';
@@ -210,9 +210,13 @@ export async function runApprove(ctx, args) {
         }, 'Install the br CLI and run `br init` in the repo root, then retry flywheel_approve_beads.');
     }
     let allBeads = [];
+    let skippedRowWarnings = [];
     const parsed = parseBrList(brListResult.stdout);
     if (parsed.ok) {
         allBeads = parsed.data;
+        skippedRowWarnings = formatSkippedBrRows(parsed.skipped);
+        if (parsed.skipped.length > 0)
+            log.warn('Skipped unreadable br list rows', { skipped: parsed.skipped });
     }
     else {
         log.warn('Failed to parse br list output', { error: parsed.error });
@@ -221,7 +225,7 @@ export async function runApprove(ctx, args) {
     const expectedProgramLabel = state.beadProgramScope?.label ?? goalBeadProgramLabel(state.selectedGoal);
     const program = resolveBeadProgram(allBeads, expectedProgramLabel);
     const beads = program.beads;
-    const programWarnings = formatBeadProgramWarnings(program.warnings);
+    const programWarnings = formatBeadProgramWarnings([...skippedRowWarnings, ...program.warnings]);
     state.beadProgramScope = program.scope;
     if (!beads.some((bead) => bead.id === state.currentBeadId)) {
         state.currentBeadId = null;
@@ -449,6 +453,8 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
         const readyParsed = parseBrList(brReadyResult.stdout);
         if (readyParsed.ok) {
             ready = filterBeadsForProgram(readyParsed.data, state.beadProgramScope).beads;
+            if (readyParsed.skipped.length > 0)
+                log.warn('Skipped unreadable br ready rows', { skipped: readyParsed.skipped });
         }
         else {
             log.warn('Failed to parse br ready output', { error: readyParsed.error });

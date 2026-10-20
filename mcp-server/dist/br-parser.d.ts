@@ -2,15 +2,15 @@ import { z } from "zod";
 export declare const BrListRowSchema: z.ZodPipe<z.ZodObject<{
     id: z.ZodString;
     title: z.ZodDefault<z.ZodString>;
-    status: z.ZodDefault<z.ZodEnum<{
+    status: z.ZodDefault<z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodEnum<{
         open: "open";
         in_progress: "in_progress";
         closed: "closed";
         deferred: "deferred";
-    }>>;
+    }>>>;
     priority: z.ZodOptional<z.ZodNumber>;
     labels: z.ZodOptional<z.ZodArray<z.ZodString>>;
-    description: z.ZodOptional<z.ZodString>;
+    description: z.ZodPipe<z.ZodOptional<z.ZodNullable<z.ZodString>>, z.ZodTransform<string | undefined, string | null | undefined>>;
     template: z.ZodOptional<z.ZodString>;
     created_ts: z.ZodOptional<z.ZodString>;
     closed_ts: z.ZodOptional<z.ZodString>;
@@ -23,9 +23,9 @@ export declare const BrListRowSchema: z.ZodPipe<z.ZodObject<{
     id: string;
     title: string;
     status: "open" | "in_progress" | "closed" | "deferred";
+    description: string | undefined;
     priority?: number | undefined;
     labels?: string[] | undefined;
-    description?: string | undefined;
     created_at?: string | undefined;
     closed_at?: string | undefined;
 }, {
@@ -33,9 +33,9 @@ export declare const BrListRowSchema: z.ZodPipe<z.ZodObject<{
     id: string;
     title: string;
     status: "open" | "in_progress" | "closed" | "deferred";
+    description: string | undefined;
     priority?: number | undefined;
     labels?: string[] | undefined;
-    description?: string | undefined;
     template?: string | undefined;
     created_ts?: string | undefined;
     closed_ts?: string | undefined;
