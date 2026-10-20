@@ -29,6 +29,7 @@ import { writeCheckpoint } from '../checkpoint.js';
 import { runObserve } from '../tools/observe.js';
 import { runAdvanceWave } from '../tools/advance-wave.js';
 import { runDoctorChecks } from '../tools/doctor.js';
+import { createMockExec } from './helpers/mocks.js';
 import type { FlywheelState, ToolContext } from '../types.js';
 import type { FlywheelObserveReport } from '../tools/observe.js';
 
@@ -377,7 +378,7 @@ describe('B-AC2 — flywheel_doctor convergence_state_validity check', () => {
   });
 
   it('green when no plan in flight', async () => {
-    const report = await runDoctorChecks(tmpRoot, undefined, { totalBudgetMs: 5000 });
+    const report = await runDoctorChecks(tmpRoot, undefined, { exec: createMockExec() });
     const check = report.checks.find((c) => c.name === 'convergence_state_validity');
     expect(check).toBeDefined();
     expect(check?.severity).toBe('green');
@@ -389,7 +390,7 @@ describe('B-AC2 — flywheel_doctor convergence_state_validity check', () => {
     const slug = planSlugFromIdentifier(planPath);
     await writeConvergenceToDisk(tmpRoot, buildConvergenceFixture(slug, 0.6));
 
-    const report = await runDoctorChecks(tmpRoot, undefined, { totalBudgetMs: 5000 });
+    const report = await runDoctorChecks(tmpRoot, undefined, { exec: createMockExec() });
     const check = report.checks.find((c) => c.name === 'convergence_state_validity');
     expect(check?.severity).toBe('green');
   });
@@ -421,7 +422,7 @@ describe('B-AC2 — flywheel_doctor convergence_state_validity check', () => {
       'utf8',
     );
 
-    const report = await runDoctorChecks(tmpRoot, undefined, { totalBudgetMs: 5000 });
+    const report = await runDoctorChecks(tmpRoot, undefined, { exec: createMockExec() });
     const check = report.checks.find((c) => c.name === 'convergence_state_validity');
     expect(check?.severity).toBe('red');
     expect(check?.message).toMatch(/score_version_mismatch/);
@@ -435,7 +436,7 @@ describe('B-AC2 — flywheel_doctor convergence_state_validity check', () => {
     mkdirSync(join(tmpRoot, '.pi-flywheel/plans', slug), { recursive: true });
     writeFileSync(filePath, '{ not json', 'utf8');
 
-    const report = await runDoctorChecks(tmpRoot, undefined, { totalBudgetMs: 5000 });
+    const report = await runDoctorChecks(tmpRoot, undefined, { exec: createMockExec() });
     const check = report.checks.find((c) => c.name === 'convergence_state_validity');
     expect(check?.severity).toBe('red');
   });

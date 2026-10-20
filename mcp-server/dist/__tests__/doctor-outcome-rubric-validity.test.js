@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { runDoctorChecks } from '../tools/doctor.js';
 import { CHECKPOINT_DIR, CHECKPOINT_FILE, } from '../checkpoint.js';
 import { VERSION } from '../version.js';
+import { createMockExec } from './helpers/mocks.js';
 const GREEN_HINT = 'No action needed; continue the flywheel.';
 const YELLOW_HINT = 'Open the rubric gate and choose Re-edit or Regenerate before creating beads.';
 const RED_HINT = 'Regenerate the rubric now; an empty criteria list cannot grade the cycle.';
@@ -81,7 +82,7 @@ describe('doctor.outcome_rubric_validity', () => {
     }
     it('green when no checkpoint exists (no active rubric)', async () => {
         dir = mkdtempSync(join(tmpdir(), 'doctor-rubric-noplan-'));
-        const report = await runDoctorChecks(dir);
+        const report = await runDoctorChecks(dir, undefined, { exec: createMockExec() });
         const row = findRubricCheck(report.checks);
         expect(row.severity).toBe('green');
         expect(row.message).toBe('no active rubric - outcome grading not applicable');
@@ -94,7 +95,7 @@ describe('doctor.outcome_rubric_validity', () => {
         mkdirSync(join(dir, '.pi-flywheel/plans/outcome-grading-test'), { recursive: true });
         writeFileSync(absolute, VALID_RUBRIC, 'utf8');
         writeCheckpointWithState(dir, makeBaseState({ outcomeRubricPath: rubricPath }));
-        const report = await runDoctorChecks(dir);
+        const report = await runDoctorChecks(dir, undefined, { exec: createMockExec() });
         const row = findRubricCheck(report.checks);
         expect(row.severity).toBe('green');
         expect(row.message).toMatch(/^outcome rubric valid \(3 criteria, source auto\)$/);
@@ -104,7 +105,7 @@ describe('doctor.outcome_rubric_validity', () => {
         dir = mkdtempSync(join(tmpdir(), 'doctor-rubric-missing-'));
         const rubricPath = '.pi-flywheel/plans/missing-slug/rubric.md';
         writeCheckpointWithState(dir, makeBaseState({ outcomeRubricPath: rubricPath }));
-        const report = await runDoctorChecks(dir);
+        const report = await runDoctorChecks(dir, undefined, { exec: createMockExec() });
         const row = findRubricCheck(report.checks);
         expect(row.severity).toBe('yellow');
         expect(row.message).toBe(`outcome rubric path is set but the file is missing: ${rubricPath}`);
@@ -118,7 +119,7 @@ describe('doctor.outcome_rubric_validity', () => {
         // Missing closing `---` — parser throws rubric_synth_invalid.
         writeFileSync(absolute, '---\nversion: 1\nsource: auto\n', 'utf8');
         writeCheckpointWithState(dir, makeBaseState({ outcomeRubricPath: rubricPath }));
-        const report = await runDoctorChecks(dir);
+        const report = await runDoctorChecks(dir, undefined, { exec: createMockExec() });
         const row = findRubricCheck(report.checks);
         expect(row.severity).toBe('yellow');
         expect(row.message).toMatch(/^outcome rubric invalid: /);
@@ -131,7 +132,7 @@ describe('doctor.outcome_rubric_validity', () => {
         mkdirSync(join(dir, '.pi-flywheel/plans/empty-slug'), { recursive: true });
         writeFileSync(absolute, `---\nversion: 1\nsource: auto\ngeneratedAt: 2026-05-08T12:30:00Z\nplanSlug: empty-slug\ngoal: Empty\ncriteria:\n---\n`, 'utf8');
         writeCheckpointWithState(dir, makeBaseState({ outcomeRubricPath: rubricPath }));
-        const report = await runDoctorChecks(dir);
+        const report = await runDoctorChecks(dir, undefined, { exec: createMockExec() });
         const row = findRubricCheck(report.checks);
         expect(row.severity).toBe('red');
         expect(row.message).toBe('outcome rubric has zero criteria');
