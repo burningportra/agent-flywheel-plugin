@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.24.0] - 2026-10-19
+
+`/agent-flywheel:start` reaches its first decision in well under half the time, and its bead counts are exact. On a 2,998-bead fixture, interleaved A/B runs put the median at 84 s for v3.23.0 and 44 s after the first round of changes. The second round's changes each beat their own baseline, which puts the median at about 32–36 s. That last figure is an estimate, since those changes were measured against separate baselines. Method and numbers are in `docs/speedup/start-screen/report.md`.
+
+### Added
+
+- **`flywheel_memory` search takes an optional `history` count.** It passes through to `cm context --history`, and `history: 0` skips the session-history search, which cut a start-screen query from 5.9–7.9 s to 0.4–0.9 s with the same learnings.
+- **`flywheel_get_skill` reports the running plugin version**, in its header line and in `data.pluginVersion`, so the banner needs no shell call.
+- **`flywheel_observe` returns `projectName`, `recentPlans`, and `topErrorCodes`.** These are the project name from `package.json` or the directory, the three newest `docs/plans/*.md`, and the top three nonzero error codes. The start screen no longer reads those files itself.
+
+### Changed
+
+- **The start screen gathers its state in one parallel batch.** The pointer command loads every Step 0 tool with one `ToolSearch`. Step 0b then makes the doctor, observe, and memory calls in one message next to the version banner, and the repo profile waits for Step 2. Runs went from a median 9 model turns to 4.
+- **The start screen prints less.** Step 0c prints only its defined blocks and quotes three learnings verbatim instead of paraphrasing them. When the doctor sets a pre-flight banner, the screen stops at that gate and shows the main menu after it's answered.
+- **`flywheel_doctor` answers first-run from local files first.** With a checkpoint, plan, or legacy state present it never spawns `br` or `cass`, which took the doctor on the fixture from 5.7 s to about 1.3 s.
+
+### Fixed
+
+- **Start-screen bead counts are exact and include blocked beads.** `flywheel_observe` counts with `br count`. v3.23.0 printed "50+ done" for 2,982 closed beads, because `br list --json` drops closed beads and `br list --all --json` stops at 50 rows.
+
 ## [3.23.0] - 2026-10-19
 
 A swarm can run on another Mac on the local network while this session coordinates.
