@@ -215,6 +215,30 @@ describe('runApprove', () => {
     expect(result.content[0].text).toContain('No open beads found');
   });
 
+  it('starts from a br list holding rows br accepts but the flywheel used to reject', async () => {
+    const openBead = makeBead();
+    const { description: _, ...noDescription } = makeBead({ id: 'old-1', status: 'closed' });
+    const rows = [
+      openBead,
+      noDescription,
+      { ...makeBead({ id: 'old-2', status: 'closed' }), description: null },
+      makeBead({ id: 'old-3', status: 'completed' as Bead['status'] }),
+      makeBead({ id: 'odd-1', status: 'wibble' as Bead['status'] }),
+    ];
+    const { ctx, state } = makeCtx({}, [
+      { cmd: 'br', args: ['list', '--all', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify(rows), stderr: '' } },
+      { cmd: 'br', args: ['ready', '--limit', '0', '--json'], result: { code: 0, stdout: JSON.stringify([openBead]), stderr: '' } },
+      { cmd: 'br', args: ['update', openBead.id, '--status', 'in_progress'], result: { code: 0, stdout: '', stderr: '' } },
+    ]);
+
+    const result = await runApprove(ctx, { cwd: '/fake/cwd', action: 'start' });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).not.toContain('Could not parse');
+    expect(state.activeBeadIds).toEqual([openBead.id]);
+    expect(result.content[0].text).toContain('Warning: Skipped bead odd-1 from br output: unknown status "wibble".');
+  });
+
   // ── action=reject ────────────────────────────────────────────
 
   it('resets state on reject', async () => {
