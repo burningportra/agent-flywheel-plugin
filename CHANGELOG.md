@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.25.2] - 2026-10-20
+
+### Fixed
+
+- **`flywheel_approve_beads` no longer fails on the whole bead list because of one bead.** br saves a bead with no description and stores any string given to `br update --status`, so an old bead marked `completed` or created without a description made the parser reject every bead with `parse_failure`. The flywheel now reads `br list` row by row. A missing or null description becomes empty, `completed` and `done` count as closed, `blocked` counts as open (`br ready` still holds it back), and `pinned` counts as deferred. A row with an unknown status, no id, or that isn't an object is skipped, and `flywheel_approve_beads` and the program refresh before each dispatch name it in a warning. One module, `bead-status.ts`, now holds the status list that the bead readers used to repeat, and `flywheel_verify_beads` now treats a `completed` bead as closed instead of open.
+
 ## [3.25.1] - 2026-10-20
 
 ### Fixed
