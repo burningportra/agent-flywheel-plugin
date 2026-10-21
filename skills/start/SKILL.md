@@ -9,322 +9,245 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 > ## ⚠️ UNIVERSAL RULE 1 — `AskUserQuestion` is the only way to ask the user anything
 >
-> Present every user decision through `AskUserQuestion` with two to four labeled options. Use the client-provided Other field for custom answers. Prose questions, waits for confirmation, and implicit decisions are bugs.
+> Present every user decision through `AskUserQuestion` with 2–4 labeled options (use Other for custom input). Prose questions, confirmation waits, and implicit choices are bugs.
 >
 > ## UNIVERSAL RULE 2: invoke specialist skills by name when they apply
 >
-> Invoke named or applicable specialist skills through the `Skill` tool and follow their bodies instead of recreating them inline.
-
+> Invoke named or applicable specialist skills via the `Skill` tool instead of recreating them inline.
+>
 > ## UNIVERSAL RULE 3: load phase instructions on demand with `flywheel_get_skill`
 >
-> At each phase boundary, call `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })` before executing that phase.
+> At each phase boundary, call `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })` before executing that phase:
 >
-> | Phase | Skill name | Sub-file (fallback) | Steps |
-> |-------|-----------|---------------------|-------|
+> | Phase | Skill name | Sub-file | Steps |
+> |-------|-----------|----------|-------|
 > | Planning | `agent-flywheel:start_planning` | `_planning.md` | 5, 5.55, 5.6 |
 > | Bead creation & approval | `agent-flywheel:start_beads` | `_beads.md` | 5.5, 6 |
 > | Implementation | `agent-flywheel:start_implement` | `_implement.md` | 7 |
-> | Review & loop | `agent-flywheel:start_review` | `_review.md` | 8, 9 (verify + compliance), 9.25, 9.4 |
-> | Wrap-up & post-flywheel | `agent-flywheel:start_wrapup` | `_wrapup.md` | 9.5, 10, 11, 12 |
-> | Reality check | `agent-flywheel:start_reality_check` | `_reality_check.md` | (referenced from _wrapup, _saturation) |
-> | Deslop pass | `agent-flywheel:start_deslop` | `_deslop.md` | (Step 9.5 routing) |
-> | Saturation suite | `agent-flywheel:start_saturation` | `_saturation.md` | (saturation-pipeline routing) |
-> | In-flight resume | `agent-flywheel:start_inflight_prompt` | `_inflight_prompt.md` | (auto-swarm) |
+> | Review & loop | `agent-flywheel:start_review` | `_review.md` | 8, 9, 9.25, 9.4 |
+> | Wrap-up & post-flywheel | `agent-flywheel:start_wrapup` | `_wrapup.md` | 9.5–12 |
+> | Reality check | `agent-flywheel:start_reality_check` | `_reality_check.md` | gap analysis |
+> | Deslop pass | `agent-flywheel:start_deslop` | `_deslop.md` | Step 9.5 |
+> | Saturation suite | `agent-flywheel:start_saturation` | `_saturation.md` | saturation |
+> | In-flight resume | `agent-flywheel:start_inflight_prompt` | `_inflight_prompt.md` | auto-swarm |
 >
-> **Skill-stub recovery.** Pointer commands call `flywheel_get_skill` first, forward `$ARGUMENTS`, and follow the returned body. A same-name `Skill` call can return "already loaded above". Canonical bodies live at the table's skill and sub-file paths. Use `flywheel_get_skill({ name: "agent-flywheel:start" })` for this entry point.
+> **Skill-stub recovery:** Pointer commands call `flywheel_get_skill({ name: "agent-flywheel:start" })` first; read `skills/start/_<phase>.md` from disk only if `flywheel_get_skill` errors.
 >
-> **Disk fallback.** Read `skills/start/_<phase>.md` only when `flywheel_get_skill` errors because the bundle is disabled, missing, or unreachable.
-
 > ## UNIVERSAL RULE 4: route tool failures by structured error code
 >
-> Branch on `result.structuredContent?.data?.error?.code` (`FlywheelErrorCode`) and render `data.error.hint` in retries, recovery choices, and handoffs. Phase files define their local codes and actions.
+> Branch on `result.structuredContent?.data?.error?.code` (`FlywheelErrorCode`) and surface `data.error.hint` in retries and recovery menus.
 
 ## Step 0: Opening Ceremony
 
 ### 0a. Detect version
 
-Take `VERSION` from the `plugin v<version>` tag in the header line of the `flywheel_get_skill` result that loaded this skill (the same value is in `data.pluginVersion`). Only when the skill came from disk without that tag, read it from `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json`, falling back to the newest cached plugin package:
-```bash
-{ [ -n "$CLAUDE_PLUGIN_ROOT" ] && cat "$CLAUDE_PLUGIN_ROOT/mcp-server/package.json"; } \
-  || ls -t ~/.claude/plugins/cache/agent-flywheel/agent-flywheel/*/mcp-server/package.json 2>/dev/null | head -1 | xargs cat 2>/dev/null
-```
-Use `v?` when version resolution fails.
+Take `VERSION` from `plugin v<version>` in the `flywheel_get_skill` header (`data.pluginVersion`), or read `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json` (fallback `v?`).
 
 ### 0.banner: show this first
 
-**Resolve `VERSION` first, then print the banner.** Use `v?` when resolution failed; never print a stale hardcoded version. Print it as the text of the same message that makes the Step 0b calls, so the operator sees it while state detection runs.
+**Resolve `VERSION` first, then print the banner** in the same turn as Step 0b:
 
 ```
 ░▒▓ CLAUDE // AGENT-FLYWHEEL v<VERSION> ▓▒░
 ```
 
-Then continue with 0.preflight.
-
 ### 0.preflight — Captured user input
 
-Capture any prompt beyond `/start <args>` as `USER_INPUT`. Run Steps 0a–0d first so the operator sees current state, then use the Step 0e override instead of the default menu.
+Capture any prompt beyond `/start <args>` as `USER_INPUT`. Run Steps 0a–0d first, then apply this Step 0e override when `USER_INPUT` is non-empty (multi-paragraph/Markdown/`docs/plans/*.md` = plan; ≤300 chars without headings = goal; longer prose = ambiguous):
 
-Multi-paragraph input, Markdown sections, file-specific text, or a `docs/plans/*.md` path is a plan; up to 300 characters without headings is a goal. Route longer unstructured prose through **Goal framing mode** before `flywheel_select`.
-
-**Routing override for Step 0e** (only when USER_INPUT is non-empty):
-
-- Plan-shaped:
+- **Plan-shaped:**
   ```
   AskUserQuestion(questions: [{
     question: "I see a plan in your message ('<first 60 chars>…'). What should I do with it?",
     header: "Plan input",
     options: [
       { label: "Use as plan", description: "Register via flywheel_plan and jump to bead creation (Recommended)" },
-      { label: "Treat as goal", description: "Use the plan content as the goal description and run the full flywheel from Step 4" },
-      { label: "Discard", description: "Ignore the input and show the regular start menu" }
+      { label: "Treat as goal", description: "Use as goal description and run from Step 4" },
+      { label: "Discard", description: "Ignore input and show the start menu" }
     ],
     multiSelect: false
   }])
   ```
-  - **Use as plan** → pass a path through `planFile`. Write inline content to `docs/plans/<date>-<goal-slug>.md` first. Continue at Step 5.5.
-  - **Treat as goal** → call `flywheel_select` and continue at Step 5.
+  - **Use as plan** → write to `docs/plans/<date>-<goal-slug>.md` if inline, register via `planFile`, jump to Step 5.5.
+  - **Treat as goal** → call `flywheel_select`, continue at Step 5.
   - **Discard** → show the default Step 0e menu.
 
-- Goal-shaped:
+- **Goal-shaped:**
   ```
   AskUserQuestion(questions: [{
     question: "I see a goal in your message: '<USER_INPUT>'. Run the flywheel on this?",
     header: "Goal input",
     options: [
       { label: "Yes, full flywheel", description: "Skip discovery, plan and implement this goal (Recommended)" },
-      { label: "Refine first", description: "Pick a framing mode (Light / Grill with docs / Full brainstorm) before planning" },
+      { label: "Refine first", description: "Pick a framing mode (Light / Grill with docs / Full brainstorm)" },
       { label: "Plan only", description: "Generate a plan, stop before implementation" },
-      { label: "Discard", description: "Ignore the input and show the regular start menu" }
+      { label: "Discard", description: "Ignore input and show the start menu" }
     ],
     multiSelect: false
   }])
   ```
-  Every choice except Discard runs **Goal deepening** on `USER_INPUT` first and uses its result as the goal below.
-  - **Yes, full flywheel** → call `flywheel_select` and continue at Step 5, including Phase 0.5 when its skip rule does not match.
-  - **Refine first** → run **Goal framing mode** with `RAW_GOAL` set to the deepened goal, then select the enriched goal and continue at Step 5.
-  - **Plan only** → select the goal, run Step 5, stop after bead creation.
+  Every choice except Discard runs **Goal deepening** on `USER_INPUT` first:
+  - **Yes, full flywheel** → call `flywheel_select`, continue at Step 5.
+  - **Refine first** → run **Goal framing mode** (`RAW_GOAL` = deepened goal), select, continue at Step 5.
+  - **Plan only** → select goal, run Step 5, stop after bead creation.
   - **Discard** → show the default Step 0e menu.
 
-- Ambiguous → run **Goal deepening**, then **Goal framing mode** (Recommended default: Grill with docs), then route as goal-shaped after refinement.
-
-USER_INPUT still goes through the banner and a menu choice.
+- **Ambiguous** → run **Goal deepening**, then **Goal framing mode** (Recommended default: Grill with docs), then route as goal-shaped.
 
 #### Goal deepening (every goal the user types)
 
-Run this once on each goal the user types (`USER_INPUT`, **Set a goal**, or Other in a goal menu), before Goal framing mode and `flywheel_select`; skip it for a menu-picked idea, a goal built from existing beads, and plan-shaped input. It deepens the task at the same scope.
+Run once on every user-typed goal (`USER_INPUT`, **Set a goal**, or Other in a goal menu) before Goal framing mode and `flywheel_select`; skip for menu-picked ideas, bead-derived goals, and plans:
 
-1. **Answer four questions** from the goal text and what the repo profile or `flywheel_observe` already returned, a few lines each:
-   1. What would a top professional in this field do here that the goal doesn't ask for?
-   2. What is the rawest material they would start from instead of a digest (the failing input, production logs, the spec, real user sessions, benchmark data)?
-   3. Which specific methods and tools would they use?
-   4. What, other than the agent or the user, would show the result is right (a test, benchmark, dataset, or user metric)?
-2. **Rewrite the goal** to ask for exactly that. Open with a one-line restatement in the user's words, so `data.goalSlug` stays readable, then add the raw material, methods, and outside check as requirements.
-3. **Print the four answers and the rewrite**, then ask:
+1. **Answer four questions** from the goal and Step 0b context: (1) what a top professional would do that the goal omits, (2) rawest material they start from, (3) specific methods/tools, and (4) the outside check (test, benchmark, dataset, metric).
+2. **Rewrite the goal** opening with a one-line restatement in the user's words (preserving `data.goalSlug`) plus the raw material, methods, and outside check.
+3. **Print the four answers and rewrite**, then ask:
 
 ```
 AskUserQuestion(questions: [{
   question: "Deepened goal:\n\n<DEEPENED_GOAL>\n\nUse this version? Type your own edit in Other.",
   header: "Deepen",
   options: [
-    { label: "Use deepened goal", description: "Plan the rewrite: same scope, with the raw material, methods and outside check made explicit (Recommended)" },
-    { label: "Keep my wording", description: "Plan the goal exactly as typed and drop the four answers" }
+    { label: "Use deepened goal", description: "Plan the rewrite with raw material, methods, and outside check (Recommended)" },
+    { label: "Keep my wording", description: "Plan the goal as typed and drop the four answers" }
   ],
   multiSelect: false
 }])
 ```
 
-- **Use deepened goal** → set `RAW_GOAL = DEEPENED_GOAL` and keep the four answers as `DEPTH_NOTES`.
-- **Keep my wording** → keep the typed goal and leave `DEPTH_NOTES` unset.
-- **Other** → use the typed text as the goal and keep `DEPTH_NOTES`.
+- **Use deepened goal** → `RAW_GOAL = DEEPENED_GOAL`, save `DEPTH_NOTES`.
+- **Keep my wording** → keep typed goal, `DEPTH_NOTES` unset.
+- **Other** → use typed text as goal, keep `DEPTH_NOTES`.
 
-The 300-character framing check reads the goal as typed. `_planning.md` Step 4.5c and the ambition pass reuse `DEPTH_NOTES`. `_planning.md` Step 4.6 has a six-category interview (Users & Personas, Core Value & MVP, Technical Stack & Constraints, Integrations & Data, Scale & Performance, Risks & Non-Goals) and the **Poteto mode (pstack)** track (interrogate -> architect -> plan -> red-green-implement -> verify -> ship).
+`_planning.md` Step 4.5c and the ambition pass reuse `DEPTH_NOTES`; Step 4.6 provides the 6-category interview and **Poteto mode (pstack)** track.
 
 #### Goal framing mode (shared by Set a goal / Refine first / Ambiguous)
-
-Use one framing path before `flywheel_select`.
 
 ```
 AskUserQuestion(questions: [{
   question: "How should we refine this goal before planning?\n\nGoal: '<RAW_GOAL>'",
   header: "Framing",
   options: [
-    { label: "Light (Phase 0.5 only)", description: "Skip deep interview; three pressure-test questions at Step 4.5 (floor / 10x / adjacents)" },
-    { label: "Grill with docs (Recommended)", description: "Relentless interview via skills/grill-with-docs — writes brainstorm + optional ADRs/glossary, then hands off" },
-    { label: "Full brainstorm", description: "/brainstorming design dialogue — best for greenfield product specs / mockups" },
-    { label: "Skip framing", description: "Goal is already concrete — call flywheel_select with the raw text" }
+    { label: "Light (Phase 0.5 only)", description: "Three pressure-test questions at Step 4.5 (floor / 10x / adjacents)" },
+    { label: "Grill with docs (Recommended)", description: "Relentless interview via skills/grill-with-docs — writes brainstorm + ADRs" },
+    { label: "Full brainstorm", description: "/brainstorming design dialogue for greenfield specs" },
+    { label: "Skip framing", description: "Goal is concrete — call flywheel_select with raw text" }
   ],
   multiSelect: false
 }])
 ```
 
-Route the selected mode:
-
-- **Light (Phase 0.5 only)** → set `FRAMING_MODE = light`, select `RAW_GOAL`, then run `_planning.md` Step 4.5.
-- **Grill with docs (Recommended)** → set `FRAMING_MODE = grill` and load `agent-flywheel:grill-with-docs` through `flywheel_get_skill`, with `Skill(skill: "agent-flywheel:grill-with-docs")` as its fallback. Execute it with `RAW_GOAL`, `CWD`, `GOAL_SLUG`, and `TODAY`. An aborted grill returns to Start. An approved grill selects `GRILL_ENRICHED_GOAL`, records `GRILL_BRAINSTORM_PATH`, and enters Step 4.5, whose complete-brainstorm rule skips the repeated questions.
-- **Full brainstorm** → set `FRAMING_MODE = brainstorm`, invoke `/brainstorming`, select its approved goal summary or `RAW_GOAL`, then run Step 4.5 unless the design already answers its three dimensions.
-- **Skip framing** → set `FRAMING_MODE = skip`, select `RAW_GOAL`, then apply the normal Step 4.5 skip rules.
+- **Light (Phase 0.5 only)** → `FRAMING_MODE = light`, select `RAW_GOAL`, run `_planning.md` Step 4.5.
+- **Grill with docs (Recommended)** → `FRAMING_MODE = grill`, load `agent-flywheel:grill-with-docs` via `flywheel_get_skill` (fallback `Skill(skill: "agent-flywheel:grill-with-docs")`) with `RAW_GOAL`, `CWD`, `GOAL_SLUG`, `TODAY`. On approval, select `GRILL_ENRICHED_GOAL`, record `GRILL_BRAINSTORM_PATH`, and enter Step 4.5 (aborted returns to Start).
+- **Full brainstorm** → `FRAMING_MODE = brainstorm`, invoke `/brainstorming`, select summary or `RAW_GOAL`, run Step 4.5.
+- **Skip framing** → `FRAMING_MODE = skip`, select `RAW_GOAL`, apply Step 4.5 skip rules.
 
 **Anti-double-interview rule:** an approved Grill with docs goes directly to Phase 0.5 and never re-enters Goal framing mode in the same cycle.
 
 ### 0b. Detect state
 
-Make the four calls below in one message, in parallel, alongside the 0.banner text. Each one answers on its own, so none waits for another, and Step 0 needs no other tool call before the menu.
+Call in parallel alongside 0.banner:
 
-1. **Doctor.** Call `flywheel_doctor({ cwd })`. Cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN`. On failure, set the first two values to `null`, `IS_FIRST_RUN = false`, and `MCP_DEGRADED = true`.
-2. **Session, beads, git, Agent Mail, project, plans, and error counts.** Call `flywheel_observe({ cwd })`. Its report holds `projectName`, the checkpoint's phase and goal (`checkpoint.phase`, `checkpoint.selectedGoal`), exact bead counts (`beads.counts.open`, `in_progress`, `blocked`, `closed`), the branch and HEAD (`git.branch`, `git.head`), `agentMail.reachable`, the newest three plan paths (`recentPlans`), and the top three nonzero error codes (`topErrorCodes`). Do not call `Bash`, `Read`, or `Glob` for `package.json`, `docs/plans/*.md`, or `.pi-flywheel/error-counts.json` unless `flywheel_observe` errors (on error, fall back to reading `package.json` or the directory name, globbing `docs/plans/*.md`, and reading `.pi-flywheel/error-counts.json`). When `agentMail.reachable` is false, set `AGENT_MAIL_DOWN = true` and show `Agent Mail: offline`. Single-agent routes remain available.
-3. **CASS memory.** Call `flywheel_memory({ cwd, operation: "search", query: "session learnings flywheel", history: 0 })` and `flywheel_memory({ cwd, operation: "search", query: "reality-check session learnings gap analysis", history: 0 })`. `history: 0` keeps the recorded learnings and skips the session-history search, which can take seconds. Skip an unavailable CASS service.
+1. **Doctor:** `flywheel_doctor({ cwd })` → cache `data.report` as `DOCTOR_REPORT`, `data.preflightBanner` as `PREFLIGHT_BANNER`, and `data.firstRun` as `IS_FIRST_RUN` (on failure: `null`, `IS_FIRST_RUN = false`, `MCP_DEGRADED = true`).
+2. **Observe:** `flywheel_observe({ cwd })` → reads `projectName`, `checkpoint.{phase,selectedGoal}`, `beads.counts.{open,in_progress,blocked,closed}`, `git.{branch,head}`, `agentMail.reachable` (`false` sets `AGENT_MAIL_DOWN = true`), `recentPlans`, and `topErrorCodes`.
+3. **CASS memory:** `flywheel_memory({ cwd, operation: "search", query: "session learnings flywheel", history: 0 })` and `flywheel_memory({ cwd, operation: "search", query: "reality-check session learnings gap analysis", history: 0 })`.
 
-Read `DOCTOR_REPORT.ntm` for the NTM display. Before a spawn route, run `_implement.md` **Pre-flight: resolve NTM readiness** to recompute `NTM_AVAILABLE` and `NTM_PROJECT`. The repo profile waits for Step 2, which calls `flywheel_profile` itself.
-
-If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the welcome banner marks the warning state and surfaces every yellow or red check. `IS_FIRST_RUN` is true only when all five server-side signals are absent: no checkpoint, beads, plan markdown, legacy orchestrator state, or project-scoped CASS history.
+If `DOCTOR_REPORT.overall` is `"red"` OR `"yellow"`, the welcome banner marks the warning state and surfaces every yellow or red check.
 
 ### 0c. Display the welcome banner
 
-Display one concise welcome message using only the blocks below — no extra commentary, no "Active session:" or "Checkpoint note:" paragraphs, and one short line per flagged check or learning:
+Display one concise welcome message using only the blocks below:
 
 ```
  ╔══════════════════════════════════════════════════╗
- ║                                                  ║
  ║   agent-flywheel v<VERSION>                      ║
  ║   The Agentic Coding Flywheel                    ║
- ║                                                  ║
  ║   Project: <project-name>                        ║
  ║   Branch:  <current-branch> @ <short-sha>        ║
  ║   Beads:   <N open> | <M in-progress> | <B blocked> | <K done> ║
- ║                                                  ║
  ╚══════════════════════════════════════════════════╝
 ```
 
-Show `Beads: none yet` at zero and `MCP: not configured` when degraded. Add the doctor status:
+Show `Beads: none yet` at zero, `MCP: not configured` when degraded, and `Doctor: green ✓` / `yellow ⚠` / `red ✗` / `not run`.
 
-- `green` → `Doctor: green ✓`
-- `yellow` → `Doctor: yellow ⚠`
-- `red` → `Doctor: red ✗`
-- null / not run → `Doctor: not run`
-
-If `DOCTOR_REPORT.overall === "red"` OR `DOCTOR_REPORT.overall === "yellow"`, list each check with `severity` in `{ "yellow", "red" }`. Use `⚠` for yellow and `✗` for red.
+If `DOCTOR_REPORT.overall === "red"` OR `DOCTOR_REPORT.overall === "yellow"`, list each check with `severity` in `{ "yellow", "red" }`:
 
 > **Doctor flagged:**
-> - `⚠ <check_name>` — <detail>     <!-- yellow rows -->
-> - `✗ <check_name>` — <detail>     <!-- red rows -->
-> - ...
+> - `⚠ <check_name>` — <check detail>
+> - `✗ <check_name>` — <check detail>
 >
 > Yellow checks are non-blocking. Red checks indicate degraded behavior. Run `/agent-flywheel:flywheel-doctor` for details and remediation.
 
-**detail**: the doctor check's concise failure reason.
-
 #### Pre-flight issue surfacing (T4.1)
 
-Print a non-null `PREFLIGHT_BANNER` verbatim once above the menu, followed immediately by this gate (stopping here until answered, without printing the 0d menu ahead of time). A null banner skips the gate.
+Print a non-null `PREFLIGHT_BANNER` verbatim once above the menu, followed immediately by this gate (skip when null):
 
 ```
 AskUserQuestion(questions: [{
   question: "Pre-flight issues detected. How to proceed?",
   header: "Pre-flight",
   options: [
-    { label: "Run setup now (Recommended)", description: "Launches /agent-flywheel:flywheel-setup which detects + batches + verifies" },
-    { label: "Continue with degraded",      description: "Skip setup, fall through to the menu — features tied to the failing checks will degrade" },
-    { label: "Show me what's degraded",     description: "Print the doctor report row by row, then re-prompt this question" }
+    { label: "Run setup now (Recommended)", description: "Launches /agent-flywheel:flywheel-setup" },
+    { label: "Continue with degraded", description: "Skip setup; failing checks will degrade" },
+    { label: "Show me what's degraded", description: "Print doctor report rows, then re-prompt" }
   ],
   multiSelect: false
 }])
 ```
 
-**Run setup now** invokes setup and restarts Step 0. **Continue with degraded** opens the main menu. **Show me what's degraded** prints `DOCTOR_REPORT.checks` and repeats this gate.
-
-Display three relevant CASS learnings when three are available (fewer only when memory returned fewer), quoting each learning's first sentence verbatim from the memory result instead of rewriting it:
+Display three relevant CASS learnings when three are available (fewer only when memory returned fewer), quoting each learning's first sentence verbatim:
 
 > **From prior sessions:**
 > - <top 3 most relevant learnings, each learning's first sentence verbatim>
+>
+> **Error-code trends:** `<code_1>` — <occurrence count> · **Suggestion:** <session count> sessions since `/agent-flywheel:flywheel-reality-check`.
 
-From `topErrorCodes` in the Step 0b observe report (or `.pi-flywheel/error-counts.json` on fallback), show the top three nonzero codes:
-
-> **Error-code trends (last 10 sessions):**
-> - `<code_1>` — <count> occurrence(s)
-> - `<code_2>` — <count> occurrence(s)
-> - `<code_3>` — <count> occurrence(s)
-
-From the reality-check memory search in Step 0b, after at least three sessions, suggest a reality check when none ran in the last seven sessions:
-
-> **Suggestion:** It's been <X> sessions since the last reality-check pass — consider running `/agent-flywheel:flywheel-reality-check` (or pick "Reality check" from the menu) to verify the implementation still matches the project's vision before continuing.
-
-**count**: a telemetry occurrence count. **X**: the number of sessions since the last reality check.
-
-These memory blocks are advisory and disappear when their data is unavailable.
-
-If `DOCTOR_REPORT.checks` contains a yellow `orphaned_worktrees` row whose `message` mentions `orphaned worktree`, `stale worktree`, or `locked stale worktree`, run this cleanup gate before the main menu:
+If `DOCTOR_REPORT.checks` has a yellow `orphaned_worktrees` row mentioning `orphaned worktree`, `stale worktree`, or `locked stale worktree`, ask before the main menu:
 
 ```
 AskUserQuestion(questions: [{
-  question: "Doctor found stale or orphaned worktrees from prior sessions. Clean up before starting?",
+  question: "Doctor found stale or orphaned worktrees. Clean up before starting?",
   header: "Cleanup",
   options: [
-    { label: "Inspect first (Recommended)", description: "List the candidate worktrees and lock state before removing anything" },
-    { label: "Clean up", description: "Run the flywheel-cleanup command and confirm removals in its prompt" },
-    { label: "Skip", description: "Continue to the start menu and leave the worktrees untouched" }
+    { label: "Inspect first (Recommended)", description: "List candidate worktrees and lock state first" },
+    { label: "Clean up", description: "Run flywheel-cleanup and confirm removals" },
+    { label: "Skip", description: "Continue to start menu" }
   ],
   multiSelect: false
 }])
 ```
 
-**Inspect first** shows `git worktree list --porcelain` and repeats the gate. **Clean up** runs `flywheel-cleanup`. **Skip** opens the main menu. Treat locked stale worktrees as inspect-first unless the operator chooses cleanup.
-
 ### 0d. Present the main menu
 
-**Plan detection.** Take `RECENT_PLAN_PATHS = recentPlans` from the Step 0b observe report (up to 3 newest `docs/plans/*.md` relative paths, or `[]` if none exist; glob `docs/plans/*.md` only on fallback). This list is surfaced inline in the printed block whenever "Pick up existing plan" is shown so operators can copy-paste a path directly.
-
-Build `RECENT_PLANS_BLOCK` once from that list:
+Take `RECENT_PLAN_PATHS = recentPlans` from `flywheel_observe` and build `RECENT_PLANS_BLOCK`:
 
 ```text
 Recent plans (mtime desc — copy-paste into Other when picking "Pick up existing plan"):
-  • <RECENT_PLAN_PATHS[0]>                       (or "(no docs/plans/*.md found)" if empty)
-  • <RECENT_PLAN_PATHS[1]>
-  • <RECENT_PLAN_PATHS[2]>
+  • <RECENT_PLAN_PATHS[0]>
 ```
 
-Build the menu options dynamically based on detected state:
-
-Set `SWARM_MIX = DOCTOR_REPORT.swarm.label`. The server builds it from the lanes this host can run after the substitution ladder and the `lanes:` switches in flywheel.config.yaml, so a host with Gemini switched off reads `cc:pi 2:4`. Print it as given. When the report has no `swarm` field, set `SWARM_MIX = "model-diversified"`.
-
-After printing the selected state's menu block, append this glossary line once: `Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol`.
+Set `SWARM_MIX = DOCTOR_REPORT.swarm.label` (fallback `"model-diversified"`). Append once after the menu block: `Glossary: bead=atomic task · plan=grouped beads · flywheel=full loop · NTM=tmux multi-agent · agent-mail=inter-agent inbox · MCP=Model Context Protocol`.
 
 **If a previous session exists** (checkpoint found with non-idle phase):
-
-Print this block first (per the menu-visibility rule below):
 
 ```
 Primary entry points (active session: '<goal>' @ <phase>):
   • Auto-swarm          — in-flight resume with a <SWARM_MIX> swarm (Recommended)
   • Resume session      — continue manually (no swarm)
-  • Set a goal          — type a fresh goal in Other; appends to existing beads after drift confirm
-  • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps to bead creation
-
+  • Set a goal          — type a fresh goal in Other
+  • Pick up existing plan — type docs/plans/<file>.md in Other
 [Insert `RECENT_PLANS_BLOCK` built from `RECENT_PLAN_PATHS`.]
-
-More entry points (type the label into "Other" or run the slash command directly):
-  • Work on beads       — refine / implement / inspect the open bead set
-  • New goal            — discard checkpoint AND existing beads, start over
-  • Reality check       — gap-check vs vision via /reality-check-for-project
-  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
-  • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
-  • Research repo       — paste a GitHub URL → /flywheel-research
-  • Audit               — /agent-flywheel:flywheel-audit
-  • Setup               — /agent-flywheel:flywheel-setup
-  • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
-
+More (Other/slash): Work on beads · New goal · Reality check · Duel · Simplify pass · Research repo · Audit · Setup · Speed up
 ```
-
-Then call:
 
 ```
 AskUserQuestion(questions: [{
-  question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
+  question: "What would you like to do?",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Resume '<goal>' from <phase> with a <SWARM_MIX> swarm through the in-flight route in Step 0e" },
-    { label: "Resume session", description: "Continue '<goal>' from <phase> phase manually (no swarm)" },
-    { label: "Set a goal", description: "Type a fresh goal in Other — appends to the current bead set after a drift confirmation. Does NOT discard the checkpoint" },
-    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps" }
+    { label: "Auto-swarm (Recommended)", description: "Resume '<goal>' from <phase> with a <SWARM_MIX> swarm" },
+    { label: "Resume session", description: "Continue '<goal>' manually" },
+    { label: "Set a goal", description: "Type a fresh goal in Other" },
+    { label: "Pick up existing plan", description: "Type docs/plans/<file>.md in Other (RECENT_PLAN_PATHS) → Step 5.45 (Validate)" }
   ],
   multiSelect: false
 }])
@@ -332,40 +255,25 @@ AskUserQuestion(questions: [{
 
 **If open/in-progress beads exist** but no active session:
 
-Print this block first (per the menu-visibility rule below):
-
 ```
 Primary entry points (<N> open beads):
   • Auto-swarm          — in-flight resume with a <SWARM_MIX> swarm (Recommended)
   • Work on beads       — refine / implement / inspect manually
-  • Set a goal          — type a fresh goal in Other; appends new beads to the current set
-  • Pick up existing plan — type a path to docs/plans/<file>.md in Other; merges into the current bead set
-
+  • Set a goal          — type a fresh goal in Other
+  • Pick up existing plan — type docs/plans/<file>.md in Other
 [Insert `RECENT_PLANS_BLOCK` built from `RECENT_PLAN_PATHS`.]
-
-More entry points (type the label into "Other" or run the slash command directly):
-  • Reality check       — gap-check vs vision via /reality-check-for-project
-  • Duel                — /agent-flywheel:flywheel-duel adversarial cross-scoring
-  • New goal            — discard the open beads and start over
-  • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
-  • Research repo       — paste a GitHub URL → /flywheel-research
-  • Audit               — /agent-flywheel:flywheel-audit
-  • Setup               — /agent-flywheel:flywheel-setup
-  • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
-
+More (Other/slash): Reality check · Duel · New goal · Simplify pass · Research repo · Audit · Setup · Speed up
 ```
-
-Then call:
 
 ```
 AskUserQuestion(questions: [{
-  question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
+  question: "What would you like to do?",
   header: "Start",
   options: [
-    { label: "Auto-swarm (Recommended)", description: "Dispatch the <N> open beads to a <SWARM_MIX> swarm through the in-flight route in Step 0e" },
-    { label: "Work on beads", description: "<N> open beads exist — refine, implement, or inspect (manual)" },
-    { label: "Set a goal", description: "Type a fresh goal in Other — appends new beads to the existing set without discarding them" },
-    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, then Step 5.45 surfaces (Validate / Approve / Refine / Scrap); validated gaps merge into the current bead set" }
+    { label: "Auto-swarm (Recommended)", description: "Dispatch <N> open beads to a <SWARM_MIX> swarm" },
+    { label: "Work on beads", description: "<N> open beads — refine, implement, or inspect" },
+    { label: "Set a goal", description: "Type a fresh goal in Other" },
+    { label: "Pick up existing plan", description: "Type docs/plans/<file>.md in Other (RECENT_PLAN_PATHS) → Step 5.45 (Validate)" }
   ],
   multiSelect: false
 }])
@@ -373,274 +281,138 @@ AskUserQuestion(questions: [{
 
 **If no beads and no session** (fresh start):
 
-> **Menu visibility rule.** Before each four-option `AskUserQuestion`, print the state's complete menu. The operator reaches extra entries through Other or their slash commands.
-
-Print this block first (the `• Take the 5-min tour` row appears ONLY when `IS_FIRST_RUN === true` per Step 0b):
-
 ```
 Primary entry points:
-  • Take the 5-min tour — first time? guided tutorial-bead walkthrough  [only when IS_FIRST_RUN]
-  • Set a goal          — type your goal in Other; framing mode (Light / Grill with docs / Full brainstorm) if ambiguous, then flywheel_select
-  • Pick up existing plan — type a path to docs/plans/<file>.md in Other; jumps straight to bead creation
-  • Scan & discover     — profile the repo and surface improvement ideas
+  • Take the 5-min tour — guided walkthrough [only when IS_FIRST_RUN]
+  • Set a goal          — type your goal in Other
+  • Pick up existing plan — type docs/plans/<file>.md in Other
+  • Scan & discover     — profile the repo and surface ideas
   • Reality check       — /reality-check-for-project gap analysis
-
 [Insert `RECENT_PLANS_BLOCK` built from `RECENT_PLAN_PATHS`.]
-
-More entry points (type the label into "Other" or run the slash command directly):
-  • Research repo       — paste a GitHub URL → /flywheel-research
-  • Simplify pass       — /simplify-and-refactor-code-isomorphically (Deslop)
-  • Duel                — /agent-flywheel:flywheel-duel (adversarial 2-agent ideation)
-  • Audit               — /agent-flywheel:flywheel-audit
-  • Setup               — /agent-flywheel:flywheel-setup
-  • Speed up            — /agent-flywheel:flywheel-speedup (profile → optimize or re-architect → canary)
-  • Quick fix           — /agent-flywheel:flywheel-fix
-  • Auto-swarm          — in-flight resume; only meaningful with active beads
-
+More (Other/slash): Research repo · Simplify pass · Duel · Audit · Setup · Speed up · Quick fix · Auto-swarm
 ```
 
-Then call (when `IS_FIRST_RUN === true`, **substitute** the "Take the 5-min tour" row for whichever existing option would otherwise have been Recommended — keep the 4-option cap):
+When `IS_FIRST_RUN === false`, replace the tour row with `Reality check`:
 
 ```
 AskUserQuestion(questions: [{
-  question: "What would you like to do? (extras above are reachable via Other or slash commands.)",
+  question: "What would you like to do?",
   header: "Start",
   options: [
-    // IS_FIRST_RUN === true: this row replaces the lowest-priority Recommended candidate
-    { label: "Take the 5-min tour (Recommended)", description: "Guided tour — runs a real micro-bead end-to-end so you see scan → plan → bead → implement → commit fire once. See skills/start/_tutorial_bead.md" },
-    { label: "Set a goal", description: "Type the goal directly in Other — framing mode (Light / Grill with docs / Full brainstorm) when ambiguous, then flywheel_select. The most direct path when you know what you want to build" },
-    { label: "Pick up existing plan", description: "Type a path to docs/plans/<file>.md in Other (or use one of the suggested paths above). Registers via flywheel_plan, surfaces Step 5.45 (Validate against code / Approve / Refine / Scrap) so you bead only the gaps. Skips brainstorming + scan" },
-    { label: "Scan & discover", description: "Profile the repo and find improvement opportunities (greenfield default)" }
+    { label: "Take the 5-min tour (Recommended)", description: "Guided tour — skills/start/_tutorial_bead.md" },
+    { label: "Set a goal", description: "Type goal in Other" },
+    { label: "Pick up existing plan", description: "Type docs/plans/<file>.md in Other (RECENT_PLAN_PATHS) → Step 5.45 (Validate)" },
+    { label: "Scan & discover", description: "Profile repo and find improvement opportunities" }
   ],
   multiSelect: false
 }])
 ```
 
-When `IS_FIRST_RUN === false`, drop the tutorial row and restore the original 4-option set: `Set a goal`, `Pick up existing plan`, `Scan & discover`, `Reality check`.
-
-Use the server-provided recommendation for the non-tutorial rows. `IS_FIRST_RUN === true` still selects **Take the 5-min tour (Recommended)**.
-
 ### 0e. Route the user's choice
-
-> **If `USER_INPUT` was captured in step 0.preflight, use the routing override there instead of this menu.** The default menu below applies only when the user invoked `/start` with no extra prompt content.
 
 | Choice | Action |
 |--------|--------|
 | **Auto-swarm** | Load `skills/start/_inflight_prompt.md` and execute its canonical in-flight route. |
-| **Take the 5-min tour** | Load `skills/start/_tutorial_bead.md`. Surface this route only when `IS_FIRST_RUN === true`. |
-| **Other** | Match the printed menu label for the current state. Route a `docs/plans/` or `.md` path as **Pick up existing plan** using `RECENT_PLAN_PATHS`. Route unmatched prose as **Set a goal**. |
-| **Simplify pass** (a.k.a. Deslop pass) | Load `skills/start/_deslop.md` and present its mode gate. |
-| **Duel** | Invoke `/agent-flywheel:flywheel-duel`, then resume the phase it returns. Its preflight checks `which claude codex gemini`. `which cc` resolves `/usr/bin/cc`, not the Claude lane. |
+| **Take the 5-min tour** | Load `skills/start/_tutorial_bead.md` (when `IS_FIRST_RUN === true`). |
+| **Other** | Match printed menu labels; route a `docs/plans/` or `.md` path as **Pick up existing plan** (`RECENT_PLAN_PATHS`), or unmatched prose as **Set a goal**. |
+| **Simplify pass** | Load `skills/start/_deslop.md` and present its mode gate. |
+| **Duel** | Invoke `/agent-flywheel:flywheel-duel` (checks `which claude codex gemini`), then resume the phase it returns. |
 | **Reality check** | Load `skills/start/_reality_check.md` and present its depth gate. |
-| **Resume session** | Run the **drift check** below before jumping to the saved phase |
-| **Work on beads** | Run the **Work-on-beads sub-menu + bootstrap** below before `flywheel_approve_beads` |
-| **New goal** | Delete checkpoint if exists, proceed to Step 2 |
-| **Scan & discover** | Proceed to Step 2 |
-| **Set a goal** | Read `<goal>` from Other and run **Goal deepening**. Run **Goal framing mode** unless it is concrete and at most 300 characters, then call `flywheel_select`, load `_planning.md`, and continue through Steps 4.5 and 5 in the same turn. Existing sessions append. Open bead sets merge. |
-| **Pick up existing plan** | Validate `<plan-path>` as an existing Markdown file, then derive a goal and call `flywheel_plan({ planFile: <plan-path>, source: "picked-up-existing-plan" })`. Enter **Step 5.45** before Step 5.5. Previous sessions run the drift check. Open bead sets confirm that new beads will merge. |
-| **Research repo** | Prompt for GitHub URL via the menu below, then invoke `/flywheel-research` |
-| **Quick fix** | Invoke `/flywheel-fix` |
-| **Audit** | Invoke `/flywheel-audit` |
-| **Setup** | Invoke `/flywheel-setup` |
-| **Speed up** | Invoke `/agent-flywheel:flywheel-speedup` |
+| **Resume session** | Run **drift check** below before jumping to the saved phase. |
+| **Work on beads** | Run **Work-on-beads sub-menu** below before `flywheel_approve_beads`. |
+| **New goal / Scan & discover** | Delete checkpoint if New goal; proceed to Step 2. |
+| **Set a goal** | Read `<goal>` from Other, run **Goal deepening**, run **Goal framing mode** unless concrete and ≤300 chars, call `flywheel_select`, load `_planning.md`, and continue through Steps 4.5 and 5 in the same turn. |
+| **Pick up existing plan** | Validate `<plan-path>`, derive goal, call `flywheel_plan({ planFile: <plan-path>, source: "picked-up-existing-plan" })`, and enter **Step 5.45** before Step 5.5. |
+| **Research repo** | Prompt for GitHub URL below, then invoke `/flywheel-research`. |
+| **Quick fix / Audit / Setup / Speed up** | Invoke `/flywheel-fix`, `/flywheel-audit`, `/flywheel-setup`, or `/agent-flywheel:flywheel-speedup`. |
 
 #### Work on beads: sub-menu and bootstrap
 
-`flywheel_approve_beads` requires `state.selectedGoal`. On a fresh session with leftover beads, branch on `result.structuredContent?.data?.error?.code`; if it is `missing_prerequisite`, bootstrap first and only then retry approve.
+If `flywheel_approve_beads` returns `missing_prerequisite`, synthesize a default goal from top 3 open beads (`br list --json`), confirm via `AskUserQuestion` (`Use default` / `Custom goal`), call `flywheel_select`, then ask:
 
-Apply Universal Rule 4. For this bootstrap:
-
-```ts
-const code = result.structuredContent?.data?.error?.code;
-if (code === "missing_prerequisite") {
-  await synthesizeGoalAndCallSelect(cwd);
-  return await flywheel_approve_beads({ cwd, action: "start" });
-}
 ```
-
-Bootstrap it before any approve call:
-
-1. **Synthesize a default goal from the existing beads.** Read the top 3 open bead titles from `br list --json` and build a default like `Continue: <title-1>; <title-2>; <title-3>` (truncate at 200 chars).
-2. **Confirm or override the goal:**
-   ```
-   AskUserQuestion(questions: [{
-     question: "These beads need a goal label so the agent-flywheel can resume. Use the synthesized default?",
-     header: "Goal",
-     options: [
-       { label: "Use default", description: "'<synthesized goal>' (Recommended)" },
-       { label: "Custom goal", description: "Provide a one-line goal in the Other field" }
-     ],
-     multiSelect: false
-   }])
-   ```
-3. **Call `flywheel_select` with the chosen goal.** This populates `state.selectedGoal` and unblocks every downstream tool.
-4. **Then present the action sub-menu:**
-   ```
-   AskUserQuestion(questions: [{
-     question: "<N> open beads. What do you want to do with them?",
-     header: "Beads",
-     options: [
-       { label: "Implement", description: "Jump to Step 6 with launch as the default action (Recommended)" },
-       { label: "Refine", description: "Jump to Step 6 with polish as the default action — restructure beads/deps before implementing" },
-       { label: "Inspect", description: "Show br list + bv dependency graph, then re-show this menu" }
-     ],
-     multiSelect: false
-   }])
-   ```
-   - **"Implement"** → jump to Step 6 (read `_beads.md`).
-   - **"Refine"** → jump to Step 6 but pre-select the polish path: call `flywheel_approve_beads(action: "polish")` first to enter `refining_beads` phase, then show Step 6's menu so the user can iterate until satisfied.
-   - **"Inspect"** → run `br list` and `bv --robot-triage`, falling back to `bv --robot-insights`, then repeat the action sub-menu.
+AskUserQuestion(questions: [{
+  question: "<N> open beads. What do you want to do?",
+  header: "Beads",
+  options: [
+    { label: "Implement", description: "Step 6 launch default (Recommended)" },
+    { label: "Refine", description: "Step 6 polish default" },
+    { label: "Inspect", description: "Show br list + bv graph, then re-show menu" }
+  ],
+  multiSelect: false
+}])
+```
 
 #### Resume session: drift check
 
-Before jumping to the saved phase, compare the checkpoint to reality:
-
-1. `git rev-parse HEAD` → compare to `checkpoint.gitHead`. If they differ, HEAD has moved.
-2. `br list --json` → compare bead IDs/statuses to `checkpoint.activeBeadIds` and `checkpoint.beadResults`. If beads listed in checkpoint don't exist (or are all closed when checkpoint says `phase: implementing`), state is stale.
-
-If either check shows drift, present:
+Compare `git rev-parse HEAD` to `checkpoint.gitHead` and `br list --json` to `checkpoint.activeBeadIds`. If drifted, ask:
 
 ```
 AskUserQuestion(questions: [{
-  question: "Checkpoint drift detected: <summary, e.g. 'HEAD moved 5 commits ahead; 0/8 active beads still open'>. How should I proceed?",
+  question: "Checkpoint drift detected: <summary>. How should I proceed?",
   header: "Drift",
   options: [
-    { label: "Start fresh", description: "Discard the stale checkpoint and run the start menu (Recommended)" },
-    { label: "Inspect first", description: "Show the diff between checkpoint and reality, then re-prompt" },
-    { label: "Force resume", description: "Resume anyway — useful only if you know the checkpoint is still relevant" }
+    { label: "Start fresh", description: "Discard stale checkpoint (Recommended)" },
+    { label: "Inspect first", description: "Show diff, then re-prompt" },
+    { label: "Force resume", description: "Resume anyway" }
   ],
   multiSelect: false
 }])
 ```
-
-- "Start fresh" → delete `.pi-flywheel/checkpoint.json`, route as if user picked "New goal".
-- "Inspect first" → print the diff (`git log <checkpoint.gitHead>..HEAD --oneline` + bead status table), then re-show this menu.
-- "Force resume" → load checkpoint, jump to saved phase as before.
-
-If both checks pass (no drift), resume directly without showing the menu.
 
 #### Research repo — mode selection
 
-Use `AskUserQuestion` to collect the URL and mode:
-
 ```
 AskUserQuestion(questions: [{
-  question: "Paste the GitHub URL you want to research:",
+  question: "Paste the GitHub URL to research:",
   header: "Research",
   options: [
-    { label: "Research only", description: "Extract insights and patterns — no code changes" },
-    { label: "Research + integrate", description: "Study the repo, then create an integration plan with beads" }
+    { label: "Research only", description: "Extract insights — no code changes" },
+    { label: "Research + integrate", description: "Create integration plan with beads" }
   ],
   multiSelect: false
 }])
 ```
-
-The user pastes the URL in the "Other" field, or picks a mode first and provides the URL when prompted. Then:
-- **"Research only"** → invoke `/flywheel-research <url>`.
-- **"Research + integrate"** → invoke `/flywheel-research <url> --mode integrate` (the slash command's research skill reads `--mode integrate` to run Phases 8–12 / Major Feature Integration). If the slash command rejects the flag, fall back to invoking `/flywheel-research <url>` and prepend the prompt context "After research, generate an integration plan and create implementation beads."
 
 ### 0f. Degraded modes
 
-**Triage chain (canonical order):** when any check below fails, guide the user through the three commands in this order — `/flywheel-doctor` first (read-only snapshot, always safe, cancellable, under 2s), then `/flywheel-setup` (apply fixes for what doctor found — installs binaries, registers MCP, starts Agent Mail, configures hooks), then `/flywheel-healthcheck` (deep periodic audit of codebase + bead graph + dependencies; run on a cadence, not for setup problems). Never recommend `/flywheel-setup` before `/flywheel-doctor` — doctor is the read-only snapshot that tells setup what to fix.
-
-**MCP tools missing** (the `flywheel_doctor` call failed or the tool was not found in Step 0b):
-
-- Display in the banner: `MCP: not configured — run /flywheel-doctor for a snapshot, then /flywheel-setup to fix`
-- Set `MCP_DEGRADED = true` and apply these overrides for all subsequent steps:
-  - **Step 2:** Use Explore subagent only (skip `flywheel_profile`).
-  - **Step 3:** Use Explore-derived ideas (skip `flywheel_discover`).
-  - **Step 5:** Standard plan only — generate via Explore agent, write to `docs/plans/<date>-<goal-slug>.md` (skip `flywheel_plan`).
-  - **Step 5.5:** Create beads with `br create` as normal.
-  - **Step 6:** Present beads via `br list`, ask user to confirm manually — no quality score available.
-  - **Step 8:** Offer "Looks good" and "Self review" only (skip `flywheel_review`).
-  - **Step 10:** Skip `flywheel_memory` — remind user that session learnings were not auto-persisted.
-
-**Agent Mail offline** (`AGENT_MAIL_DOWN = true` from Step 0b):
-
-- Display in the banner: `Agent Mail: offline — parallel agents will skip file reservations`
-- Continue without requiring `/flywheel-setup`. Only parallel coordination is degraded.
-- Overrides for affected steps only:
-  - **Step 7 (impl agents):** Skip STEP 0 (Agent Mail bootstrap) in agent prompts. Agents work without file reservations or messaging — the coordinator monitors via TaskOutput instead of inbox.
-  - **Step 5 (deep plan):** Skip Agent Mail bootstrap for plan agents. Agents write plan files to disk; coordinator reads them directly.
-- If Agent Mail comes up mid-session, detect it on next parallel spawn and resume normal bootstrapping.
+- **Triage:** `/flywheel-doctor` → `/flywheel-setup` → `/flywheel-healthcheck`.
+- **`MCP_DEGRADED`:** Explore agent for Steps 2–5; `br` CLI for Steps 5.5–6; manual review in Step 8.
+- **`AGENT_MAIL_DOWN`:** single-agent or skip reservations until reachable.
 
 ## Step 5.45: Picked-up-plan stage menu (gated on `state.planSource === "picked-up-existing-plan"`)
 
-Surface this menu only after `flywheel_plan({ planFile, source: "picked-up-existing-plan" })` sets `state.planSource === "picked-up-existing-plan"`. Other plan sources continue to Step 5.5.
-
-For `pickedUp: true`, call `flywheel_convergence` with the plan slug. Append a present score and status to the question text. Keep the four options unchanged and let the operator choose without a score-based default.
+When `state.planSource === "picked-up-existing-plan"`, call `flywheel_convergence` for the plan slug and present:
 
 ```
 AskUserQuestion(questions: [{
-  question: "Plan registered: '<plan-path>' (<chars> chars, last modified <relative-time>)<, score <X.YY> (<status>) when present>. What does this plan need?",
+  question: "Plan registered: '<plan-path>' (<chars> chars, modified <relative-time>). What does this plan need?",
   header: "Plan",
   options: [
-    { label: "Validate against code (Recommended)", description: "Section-vs-file-vs-git-log diff: which plan sections are already implemented in HEAD? Bead-ify only the gaps. ~2-5 min" },
-    { label: "Approve and bead-ify", description: "Trust the plan as-is — go straight to Step 5.5 (coverage check + br create)" },
-    { label: "Refine plan first", description: "Open the plan for inline edits via /superpowers:writing-plans before bead-ifying. Re-enters this menu after refinement" },
-    { label: "Scrap and restart", description: "Discard this plan and return to Step 0d. Optionally appends a `## Retired` block to the plan file with today's date so future Pick-up runs skip it" }
+    { label: "Validate against code (Recommended)", description: "Diff plan sections against HEAD and bead-ify only gaps" },
+    { label: "Approve and bead-ify", description: "Trust plan as-is — go straight to Step 5.5" },
+    { label: "Refine plan first", description: "Edit plan inline before bead-ifying, then re-enter Step 5.45" },
+    { label: "Scrap and restart", description: "Discard plan and return to Step 0d" }
   ],
   multiSelect: false
 }])
 ```
 
-### Per-option routing
-
-#### "Validate against code" (Recommended)
-
-Compare every plan section's file and bead claims with the current code and commits newer than the plan. Classify each section as done, partial, or missing, then present the report:
-
-```
-AskUserQuestion(questions: [{
-  question: "Plan coverage: <D> done / <P> partial / <M> missing. <one-line summary of the gap>. What next?",
-  header: "Coverage",
-  options: [
-    { label: "Bead-ify gaps only (Recommended)", description: "Pre-filter the plan so Step 5.5 only sees the partial + missing sections. <P+M> beads expected" },
-    { label: "Bead-ify everything", description: "Ignore the coverage analysis and bead the full plan as-is" },
-    { label: "Retire the plan", description: "Coverage shows the plan is fully shipped — append `## Retired` block with today's date and return to Step 0d" },
-    { label: "Inspect first", description: "Show the per-section coverage breakdown, then re-prompt" }
-  ],
-  multiSelect: false
-}])
-```
-
-- **Bead-ify gaps only** → write partial and missing sections to `docs/plans/<original-name>-gaps-<YYYY-MM-DD>.md`, set it as `state.planDocument`, mark the source validated, and continue at Step 5.5.
-- **Bead-ify everything** → continue at Step 5.5 with the original plan.
-- **Retire the plan** → append a dated `## Retired` block, clear the plan state, and return to Step 0d.
-- **Inspect first** → print `<title> | <status> | <commits-found>` for each section and repeat the menu.
-
-#### "Approve and bead-ify"
-
-Load `_beads.md` and continue at Step 5.5.
-
-#### "Refine plan first"
-
-Invoke `/superpowers:writing-plans` on the plan, then register its result with `source: "picked-up-existing-plan"` so this menu runs again.
-
-#### "Scrap and restart"
-
-Append a dated `## Retired` block, clear `state.planDocument`, `state.planSource`, and `state.selectedGoal`, then return to Step 0d.
-
-> **One-time gate.** Set `state.planSource` to `undefined` or `"picked-up-validated"` after a choice. Refine re-registers the picked-up source and runs this gate again.
+- **Validate against code** → classify each section against HEAD (`done`/`partial`/`missing`), ask `Coverage` (`Bead-ify gaps only (Recommended)`, `Bead-ify everything`, `Retire the plan`, `Inspect first`), write gaps to `docs/plans/<original-name>-gaps-<YYYY-MM-DD>.md`, and continue at Step 5.5.
+- **Approve and bead-ify** → load `_beads.md` and continue at Step 5.5.
+- **Refine plan first** → edit the plan, re-register with `source: "picked-up-existing-plan"`, re-enter Step 5.45.
+- **Scrap and restart** → append `## Retired`, clear plan/goal state, return to Step 0d.
 
 ## Step 2: Scan and profile the repository
 
-Call `flywheel_profile` with `cwd`. The tool uses a git-HEAD-keyed cache — if the repo hasn't changed since the last scan, it returns instantly from cache.
-
-- **Cache hit** (output says "Profile loaded from cache"): Skip the Explore agent — the profile is fresh. Proceed directly to Step 3.
-- **Cache miss** (fresh scan): Optionally spawn an Explore agent for deeper analysis if the profile reveals a complex or unfamiliar codebase. For known repos, skip it.
-- **Force re-scan**: Pass `force: true` to `flywheel_profile` to bypass the cache (e.g. after major restructuring).
-
-If `MCP_DEGRADED` is true or `flywheel_profile` fails, fall back to an Explore agent for manual profiling.
-
-After profiling completes, briefly display the key findings (languages, frameworks, test setup) then use `AskUserQuestion`:
+Call `flywheel_profile({ cwd })` (`force: true` to rescan), display key findings, then ask:
 
 ```
 AskUserQuestion(questions: [{
   question: "Repository profiled. What next?",
   header: "Profile",
   options: [
-    { label: "Discover ideas", description: "Find improvement opportunities based on the profile (Recommended)" },
+    { label: "Discover ideas", description: "Find improvement opportunities from profile (Recommended)" },
     { label: "Set a goal", description: "I already know what I want to work on" },
     { label: "Re-scan", description: "Force a fresh profile scan (force: true)" }
   ],
@@ -648,47 +420,29 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-- **"Discover ideas"** → proceed to Step 3
-- **"Set a goal"** → capture the goal (prompt via Other if needed), run **Goal deepening**, then **Goal framing mode** (Light / Grill with docs / Full brainstorm; skip only when concrete ≤300 chars), then **stay in the same turn** and call `flywheel_select` (Step 4) + enter Step 4.5 / Step 5 without waiting for user input (see "Stay-in-turn rule" below)
-- **"Re-scan"** → call `flywheel_profile` with `force: true`, then return to this menu
-
-#### Stay in turn between steps
-
-After a file write, tool call, or sub-skill, continue to the next tool or `AskUserQuestion` until the phase completes. Framing continues through selection and Steps 4.5–5. A brainstorm artifact continues to Step 5. A plan continues to Step 5.55 or 5.6. Bead approval continues to the Step 6 launch gate.
+- **Discover ideas** → proceed to Step 3.
+- **Set a goal** → run **Goal deepening**, **Goal framing mode**, `flywheel_select`, and Steps 4.5–5 in the same turn.
+- **Re-scan** → call `flywheel_profile({ cwd, force: true })` and re-prompt.
 
 ## Step 3: Discover improvement ideas
 
-Before discovering ideas, query CASS for past goal history: call `flywheel_memory` with `operation: "search"` and `query: "past goals success failure anti-pattern"`. If results are returned, use them to:
-- Deprioritize ideas that failed before (unless circumstances changed)
-- Boost ideas similar to past successes
-- Surface anti-patterns to avoid
-
-**Choose discovery depth** via AskUserQuestion:
+Query `flywheel_memory({ cwd, operation: "search", query: "past goals success failure anti-pattern" })`, then ask discovery depth:
 
 ```
 AskUserQuestion(questions: [{
   question: "How deep should discovery go?",
   header: "Depth",
   options: [
-    { label: "Fast (default)", description: "flywheel_discover one-shot — 5-10 ranked ideas (Recommended for repeat cycles)" },
-    { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard for the 6-phase 30→5→15 pipeline — matches guide's Phase 5 (Recommended for fresh projects or wide-open cycles)" },
-    { label: "Duel (dueling-idea-wizards)", description: "Two agents (cc + cod, plus gmi if available) independently brainstorm, cross-score 0-1000, reveal, and synthesize — adversarial decorrelation; ~20-30 min; needs ntm" },
-    { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation for second-opinion scoring across Codex/Gemini/Grok" }
+    { label: "Fast (default)", description: "flywheel_discover one-shot — 5-10 ranked ideas (Recommended)" },
+    { label: "Deep (idea-wizard)", description: "Invoke /idea-wizard 30→5→15 pipeline" },
+    { label: "Duel (dueling-idea-wizards)", description: "Two agents brainstorm and cross-score 0-1000 via ntm" },
+    { label: "Triangulated", description: "Run /idea-wizard, then /multi-model-triangulation" }
   ],
   multiSelect: false
 }])
 ```
 
-- **Fast** → continue below with `flywheel_discover`.
-- **Deep** → invoke `/idea-wizard` (run phases 2–4: generate 30→5→15 ideas + check overlaps vs open beads; skip phases 5–6 bead creation — the flywheel handles that in Steps 5.5–6), then present the top ideas as goal options and continue with the standard goal-selection menu.
-- **Duel** → invoke `/dueling-idea-wizards --mode=ideas --top=5 --rounds=1`. Pre-flight: confirm `ntm deps -v` succeeds and at least 2 of {cc, cod, gmi} are healthy (the duel skill's Phase 1 detection runs this for you; if it returns only 1 agent, fall back to Deep with a one-line warning). After the duel emits `DUELING_WIZARDS_REPORT.md`, parse the report's consensus winners + contested ideas and feed them into `flywheel_discover` with each idea's `provenance` populated (`source: "duel"`, `agentScores`, `contested`, `survivingCritique`). When you present the goal-selection menu, group options under three headers: **Consensus winners** (4 highest combined cross-scores, all `contested: false`), **Contested** (highest combined score with any agent disagreement >300 pts), and surface a "Dead ideas (FYI)" footnote line listing the lowest 3 by title only — NOT in the menu options. Auto-recommend the Duel row when the repo profile signals high uncertainty: README is <500 chars, no clear product direction in the top-of-tree files, or ≥3 contested TODOs in `profile.todos`.
-- **Triangulated** → run `/idea-wizard`, then `/multi-model-triangulation` on the top-5 list to surface which ideas all models agree on vs which are one-model bets.
-
-If `MCP_DEGRADED` is false, call `flywheel_discover` with `cwd`.
-
-If `MCP_DEGRADED` is true (or `flywheel_discover` fails), generate improvement ideas from the Explore agent's findings in Step 2: identify code quality issues, missing tests, architectural improvements, and documentation gaps. Rank by estimated impact.
-
-Present the top ideas to the user using `AskUserQuestion`. Include up to 4 top-ranked ideas as options (the "Other" option is automatically provided for custom goals):
+Call `flywheel_discover({ cwd })` (or pass `/idea-wizard` / `/dueling-idea-wizards --mode=ideas --top=5 --rounds=1` provenance), then present up to 4 top ideas:
 
 ```
 AskUserQuestion(questions: [{
@@ -704,31 +458,12 @@ AskUserQuestion(questions: [{
 }])
 ```
 
-If the user selects "Other" and enters a custom goal, run **Goal deepening**, then **Goal framing mode** (Recommended: Grill with docs when the custom goal is ambiguous or architectural; Light or Skip when already concrete). After framing returns `approved` (or was skipped) and the goal is refined, use `AskUserQuestion` to confirm scope:
-
-```
-AskUserQuestion(questions: [{
-  question: "Goal refined: '<enriched goal summary>'. How should I scope this?",
-  header: "Scope",
-  options: [
-    { label: "Full flywheel", description: "Deep scan, plan, implement with agents, review" },
-    { label: "Plan only", description: "Generate and review a plan, stop before implementation" },
-    { label: "Quick fix", description: "Skip planning — use /flywheel-fix for a targeted change" }
-  ],
-  multiSelect: false
-}])
-```
-
-- **"Full flywheel"** → proceed to Step 4 with the refined/enriched goal
-- **"Plan only"** → proceed through Step 5, then stop after bead creation
-- **"Quick fix"** → invoke `/flywheel-fix` with the refined goal instead
+For custom goals in Other, run **Goal deepening** and **Goal framing mode**, then confirm scope (`Full flywheel` / `Plan only` / `Quick fix`).
 
 ## Step 4: Select goal
 
-Once the user chooses, call `flywheel_select` with `cwd` and `goal` set to their choice.
+Call `flywheel_select({ cwd, goal })`.
 
 ## Steps 5–12: Phase execution
 
-Apply Universal Rule 3 at each phase boundary.
-
-Complete the full cycle: scan → discover → plan → implement → review → verify → wrap-up → learn → refine.
+Apply Universal Rule 3 (`flywheel_get_skill`) at each phase boundary to complete: scan → discover → plan → implement → review → verify → wrap-up → learn → refine.
