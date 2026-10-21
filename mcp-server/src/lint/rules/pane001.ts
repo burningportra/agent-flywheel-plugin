@@ -48,8 +48,9 @@ export interface Pane001Context extends RuleContext {
   canonical?: CanonicalRule;
 }
 
-export type Lane = "cc" | "cod" | "gmi" | "pi";
-const ALL_LANES: readonly Lane[] = ["cc", "cod", "gmi", "pi"];
+export type Lane = "cc" | "cod" | "gmi" | "pi" | "agy";
+const DEFAULT_LADDER_LANES: readonly Lane[] = ["cc", "cod", "gmi", "pi"];
+const ALL_LANES: readonly Lane[] = ["cc", "cod", "gmi", "pi", "agy"];
 
 export interface CanonicalRule {
   /** Required lanes, cc first — order-sensitive when rendering. */
@@ -75,7 +76,7 @@ const OVERRIDE_MARKERS: ReadonlyArray<RegExp> = [
 ];
 
 /** Recognised NTM lane flags. `--gem=` is the deprecated synonym for `--gmi=`. */
-const LANE_FLAG_PATTERN = /--(cc|cod|gmi|gem|pi)=(\d+)/g;
+const LANE_FLAG_PATTERN = /--(cc|cod|gmi|gem|pi|agy)=(\d+)/g;
 const OVERRIDE_PROXIMITY_LINES = 6;
 /** Commands that spawn swarm lanes. `swarm-spawn.js` adds Pi panes to an `ntm spawn` session. */
 const SPAWN_COMMANDS = ["swarm-spawn.js", "ntm spawn"] as const;
@@ -107,7 +108,7 @@ export function parseCanonicalFromAgentsMd(content: string): CanonicalRule | nul
 
   // Tolerate backticks and whitespace between the lane triple and the digit
   // triple — markdown renderings commonly wrap it as `cc:pi:gem`.
-  const ratioRe = /\bcc:(cod|gem|gmi|pi):(cod|gem|gmi|pi)[`\s]*(\d+):(\d+):(\d+)/i;
+  const ratioRe = /\bcc:(cod|gem|gmi|pi|agy):(cod|gem|gmi|pi|agy)[`\s]*(\d+):(\d+):(\d+)/i;
   const ratioMatch = ratioRe.exec(body);
   if (ratioMatch === null) return null;
   const [, second, third, ccRatio, secondRatio, thirdRatio] = ratioMatch;
@@ -115,8 +116,8 @@ export function parseCanonicalFromAgentsMd(content: string): CanonicalRule | nul
   const ratio = [Number(ccRatio), Number(secondRatio), Number(thirdRatio)];
 
   const peers = lanes.slice(1).reverse();
-  let ladder: Lane[] = [...peers, ...ALL_LANES.filter((lane) => !lanes.includes(lane)), "cc"];
-  const inlineLadderRe = /\b(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)/i;
+  let ladder: Lane[] = [...peers, ...DEFAULT_LADDER_LANES.filter((lane) => !lanes.includes(lane)), "cc"];
+  const inlineLadderRe = /\b(gmi|cod|pi|agy|cc)\s*(?:→|->)\s*(gmi|cod|pi|agy|cc)\s*(?:→|->)\s*(gmi|cod|pi|agy|cc)\s*(?:→|->)\s*(gmi|cod|pi|agy|cc)/i;
   const inlineMatch = inlineLadderRe.exec(body);
   if (inlineMatch !== null) {
     ladder = inlineMatch.slice(1, 5).map((token) => toLane(token));

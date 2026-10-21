@@ -7,6 +7,9 @@ import {
   buildPiPaneCommand,
   classifyPanes,
   laneCount,
+  laneModel,
+  normalizeAgyLaneValue,
+  resolveAgySlug,
   parseSwarmSpawnArgs,
   runCli,
   spawnSwarm,
@@ -42,11 +45,11 @@ describe('parseSwarmSpawnArgs', () => {
   });
 
   it('keeps N:model lane values, drops zero lanes, and names Pi panes after the label by default', () => {
-    const parsed = parse(['proj', '--label=impl-x', '--cc=2:opus', '--cod=0', '--gmi=2']);
+    const parsed = parse(['proj', '--label=impl-x', '--cc=2:opus', '--cod=0', '--agy=1:gemini-4-argon:high', '--gmi=2']);
 
     expect(parsed).toMatchObject({
       ok: true,
-      args: { ntmLanes: { cc: '2:opus' }, piCount: 0, piModels: [], gmiCount: 2, piName: 'impl-x', ntmArgs: [] },
+      args: { ntmLanes: { cc: '2:opus', agy: '1:gemini-4-argon-high' }, piCount: 0, piModels: [], gmiCount: 2, piName: 'impl-x', ntmArgs: [] },
     });
   });
 
@@ -62,8 +65,8 @@ describe('parseSwarmSpawnArgs', () => {
     [['proj', '--label=x', '--cc=1', '--pi=2'], '--pi needs at least one --pi-model'],
     [['proj', '--label=x', '--cc=1', '--pi=1', '--pi-model=glm-5.3'], '--pi-model=glm-5.3 is not a provider/model id'],
     [['proj', '--label=x', '--cc=1', '--pi=1', '--pi-model=a/b;rm'], '--pi-model=a/b;rm is not a provider/model id'],
-    [['proj', '--label=x', '--pi=2', `--pi-model=${GLM}`], 'at least one of --cc, --cod must be above 0; ntm creates the session the Pi and Gemini panes join'],
-    [['proj', '--label=x', '--gmi=2'], 'at least one of --cc, --cod must be above 0; ntm creates the session the Pi and Gemini panes join'],
+    [['proj', '--label=x', '--pi=2', `--pi-model=${GLM}`], 'at least one of --cc, --cod, --agy must be above 0; ntm creates the session the Pi and Gemini panes join'],
+    [['proj', '--label=x', '--gmi=2'], 'at least one of --cc, --cod, --agy must be above 0; ntm creates the session the Pi and Gemini panes join'],
     [['proj', '--label=x', '--cc=1', '--gmi=2:flash'], `--gmi=2:flash is not a count; Gemini panes always run ${GEMINI_LANE_MODEL}`],
     [['proj', '--label=x', '--cc=1', '--pi-name=a/b'], '--pi-name allows letters, digits, . _ -'],
   ])('rejects %j', (argv, error) => {
@@ -79,6 +82,77 @@ describe('laneCount', () => {
     [undefined, 0],
   ])('%j counts %d panes', (value, count) => {
     expect(laneCount(value)).toBe(count);
+  });
+});
+
+describe('agy lane values', () => {
+  it.each([
+    ['1', '1'],
+    ['1:gemini-4-argon-high', '1:gemini-4-argon-high'],
+    ['2:gemini-4-argon:high', '2:gemini-4-argon-high'],
+    ['1:gemini-4-argon-low:high', '1:gemini-4-argon-low'],
+    ['1:claude-opus-5-5:xhigh', '1:claude-opus-5-5-xhigh'],
+    ['0:gemini-4-argon', '0:gemini-4-argon'],
+  ])('normalizes --agy=%s to %s', (value, normalized) => {
+    expect(normalizeAgyLaneValue(value)).toBe(normalized);
+  });
+
+  it.each([
+    'Gemini 4 Argon (High)',
+    '1:Gemini 4 Argon (High)',
+    '1:gemini 4 argon',
+    '1:gemini-4-argon(high)',
+    '1:Gemini-4-Argon',
+    '1:gemini-4-argon:turbo',
+    '1:gemini-4-argon:high:extra',
+    '1:-gemini',
+    '1:',
+    'x',
+  ])('rejects --agy=%s', (value) => {
+    expect(normalizeAgyLaneValue(value)).toBeUndefined();
+    expect(parse(['proj', '--label=impl-x', '--cc=1', `--agy=${value}`])).toMatchObject({ ok: false });
+  });
+
+  it('resolveAgySlug adds the effort only to a bare model', () => {
+    expect(resolveAgySlug('gemini-4-argon', 'high')).toBe('gemini-4-argon-high');
+    expect(resolveAgySlug('gemini-4-argon-medium', 'high')).toBe('gemini-4-argon-medium');
+    expect(resolveAgySlug('gemini-4-argon')).toBe('gemini-4-argon');
+  });
+
+  it('spawns an agy-only swarm with the resolved slug', () => {
+    const parsed = parse(['proj', '--label=impl-x', '--agy=2:gemini-4-argon:high']);
+    expect(parsed.ok && buildNtmSpawnArgs(parsed.args)).toContain('--agy=2:gemini-4-argon-high');
+  });
+});
+
+describe('strict non-agy lane values', () => {
+  it.each(['cc', 'cod'])('rejects display names and spaces on --%s', (lane) => {
+    for (const value of ['2:Claude Opus (High)', '2:opus (high)', '2:a b', '2.5', '-1']) {
+      expect(parse(['proj', '--label=impl-x', `--${lane}=${value}`])).toMatchObject({ ok: false });
+    }
+  });
+
+  it.each(['gmi', 'pi'])('rejects anything but a count on --%s', (lane) => {
+    for (const value of ['1:gemini-4-argon', '1 ', '(1)']) {
+      expect(parse(['proj', '--label=impl-x', '--cc=1', `--${lane}=${value}`, '--pi-model=xai/grok-4.7'])).toMatchObject({ ok: false });
+    }
+  });
+
+  it.each(['1:Gemini 4 Argon (High)', '1:a b', '1:x/y'])('laneCount and laneModel ignore %j', (value) => {
+    expect(laneCount(value)).toBe(0);
+    expect(laneModel(value)).toBeUndefined();
+  });
+});
+
+describe('laneModel', () => {
+  it.each([
+    ['2:opus', 'opus'],
+    ['1:gpt-5.4', 'gpt-5.4'],
+    ['2', undefined],
+    ['x', undefined],
+    [undefined, undefined],
+  ])('%j extracts model %j', (value, model) => {
+    expect(laneModel(value)).toBe(model);
   });
 });
 
@@ -98,9 +172,9 @@ function args(overrides: Partial<SwarmSpawnArgs> = {}): SwarmSpawnArgs {
 }
 
 describe('command builders', () => {
-  it('spawns NTM lanes in cc, cod order with --no-user and smart stagger before passthrough flags, never gmi', () => {
-    expect(buildNtmSpawnArgs(args({ ntmLanes: { cod: '2', cc: '2' }, gmiCount: 2, ntmArgs: ['--auto-restart'] }))).toEqual([
-      'spawn', 'proj', '--label', 'deep-plan-x', '--no-user', '--cc=2', '--cod=2', '--stagger-mode=smart', '--auto-restart',
+  it('spawns NTM lanes in cc, cod, agy order with --no-user and smart stagger before passthrough flags, never gmi', () => {
+    expect(buildNtmSpawnArgs(args({ ntmLanes: { agy: '1:argon', cod: '2', cc: '2' }, gmiCount: 2, ntmArgs: ['--auto-restart'] }))).toEqual([
+      'spawn', 'proj', '--label', 'deep-plan-x', '--no-user', '--cc=2', '--cod=2', '--agy=1:argon', '--stagger-mode=smart', '--auto-restart',
     ]);
   });
 
@@ -129,6 +203,27 @@ describe('command builders', () => {
       { lane: 'gmi', index: 2, paneId: '%47', title: 'proj--deep-plan-x__pi_gmi_1', model: GEMINI_LANE_MODEL },
       { lane: 'unknown', index: 3, paneId: '%48', title: 'proj--deep-plan-x__gmi_1' },
       { lane: 'unknown', index: 4, paneId: '%49', title: 'zsh' },
+    ]);
+  });
+
+  it('includes models for cc, cod, and agy panes from N:model lane values or ntm variant titles', () => {
+    const listing = [
+      '0\t%45\tproj--impl-x__cc_1',
+      '1\t%46\tproj--impl-x__cod_1',
+      '2\t%47\tproj--impl-x__cc_2_opus',
+      '3\t%48\tproj--impl-x__agy_1',
+      '',
+    ].join('\n');
+
+    expect(classifyPanes(listing, new Map(), { cc: '2:claude-opus-4-7', cod: '1:gpt-5.4', agy: '1:gemini-4-argon-high' })).toEqual([
+      { lane: 'cc', index: 0, paneId: '%45', title: 'proj--impl-x__cc_1', model: 'claude-opus-4-7' },
+      { lane: 'cod', index: 1, paneId: '%46', title: 'proj--impl-x__cod_1', model: 'gpt-5.4' },
+      { lane: 'cc', index: 2, paneId: '%47', title: 'proj--impl-x__cc_2_opus', model: 'claude-opus-4-7' },
+      { lane: 'agy', index: 3, paneId: '%48', title: 'proj--impl-x__agy_1', model: 'gemini-4-argon-high' },
+    ]);
+    expect(classifyPanes('0\t%45\tproj--impl-x__cc_1_opus\n1\t%46\tproj--impl-x__agy_1_argon\n', new Map())).toEqual([
+      { lane: 'cc', index: 0, paneId: '%45', title: 'proj--impl-x__cc_1_opus', model: 'opus' },
+      { lane: 'agy', index: 1, paneId: '%46', title: 'proj--impl-x__agy_1_argon', model: 'argon' },
     ]);
   });
 });
@@ -316,7 +411,7 @@ describe('runCli', () => {
     const { out, deps } = io();
 
     expect(await runCli(['--help'], deps)).toBe(0);
-    expect(out.join('')).toContain('Usage: swarm-spawn <project> --label <label>');
+    expect(out.join('')).toContain('Usage: swarm-spawn <project> --label <label> [--cc=N[:model]] [--cod=N[:model]] [--agy=N[:model[:effort]]] [--gmi=N]');
   });
 
   it('exits 2 with the parse error and usage on bad flags', async () => {
@@ -329,10 +424,10 @@ describe('runCli', () => {
   it('prints the pane JSON and exits 0 on success, 1 when a step failed', async () => {
     const ok = io();
     const { exec } = fakeTmux();
-    expect(await runCli(['proj', '--label=deep-plan-x', '--cc=1', '--pi=1', `--pi-model=${GLM}`], { ...ok.deps, exec })).toBe(0);
+    expect(await runCli(['proj', '--label=deep-plan-x', '--cc=1:opus', '--pi=1', `--pi-model=${GLM}`], { ...ok.deps, exec })).toBe(0);
     expect(JSON.parse(ok.out.join(''))).toMatchObject({
       session: 'proj--deep-plan-x',
-      panes: [{ lane: 'cc', index: 0 }, { lane: 'pi', index: 1, model: GLM }],
+      panes: [{ lane: 'cc', index: 0, model: 'opus' }, { lane: 'pi', index: 1, model: GLM }],
       errors: [],
     });
 

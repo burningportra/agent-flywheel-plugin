@@ -107,9 +107,9 @@ describe("PANE001 — extractLaneCounts", () => {
     expect(c).toEqual({});
   });
 
-  it("includes --pi=N in the output map", () => {
-    const c = extractLaneCounts("ntm spawn proj --cc=2 --pi=4");
-    expect(c).toEqual({ cc: 2, pi: 4 });
+  it("includes --pi=N and --agy=N in the output map", () => {
+    const c = extractLaneCounts("ntm spawn proj --cc=2 --pi=4 --agy=1:argon");
+    expect(c).toEqual({ cc: 2, pi: 4, agy: 1 });
   });
 });
 
@@ -517,6 +517,7 @@ describe("PANE001 — cc:pi:gem canonical from the repo AGENTS.md", () => {
   it.each<[Record<string, number>, string]>([
     [{ cc: 2, pi: 2, gmi: 2 }, "canonical 2:2:2"],
     [{ cc: 2, cod: 2, gmi: 2 }, "Codex standing in for a missing Pi"],
+    [{ cc: 2, pi: 2, agy: 2 }, "AGY standing in for a missing Gemini"],
     [{ cc: 2, cod: 4 }, "Codex taking both missing shares"],
     [{ cc: 6 }, "cc-only floor"],
   ])("accepts %o (%s)", (counts) => {

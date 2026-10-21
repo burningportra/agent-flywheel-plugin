@@ -1,6 +1,6 @@
 /**
  * `swarm-spawn` starts a flywheel swarm: `ntm spawn` for the lanes NTM runs
- * (cc, cod), then one tmux pane per Pi or Gemini pane in the same session
+ * (cc, cod, agy), then one tmux pane per Pi or Gemini pane in the same session
  * window, because ntm has no Pi agent type. Gemini panes are Pi on
  * gemini-4-argon; ntm's own gmi lane would start the gemini CLI. It prints
  * every pane's lane and tmux index as JSON so the coordinator can address
@@ -13,7 +13,7 @@ import { makeExec, type ExecFn } from './exec.js';
 import { GEMINI_LANE_MODEL } from './pi-models.js';
 import { makeSshExec, readSwarmHost } from './swarm-host.js';
 
-const NTM_LANES = ['cc', 'cod'] as const;
+const NTM_LANES = ['cc', 'cod', 'agy'] as const;
 export type NtmLane = (typeof NTM_LANES)[number];
 export type PiPaneLane = 'pi' | 'gmi';
 export type SwarmLane = NtmLane | PiPaneLane;
@@ -21,6 +21,9 @@ export type SwarmLane = NtmLane | PiPaneLane;
 /** `provider/id` with an optional nested id, e.g. `vercel-ai-gateway/deepseek/deepseek-v4.1-flash-1017`. */
 const PI_MODEL_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/;
 const LANE_VALUE_PATTERN = /^(\d+)(:[A-Za-z0-9._@:+-]+)?$/;
+/** `N[:model[:effort]]` with an `agy models` slug, never its display name (`Gemini 4 Argon (High)`). */
+const AGY_LANE_VALUE_PATTERN = /^(\d+)(?::([a-z0-9][a-z0-9.-]*)(?::(low|medium|high|xhigh|max))?)?$/;
+const AGY_EFFORT_SUFFIX = /-(low|medium|high|xhigh|max)$/;
 const NTM_SPAWN_TIMEOUT_MS = 180_000;
 const TMUX_TIMEOUT_MS = 10_000;
 
@@ -55,11 +58,11 @@ export interface SwarmSpawnResult {
 
 function usageText(): string {
   return [
-    'Usage: swarm-spawn <project> --label <label> [--cc=N] [--cod=N] [--gmi=N]',
+    'Usage: swarm-spawn <project> --label <label> [--cc=N[:model]] [--cod=N[:model]] [--agy=N[:model[:effort]]] [--gmi=N]',
     '                   [--pi=N --pi-model=<provider/model> [--pi-model=...]] [--pi-name=<prefix>]',
     '                   [-- <extra ntm spawn flags>]',
     '',
-    'Runs ntm spawn --no-user --stagger-mode=smart for the cc/cod lanes, then adds',
+    'Runs ntm spawn --no-user --stagger-mode=smart for the cc/cod/agy lanes, then adds',
     'the Pi panes to the session with tmux split-window, cycling through the models, and the',
     `Gemini panes, which are Pi on ${GEMINI_LANE_MODEL}. Each runs`,
     '`pi --model <model> --thinking high --no-approve`. Prints',
@@ -70,6 +73,29 @@ function usageText(): string {
 export function laneCount(value: string | undefined): number {
   const match = value === undefined ? null : LANE_VALUE_PATTERN.exec(value);
   return match ? Number(match[1]) : 0;
+}
+
+export function laneModel(value: string | undefined): string | undefined {
+  const match = value === undefined ? null : LANE_VALUE_PATTERN.exec(value);
+  return match?.[2]?.slice(1);
+}
+
+/**
+ * `agy models` lists only effort-suffixed slugs (`gemini-4-argon-high`), so a
+ * bare model plus an effort becomes that slug. A slug that already carries an
+ * effort suffix, or a bare model without one, is returned unchanged.
+ */
+export function resolveAgySlug(model: string, effort?: string): string {
+  if (effort === undefined || AGY_EFFORT_SUFFIX.test(model)) return model;
+  return `${model}-${effort}`;
+}
+
+/** Rewrites an `--agy` value to `N` or `N:<slug>`; undefined when the value isn't `N[:model[:effort]]`. */
+export function normalizeAgyLaneValue(value: string): string | undefined {
+  const match = AGY_LANE_VALUE_PATTERN.exec(value);
+  if (match === null) return undefined;
+  const [, count, model, effort] = match;
+  return model === undefined ? count : `${count}:${resolveAgySlug(model, effort)}`;
 }
 
 export function parseSwarmSpawnArgs(
@@ -99,7 +125,7 @@ export function parseSwarmSpawnArgs(
     values.set(key, [...(values.get(key) ?? []), value]);
   }
 
-  const known = new Set(['label', 'cc', 'cod', 'gmi', 'pi', 'pi-model', 'pi-name']);
+  const known = new Set(['label', 'cc', 'cod', 'agy', 'gmi', 'pi', 'pi-model', 'pi-name']);
   for (const key of values.keys()) {
     if (!known.has(key)) return { ok: false, error: `unknown flag --${key} (pass ntm spawn flags after --)` };
   }
@@ -111,6 +137,14 @@ export function parseSwarmSpawnArgs(
   for (const lane of NTM_LANES) {
     const value = values.get(lane)?.at(-1);
     if (value === undefined) continue;
+    if (lane === 'agy') {
+      const normalized = normalizeAgyLaneValue(value);
+      if (normalized === undefined) {
+        return { ok: false, error: `--agy=${value} is not N, N:model, or N:model:effort with an agy models slug` };
+      }
+      if (laneCount(normalized) > 0) ntmLanes.agy = normalized;
+      continue;
+    }
     if (!LANE_VALUE_PATTERN.test(value)) return { ok: false, error: `--${lane}=${value} is not N or N:model` };
     if (laneCount(value) > 0) ntmLanes[lane] = value;
   }
@@ -128,7 +162,7 @@ export function parseSwarmSpawnArgs(
   }
   if (piCount > 0 && piModels.length === 0) return { ok: false, error: '--pi needs at least one --pi-model' };
   if (Object.keys(ntmLanes).length === 0) {
-    return { ok: false, error: 'at least one of --cc, --cod must be above 0; ntm creates the session the Pi and Gemini panes join' };
+    return { ok: false, error: 'at least one of --cc, --cod, --agy must be above 0; ntm creates the session the Pi and Gemini panes join' };
   }
   const piName = values.get('pi-name')?.at(-1) ?? label;
   if (!/^[A-Za-z0-9._-]+$/.test(piName)) return { ok: false, error: '--pi-name allows letters, digits, . _ -' };
@@ -156,7 +190,7 @@ export function buildPiPaneCommand(piBin: string, model: string, name: string): 
   return [piBin, '--model', model, '--thinking', 'high', '--no-approve', '--name', name];
 }
 
-const NTM_TITLE_PATTERN = /__(cc|cod)_\d+$/;
+const NTM_TITLE_PATTERN = /__(cc|cod|agy)_\d+(?:_([A-Za-z0-9._@:+-]+))?$/;
 
 interface PiPane {
   lane: PiPaneLane;
@@ -186,6 +220,7 @@ function planPiPanes(args: SwarmSpawnArgs, session: string): PiPane[] {
 export function classifyPanes(
   listing: string,
   piPanes: ReadonlyMap<string, Pick<PiPane, 'lane' | 'model'>>,
+  ntmLanes: Partial<Record<NtmLane, string>> = {},
 ): SwarmPane[] {
   return listing
     .split('\n')
@@ -194,8 +229,16 @@ export function classifyPanes(
       const [index = '', paneId = '', title = ''] = line.split('\t');
       const pane = piPanes.get(paneId);
       if (pane !== undefined) return { lane: pane.lane, index: Number(index), paneId, title, model: pane.model };
-      const lane = NTM_TITLE_PATTERN.exec(title)?.[1] as NtmLane | undefined;
-      return { lane: lane ?? ('unknown' as const), index: Number(index), paneId, title };
+      const match = NTM_TITLE_PATTERN.exec(title);
+      const lane = match?.[1] as NtmLane | undefined;
+      const model = (lane ? laneModel(ntmLanes[lane]) : undefined) ?? match?.[2];
+      return {
+        lane: lane ?? ('unknown' as const),
+        index: Number(index),
+        paneId,
+        title,
+        ...(model ? { model } : {}),
+      };
     });
 }
 
@@ -254,7 +297,7 @@ export async function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<Sw
 
   const listing = await run('tmux', ['list-panes', '-t', target, '-F', '#{pane_index}\t#{pane_id}\t#{pane_title}']);
   if (listing.code !== 0) errors.push(`tmux list-panes failed: ${listing.stderr.trim()}`);
-  return { session, panes: classifyPanes(listing.stdout, piPanes), errors };
+  return { session, panes: classifyPanes(listing.stdout, piPanes, args.ntmLanes), errors };
 }
 
 export interface SwarmSpawnDeps {
