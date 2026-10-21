@@ -18,6 +18,12 @@ import {
   ntmBinaryHandler,
   cmBinaryHandler,
 } from './remediations/cli_binary.js';
+import {
+  describeSyncAgySummary,
+  findSyncAgyScript,
+  resolveAgyPortTarget,
+  runSyncAgy,
+} from '../adapters/antigravity.js';
 
 const OUTPUT_CAP_BYTES = 4 * 1024;
 
@@ -63,6 +69,56 @@ export interface RemediationHandler {
   execute(ctx: HandlerCtx): Promise<{ stepsRun: number; stdout?: string; stderr?: string }>;
   verifyProbe(ctx: HandlerCtx): Promise<boolean>;
 }
+
+const SYNC_AGY_WRITE_TIMEOUT_MS = 120_000;
+const SYNC_AGY_VERIFY_TIMEOUT_MS = 30_000;
+
+/**
+ * Writes the Antigravity port with `scripts/sync-agy.sh --write`. Reversible:
+ * the script backs up any file it overwrites that was edited in the port.
+ * The dispatcher's per-check lock keeps two writes from racing.
+ */
+const agyPortSyncHandler: RemediationHandler = {
+  description: 'Write the Antigravity port of this plugin with scripts/sync-agy.sh --write.',
+  mutating: true,
+  reversible: true,
+  async buildPlan({ cwd }) {
+    const sync = findSyncAgyScript(cwd);
+    const script = sync?.script ?? 'scripts/sync-agy.sh';
+    const target = sync ? resolveAgyPortTarget(sync.pluginRoot) : '<agy/manifest.json target>';
+    return {
+      description: this.description,
+      steps: [`bash ${script} --write --json --target ${target}`],
+      mutating: this.mutating,
+      reversible: this.reversible,
+    };
+  },
+  async execute({ cwd, exec, signal }) {
+    const sync = findSyncAgyScript(cwd);
+    if (sync === null) throw new Error('scripts/sync-agy.sh was not found in cwd or the running plugin');
+    const run = await runSyncAgy(exec, {
+      ...sync,
+      mode: 'write',
+      target: resolveAgyPortTarget(sync.pluginRoot),
+      timeout: SYNC_AGY_WRITE_TIMEOUT_MS,
+      signal,
+    });
+    if (run.report === undefined) throw new Error(`sync-agy.sh --write exited ${run.code}: ${run.stderr}`);
+    return { stepsRun: 1, stdout: describeSyncAgySummary(run.report.summary), stderr: run.stderr || undefined };
+  },
+  async verifyProbe({ cwd, exec, signal }) {
+    const sync = findSyncAgyScript(cwd);
+    if (sync === null) return false;
+    const run = await runSyncAgy(exec, {
+      ...sync,
+      mode: 'check',
+      target: resolveAgyPortTarget(sync.pluginRoot),
+      timeout: SYNC_AGY_VERIFY_TIMEOUT_MS,
+      signal,
+    });
+    return run.code === 0 && run.report !== undefined;
+  },
+};
 
 /**
  * Per-check registry. `null` means "no automated remediation"; T7 will
@@ -120,6 +176,11 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   // handler reads the projects_base from `ntm config show` then issues a
   // single `ln -s`. Reversible (a symlink that can be removed).
   projects_base_misconfig: projectsBaseMisconfigHandler,
+  // Installing or repairing agy itself is user-managed.
+  agy_cli: null,
+  agy_port_sync: agyPortSyncHandler,
+  // Installing pstack is a Claude Code plugin action the user takes.
+  pstack_plugin: null,
 };
 
 function assertExhaustive(_: never): never {

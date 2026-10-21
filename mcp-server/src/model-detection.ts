@@ -277,3 +277,43 @@ function formatDetectedModels(detected: DetectedModels): string {
 
   return lines.join("\n");
 }
+
+/** Claude:Pi:Gemini bead counts, the shape `DispatchPlan.ratio` encodes as "2:2:2". */
+export interface FamilyRatio {
+  claude: number;
+  pi: number;
+  gemini: number;
+}
+
+/** Pane counts per spawn lane. The Gemini seat runs on `gmi` (Pi on the gateway) or on `agy`. */
+export interface RatioByLane {
+  cc: number;
+  pi: number;
+  gmi: number;
+  agy: number;
+}
+
+export interface DispatchRatio {
+  ratio: FamilyRatio;
+  ratioByLane: RatioByLane;
+}
+
+/**
+ * Splits a `DispatchPlan.ratio` string into family counts and spawn lanes.
+ * The Gemini seat moves to `agy` only when the agy CLI works and this ntm
+ * accepts `--agy`; otherwise it stays on the `gmi` lane.
+ */
+export function computeDispatchRatio(
+  ratio: string,
+  agyRoute: { agyReady: boolean; ntmAgy: boolean },
+): DispatchRatio {
+  const [claude = 0, pi = 0, gemini = 0] = ratio.split(':').map((part) => {
+    const n = Number(part);
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  });
+  const useAgy = agyRoute.agyReady && agyRoute.ntmAgy;
+  return {
+    ratio: { claude, pi, gemini },
+    ratioByLane: { cc: claude, pi, gmi: useAgy ? 0 : gemini, agy: useAgy ? gemini : 0 },
+  };
+}
