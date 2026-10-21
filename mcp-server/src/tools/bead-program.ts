@@ -6,6 +6,12 @@ import type { Bead, BeadProgramScope } from '../types.js';
 
 export const FLYWHEEL_GOAL_LABEL_PREFIX = 'flywheel-goal:';
 
+// `br create` rejects labels over 50 characters: prefix (14) + slug + ':' + hash (8).
+const BR_LABEL_MAX_LENGTH = 50;
+const GOAL_LABEL_HASH_LENGTH = 8;
+const GOAL_LABEL_SLUG_MAX_LENGTH =
+  BR_LABEL_MAX_LENGTH - FLYWHEEL_GOAL_LABEL_PREFIX.length - 1 - GOAL_LABEL_HASH_LENGTH;
+
 export interface ResolvedBeadProgram {
   scope: Extract<BeadProgramScope, { kind: 'tagged' | 'legacy' }>;
   beads: Bead[];
@@ -35,8 +41,11 @@ export function slugifyGoal(goal: string): string {
 
 export function goalBeadProgramLabel(goal: string): string {
   const normalizedGoal = goal.trim();
-  const hash = createHash('sha256').update(normalizedGoal).digest('hex').slice(0, 8);
-  return `${FLYWHEEL_GOAL_LABEL_PREFIX}${slugifyGoal(normalizedGoal)}:${hash}`;
+  const hash = createHash('sha256').update(normalizedGoal).digest('hex').slice(0, GOAL_LABEL_HASH_LENGTH);
+  const slug = slugifyGoal(normalizedGoal)
+    .slice(0, GOAL_LABEL_SLUG_MAX_LENGTH)
+    .replace(/-+$/, '') || 'plan';
+  return `${FLYWHEEL_GOAL_LABEL_PREFIX}${slug}:${hash}`;
 }
 
 export function beadHasProgramLabel(bead: Bead, label: string): boolean {

@@ -7,7 +7,7 @@ exports[`flywheel_capabilities — payload shape against the live TOOLS list > s
     "deprecated_tool_count": 24,
     "doctor_check_count": 24,
     "env_var_count": 12,
-    "error_code_count": 47,
+    "error_code_count": 52,
     "exit_code_count": 6,
     "first_tool_name": "flywheel_advance_wave",
     "kind": "capabilities",
