@@ -1,14 +1,14 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.18.0 ▓▒░
+░▒▓ CLAUDE // AGENT-FLYWHEEL v3.26.0 ▓▒░
 ```
 
-**Multi-agent coding flywheel for Claude Code.**
+**Multi-agent coding flywheel for Claude Code, OpenCode, and Antigravity (`agy`).**
 Scan → discover → plan → implement → review — with checkpoints, gates, and adversarial review at every seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.18.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.26.0-blue.svg)](#)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.18-brightgreen)](#)
 [![CI](https://github.com/burningportra/agent-flywheel-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/burningportra/agent-flywheel-plugin/actions)
@@ -116,6 +116,12 @@ node mcp-server/dist/scripts/swarm-spawn.js agent-flywheel --label impl \
 7. **Completion is evidence-backed, not narrative.** Every closed bead writes a `CompletionReportSchemaV1` JSON file with UBS results, verify-command exitCodes, self-review summary, and bead-close verification. `flywheel_advance_wave` gates on it (Stage 1 warn-only by default; flip `FW_ATTESTATION_REQUIRED=1` for hard-block).
 
 ---
+
+## What's new in v3.26.0 (2026-10-21)
+
+- **Antigravity (`agy`) mirror port & `flywheel_emit_agy`.** `scripts/sync-agy.sh` and `flywheel_emit_agy({ cwd, targetDir, mode: "check" | "write" | "prune" })` emit the Antigravity plugin under `~/.gemini/antigravity/plugins/agent-flywheel` from `agy/manifest.json` and validate with `agy plugin validate --strict --json`. Includes `AntigravityAdapter`, `ratioByLane: { cc, pi, gmi, agy }`, `--agy=N[:model[:effort]]` swarm lane validation, and the `agy_cli`, `agy_port_sync`, and `pstack_plugin` doctor checks (`docs/agy.md`).
+- **Poteto (`pstack`) mode & SHA-coupled verification ledger.** `flywheel_plan({ poteto: true, preCodeResearch })` gates planning on pre-code interrogation (`docs/specs/<slug>-interrogation.md`), ADR (`docs/architecture/<slug>-adr.md`), and the 4 `preCodeResearch` areas. Vendored Hybrid Core-6 `pstack` skills (`poteto-mode`, `interrogate`, `architect`, `plan`, `verify`, `why` + `references/`), `scripts/check-plan.mjs`, and `scripts/check-bead-verify.mjs` enforce the Plan Verification Triad (`Verify, unit / live / perf`). `flywheel_approve_beads(action: "verify-bead")` stamps `git patch-id --stable`-coupled verdicts into `.pi-flywheel/completion/<beadId>.json` and `.pi-flywheel/ledger.tsv`, enforced at wave boundaries by `flywheel_advance_wave`.
+- **Complete Flywheel Guide convergence & cross-agent review loops.** `bv-runner.ts` wires `bv --robot-triage|next|plan|insights`, `flywheel_approve_beads(action: "converge-polish")` tracks multi-round bead polish convergence, and `flywheel_review(action: "converge" | "cross-agent")` drives fresh-eyes convergence and decorrelated cross-family peer review with self-annealing CASS rule drafts.
 
 ## What's new in v3.18.0 (2026-05-15)
 

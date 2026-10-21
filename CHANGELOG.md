@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.26.0] - 2026-10-21
+
+### Added
+
+- **Antigravity (`agy`) mirror port and `flywheel_emit_agy`.** `scripts/sync-agy.sh` (backed by `scripts/agy/{sync,rewrite-body,emit-hooks,validate}.mjs` and `agy/manifest.json`) renders the Antigravity plugin under `~/.gemini/antigravity/plugins/agent-flywheel` (`plugin.json`, `.agy-plugin/plugin.json`, `mcp_config.json`, `rules/AGENTS.md` ≤ 24 KB, `hooks/hooks.json`, and rewritten skills/commands) and validates with `agy plugin validate --strict --json`. `flywheel_emit_agy({ cwd, targetDir, mode: "check" | "write" | "prune" })` exposes the sync as an MCP tool, `AntigravityAdapter` (`mcp-server/src/adapters/antigravity.ts`) emits `agy`-native coordinator prompts, and `model-detection.ts` surfaces `ratioByLane: { cc, pi, gmi, agy }`. Three doctor checks (`agy_cli`, `agy_port_sync`, `pstack_plugin`) and a `flywheel_remediate({ checkName: "agy_port_sync" })` handler cover port health. Operator guide: `docs/agy.md`.
+- **Poteto (`pstack`) mode and SHA-coupled verification ledger.** `flywheel_plan({ poteto: true, preCodeResearch })` enforces pre-code interrogation (`docs/specs/<slug>-interrogation.md`), ADR (`docs/architecture/<slug>-adr.md`), and the four `preCodeResearch` areas (`poteto_prerequisite_missing`, `pre_code_research_incomplete`), then sets `potetoMode: true` in `.pi-flywheel/checkpoint.json`. Hybrid Core-6 `pstack` skills (`poteto-mode`, `interrogate`, `architect`, `plan`, `verify`, `why` + `references/*.md`) are vendored and bundled into `mcp-server/dist/skills.bundle.json`. `scripts/check-plan.mjs` and `scripts/check-bead-verify.mjs` check plan structure and the Plan Verification Triad (`Verify, unit` / `Verify, live` / `Verify, perf`). `flywheel_approve_beads(action: "verify-bead")` stamps a `git patch-id --stable`-coupled verification verdict onto `.pi-flywheel/completion/<beadId>.json` and appends an immutable row to `.pi-flywheel/ledger.tsv`; `flywheel_advance_wave` enforces `verification_missing`, `verification_failed`, and `verification_sha_drift` when `potetoMode` or `FW_VERIFICATION_REQUIRED=1` is active.
+- **Complete Flywheel Guide convergence and cross-agent review loops.** `mcp-server/src/bv-runner.ts` integrates `bv --robot-triage`, `--robot-next`, `--robot-plan`, and `--robot-insights` with deterministic graph fallback. `flywheel_approve_beads(action: "converge-polish")` tracks multi-round bead polish convergence (2 consecutive zero-change rounds or 6 rounds max) and boosts quality scoring when beads carry the `Verify, unit / live / perf` triad. `flywheel_review(action: "converge")` tracks fresh-eyes review convergence (2 consecutive clean rounds or 5 rounds max), and `flywheel_review(action: "cross-agent")` builds a decorrelated reviewer prompt for a model family different from the implementer's and drafts a self-annealing CASS rule when `rejectedReason` is supplied.
+
+### Fixed
+
+- **`swarm-spawn.ts` and `PANE001` validate `--agy` model slugs without weakening numeric counts on `--cc`, `--cod`, `--gmi`, or `--pi`.** `AGY_LANE_VALUE_PATTERN` accepts `--agy=N[:model[:effort]]` with `resolveAgySlug` alias resolution (`flash` → `gemini-3-flash`, `pro` → `gemini-3.1-pro-high`) and probes `ntm spawn --help` before passing `--agy`.
+- **`goalBeadProgramLabel` clamps `--labels` to `br`'s 50-character limit.** Long goal slugs are truncated before the `:${hash}` suffix so `br create` never rejects a program label.
+
 ## [3.25.2] - 2026-10-20
 
 ### Fixed
