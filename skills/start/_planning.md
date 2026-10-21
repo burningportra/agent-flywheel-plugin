@@ -1,4 +1,4 @@
-# Planning phase: Steps 4.5, 5, 5.55, and 5.6
+# Planning phase: Steps 4.5, 4.6, 5, 5.55, and 5.6
 
 ## Step 4.5: Phase 0.5 brainstorm
 
@@ -140,6 +140,22 @@ For **Hand off to Codex**, call `flywheel_rescue({ cwd, phase: "plan", beadId, e
 
 ---
 
+## Step 4.6: Structured interview and Poteto mode (pstack)
+
+**Six-category interview.** When Goal deepening and framing still leave product questions open, interview the user along the Complete Guide's six categories, in this order, and skip any the brainstorm already answers: Users & Personas, Core Value & MVP, Technical Stack & Constraints, Integrations & Data, Scale & Performance, Risks & Non-Goals. Ask up to four questions per `AskUserQuestion` call, each with a recommended option, and add the answers under the brainstorm's `## User answers`.
+
+**Poteto mode (pstack).** For architectural or high-stakes goals, offer the pstack track: interrogate -> architect -> plan -> red-green-implement -> verify -> ship. It adds three gates the standard track lacks: planning waits for an interrogation and a decision record, every bead is verified by an agent other than its implementer, and a wave can't advance on a stale verdict.
+
+1. **Interrogate.** Run `/agent-flywheel:interrogate` on the goal and write `docs/specs/<goal-slug>-interrogation.md`.
+2. **Architect.** Run `/agent-flywheel:architect` and write the decision record to `docs/architecture/<goal-slug>-adr.md`.
+3. **Pre-code research.** Research architecture, dependencies, security, and performance before planning, and note what each turned up in the decision record.
+4. **Plan.** Call `flywheel_plan` with the mode the user picks at Step 5 plus `poteto: true` and `preCodeResearch: { architecture: true, dependencies: true, security: true, performance: true }`. The tool checks that both documents exist and aren't empty, at the paths above or the ones the checkpoint already records, then sets `potetoMode` in the checkpoint.
+   - `poteto_prerequisite_missing`: `error.details.missing` names the documents to write. Write them and call again.
+   - `pre_code_research_incomplete`: `error.details.incomplete` names the areas still to research. An area left out of `preCodeResearch` counts as not done.
+5. **Red-green-implement.** Each implementer writes the failing test first, then the code that passes it (`/pstack:tdd` when the doctor's `pstack_plugin` row is green).
+6. **Verify.** An agent other than the implementer verifies each closed bead (`_beads.md` **Independent verification**), and `flywheel_advance_wave` holds the wave until every closed bead has a current verdict (`_implement.md` **Verification gate**).
+7. **Ship.** Wrap-up audits `.pi-flywheel/ledger.tsv` before the commit review (`_wrapup.md` Step 9.5).
+
 ## Step 5: Choose planning mode
 
 Use one `AskUserQuestion` call:
@@ -169,7 +185,7 @@ AskUserQuestion(questions: [
 ])
 ```
 
-The Step 5.6 **Triangulate** refinement works with every plan mode.
+The Step 5.6 **Triangulate** refinement works with every plan mode. On the Poteto mode track, add `poteto: true` and `preCodeResearch` to every `flywheel_plan` call below (Step 4.6).
 
 For **Ambitious**, run the pass below, then call `flywheel_plan` with the chosen mode and `ambition: "ambitious"`. If the tool returns `missing_prerequisite`, write the charter and retry. For **As scoped**, omit `ambition`; the tool ignores an old charter.
 
@@ -354,6 +370,7 @@ Run `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition` for the cc
          docs/plans/<date>-robustness.md
 
        For each plan, name its strongest and unique contribution. Synthesize the compatible decisions, explain each major choice, and flag unresolved conflicts.
+       Open the file with an agreement report that sorts every proposal from the three plans into Wholeheartedly agree, Somewhat agree (say what you changed), and Disagree (say why it was dropped). Follow it with a git-diff style summary of the synthesized plan against the strongest single plan: one line per change, prefixed + for added, - for dropped, and ~ for changed.
        Write docs/plans/<date>-<goal-slug>-synthesized.md and mail its path to <your-coordinator-name>.
      "
    )

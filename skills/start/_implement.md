@@ -187,6 +187,8 @@ node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJEC
 
 Drop `--pi` and `--pi-model` when `N_pi` is 0. The script prints `{ session, panes: [{ lane, index, paneId, model? }], errors }`. A non-zero exit lists what failed in `errors`; tell the user and give the prompts that have no pane to `Agent()` workers as in the fallback below.
 
+The five lanes the script takes are `--cc` (Claude), `--pi` (Pi on the picked models), `--gmi` (Pi on gemini-4-argon), `--cod` (Codex), and `--agy` (Antigravity). Add `--agy=<N>[:<model>[:<effort>]]` only when the user asks for Antigravity panes and the doctor's `agy_cli` row is green. `agy models` prints only effort-suffixed slugs such as `gemini-4-argon-high`, so pass that slug or a model plus effort (`--agy=1:gemini-4-argon:high`), which the script joins into the slug. ntm spawns agy panes on its own lane, but the wave dispatch assigns them no beads, so send them work you route yourself by pane index, such as an extra reviewer.
+
 Process prompt records in array order. Send each record unchanged to the next unused pane whose `lane` matches the record's `lane`, by that pane's `index`:
 
 ```bash
@@ -243,6 +245,20 @@ flywheel_advance_wave(cwd, closedBeadIds: [<wave-N full bead IDs>], coordinatorN
 
 - If `nextWave.prompts` exists, dispatch the returned prompts from `nextWave.lanes`, call `ScheduleWakeup(270s, …)`, and end the turn.
 - If `nextWave` is null and `waveComplete` is true, finish any batch review below first. Then stop the tender daemon with `kill -TERM $tender_daemon_pid`, leave the tmux session available for inspection, and continue to Step 8 in `_review.md`.
+
+### Verification gate
+
+On the Poteto mode track, or when the coordinator runs with `FW_VERIFICATION_REQUIRED=1`, `flywheel_advance_wave` checks every closed bead's completion report before it builds the next wave. A bead passes when its `verification.verdict` is `verified` and the patch id of its commits on HEAD still matches the verified one, so a rebase that keeps the diff passes and any edit after verification does not. The response's `verificationGate` lists the beads it checked and any it carried across a rebase. Otherwise the call returns one of these codes, with every failing bead in `error.details.failures`:
+
+| Code | Meaning | Next step |
+|------|---------|-----------|
+| `verification_failed` | The verifier recorded a failing verdict. | Send the bead back to its implementer, then verify again. |
+| `verification_sha_drift` | The bead's code changed after verification, or its verified commits left HEAD. | Have the verifier rerun the Verify commands at HEAD and call `verify-bead` again. |
+| `verification_missing` | No verifier has recorded a verdict. | Run `_beads.md` **Independent verification** for the bead. |
+
+The gate appends each stale or rebase-carried verdict to `.pi-flywheel/ledger.tsv`. Fix every listed bead, then call `flywheel_advance_wave` again with the same `closedBeadIds`.
+
+When a failed verification or rejected review shows a mistake an agent could repeat, store it as a rule: `flywheel_memory({ cwd, operation: "store", content: "<when it happens, what went wrong, what to do instead>" })`. `flywheel_review(action: "cross-agent")` drafts one in `data.selfAnnealingRule` when you pass `rejectedReason`. Later cycles find them with `flywheel_memory({ cwd, operation: "search", query })`.
 
 ### Handle commit-batch review steps
 

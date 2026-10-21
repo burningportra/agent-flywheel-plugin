@@ -76,6 +76,14 @@ AskUserQuestion(questions: [{
 - **"Skip wrap-up"** -> continue to Step 10.
 
 ### 1. Review bead commits
+When the cycle ran on the Poteto mode track or with `FW_VERIFICATION_REQUIRED=1`, audit the verification ledger first. It lives at `.pi-flywheel/ledger.tsv`, or at `verificationLedgerPath` when the checkpoint names one, with one row per verdict change (`recorded_at`, `bead_id`, `verdict`, `base_sha`, `head_sha`, `patch_id`, `verifier`, `evidence`). Print each bead's latest verdict:
+
+```bash
+awk -F'\t' 'NR > 1 { last[$2] = $3 } END { for (b in last) print b, last[b] }' .pi-flywheel/ledger.tsv
+```
+
+Every bead closed this cycle should end on `verified`. Send any bead that ends on `needs-verification` or `verification-failed`, or that has no row, back through `_beads.md` **Independent verification** before reviewing commits.
+
 Show this session's bead commits with `git log --oneline`. When two or more touch one subsystem, ask:
 
 ```

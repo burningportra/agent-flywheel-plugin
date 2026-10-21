@@ -113,6 +113,12 @@ For **Hand off to Codex**, call `flywheel_rescue({ cwd, phase: 'review', beadId,
 
 When `flywheel_review` sends `beadId: "__gates__"`, call `hit-me`, perform the returned gate, then call `looks-good` to advance or `hit-me` to repeat. Completion requires five consecutive passed gates; a failure resets the circuit.
 
+### Step 8.7: Converge and cross-agent review
+
+**Converge loop.** For a bead that needs repeated fresh-eyes passes, run one review round, fix its findings, then call `flywheel_review({ cwd, beadId, action: "converge", findingCount: <findings this round> })`. Repeat until the response reports `converged: true`, which happens after two clean rounds in a row (`findingCount: 0`) or after five rounds. Report the real count each round; a round with findings resets the clean streak.
+
+**Cross-agent review.** `flywheel_review({ cwd, beadId, action: "cross-agent" })` returns `data.prompt` for a reviewer from a model family other than the implementer's, named in `data.reviewerFamily`. Send the prompt to a pane of that family by its index. When an earlier review rejected the bead, pass `rejectedReason`: the prompt then names the rejection, and the response adds `data.selfAnnealingRule`, a rule draft to store with `flywheel_memory({ cwd, operation: "store", content: <rule> })` so later cycles can find the mistake.
+
 ## Step 9: Loop until complete
 
 **Reconcile the wave first.** Before showing the menu, call `flywheel_verify_beads` with the IDs of beads completed in this wave:

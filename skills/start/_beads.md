@@ -36,6 +36,16 @@
 
    Copy values only from `idea.provenance` or the matching Consensus, Contested, and Steelman entries in `DUELING_WIZARDS_REPORT.md`.
 
+   Give every bead the Plan Verification Triad in its acceptance criteria, one runnable command per line, since tests alone don't show a change works:
+
+   ```markdown
+   - **Verify, unit**: <command that runs the bead's tests>
+   - **Verify, live**: <command that exercises the real artifact: the CLI, the server, the built tool>
+   - **Verify, perf**: <command that measures the path the bead touches>
+   ```
+
+   Check the open beads with `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-bead-verify.mjs" --strict` (it reads `br list --json`, or pass plan files to check their `#### Bead` sections). A missing or empty line is an error; a line with no runnable command, or with a TODO or angle-bracket placeholder, is a warning that `--strict` turns into an error. Fix every finding before Step 6.
+
 2. When the acceptance criteria require automated tests, create a companion test bead that depends on the implementation bead.
    ```
    br create --title "Test: <impl bead title>" --description "Write tests for <bead-id>: <specific test requirements from acceptance criteria>" --priority 2 --type task
@@ -68,6 +78,8 @@ AskUserQuestion(questions: [{
 - **Start implementing** → run the swarm-host gate in `_offload.md` (`flywheel_get_skill({ name: "agent-flywheel:start_offload" })`), then call `flywheel_approve_beads({ action: "start", coordinatorName: "<current Agent Mail name>" })`. If it returns bead-creation instructions instead of a score, create the beads and repeat the same call.
 - **Polish further** → call `action: "polish"`, show the updated `br list`, and repeat this gate.
 - **Reject** → call `action: "reject"` and return to Step 3.
+
+To polish to a fixed point instead of one round per menu pass, call `flywheel_approve_beads({ cwd, action: "converge-polish" })` after each round of edits. Each call compares the bead graph with the previous call and reports convergence after two zero-change rounds in a row or six rounds; until then it asks for another round. Its response carries best-effort `bv` insights, and a missing `bv` only adds a warning. Between rounds, read the graph with `bv --robot-triage` (ranked open work), `bv --robot-next` (the single best next bead), `bv --robot-plan` (parallel tracks), and `bv --robot-insights` (bottlenecks and cycles). Bare `bv` opens an interactive view that blocks the session.
 
 Only `action: "start"` returns the launch score. A score request may call it early, but still ends at the launch-confirmation gate.
 
@@ -104,3 +116,13 @@ When the response has no `present_choices`, branch on `data.quality.score` for t
 - **Acceptable quality (`score >= 0.75`).** Ask **Launch (Recommended)**, **Polish more**, or **Back to plan** under header **Launch**. Route to Step 7 and `_implement.md`, `action: "polish"`, or Step 5.6.
 
 When at least half of the weak-bead reasons are title-format flags on wave prefixes such as `R1:`, mark them cosmetic and recommend **Launch anyway**. Reserve polishing for substantive weakness such as vague criteria, missing rationale, or oversized scope.
+
+## Independent verification
+
+On the Poteto mode track (`_planning.md` Step 4.6), or when the coordinator runs with `FW_VERIFICATION_REQUIRED=1`, each closed bead needs a verdict from an agent other than its implementer:
+
+1. The verifier checks out the current HEAD and runs the bead's three Verify commands exactly as written.
+2. When all three pass, it calls `flywheel_approve_beads({ cwd, action: "verify-bead", beadId })`. The tool resolves HEAD, computes the patch id of the bead's base..HEAD range, stamps the `verification` block on `.pi-flywheel/completion/<beadId>.json`, and appends a row to `.pi-flywheel/ledger.tsv`.
+3. When a command fails, it skips that call, mails the implementer the failing command and its output, and reopens the bead with `br update <id> --status open`.
+
+`verify-bead` records `verified` whenever the range has a diff; it doesn't run the commands itself, so call it only after step 1 passed. A `not_found` or `parse_failure` result means the implementer hasn't written a valid completion report yet.

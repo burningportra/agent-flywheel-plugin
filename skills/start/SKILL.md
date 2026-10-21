@@ -62,9 +62,9 @@ Then continue with 0.preflight.
 
 ### 0.preflight — Captured user input
 
-Capture any prompt beyond `/start <args>` as `USER_INPUT`. Run Steps 0a–0d before acting on it so the operator sees current state, then use the Step 0e override instead of the default menu.
+Capture any prompt beyond `/start <args>` as `USER_INPUT`. Run Steps 0a–0d first so the operator sees current state, then use the Step 0e override instead of the default menu.
 
-Classify multi-paragraph input, Markdown sections, file-specific text, or an existing `docs/plans/*.md` path as a plan. Classify up to 300 characters without headings as a goal. Route longer unstructured prose through **Goal framing mode** before `flywheel_select`.
+Multi-paragraph input, Markdown sections, file-specific text, or a `docs/plans/*.md` path is a plan; up to 300 characters without headings is a goal. Route longer unstructured prose through **Goal framing mode** before `flywheel_select`.
 
 **Routing override for Step 0e** (only when USER_INPUT is non-empty):
 
@@ -102,23 +102,23 @@ Classify multi-paragraph input, Markdown sections, file-specific text, or an exi
   Every choice except Discard runs **Goal deepening** on `USER_INPUT` first and uses its result as the goal below.
   - **Yes, full flywheel** → call `flywheel_select` and continue at Step 5, including Phase 0.5 when its skip rule does not match.
   - **Refine first** → run **Goal framing mode** with `RAW_GOAL` set to the deepened goal, then select the enriched goal and continue at Step 5.
-  - **Plan only** → select the goal, run Step 5, and stop after bead creation.
+  - **Plan only** → select the goal, run Step 5, stop after bead creation.
   - **Discard** → show the default Step 0e menu.
 
 - Ambiguous → run **Goal deepening**, then **Goal framing mode** (Recommended default: Grill with docs), then route as goal-shaped after refinement.
 
-USER_INPUT still passes through the banner and an explicit menu choice.
+USER_INPUT still goes through the banner and a menu choice.
 
 #### Goal deepening (every goal the user types)
 
-Run this once on each goal the user types (`USER_INPUT`, **Set a goal**, or Other in a goal menu), before Goal framing mode and `flywheel_select`. Skip it for a discovered idea picked from a menu, a goal synthesized from existing beads, and plan-shaped input. The aim is a deeper version of the same task, not a bigger one, so the rewrite keeps the goal's scope.
+Run this once on each goal the user types (`USER_INPUT`, **Set a goal**, or Other in a goal menu), before Goal framing mode and `flywheel_select`; skip it for a menu-picked idea, a goal built from existing beads, and plan-shaped input. It deepens the task at the same scope.
 
 1. **Answer four questions** from the goal text and what the repo profile or `flywheel_observe` already returned, a few lines each:
    1. What would a top professional in this field do here that the goal doesn't ask for?
-   2. What is the rawest material they would start from instead of the digested version (the failing input, production logs, the spec, real user sessions, benchmark data rather than a summary of it)?
+   2. What is the rawest material they would start from instead of a digest (the failing input, production logs, the spec, real user sessions, benchmark data)?
    3. Which specific methods and tools would they use?
    4. What, other than the agent or the user, would show the result is right (a test, benchmark, dataset, or user metric)?
-2. **Rewrite the goal** to ask for exactly that. Open it with a one-line restatement of the goal in the user's words, so `data.goalSlug` stays readable, then add the raw material, methods, and outside check as requirements.
+2. **Rewrite the goal** to ask for exactly that. Open with a one-line restatement in the user's words, so `data.goalSlug` stays readable, then add the raw material, methods, and outside check as requirements.
 3. **Print the four answers and the rewrite**, then ask:
 
 ```
@@ -137,7 +137,7 @@ AskUserQuestion(questions: [{
 - **Keep my wording** → keep the typed goal and leave `DEPTH_NOTES` unset.
 - **Other** → use the typed text as the goal and keep `DEPTH_NOTES`.
 
-The 300-character concreteness check that decides whether framing runs reads the goal as the user typed it, since a deepened goal is longer by design. `_planning.md` Step 4.5c and the Step 5 ambition pass reuse `DEPTH_NOTES`.
+The 300-character framing check reads the goal as typed. `_planning.md` Step 4.5c and the ambition pass reuse `DEPTH_NOTES`. `_planning.md` Step 4.6 has a six-category interview (Users & Personas, Core Value & MVP, Technical Stack & Constraints, Integrations & Data, Scale & Performance, Risks & Non-Goals) and the **Poteto mode (pstack)** track (interrogate -> architect -> plan -> red-green-implement -> verify -> ship).
 
 #### Goal framing mode (shared by Set a goal / Refine first / Ambiguous)
 
