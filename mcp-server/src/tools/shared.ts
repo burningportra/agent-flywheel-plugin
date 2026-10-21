@@ -258,6 +258,15 @@ export function computeBeadQualityScore(beads: import('../types.js').Bead[]): Be
     beadScore += criteriaScore;
     if (criteriaScore < 10) issues.push('no acceptance criteria');
 
+    // Plan Verification Triad (0-6 pts): +2 per Verify lane present in the
+    // description. Boost-only (no new weak-bead issues) so triad-less legacy
+    // beads keep their existing score.
+    const triadLanes = ['Verify, unit', 'Verify, live', 'Verify, perf'].filter((lane) =>
+      bead.description.includes(lane),
+    );
+    beadScore += triadLanes.length * 2;
+    beadScore = Math.min(100, beadScore);
+
     totalScore += beadScore;
     if (issues.length > 0) weakBeads.push(`${bead.id} (${issues.join(', ')})`);
   }
