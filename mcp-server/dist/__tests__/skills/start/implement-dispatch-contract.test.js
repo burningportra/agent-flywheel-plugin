@@ -28,6 +28,10 @@ describe('server-owned wave-one implementer dispatch', () => {
         // ntm 1.36.1 rejects --pi on a raw spawn, and its gmi lane is the gemini CLI.
         expect(content).not.toMatch(/ntm spawn[^\n]*--(pi|gmi)=/);
     });
+    it('asks which model the Claude panes run and passes it as --cc=<N_cc>:<model>', () => {
+        const content = read('skills/start/_implement.md');
+        expect(content).toContain('When `N_cc` is above 0, also ask which model the Claude panes run and pass it as `--cc=<N_cc>:<model>`.');
+    });
     it('keeps the pane-addressing invariants', () => {
         const content = read('skills/start/_implement.md');
         expect(content).toContain('Use `--panes=N`');

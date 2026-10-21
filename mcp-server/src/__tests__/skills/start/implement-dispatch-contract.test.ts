@@ -39,6 +39,12 @@ describe('server-owned wave-one implementer dispatch', () => {
     },
   );
 
+  it('asks which model the Claude panes run and passes it as --cc=<N_cc>:<model>', () => {
+    const content = read('skills/start/_implement.md');
+
+    expect(content).toContain('When `N_cc` is above 0, also ask which model the Claude panes run and pass it as `--cc=<N_cc>:<model>`.');
+  });
+
   it('keeps the pane-addressing invariants', () => {
     const content = read('skills/start/_implement.md');
 

@@ -21,6 +21,14 @@ describe('goal bead program identity', () => {
         expect(first).not.toBe(second);
         expect(first.split(':')[1]).toBe(second.split(':')[1]);
     });
+    it('keeps every goal label within the 50-character br label limit', () => {
+        const label = goalBeadProgramLabel('Create an Antigravity agy mirror plugin, close all July 2026 gaps');
+        expect(label.length).toBeLessThanOrEqual(50);
+        expect(label).toMatch(/^flywheel-goal:create-an-antigravity-agy-m:[0-9a-f]{8}$/);
+        // A cut that lands on a separator must not leave a trailing hyphen.
+        const boundary = goalBeadProgramLabel(`${'a'.repeat(26)} tail`);
+        expect(boundary).toMatch(/^flywheel-goal:a{26}:[0-9a-f]{8}$/);
+    });
     it('resolves tagged programs without admitting other or untagged beads', () => {
         const labelA = goalBeadProgramLabel('Goal A');
         const labelB = goalBeadProgramLabel('Goal B');

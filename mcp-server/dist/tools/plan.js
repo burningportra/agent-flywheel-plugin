@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, lstatSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { makeOkToolResult, slugifyGoal } from './shared.js';
 import { DEEP_PLAN_MODELS } from '../model-detection.js';
 import { detectCliCapabilities } from '../adapters/model-diversity.js';
@@ -125,6 +125,21 @@ function errorResult(phase, code, message, details, hint) {
         ...(details ? { details } : {}),
     });
 }
+const PRE_CODE_RESEARCH_AREAS = ['architecture', 'dependencies', 'security', 'performance'];
+/** The first candidate that is a non-empty file, as given. */
+function findPotetoDoc(cwd, candidates) {
+    return candidates.find((candidate) => {
+        if (!candidate)
+            return false;
+        try {
+            const stat = statSync(resolve(cwd, candidate));
+            return stat.isFile() && stat.size > 0;
+        }
+        catch {
+            return false;
+        }
+    });
+}
 /**
  * flywheel_plan — Generate a plan document for the selected goal.
  *
@@ -155,6 +170,40 @@ export async function runPlan(ctx, args) {
     const constraintsSummary = state.constraints.length > 0
         ? `\nConstraints: ${state.constraints.join(', ')}`
         : '';
+    // Both checks run before either touches state, so a refused call records nothing.
+    const potetoState = state;
+    let potetoDocs;
+    if (args.poteto) {
+        const interrogationDefault = `docs/specs/${planSlug}-interrogation.md`;
+        const architectureDefault = `docs/architecture/${planSlug}-adr.md`;
+        const interrogation = findPotetoDoc(cwd, [potetoState.interrogationDocPath, interrogationDefault]);
+        const architecture = findPotetoDoc(cwd, [potetoState.architectureDocPath, architectureDefault]);
+        if (!interrogation || !architecture) {
+            const missing = [
+                ...(interrogation ? [] : [potetoState.interrogationDocPath ?? interrogationDefault]),
+                ...(architecture ? [] : [potetoState.architectureDocPath ?? architectureDefault]),
+            ];
+            return errorResult('planning', 'poteto_prerequisite_missing', `Error: poteto mode plans only after interrogation and architecture; missing or empty: ${missing.join(', ')}.`, { goalSlug: planSlug, missing }, `Write ${missing.join(' and ')}, then call flywheel_plan with poteto: true again.`);
+        }
+        potetoDocs = { interrogation, architecture };
+    }
+    if (args.preCodeResearch !== undefined) {
+        const checklist = args.preCodeResearch;
+        const incomplete = PRE_CODE_RESEARCH_AREAS.filter((area) => checklist[area] !== true);
+        if (incomplete.length > 0) {
+            return errorResult('planning', 'pre_code_research_incomplete', `Error: pre-code research is not done for: ${incomplete.join(', ')}.`, { goalSlug: planSlug, incomplete }, `Research ${incomplete.join(', ')} and pass preCodeResearch with every area set to true.`);
+        }
+    }
+    if (potetoDocs) {
+        potetoState.potetoMode = true;
+        potetoState.interrogationDocPath = potetoDocs.interrogation;
+        potetoState.architectureDocPath = potetoDocs.architecture;
+    }
+    if (args.preCodeResearch !== undefined) {
+        potetoState.preCodeResearch = { complete: true, completedAt: new Date().toISOString() };
+    }
+    if (potetoDocs || args.preCodeResearch !== undefined)
+        await saveState(state);
     // ── If planFile path provided, read it from disk (avoids large stdio payloads) ──
     if (args.planFile) {
         // Path-traversal guard (bead mq3): the user-supplied planFile must stay inside cwd.

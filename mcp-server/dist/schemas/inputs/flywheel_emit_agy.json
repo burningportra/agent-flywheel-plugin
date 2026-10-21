@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-flywheel.dev/schemas/inputs/flywheel_emit_agy.json",
+  "title": "flywheel: flywheel_emit_agy input",
+  "description": "Check, write, or prune the Antigravity (agy) port of this plugin by running scripts/sync-agy.sh --json --target <targetDir>. targetDir must sit inside cwd or the Antigravity plugins directory (~/.gemini/antigravity/plugins).",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string",
+      "description": "Project working directory (absolute path)"
+    },
+    "targetDir": {
+      "type": "string",
+      "description": "Port directory, e.g. ~/.gemini/antigravity/plugins/agent-flywheel (absolute or relative to cwd)"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "check",
+        "write",
+        "prune"
+      ],
+      "default": "check",
+      "description": "check=report drift without writing, write=update the port, prune=also delete files the port no longer ships"
+    },
+    "pluginRoot": {
+      "type": "string",
+      "description": "Optional agent-flywheel checkout holding scripts/sync-agy.sh. Must be inside cwd or match CLAUDE_PLUGIN_ROOT."
+    }
+  },
+  "required": [
+    "cwd",
+    "targetDir"
+  ]
+}

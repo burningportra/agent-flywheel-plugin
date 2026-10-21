@@ -60,6 +60,11 @@ export declare const RescueInputSchema: z.ZodObject<{
             outcome_iteration_capped: "outcome_iteration_capped";
             concurrent_grade: "concurrent_grade";
             compliance_false_closed: "compliance_false_closed";
+            poteto_prerequisite_missing: "poteto_prerequisite_missing";
+            pre_code_research_incomplete: "pre_code_research_incomplete";
+            verification_missing: "verification_missing";
+            verification_failed: "verification_failed";
+            verification_sha_drift: "verification_sha_drift";
         }>;
         message: z.ZodOptional<z.ZodString>;
         hint: z.ZodOptional<z.ZodString>;

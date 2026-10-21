@@ -522,6 +522,10 @@ export interface FlywheelState {
      *  `applyBatchReviewVerdict` resumes after the last recorded ID, so applying
      *  a range twice never files a finding twice. */
     batchReviewSynthesizedBeads?: Record<string, string[]>;
+    potetoMode?: boolean;
+    interrogationDocPath?: string;
+    architectureDocPath?: string;
+    verificationLedgerPath?: string;
 }
 /** On-disk checkpoint envelope — wraps FlywheelState with crash-recovery metadata. */
 export interface CheckpointEnvelope {

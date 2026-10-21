@@ -79,4 +79,30 @@ export declare const MODEL_ROUTING_TIERS: {
  */
 export declare function detectAvailableModels(availableModelIds?: string[]): DetectedModels;
 export declare function getRefinementModel(round: number): AgentModelAlias;
+/** Claude:Pi:Gemini bead counts, the shape `DispatchPlan.ratio` encodes as "2:2:2". */
+export interface FamilyRatio {
+    claude: number;
+    pi: number;
+    gemini: number;
+}
+/** Pane counts per spawn lane. The Gemini seat runs on `gmi` (Pi on the gateway) or on `agy`. */
+export interface RatioByLane {
+    cc: number;
+    pi: number;
+    gmi: number;
+    agy: number;
+}
+export interface DispatchRatio {
+    ratio: FamilyRatio;
+    ratioByLane: RatioByLane;
+}
+/**
+ * Splits a `DispatchPlan.ratio` string into family counts and spawn lanes.
+ * The Gemini seat moves to `agy` only when the agy CLI works and this ntm
+ * accepts `--agy`; otherwise it stays on the `gmi` lane.
+ */
+export declare function computeDispatchRatio(ratio: string, agyRoute: {
+    agyReady: boolean;
+    ntmAgy: boolean;
+}): DispatchRatio;
 //# sourceMappingURL=model-detection.d.ts.map

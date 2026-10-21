@@ -27,18 +27,21 @@ import { fileURLToPath } from "node:url";
 const isCompiled = import.meta.url.includes("/dist/scripts/");
 const lintBase = isCompiled ? "../lint" : "../src/lint";
 async function loadLintModules() {
-    const lintMod = (await import(`${lintBase}/index.js`));
-    const registryMod = (await import(`${lintBase}/skillRegistry.js`));
-    const baselineMod = (await import(`${lintBase}/baseline.js`));
-    const manifestMod = (await import(`${lintBase}/manifest.js`));
-    const reportersMod = (await import(`${lintBase}/reporters/index.js`));
-    const auq = (await import(`${lintBase}/rules/askUserQuestion.js`));
-    const slashMod = (await import(`${lintBase}/rules/slashReferences.js`));
-    const placeMod = (await import(`${lintBase}/rules/placeholders.js`));
-    const implMod = (await import(`${lintBase}/rules/implicitDecisions.js`));
-    const errMod = (await import(`${lintBase}/rules/errorCodeReferences.js`));
-    const reserveMod = (await import(`${lintBase}/rules/reserve001.js`));
-    const paneMod = (await import(`${lintBase}/rules/pane001.js`));
+    // Independent module graphs: load them concurrently so fs resolution/compile overlaps.
+    const [lintMod, registryMod, baselineMod, manifestMod, reportersMod, auq, slashMod, placeMod, implMod, errMod, reserveMod, paneMod,] = (await Promise.all([
+        import(`${lintBase}/index.js`),
+        import(`${lintBase}/skillRegistry.js`),
+        import(`${lintBase}/baseline.js`),
+        import(`${lintBase}/manifest.js`),
+        import(`${lintBase}/reporters/index.js`),
+        import(`${lintBase}/rules/askUserQuestion.js`),
+        import(`${lintBase}/rules/slashReferences.js`),
+        import(`${lintBase}/rules/placeholders.js`),
+        import(`${lintBase}/rules/implicitDecisions.js`),
+        import(`${lintBase}/rules/errorCodeReferences.js`),
+        import(`${lintBase}/rules/reserve001.js`),
+        import(`${lintBase}/rules/pane001.js`),
+    ]));
     const rules = {
         rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001, paneMod.pane001],
     };
@@ -276,6 +279,9 @@ export async function main(argv) {
         return lintMod.EXIT_INVALID_ARGS;
     }
     const filePath = path.resolve(process.cwd(), opts.file);
+    // Start the registry scan alongside the source read; they are independent fs work.
+    const registryPromise = registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci });
+    registryPromise.catch(() => undefined); // avoid unhandled rejection if the read fails first
     let raw;
     try {
         raw = await readSourceFile(filePath, opts.maxBytes);
@@ -286,7 +292,7 @@ export async function main(argv) {
     }
     const source = baselineMod.normalizeSourceForFingerprint(raw);
     const ruleSet = pickRules(rules.rules, opts.rule);
-    const registry = await registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci });
+    const registry = await registryPromise;
     let result;
     try {
         result = await lintMod.lint({

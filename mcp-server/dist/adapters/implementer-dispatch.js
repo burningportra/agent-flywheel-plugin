@@ -7,7 +7,7 @@ const NTM_LANE = {
     gemini: 'gmi',
     pi: 'pi',
 };
-function beadToDispatchContext(bead, complexity, agentName, coordinatorName, projectKey) {
+function beadToDispatchContext(bead, complexity, agentName, coordinatorName, projectKey, potetoMode) {
     const acceptance = bead.description
         .split('\n')
         .filter((line) => /^\s*[-*]\s/u.test(line))
@@ -26,6 +26,7 @@ function beadToDispatchContext(bead, complexity, agentName, coordinatorName, pro
         agentName,
         coordinatorName,
         projectKey,
+        ...(potetoMode !== undefined ? { potetoMode } : {}),
     };
 }
 export async function buildImplementerDispatch(args) {
@@ -71,7 +72,7 @@ export async function buildImplementerDispatch(args) {
         const agentName = agentNames[index];
         if (!agentName)
             throw new Error(`no implementation agent name allocated for bead ${bead.id}`);
-        const context = beadToDispatchContext(bead, beadComplexity, agentName, args.coordinatorName, projectKey);
+        const context = beadToDispatchContext(bead, beadComplexity, agentName, args.coordinatorName, projectKey, args.potetoMode);
         const adapted = adaptPromptFor(provider, context);
         return {
             beadId: bead.id,

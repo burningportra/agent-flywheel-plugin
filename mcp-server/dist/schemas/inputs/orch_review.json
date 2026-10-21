@@ -19,9 +19,11 @@
         "hit-me",
         "looks-good",
         "skip",
-        "report"
+        "report",
+        "converge",
+        "cross-agent"
       ],
-      "description": "hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead, report=submit an aggregated headless result"
+      "description": "hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead, report=submit an aggregated headless result, converge=record one fresh-eyes round (converges after 2 clean rounds in a row or 5 rounds), cross-agent=build a peer-review prompt for a model family other than the implementer's"
     },
     "mode": {
       "type": "string",
@@ -42,7 +44,11 @@
     "findingCount": {
       "type": "integer",
       "minimum": 0,
-      "description": "Aggregated number of findings. Required when action=report and mode=headless."
+      "description": "Aggregated number of findings. Required when action=report and mode=headless; the round's finding count for action=converge (default 0)."
+    },
+    "rejectedReason": {
+      "type": "string",
+      "description": "For action=cross-agent: why an earlier review rejected the bead. Adds it to the prompt and returns a selfAnnealingRule draft for flywheel_memory."
     },
     "crashed": {
       "type": "boolean",

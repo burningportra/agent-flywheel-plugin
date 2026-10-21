@@ -26,6 +26,7 @@ import { getAdapter } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
 import { GEMINI_GATEWAY_ID, GEMINI_LANE_MODEL, readGeminiLaneListing } from '../pi-models.js';
+import { describeSyncAgySummary, detectAgyCli, findSyncAgyScript, resolveAgyPortTarget, runSyncAgy, RUNNING_PLUGIN_ROOT, } from '../adapters/antigravity.js';
 import { readConvergenceFromDisk, planSlugFromIdentifier, } from './convergence-tool.js';
 import { classifyNtmProjectTarget, ntmProjectName, parseNtmProjectsBase, } from '../ntm-project.js';
 const log = createLogger('doctor');
@@ -96,6 +97,16 @@ export const DOCTOR_CHECK_NAMES = [
     // missing — the flywheel will silently fall back to `Agent()` without
     // this. Auto-remediable via flywheel_remediate.
     'projects_base_misconfig',
+    // Antigravity lane (bead dy6). agy is optional: green when absent, yellow
+    // when it is on PATH but `agy --version` fails.
+    'agy_cli',
+    // The Antigravity port of this plugin (`scripts/sync-agy.sh --check`).
+    // Skipped (green) without agy or the script; yellow when the port is
+    // missing or drifted. Auto-remediable via flywheel_remediate.
+    'agy_port_sync',
+    // pstack skills, vendored in skills/PSTACK_VENDOR.json or installed as a
+    // Claude Code plugin. Yellow when neither is found.
+    'pstack_plugin',
 ];
 // ─── Actionable hints ─────────────────────────────────────────────────────
 // DoctorCheck.hint must be a human-readable remediation sentence, not an
@@ -104,6 +115,11 @@ export const DOCTOR_CHECK_NAMES = [
 const DOCTOR_CHECK_FAILED_HINT = 'Re-run `flywheel_doctor`; if the failure persists, set FW_LOG_LEVEL=debug and inspect the server log for the specific probe.';
 const DOCTOR_PARTIAL_REPORT_HINT = 'Sweep budget (default 10s) or external abort fired before this probe ran. Re-run, raise the timeout, or reduce concurrent load.';
 const AGENT_MAIL_UNREACHABLE_HINT = 'Start Agent Mail (see `/flywheel-setup`) and confirm it is bound to http://127.0.0.1:8765 before re-running doctor.';
+const AGY_CLI_BROKEN_HINT = 'Reinstall or update Antigravity so `agy --version` succeeds, or remove the broken agy from PATH.';
+const AGY_PORT_SYNC_HINT = "Call flywheel_remediate({ checkName: 'agy_port_sync', mode: 'execute', autoConfirm: true }) to write the Antigravity port.";
+const PSTACK_PLUGIN_HINT = 'Install the pstack plugin in Claude Code (`/plugin install pstack`) or vendor its skills with skills/PSTACK_VENDOR.json.';
+/** sync-agy.sh starts node and walks the port; ~4 s on a warm disk. */
+const AGY_SYNC_CHECK_TIMEOUT_MS = 8_000;
 const CLI_FAILURE_HINT = 'The CLI was found on PATH but exited non-zero. Run it manually to see the error, or set FW_LOG_LEVEL=debug to capture stderr.';
 const CLI_NOT_AVAILABLE_HINT = 'Install the missing CLI and ensure it is on $PATH. `/flywheel-setup` prints the install commands for each required tool.';
 const EXEC_TIMEOUT_HINT = 'The probe exceeded its per-check timeout (default 2s). Re-run with a larger `perCheckTimeoutMs`, or investigate why the CLI is slow.';
@@ -174,6 +190,8 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
     const cmExec = (cmd, args, opts) => cmd === 'cm' && args.length === 1 && args[0] === '--version'
         ? (cmVersionPromise ??= exec(cmd, args, opts))
         : exec(cmd, args, opts);
+    // agy_cli and agy_port_sync share one `agy --version` probe.
+    const agyCliPromise = detectAgyCli(exec, combined, perCheckTimeoutMs);
     let projectsBaseReadiness;
     const checkFns = [
         () => checkMcpConnectivity(cwd, combined, now),
@@ -209,6 +227,9 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
             projectsBaseReadiness = result.ntm;
             return result.check;
         },
+        () => checkAgyCli(agyCliPromise, combined, now),
+        () => checkAgyPortSync(exec, cwd, agyCliPromise, combined, now, options.agyPortTarget),
+        () => checkPstackPlugin(cwd, combined, now, options.pstackVendorPath, options.installedPluginsPath),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -375,6 +396,114 @@ function abortedCheck(name) {
         hint: DOCTOR_PARTIAL_REPORT_HINT,
         durationMs: 0,
     };
+}
+async function checkAgyCli(agyPromise, signal, now) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('agy_cli');
+    const agy = await agyPromise;
+    if (agy.available) {
+        return { name: 'agy_cli', severity: 'green', message: `agy ${agy.version}`, durationMs: now() - start };
+    }
+    if (!agy.installed) {
+        return {
+            name: 'agy_cli',
+            severity: 'green',
+            message: 'agy not installed (optional Antigravity lane)',
+            durationMs: now() - start,
+        };
+    }
+    return {
+        name: 'agy_cli',
+        severity: 'yellow',
+        message: `agy at ${agy.path} fails --version${agy.reason ? ` (${agy.reason})` : ''}`,
+        hint: AGY_CLI_BROKEN_HINT,
+        durationMs: now() - start,
+    };
+}
+async function checkAgyPortSync(exec, cwd, agyPromise, signal, now, targetOverride) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('agy_port_sync');
+    const done = (severity, message, hint) => ({
+        name: 'agy_port_sync',
+        severity,
+        message,
+        ...(hint ? { hint } : {}),
+        durationMs: now() - start,
+    });
+    if (!(await agyPromise).available)
+        return done('green', 'agy not available; port sync skipped');
+    const sync = findSyncAgyScript(cwd);
+    if (sync === null)
+        return done('green', 'scripts/sync-agy.sh is not part of this install; port sync skipped');
+    const target = targetOverride ?? resolveAgyPortTarget(sync.pluginRoot);
+    if (!existsSync(target))
+        return done('yellow', `Antigravity port not installed at ${target}`, AGY_PORT_SYNC_HINT);
+    try {
+        const run = await runSyncAgy(exec, {
+            script: sync.script,
+            pluginRoot: sync.pluginRoot,
+            mode: 'check',
+            target,
+            timeout: AGY_SYNC_CHECK_TIMEOUT_MS,
+            signal,
+        });
+        if (run.report && run.code === 0)
+            return done('green', `port in sync at ${target} (${describeSyncAgySummary(run.report.summary)})`);
+        if (run.report && run.code === 1) {
+            return done('yellow', `port drift at ${target}: ${describeSyncAgySummary(run.report.summary)}`, AGY_PORT_SYNC_HINT);
+        }
+        return done('yellow', `sync-agy.sh --check failed: ${run.stderr}`, CLI_FAILURE_HINT);
+    }
+    catch (err) {
+        return done('yellow', `sync-agy.sh --check failed: ${errMsg(err)}`, CLI_FAILURE_HINT);
+    }
+}
+async function checkPstackPlugin(cwd, signal, now, vendorPath, installedPluginsPath) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('pstack_plugin');
+    const done = (severity, message, hint) => ({
+        name: 'pstack_plugin',
+        severity,
+        message,
+        ...(hint ? { hint } : {}),
+        durationMs: now() - start,
+    });
+    const vendorCandidates = vendorPath === null
+        ? []
+        : vendorPath !== undefined
+            ? [vendorPath]
+            : [join(cwd, 'skills', 'PSTACK_VENDOR.json'), join(RUNNING_PLUGIN_ROOT, 'skills', 'PSTACK_VENDOR.json')];
+    for (const candidate of vendorCandidates) {
+        if (!existsSync(candidate))
+            continue;
+        try {
+            const vendor = JSON.parse(readFileSync(candidate, 'utf8'));
+            if (Array.isArray(vendor.skills) && vendor.skills.length > 0) {
+                const version = typeof vendor.upstreamVersion === 'string' ? ` ${vendor.upstreamVersion}` : '';
+                return done('green', `pstack${version} vendored (${vendor.skills.join(', ')})`);
+            }
+            return done('yellow', `${candidate} lists no skills`, PSTACK_PLUGIN_HINT);
+        }
+        catch (err) {
+            return done('yellow', `${candidate} is unreadable: ${errMsg(err)}`, PSTACK_PLUGIN_HINT);
+        }
+    }
+    const installedPath = installedPluginsPath === undefined ? join(homedir(), '.claude', 'plugins', 'installed_plugins.json') : installedPluginsPath;
+    if (installedPath !== null && existsSync(installedPath)) {
+        try {
+            const installed = JSON.parse(readFileSync(installedPath, 'utf8'));
+            const key = Object.keys(installed.plugins ?? {}).find((name) => name.startsWith('pstack@'));
+            if (key)
+                return done('green', `pstack plugin installed (${key})`);
+        }
+        catch {
+            // An unreadable plugin list is the same as no pstack entry.
+        }
+    }
+    return done('yellow', 'pstack is neither vendored nor installed', PSTACK_PLUGIN_HINT);
 }
 /**
  * 1. MCP connectivity.

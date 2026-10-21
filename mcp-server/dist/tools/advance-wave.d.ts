@@ -1,7 +1,38 @@
-import type { McpToolResult, ToolContext, AdvanceWaveArgs } from '../types.js';
+import type { McpToolResult, ToolContext, AdvanceWaveArgs, FlywheelState } from '../types.js';
 import type { VerifyBeadsOutcome } from './verify-beads.js';
 import { type ImplementerDispatch } from '../adapters/implementer-dispatch.js';
 import { type SwarmHostHandoff } from '../swarm-host.js';
+import type { ExecFn } from '../exec.js';
+type VerificationFailureCode = 'verification_failed' | 'verification_sha_drift' | 'verification_missing';
+export interface VerificationGateFailure {
+    beadId: string;
+    code: VerificationFailureCode;
+    message: string;
+}
+export interface VerificationGateResult {
+    checked: string[];
+    failures: VerificationGateFailure[];
+    /** Beads whose verified change now sits on different commits with the same patch id. */
+    rebased: Array<{
+        beadId: string;
+        fromHeadSha: string;
+        toHeadSha: string;
+    }>;
+}
+export declare function isVerificationRequired(state: FlywheelState): boolean;
+/**
+ * Check that every bead carries an independent `verified` verdict that still
+ * matches the code on this branch, by patch id, so a rebase keeps the verdict
+ * and an edit after verification voids it. Each verdict change this finds
+ * (stale, or carried to new commits) is appended to the verification ledger.
+ */
+export declare function checkWaveVerification(opts: {
+    exec: ExecFn;
+    cwd: string;
+    beadIds: string[];
+    ledgerPath?: string;
+    signal?: AbortSignal;
+}): Promise<VerificationGateResult>;
 export interface AdvanceWaveOutcome {
     verification: VerifyBeadsOutcome;
     nextWave: ({
@@ -52,6 +83,8 @@ export interface AdvanceWaveOutcome {
      *  verdicts that landed, and ranges still waiting on their reviewer. */
     /** Set when the swarm runs on another Mac: whether this wave's commits and beads reached it. */
     swarmHost?: SwarmHostHandoff;
+    /** Set when poteto mode or `FW_VERIFICATION_REQUIRED=1` ran the verification gate and it passed. */
+    verificationGate?: Pick<VerificationGateResult, 'checked' | 'rebased'>;
     batchReviews?: {
         filed: Array<{
             shaRange: string;
@@ -61,4 +94,5 @@ export interface AdvanceWaveOutcome {
     };
 }
 export declare function runAdvanceWave(ctx: ToolContext, args: AdvanceWaveArgs): Promise<McpToolResult>;
+export {};
 //# sourceMappingURL=advance-wave.d.ts.map

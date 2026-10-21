@@ -66,10 +66,18 @@ const V3_4_CODES = [
 const V3_14_CODES = [
     'compliance_false_closed',
 ];
+// agent-flywheel-plugin-8mi — poteto-mode prerequisites + verification state machine
+const POTETO_CODES = [
+    'poteto_prerequisite_missing',
+    'pre_code_research_incomplete',
+    'verification_missing',
+    'verification_failed',
+    'verification_sha_drift',
+];
 describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
-    it('contains exactly the 16 legacy + 31 additive codes (47 total)', () => {
-        expect(FLYWHEEL_ERROR_CODES).toHaveLength(LEGACY_CODES.length + V3_4_CODES.length + V3_14_CODES.length);
-        expect(FLYWHEEL_ERROR_CODES).toHaveLength(47);
+    it('contains exactly the 16 legacy + 36 additive codes (52 total)', () => {
+        expect(FLYWHEEL_ERROR_CODES).toHaveLength(LEGACY_CODES.length + V3_4_CODES.length + V3_14_CODES.length + POTETO_CODES.length);
+        expect(FLYWHEEL_ERROR_CODES).toHaveLength(52);
     });
     it('preserves legacy codes in order for v3.3.0 back-compat', () => {
         for (let i = 0; i < LEGACY_CODES.length; i++) {
@@ -77,11 +85,14 @@ describe('FLYWHEEL_ERROR_CODES — v3.4.0 shape', () => {
         }
     });
     it('appends the v3.4.0 codes after the legacy set', () => {
-        const tail = FLYWHEEL_ERROR_CODES.slice(LEGACY_CODES.length, -V3_14_CODES.length);
+        const tail = FLYWHEEL_ERROR_CODES.slice(LEGACY_CODES.length, -(V3_14_CODES.length + POTETO_CODES.length));
         expect(tail).toEqual(V3_4_CODES);
     });
     it('appends the v3.14.0 compliance codes after prior cohorts', () => {
-        expect(FLYWHEEL_ERROR_CODES.slice(-V3_14_CODES.length)).toEqual(V3_14_CODES);
+        expect(FLYWHEEL_ERROR_CODES.slice(-(V3_14_CODES.length + POTETO_CODES.length), -POTETO_CODES.length)).toEqual(V3_14_CODES);
+    });
+    it('appends the 8mi poteto verification codes last', () => {
+        expect(FLYWHEEL_ERROR_CODES.slice(-POTETO_CODES.length)).toEqual(POTETO_CODES);
     });
     it('every legacy code round-trips through FlywheelErrorCodeSchema.parse()', () => {
         for (const code of LEGACY_CODES) {

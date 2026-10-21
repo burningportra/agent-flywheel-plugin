@@ -64,6 +64,13 @@ export const FLYWHEEL_ERROR_CODES = [
     'concurrent_grade',
     // v3.14.0 beads-compliance audit
     'compliance_false_closed',
+    // agent-flywheel-plugin-8mi — poteto-mode prerequisites and the SHA-coupled
+    // verification state machine on CompletionReport.verification.
+    'poteto_prerequisite_missing',
+    'pre_code_research_incomplete',
+    'verification_missing',
+    'verification_failed',
+    'verification_sha_drift',
 ];
 export const FlywheelErrorCodeSchema = z.enum(FLYWHEEL_ERROR_CODES);
 export const FlywheelToolErrorSchema = z.object({
@@ -158,6 +165,11 @@ export const DEFAULT_HINTS = {
     cycle_start_sha_unset: 'cycleStartSha was not captured at flywheel_select — using checkpoint.gitHead or HEAD~50 fallback; commit a baseline to fix.',
     outcome_iteration_capped: 'maxOutcomeIterations reached — accept the verdict, abort the cycle, or raise FW_MAX_OUTCOME_ITERATIONS (bounded [1,5]) before the next cycle.',
     concurrent_grade: 'Another grader is in flight for this plan — wait for it to complete, or pass force=true to override the in-memory mutex.',
+    poteto_prerequisite_missing: 'Poteto mode needs its interrogation and architecture documents before implementation starts; the checkpoint does not point at both.',
+    pre_code_research_incomplete: 'Poteto mode requires pre-code research to finish before any bead is dispatched; the checkpoint records it as incomplete.',
+    verification_missing: 'The completion report has no verification block, so nobody has verified this bead against a base..head range yet.',
+    verification_failed: 'The verifier recorded verification-failed for this bead; the change must be fixed and verified again before it can advance.',
+    verification_sha_drift: 'The code changed after verification: the patch-id of base..head no longer matches the verified one, so the verdict is stale.',
 };
 /**
  * R-007 — default `try_this` per error code. Imperative, paste-ready.
@@ -222,6 +234,11 @@ export const DEFAULT_TRY_THIS = {
     cycle_start_sha_unset: 'Commit a baseline (git commit --allow-empty -m "baseline"), or pass an explicit cycleStartSha; the fallback (HEAD~50) is in use.',
     outcome_iteration_capped: 'Accept the current verdict, abort the cycle, or raise FW_MAX_OUTCOME_ITERATIONS (max 5) before starting the next cycle.',
     concurrent_grade: 'Wait for the in-flight grader to settle, or pass force:true to override the in-memory mutex.',
+    poteto_prerequisite_missing: 'Add the interrogation and architecture docs, record their paths in the checkpoint (interrogationDocPath, architectureDocPath), then retry.',
+    pre_code_research_incomplete: 'Run the pre-code research pass to the end and mark preCodeResearch complete in the checkpoint, then dispatch the bead again.',
+    verification_missing: 'Run the verifier on the bead and write a `verification` block (verdict, baseSha, headSha, patchId, verifier, verifiedAt) into its completion report.',
+    verification_failed: 'Read `verification.evidence` in `.pi-flywheel/completion/<beadId>.json`, fix the failures, commit, and re-run the verifier.',
+    verification_sha_drift: 'Re-run the verifier against the current HEAD; it writes a fresh patchId and appends the transition to `.pi-flywheel/ledger.tsv`.',
 };
 export const DEFAULT_RETRYABLE = {
     missing_prerequisite: false,
@@ -282,6 +299,13 @@ export const DEFAULT_RETRYABLE = {
     cycle_start_sha_unset: false,
     outcome_iteration_capped: false,
     concurrent_grade: false,
+    // agent-flywheel-plugin-8mi — each needs a doc, research, a fix, or a fresh
+    // verifier run before a retry can succeed.
+    poteto_prerequisite_missing: false,
+    pre_code_research_incomplete: false,
+    verification_missing: false,
+    verification_failed: false,
+    verification_sha_drift: false,
 };
 export class FlywheelError extends Error {
     code;

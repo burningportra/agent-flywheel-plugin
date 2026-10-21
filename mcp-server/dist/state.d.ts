@@ -30,8 +30,30 @@ declare const ReviewArgsSchema: z.ZodObject<{
     parallelSafe: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
 }, z.core.$strip>;
 export type ReviewArgsZ = z.infer<typeof ReviewArgsSchema>;
-export declare function loadState(cwd: string): FlywheelState;
-export declare function saveState(cwd: string, state: FlywheelState): Promise<boolean>;
+export declare const PreCodeResearchSchema: z.ZodObject<{
+    complete: z.ZodBoolean;
+    docPath: z.ZodOptional<z.ZodString>;
+    completedAt: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export type PreCodeResearch = z.infer<typeof PreCodeResearchSchema>;
+export declare const PotetoCheckpointFieldsSchema: z.ZodObject<{
+    potetoMode: z.ZodOptional<z.ZodBoolean>;
+    interrogationDocPath: z.ZodOptional<z.ZodString>;
+    architectureDocPath: z.ZodOptional<z.ZodString>;
+    preCodeResearch: z.ZodOptional<z.ZodObject<{
+        complete: z.ZodBoolean;
+        docPath: z.ZodOptional<z.ZodString>;
+        completedAt: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    polishRound: z.ZodOptional<z.ZodNumber>;
+    polishConverged: z.ZodOptional<z.ZodBoolean>;
+    reviewIterations: z.ZodOptional<z.ZodNumber>;
+    verificationLedgerPath: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export type PotetoCheckpointFields = z.infer<typeof PotetoCheckpointFieldsSchema>;
+export type CheckpointState = FlywheelState & PotetoCheckpointFields;
+export declare function loadState(cwd: string): CheckpointState;
+export declare function saveState(cwd: string, state: CheckpointState): Promise<boolean>;
 export declare function clearState(cwd: string): void;
 export type FlywheelMemoryOperation = 'search' | 'store' | 'draft_postmortem' | 'draft_solution_doc' | 'refresh_learnings';
 export interface FlywheelMemoryOperationDescriptor {

@@ -10,4 +10,13 @@ export declare const HEADLESS_EXIT_HINT = "Complete headless mode with action=\"
  * action="report"    — Complete headless review with an aggregated CI signal
  */
 export declare function runReview(ctx: ToolContext, args: ReviewArgs): Promise<McpToolResult>;
+export declare const MAX_FRESH_EYES_ROUNDS = 5;
+export declare const CLEAN_STREAK_TARGET = 2;
+export interface ReviewIteration {
+    round: number;
+    cleanStreak: number;
+    converged: boolean;
+    lastFindingCount: number;
+}
+export type ModelFamily = 'claude' | 'pi' | 'gemini' | 'codex' | 'unknown';
 //# sourceMappingURL=review.d.ts.map

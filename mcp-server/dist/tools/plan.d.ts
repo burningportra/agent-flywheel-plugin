@@ -1,4 +1,16 @@
 import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
+export interface PreCodeResearchChecklist {
+    architecture?: boolean;
+    dependencies?: boolean;
+    security?: boolean;
+    performance?: boolean;
+}
+export type PotetoPlanArgs = PlanArgs & {
+    /** Poteto mode: planning needs the interrogation and ADR documents first. */
+    poteto?: boolean;
+    /** Every area must be `true`; a missing area counts as not researched. */
+    preCodeResearch?: PreCodeResearchChecklist;
+};
 /**
  * flywheel_plan — Generate a plan document for the selected goal.
  *
@@ -13,5 +25,5 @@ import type { ToolContext, McpToolResult, PlanArgs } from '../types.js';
  * charter at docs/brainstorms/<slug>-<date>-ambition.md and injects it, with fixed ambitious-plan
  * requirements, into whichever generator the mode picks. planFile/planContent registration ignores it.
  */
-export declare function runPlan(ctx: ToolContext, args: PlanArgs): Promise<McpToolResult>;
+export declare function runPlan(ctx: ToolContext, args: PotetoPlanArgs): Promise<McpToolResult>;
 //# sourceMappingURL=plan.d.ts.map

@@ -49,6 +49,8 @@ export interface BeadDispatchContext {
     readonly coordinatorName: string;
     /** Absolute repository root used as the Agent Mail human_key. */
     readonly projectKey: string;
+    /** Whether Poteto mode is active (prohibits implementer self-verification). */
+    readonly potetoMode?: boolean;
 }
 /**
  * Output shape — kept stable across adapters so the spawner can

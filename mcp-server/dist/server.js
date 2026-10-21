@@ -9,6 +9,7 @@ import { runApprove } from './tools/approve.js';
 import { runDiscover } from './tools/discover.js';
 import { runDoctor } from './tools/doctor-tool.js';
 import { runEmitCodex } from './tools/emit-codex.js';
+import { runEmitAgy } from './tools/emit-agy.js';
 import { runGetSkill } from './tools/get-skill.js';
 import { runMemory } from './tools/memory-tool.js';
 import { runPlan } from './tools/plan.js';
@@ -134,6 +135,20 @@ const PRIMARY_TOOLS = [
                     type: 'string',
                     description: 'Pre-synthesized plan content (inline). For large plans, write to disk first and use planFile instead to prevent stdio stalling.',
                 },
+                poteto: {
+                    type: 'boolean',
+                    description: 'Poteto mode: planning requires the interrogation and architecture documents first and returns poteto_prerequisite_missing without them.',
+                },
+                preCodeResearch: {
+                    type: 'object',
+                    description: 'Poteto mode pre-code research checklist. Every area must be true; a missing area counts as not researched.',
+                    properties: {
+                        architecture: { type: 'boolean' },
+                        dependencies: { type: 'boolean' },
+                        security: { type: 'boolean' },
+                        performance: { type: 'boolean' },
+                    },
+                },
                 source: {
                     type: 'string',
                     enum: ['picked-up-existing-plan'],
@@ -152,8 +167,12 @@ const PRIMARY_TOOLS = [
                 cwd: { type: 'string', description: 'Project working directory' },
                 action: {
                     type: 'string',
-                    enum: ['start', 'polish', 'reject', 'advanced', 'git-diff-review', 'remediate'],
-                    description: 'start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle, remediate=create one bead from a failing outcome-grading criterion (T20).',
+                    enum: ['start', 'polish', 'reject', 'advanced', 'git-diff-review', 'remediate', 'converge-polish', 'verify-bead'],
+                    description: 'start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle, remediate=create one bead from a failing outcome-grading criterion (T20), converge-polish=run one round of the polish convergence loop, verify-bead=independently verify one bead\'s completion report (needs beadId).',
+                },
+                beadId: {
+                    type: 'string',
+                    description: 'Required when action=verify-bead: the bead whose completion report to verify.',
                 },
                 coordinatorName: {
                     type: 'string',
@@ -210,8 +229,8 @@ const PRIMARY_TOOLS = [
                 },
                 action: {
                     type: 'string',
-                    enum: ['hit-me', 'looks-good', 'skip', 'report'],
-                    description: 'hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead, report=submit an aggregated headless result',
+                    enum: ['hit-me', 'looks-good', 'skip', 'report', 'converge', 'cross-agent'],
+                    description: 'hit-me=spawn parallel review agents, looks-good=mark done and advance, skip=defer bead, report=submit an aggregated headless result, converge=record one fresh-eyes round (converges after 2 clean rounds in a row or 5 rounds), cross-agent=build a peer-review prompt for a model family other than the implementer\'s',
                 },
                 mode: {
                     type: 'string',
@@ -227,7 +246,11 @@ const PRIMARY_TOOLS = [
                 findingCount: {
                     type: 'integer',
                     minimum: 0,
-                    description: 'Aggregated number of findings. Required when action=report and mode=headless.',
+                    description: 'Aggregated number of findings. Required when action=report and mode=headless; the round\'s finding count for action=converge (default 0).',
+                },
+                rejectedReason: {
+                    type: 'string',
+                    description: 'For action=cross-agent: why an earlier review rejected the bead. Adds it to the prompt and returns a selfAnnealingRule draft for flywheel_memory.',
                 },
                 crashed: {
                     type: 'boolean',
@@ -474,6 +497,31 @@ const PRIMARY_TOOLS = [
         },
     },
     {
+        name: 'flywheel_emit_agy',
+        description: 'Check, write, or prune the Antigravity (agy) port of this plugin by running scripts/sync-agy.sh --json --target <targetDir>. targetDir must sit inside cwd or the Antigravity plugins directory (~/.gemini/antigravity/plugins).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                cwd: { type: 'string', description: 'Project working directory (absolute path)' },
+                targetDir: {
+                    type: 'string',
+                    description: 'Port directory, e.g. ~/.gemini/antigravity/plugins/agent-flywheel (absolute or relative to cwd)',
+                },
+                mode: {
+                    type: 'string',
+                    enum: ['check', 'write', 'prune'],
+                    default: 'check',
+                    description: 'check=report drift without writing, write=update the port, prune=also delete files the port no longer ships',
+                },
+                pluginRoot: {
+                    type: 'string',
+                    description: 'Optional agent-flywheel checkout holding scripts/sync-agy.sh. Must be inside cwd or match CLAUDE_PLUGIN_ROOT.',
+                },
+            },
+            required: ['cwd', 'targetDir'],
+        },
+    },
+    {
         name: 'flywheel_get_skill',
         description: 'Return a skill\'s frontmatter + body in one round-trip. Backed by a deterministic build-time bundle with 4-layer drift defense (manifest integrity check, per-entry stale warn, FW_SKILL_BUNDLE=off bypass, transparent disk fallback). Pass name as `<plugin>:<skill-name>` (e.g. `agent-flywheel:start`, `agent-flywheel:start_planning`). Returns `{ name, frontmatter, body, source: "bundle"|"disk", staleWarn? }`.',
         inputSchema: {
@@ -677,6 +725,7 @@ const PRIMARY_RUNNERS = {
     flywheel_memory: runMemory,
     flywheel_doctor: runDoctor,
     flywheel_emit_codex: runEmitCodex,
+    flywheel_emit_agy: runEmitAgy,
     flywheel_get_skill: runGetSkill,
     flywheel_observe: runObserve,
     flywheel_rescue: runRescue,

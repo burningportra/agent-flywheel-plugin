@@ -212,4 +212,20 @@ function formatDetectedModels(detected) {
     }
     return lines.join("\n");
 }
+/**
+ * Splits a `DispatchPlan.ratio` string into family counts and spawn lanes.
+ * The Gemini seat moves to `agy` only when the agy CLI works and this ntm
+ * accepts `--agy`; otherwise it stays on the `gmi` lane.
+ */
+export function computeDispatchRatio(ratio, agyRoute) {
+    const [claude = 0, pi = 0, gemini = 0] = ratio.split(':').map((part) => {
+        const n = Number(part);
+        return Number.isInteger(n) && n >= 0 ? n : 0;
+    });
+    const useAgy = agyRoute.agyReady && agyRoute.ntmAgy;
+    return {
+        ratio: { claude, pi, gemini },
+        ratioByLane: { cc: claude, pi, gmi: useAgy ? 0 : gemini, agy: useAgy ? gemini : 0 },
+    };
+}
 //# sourceMappingURL=model-detection.js.map

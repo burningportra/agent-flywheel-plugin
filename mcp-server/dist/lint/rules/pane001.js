@@ -1,7 +1,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import * as path from "node:path";
 import { GEMINI_LANE_MODEL } from "../../pi-models.js";
-const ALL_LANES = ["cc", "cod", "gmi", "pi"];
+const DEFAULT_LADDER_LANES = ["cc", "cod", "gmi", "pi"];
+const ALL_LANES = ["cc", "cod", "gmi", "pi", "agy"];
 /**
  * Canonical PANE001 override markers.
  *
@@ -14,7 +15,7 @@ const OVERRIDE_MARKERS = [
     /\bPANE001-OVERRIDE:/,
 ];
 /** Recognised NTM lane flags. `--gem=` is the deprecated synonym for `--gmi=`. */
-const LANE_FLAG_PATTERN = /--(cc|cod|gmi|gem|pi)=(\d+)/g;
+const LANE_FLAG_PATTERN = /--(cc|cod|gmi|gem|pi|agy)=(\d+)/g;
 const OVERRIDE_PROXIMITY_LINES = 6;
 /** Commands that spawn swarm lanes. `swarm-spawn.js` adds Pi panes to an `ntm spawn` session. */
 const SPAWN_COMMANDS = ["swarm-spawn.js", "ntm spawn"];
@@ -44,7 +45,7 @@ export function parseCanonicalFromAgentsMd(content) {
         return null;
     // Tolerate backticks and whitespace between the lane triple and the digit
     // triple — markdown renderings commonly wrap it as `cc:pi:gem`.
-    const ratioRe = /\bcc:(cod|gem|gmi|pi):(cod|gem|gmi|pi)[`\s]*(\d+):(\d+):(\d+)/i;
+    const ratioRe = /\bcc:(cod|gem|gmi|pi|agy):(cod|gem|gmi|pi|agy)[`\s]*(\d+):(\d+):(\d+)/i;
     const ratioMatch = ratioRe.exec(body);
     if (ratioMatch === null)
         return null;
@@ -52,8 +53,8 @@ export function parseCanonicalFromAgentsMd(content) {
     const lanes = ["cc", toLane(second), toLane(third)];
     const ratio = [Number(ccRatio), Number(secondRatio), Number(thirdRatio)];
     const peers = lanes.slice(1).reverse();
-    let ladder = [...peers, ...ALL_LANES.filter((lane) => !lanes.includes(lane)), "cc"];
-    const inlineLadderRe = /\b(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)\s*(?:→|->)\s*(gmi|cod|pi|cc)/i;
+    let ladder = [...peers, ...DEFAULT_LADDER_LANES.filter((lane) => !lanes.includes(lane)), "cc"];
+    const inlineLadderRe = /\b(gmi|cod|pi|agy|cc)\s*(?:→|->)\s*(gmi|cod|pi|agy|cc)\s*(?:→|->)\s*(gmi|cod|pi|agy|cc)\s*(?:→|->)\s*(gmi|cod|pi|agy|cc)/i;
     const inlineMatch = inlineLadderRe.exec(body);
     if (inlineMatch !== null) {
         ladder = inlineMatch.slice(1, 5).map((token) => toLane(token));

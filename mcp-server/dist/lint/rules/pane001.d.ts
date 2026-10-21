@@ -42,7 +42,7 @@ export interface Pane001Context extends RuleContext {
     /** Override the parsed canonical (tests inject for fixture-based behaviour). */
     canonical?: CanonicalRule;
 }
-export type Lane = "cc" | "cod" | "gmi" | "pi";
+export type Lane = "cc" | "cod" | "gmi" | "pi" | "agy";
 export interface CanonicalRule {
     /** Required lanes, cc first — order-sensitive when rendering. */
     lanes: Lane[];

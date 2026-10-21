@@ -44,6 +44,7 @@ export interface BuildImplementerDispatchArgs {
   readonly projectKey?: string;
   readonly probeScope?: string;
   readonly verifyClaudeLogin?: boolean;
+  readonly potetoMode?: boolean;
 }
 
 const NTM_LANE = {
@@ -59,6 +60,7 @@ function beadToDispatchContext(
   agentName: string,
   coordinatorName: string,
   projectKey: string,
+  potetoMode?: boolean,
 ): BeadDispatchContext {
   const acceptance = bead.description
     .split('\n')
@@ -79,6 +81,7 @@ function beadToDispatchContext(
     agentName,
     coordinatorName,
     projectKey,
+    ...(potetoMode !== undefined ? { potetoMode } : {}),
   };
 }
 
@@ -138,6 +141,7 @@ export async function buildImplementerDispatch(
       agentName,
       args.coordinatorName,
       projectKey,
+      args.potetoMode,
     );
     const adapted = adaptPromptFor(provider, context);
     return {

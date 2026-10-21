@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { FLYWHEEL_ERROR_CODES, FlywheelErrorCodeSchema, FlywheelToolErrorSchema, FlywheelStructuredErrorSchema, DEFAULT_RETRYABLE, DEFAULT_HINTS, DEFAULT_TRY_THIS, FlywheelError, throwFlywheelError, makeFlywheelErrorResult, classifyExecError, } from '../errors.js';
 describe('FLYWHEEL_ERROR_CODES', () => {
-    it('has exactly 47 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode + 7 22i remediation/bundle/viewer + 2 xsz attestation + 8 v3.13.0 outcome-grading + 1 v3.14.0 compliance)', () => {
-        expect(FLYWHEEL_ERROR_CODES).toHaveLength(47);
+    it('has exactly 47 codes (16 legacy + 10 v3.4.0 + 1 iy4 wave-collision + 2 f0j review-mode + 7 22i remediation/bundle/viewer + 2 xsz attestation + 8 v3.13.0 outcome-grading + 1 v3.14.0 compliance + 5 8mi poteto verification)', () => {
+        expect(FLYWHEEL_ERROR_CODES).toHaveLength(52);
     });
     it('DEFAULT_RETRYABLE covers every code', () => {
         expect(Object.keys(DEFAULT_RETRYABLE).sort()).toEqual([...FLYWHEEL_ERROR_CODES].sort());

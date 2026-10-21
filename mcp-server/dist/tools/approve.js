@@ -9,6 +9,8 @@ import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { formatSkippedBrRows, parseBrList } from '../parsers.js';
 import { computeHotspotMatrix } from '../plan-simulation.js';
+import { runBvRobot } from '../bv-runner.js';
+import { appendVerificationLedger, computePatchId, readCompletionReport, writeCompletionReport, } from '../completion-report.js';
 import { createLogger } from '../logger.js';
 import { normalizeText } from '../utils/text-normalize.js';
 import { resolveDuelProvenanceInstructions } from '../duel-provenance.js';
@@ -30,6 +32,12 @@ ${planText}
 ${revisions}`;
 }
 let _lastBeadSnapshot;
+/**
+ * Bead agent-flywheel-plugin-jl5 — cap for the converge-polish loop
+ * (July 2026 Complete Guide §6x Polish). The loop also stops early after
+ * 2 consecutive zero-change rounds (steady state).
+ */
+export const MAX_POLISH_ROUNDS = 6;
 function descFingerprint(desc) {
     return `${desc.length}:${desc.slice(0, 50)}`;
 }
@@ -195,6 +203,12 @@ export async function runApprove(ctx, args) {
     if (args.action === 'remediate') {
         return handleRemediate(ctx, args);
     }
+    // ── Bead agent-flywheel-plugin-jl5: independent verification (TBD) ──
+    // Branches before the bead-list refresh like remediate: verification
+    // reads a completion report + git state, not the bead graph.
+    if (args.action === 'verify-bead') {
+        return handleVerifyBead(ctx, args);
+    }
     // ── Plan approval mode (when phase is awaiting_plan_approval) ──
     if ((state.phase === 'awaiting_plan_approval' || (state.phase === 'planning' && state.planDocument)) &&
         state.planDocument) {
@@ -353,6 +367,10 @@ export async function runApprove(ctx, args) {
     if (args.action === 'advanced') {
         return handleAdvanced(ctx, beads, round, args.advancedAction, matrix);
     }
+    // ── Bead agent-flywheel-plugin-jl5: 6x Polish convergence loop ──
+    if (args.action === 'converge-polish') {
+        return handleConvergePolish(ctx, beads);
+    }
     // action === 'start' — launch implementation. stop_reason is "manual_start"
     // because the polish loop was terminated by an explicit operator decision.
     return handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix, args.coordinatorName ?? 'Coordinator', programWarnings);
@@ -484,6 +502,7 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
         projectKey: lane.projectKey,
         probeScope: lane.probeScope,
         verifyClaudeLogin: lane.verifyClaudeLogin,
+        potetoMode: state.potetoMode,
     });
     if (dispatch.prompts.length !== ready.length) {
         return makeApproveError('No implementation CLI is available for the first wave.', state.phase, 'beads', 'cli_not_available', { warnings: dispatch.warnings }, 'Install at least one of claude, codex, or pi, then retry flywheel_approve_beads.');
@@ -886,6 +905,148 @@ async function handleRemediate(ctx, args) {
         tool: 'flywheel_approve_beads',
         argsSchemaHint: { action: 'remediate', remediation: '<failing criterion>' },
     }));
+}
+// ─── Bead agent-flywheel-plugin-jl5: converge-polish + verify-bead ─────────
+const GIT_SHA_RE = /^[0-9a-f]{7,64}$/i;
+/**
+ * 6x Polish convergence loop. Each call snapshots the bead graph against
+ * the previous call (the bead-mode flow primes the snapshot on first sight,
+ * so round 1 already compares). Converges on 2 consecutive zero-change
+ * rounds or when polishRound hits MAX_POLISH_ROUNDS. Enriches the response with best-effort `bvInsights`
+ * (unavailable bv degrades to a warning, never a failure).
+ */
+async function handleConvergePolish(ctx, beads) {
+    const { exec, cwd, state, saveState, signal } = ctx;
+    const currentSnapshot = snapshotBeads(beads);
+    if (_lastBeadSnapshot) {
+        state.polishChanges.push(countChanges(_lastBeadSnapshot, currentSnapshot));
+    }
+    _lastBeadSnapshot = currentSnapshot;
+    state.polishRound = Math.min((state.polishRound ?? 0) + 1, MAX_POLISH_ROUNDS);
+    const pc = state.polishChanges;
+    const steadyState = pc.length >= 2 && pc[pc.length - 1] === 0 && pc[pc.length - 2] === 0;
+    if (steadyState || state.polishRound >= MAX_POLISH_ROUNDS) {
+        state.polishConverged = true;
+    }
+    saveState(state);
+    const bv = await runBvRobot(exec, cwd, 'insights', { signal });
+    const quality = computeBeadQualityScore(beads);
+    const history = pc.length > 0
+        ? pc.map((n, i) => `R${i + 1}: ${n} change${n !== 1 ? 's' : ''}`).join(', ')
+        : '(baseline established — no comparison yet)';
+    const header = `**Polish round ${state.polishRound}/${MAX_POLISH_ROUNDS}** (${history}) — quality ${(quality.score * 100).toFixed(0)} ${quality.label}`;
+    const bvNote = bv.available
+        ? `\n\nBV insights attached in \`data.bvInsights\`.`
+        : `\n\nBV insights unavailable: ${bv.warning}`;
+    if (state.polishConverged) {
+        const reason = steadyState ? '2 consecutive zero-change rounds (steady state)' : `round cap ${MAX_POLISH_ROUNDS} reached`;
+        return makeApproveResult(`${header}\n\n**Polish converged: ${reason}.**${bvNote}\n\nNEXT: call \`flywheel_approve_beads\` with action="start" to launch implementation.`, state.phase, 'beads', {
+            kind: 'polish_converged',
+            action: 'converge-polish',
+            stop_reason: (steadyState ? 'convergence_reached' : 'max_rounds_hit'),
+            polishRound: state.polishRound,
+            polishConverged: true,
+            changes: [...pc],
+            bvInsights: bv.available ? bv.data : null,
+            ...(bv.warning ? { bvWarning: bv.warning } : {}),
+            quality: { score: quality.score, summary: formatBeadQualityScore(quality) },
+            activeBeadIds: state.activeBeadIds,
+        }, makeNextToolStep('call_tool', 'Polish loop converged — start implementation.', {
+            tool: 'flywheel_approve_beads',
+            argsSchemaHint: { action: 'start' },
+        }));
+    }
+    return makeApproveResult(`${header}${bvNote}\n\nNEXT: refine the beads, then call \`flywheel_approve_beads\` with action="converge-polish" again.`, state.phase, 'beads', {
+        kind: 'polish_round_complete',
+        action: 'converge-polish',
+        polishRound: state.polishRound,
+        polishConverged: false,
+        changes: [...pc],
+        bvInsights: bv.available ? bv.data : null,
+        ...(bv.warning ? { bvWarning: bv.warning } : {}),
+        quality: { score: quality.score, summary: formatBeadQualityScore(quality) },
+        activeBeadIds: state.activeBeadIds,
+    }, makeNextToolStep('call_tool', 'Keep polishing, then re-run converge-polish.', {
+        tool: 'flywheel_approve_beads',
+        argsSchemaHint: { action: 'converge-polish' },
+    }));
+}
+/**
+ * Independent bead verification. Reads `.pi-flywheel/completion/<beadId>.json`,
+ * resolves HEAD, computes the `patchId` over base..head, stamps
+ * `report.verification` (`verified` iff a patch id exists, else
+ * `verification-failed`), persists the report, and appends to
+ * `.pi-flywheel/ledger.tsv`. Never writes a schema-invalid report: bad SHAs
+ * or git failures return `cli_failure` before any write.
+ */
+async function handleVerifyBead(ctx, args) {
+    const { exec, cwd, state, signal } = ctx;
+    const beadId = args.beadId?.trim();
+    if (!beadId) {
+        return makeApproveError('Error: action="verify-bead" requires `beadId`.', state.phase, 'beads', 'invalid_input', { action: 'verify-bead' }, 'Pass the bead id whose .pi-flywheel/completion/<beadId>.json report should be verified.');
+    }
+    const read = await readCompletionReport(cwd, beadId);
+    if (!read.ok) {
+        return makeApproveError(`Error: cannot verify bead ${beadId}: ${read.error.message}`, state.phase, 'beads', read.error.code === 'not_found' ? 'not_found' : 'parse_failure', { action: 'verify-bead', beadId }, 'The implementer must write the completion report before independent verification.');
+    }
+    let headSha;
+    try {
+        const head = await exec('git', ['rev-parse', 'HEAD'], { cwd, timeout: 5000, signal });
+        if (head.code !== 0)
+            throw new Error(head.stderr.trim() || `exit ${head.code}`);
+        headSha = head.stdout.trim();
+    }
+    catch (err) {
+        return makeApproveError(`Error: cannot resolve HEAD for verification: ${errMsg(err)}`, state.phase, 'beads', 'cli_failure', { action: 'verify-bead', beadId }, 'Run `git rev-parse HEAD` in the project directory to diagnose.');
+    }
+    const baseSha = read.report.verification?.baseSha ?? state.cycleStartSha ?? headSha;
+    if (!GIT_SHA_RE.test(baseSha) || !GIT_SHA_RE.test(headSha)) {
+        return makeApproveError(`Error: non-SHA base/head for verification (base=${baseSha.slice(0, 12)} head=${headSha.slice(0, 12)}).`, state.phase, 'beads', 'cli_failure', { action: 'verify-bead', beadId }, 'Verification needs hex SHAs; check state.cycleStartSha and the report verification block.');
+    }
+    let patchId = null;
+    let patchError;
+    try {
+        patchId = await computePatchId(exec, cwd, baseSha, headSha, { timeout: 30000, signal });
+    }
+    catch (err) {
+        patchError = errMsg(err);
+    }
+    const verifiedAt = new Date().toISOString();
+    const verifier = args.coordinatorName ?? 'flywheel_approve_beads';
+    // Schema requires patchId when verified; a missing/empty diff can only be
+    // recorded as verification-failed.
+    const verdict = patchId ? 'verified' : 'verification-failed';
+    const verification = {
+        verdict,
+        baseSha,
+        headSha,
+        ...(patchId ? { patchId } : {}),
+        verifier,
+        verifiedAt,
+        evidence: patchError
+            ? [`patch-id failed: ${patchError}`]
+            : [`patch ${patchId} over ${baseSha.slice(0, 12)}..${headSha.slice(0, 12)}`],
+    };
+    const updated = { ...read.report, verification };
+    let reportPath;
+    let ledgerPath;
+    try {
+        ({ path: reportPath } = await writeCompletionReport(cwd, updated));
+        ({ path: ledgerPath } = await appendVerificationLedger(cwd, { beadId, verification }));
+    }
+    catch (err) {
+        return makeApproveError(`Error: verification computed (${verdict}) but persistence failed: ${errMsg(err)}`, state.phase, 'beads', 'cli_failure', { action: 'verify-bead', beadId, verdict }, 'Check .pi-flywheel/ directory permissions and disk space, then retry.');
+    }
+    return makeApproveResult(`**Bead ${beadId} verification: ${verdict}.** head=${headSha.slice(0, 12)} patch=${patchId ?? '(none)'}\nReport: \`${reportPath}\` — ledger: \`${ledgerPath}\``, state.phase, 'beads', {
+        kind: 'bead_verified',
+        action: 'verify-bead',
+        beadId,
+        verdict,
+        headSha,
+        patchId,
+        reportPath,
+        ledgerPath,
+    }, makeNextToolStep('call_tool', verdict === 'verified' ? 'Verification recorded — continue the wave.' : 'Verification failed — inspect the evidence, fix, and re-verify.'));
 }
 function formatBeadList(beads) {
     const childIds = new Set(beads.filter(b => b.parent).map(b => b.id));

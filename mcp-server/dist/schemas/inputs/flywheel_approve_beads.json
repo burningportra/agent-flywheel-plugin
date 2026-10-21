@@ -17,9 +17,15 @@
         "reject",
         "advanced",
         "git-diff-review",
-        "remediate"
+        "remediate",
+        "converge-polish",
+        "verify-bead"
       ],
-      "description": "start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle, remediate=create one bead from a failing outcome-grading criterion (T20)."
+      "description": "start=approve and launch implementation, polish=refine beads/plan, reject=stop, advanced=use advancedAction, git-diff-review=run git-diff style plan review cycle, remediate=create one bead from a failing outcome-grading criterion (T20), converge-polish=run one round of the polish convergence loop, verify-bead=independently verify one bead's completion report (needs beadId)."
+    },
+    "beadId": {
+      "type": "string",
+      "description": "Required when action=verify-bead: the bead whose completion report to verify."
     },
     "coordinatorName": {
       "type": "string",

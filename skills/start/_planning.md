@@ -390,13 +390,15 @@ Read `state.planDocument` end to end. Identify two to four decisions that could 
 - Scope boundaries and explicit non-goals.
 - Architecture, tool, and trade-off choices.
 - Ordering and dependency assumptions.
-- Deferred risks and missing coverage.
+- Deferred risks and missing coverage. For a new broker, provider, or integration, the plan needs a bead that traces real app startup to the first order through the production factory and wiring, because tests that build their own factory never exercise it.
 
 Skip the obvious. Ask only about decisions where reasonable people would disagree.
 
 #### 1a. Verify numeric claims
 
 Run a command to verify codebase counts before asking the user, especially when source plans disagree. Use the measured value in the question and later synthesis.
+
+Check every claim about a third-party API (order types, shorting, fractional quantities, duplicate-id handling) against its SDK or docs source at the latest tag before asking the user. A shallow clone into the scratchpad is enough.
 
 ### 2. Present the questions in one batch
 

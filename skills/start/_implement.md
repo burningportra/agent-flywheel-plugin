@@ -100,7 +100,7 @@ During each tend cycle:
 1. Capture state with `ntm --robot-snapshot --robot-format=toon`, then block on `ntm --robot-wait "$SESSION" --wait-until=attention,action_required,mail_ack_required --timeout=90s`.
 2. Cross-check `ntm --robot-is-working="$SESSION"` with Agent Mail and `git log --oneline --grep="<full-bead-id>"`. Read and acknowledge `[impl] <full-bead-id> done` messages.
 3. About 60 seconds after spawn, confirm each pane registered an Agent Mail identity. Nudge a missing identity with `ntm --robot-send`. ntm can't classify Pi panes, so check each one with `tmux capture-pane -p -t <paneId>` and `tmux display-message -p -t <paneId> '#{pane_dead}'`.
-4. Print a tick only when pane state, inbox count, or commits change.
+4. Print a tick only when pane state, inbox count, or commits change. Alert only for a pane that holds an assigned bead and sits idle with uncommitted changes, or whose process is dead (`#{pane_dead}`). An idle pane with no assignment is expected, so stay silent about it.
 5. Call `ScheduleWakeup(270s, …)` and end the turn while work continues.
 
 > **Tend-cycle note**: `br list` (no flags) shows only `open` and `in_progress`. To check this cycle's completion count, use `br list --status closed --json`. Without it, commits next to 0 closed beads look like implementers skipping the close.
@@ -123,6 +123,10 @@ exit 0
 ```
 
 ### Dispatch the wave
+
+Load `/ntm` and `/vibing-with-ntm` first, before any gate below. Follow `/vibing-with-ntm` for nudge escalation, the stuck-pane ladder, rate-limit probes, context handoff, and convergence termination.
+
+Before writing a check command (type check, test run, lint) into the lane orders, run it once yourself and confirm it examined more than zero items, such as the tsc file count from `--listFiles` or pytest's collected count. Every lane copies the command, so a check that looks at nothing makes every lane report "clean".
 
 When `_offload.md` moved the swarm to another Mac, its `$RUN` rules apply to every pane command in this file.
 
@@ -170,12 +174,12 @@ AskUserQuestion(questions: [{
 
 In unattended runs, apply the recommended remediation. Stop if compatibility stays non-green. Never rewrite the returned lanes by hand.
 
-Load `/ntm` and `/vibing-with-ntm` before spawning. Follow `/vibing-with-ntm` for nudge escalation, the stuck-pane ladder, rate-limit probes, context handoff, and convergence termination.
-
 When `NTM_AVAILABLE=true`, count the panes per lane from the returned lanes: `N_cc`, `N_pi`, `N_gmi`, and `N_cod`. Codex lanes appear only when Pi or Gemini fell back. When `N_pi` is above 0, ask which models the Pi panes run, because the models a login can run and the gateway's top models both change every few weeks:
 
 1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })` and pass `data.questions[0]` to `AskUserQuestion` unchanged. It is multi-select, and its first options are the user's last picks.
 2. Call `flywheel_pi_models({ cwd, action: "choose", picks: { implementer: "<answer>" } })` with the answer string unchanged, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. It holds one model, or a comma-separated list that `swarm-spawn.js` alternates across the Pi panes. An `invalid_input` result lists close ids in `error.details.suggestions`; ask again with those. If `list` fails or `piReady` is false, tell the user that the Pi lanes can't start and stop before spawning.
+
+When `N_cc` is above 0, also ask which model the Claude panes run and pass it as `--cc=<N_cc>:<model>`. Without the `:<model>` suffix they start on the CLI default, which can be a generation behind the coordinator. After spawning, read each pane's footer with `tmux capture-pane -p -t <paneId>` and confirm its model. To change a running Claude pane's model, send `/model <id>` then `/clear`. To change a Pi pane, run `tmux respawn-pane -k -t <paneId> -c <repo> "pi --model <id> --thinking high --no-approve"`.
 
 ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc and cod lanes and adds the Pi panes to the same session with tmux. It runs the gmi panes as Pi on `gemini-4-argon`, since ntm's gmi lane starts the gemini CLI:
 
@@ -213,12 +217,16 @@ When `/dcg` blocks a command, use the corresponding safe operation:
 |-----------------|------------------|--------|
 | `rm -rf <dir> && mkdir <dir>` | `mkdir -p <dir>-$$` | Create a new temporary directory. |
 | `git checkout HEAD -- <path>` | `git show HEAD:<path> > <path>` | Preserve the index and name the source revision. |
-| `git reset --hard <sha>` | `git stash && git checkout <sha>` | Preserve current work before changing revisions. |
+| `git reset --hard <sha>` | `git diff -- <paths> > <scratch>/undo.patch && git apply -R <scratch>/undo.patch` | Undo only your own edits without stash or a branch switch. |
 | `git push --force <branch>` | `git push --force-with-lease <branch>` | Refuse to overwrite an unseen remote update. |
 | `DROP TABLE <t>` | `ALTER TABLE <t> RENAME TO <t>_deprecated_<date>` | Keep the table recoverable. |
 | `rm -rf <dir>` | `mv <dir> /tmp/trash-$(date +%s)-<dir-basename>` | Move the target to temporary storage. |
 
 If no row applies, send `/slb` the command, expected outcome, and recovery plan. Keep harness safety enabled.
+
+The repo's AGENTS.md "never" list (for example stash, hard reset, branch switch) overrides this table. Copy that list into every lane order.
+
+When a permission check denies a pane setup (for example a pane started with permission prompts off), tell the user the permission mode of the panes already running and let them decide. Don't reuse those panes to reach the same state.
 
 ### Tend, close, and advance
 

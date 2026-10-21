@@ -324,6 +324,48 @@ async function detectGeneratorId(repoRoot) {
     }
     return fallback;
 }
+// --- references -------------------------------------------------------------------------
+//
+// Read <skillDir>/references/**/*.md into { relpath -> content } with
+// posix-style keys sorted for determinism. Returns undefined when the skill
+// is a start/_ sub-file or has no references/ directory, so the field stays
+// optional on the bundle entry.
+async function readReferences(skillDir, isSubFile, relPath, maxEntry) {
+    if (isSubFile)
+        return undefined;
+    const refDir = path.join(skillDir, "references");
+    const files = [];
+    const walk = async (dir) => {
+        let dirents;
+        try {
+            dirents = await readdir(dir, { withFileTypes: true });
+        }
+        catch {
+            return;
+        }
+        for (const d of dirents) {
+            const abs = path.join(dir, d.name);
+            if (d.isDirectory())
+                await walk(abs);
+            else if (d.isFile() && d.name.endsWith(".md"))
+                files.push(abs);
+        }
+    };
+    await walk(refDir);
+    if (files.length === 0)
+        return undefined;
+    files.sort();
+    const out = {};
+    for (const abs of files) {
+        const key = path.relative(refDir, abs).split(path.sep).join("/");
+        const buf = await readFile(abs);
+        if (buf.byteLength > maxEntry) {
+            throw new Error(`entry too large: ${relPath} references/${key} is ${buf.byteLength} bytes > --max-entry ${maxEntry}`);
+        }
+        out[key] = buf.toString("utf8");
+    }
+    return out;
+}
 export async function build(opts) {
     const sources = await walkSources(opts.sourceRoot);
     const generatedAt = new Date().toISOString();
@@ -343,6 +385,11 @@ export async function build(opts) {
         if (bodyBytes > opts.maxEntry) {
             throw new Error(`entry too large: ${src.relPath} body is ${bodyBytes} bytes > --max-entry ${opts.maxEntry}`);
         }
+        // Optional references/: bundle references/*.md (recursive) alongside
+        // the SKILL.md body so reference-heavy skills (e.g. vendored pstack
+        // skills) survive the bundle. srcSha256 stays SKILL.md-only so
+        // check:skills-bundle keeps passing unchanged.
+        const references = await readReferences(path.dirname(src.absPath), path.basename(src.absPath).startsWith("_"), src.relPath, opts.maxEntry);
         entries.push({
             name: src.skillName,
             path: src.relPath,
@@ -351,6 +398,7 @@ export async function build(opts) {
             srcSha256,
             sizeBytes: bodyBytes,
             bundledAt: generatedAt,
+            ...(references ? { references } : {}),
         });
     }
     entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));

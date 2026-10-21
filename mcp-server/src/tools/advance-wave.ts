@@ -609,6 +609,7 @@ export async function runAdvanceWave(
     projectKey: lane.projectKey,
     probeScope: lane.probeScope,
     verifyClaudeLogin: lane.verifyClaudeLogin,
+    potetoMode: state.potetoMode,
   });
   if (dispatch.prompts.length !== waveCandidates.length) {
     return makeToolError(

@@ -1,6 +1,26 @@
 import type { ToolContext, McpToolResult, Bead, ApproveArgs, HotspotMatrix } from '../types.js';
 import { type HotspotInputBead } from '../plan-simulation.js';
 /**
+ * Bead agent-flywheel-plugin-jl5 — cap for the converge-polish loop
+ * (July 2026 Complete Guide §6x Polish). The loop also stops early after
+ * 2 consecutive zero-change rounds (steady state).
+ */
+export declare const MAX_POLISH_ROUNDS = 6;
+/**
+ * Bead agent-flywheel-plugin-jl5 — widened approve args.
+ *
+ * `converge-polish` (6x Polish convergence loop) and `verify-bead`
+ * (independent SHA + patch-id verification) are handled inside this module.
+ * The MCP inputSchema enum in server.ts is intentionally untouched here —
+ * the follow-up wiring bead extends it. Callers holding a narrow
+ * `ApproveArgs` still satisfy this interface.
+ */
+export interface ExtendedApproveArgs extends Omit<ApproveArgs, 'action'> {
+    action: ApproveArgs['action'] | 'converge-polish' | 'verify-bead';
+    /** Required when action='verify-bead': bead whose completion report to verify. */
+    beadId?: string;
+}
+/**
  * Map br CLI beads (which carry a `description` field) into the input shape
  * expected by `computeHotspotMatrix` (which expects `body`).
  *
@@ -29,5 +49,5 @@ export declare function shouldOfferCoordinatorSerial(matrix: HotspotMatrix): boo
  * action="reject"   — Reject and stop the flywheel
  * action="advanced" — Advanced refinement (requires advancedAction param)
  */
-export declare function runApprove(ctx: ToolContext, args: ApproveArgs): Promise<McpToolResult>;
+export declare function runApprove(ctx: ToolContext, args: ExtendedApproveArgs): Promise<McpToolResult>;
 //# sourceMappingURL=approve.d.ts.map

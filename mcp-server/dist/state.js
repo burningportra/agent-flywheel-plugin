@@ -34,6 +34,29 @@ const ReviewArgsSchema = z.object({
     /** Caller asserts reviewers will not race on the same files. Defaults to false. */
     parallelSafe: z.boolean().optional().default(false),
 });
+// ─── Poteto-mode checkpoint fields (bead agent-flywheel-plugin-8mi) ─────
+//
+// Deep pstack (poteto-mode) runs interrogation → architecture → pre-code
+// research before any bead dispatches, then polish and review loops whose
+// progress has to survive a crash. Every field is optional so checkpoints
+// written before poteto mode keep loading; the checkpoint layer persists the
+// state object as-is, so these ride along without a schema bump.
+export const PreCodeResearchSchema = z.object({
+    complete: z.boolean(),
+    docPath: z.string().min(1).optional(),
+    completedAt: z.string().min(1).optional(),
+});
+export const PotetoCheckpointFieldsSchema = z.object({
+    potetoMode: z.boolean().optional(),
+    interrogationDocPath: z.string().min(1).optional(),
+    architectureDocPath: z.string().min(1).optional(),
+    preCodeResearch: PreCodeResearchSchema.optional(),
+    polishRound: z.number().int().nonnegative().optional(),
+    polishConverged: z.boolean().optional(),
+    reviewIterations: z.number().int().nonnegative().optional(),
+    /** Repo-relative path of the verification ledger, normally `.pi-flywheel/ledger.tsv`. */
+    verificationLedgerPath: z.string().min(1).optional(),
+});
 export function loadState(cwd) {
     const result = readCheckpoint(cwd);
     if (result && result.envelope.state.phase !== 'idle' && result.envelope.state.phase !== 'complete') {

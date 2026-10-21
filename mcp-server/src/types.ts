@@ -639,6 +639,12 @@ export interface FlywheelState {
    *  `applyBatchReviewVerdict` resumes after the last recorded ID, so applying
    *  a range twice never files a finding twice. */
   batchReviewSynthesizedBeads?: Record<string, string[]>;
+
+  // ─── Poteto-mode / pstack additions ─────────────────────────
+  potetoMode?: boolean;
+  interrogationDocPath?: string;
+  architectureDocPath?: string;
+  verificationLedgerPath?: string;
 }
 
 // ─── Checkpoint Persistence ─────────────────────────────────

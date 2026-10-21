@@ -36,6 +36,28 @@
       "type": "string",
       "description": "Pre-synthesized plan content (inline). For large plans, write to disk first and use planFile instead to prevent stdio stalling."
     },
+    "poteto": {
+      "type": "boolean",
+      "description": "Poteto mode: planning requires the interrogation and architecture documents first and returns poteto_prerequisite_missing without them."
+    },
+    "preCodeResearch": {
+      "type": "object",
+      "description": "Poteto mode pre-code research checklist. Every area must be true; a missing area counts as not researched.",
+      "properties": {
+        "architecture": {
+          "type": "boolean"
+        },
+        "dependencies": {
+          "type": "boolean"
+        },
+        "security": {
+          "type": "boolean"
+        },
+        "performance": {
+          "type": "boolean"
+        }
+      }
+    },
     "source": {
       "type": "string",
       "enum": [

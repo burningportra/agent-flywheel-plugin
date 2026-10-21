@@ -714,6 +714,7 @@ async function handleStart(
     projectKey: lane.projectKey,
     probeScope: lane.probeScope,
     verifyClaudeLogin: lane.verifyClaudeLogin,
+    potetoMode: state.potetoMode,
   });
   if (dispatch.prompts.length !== ready.length) {
     return makeApproveError(

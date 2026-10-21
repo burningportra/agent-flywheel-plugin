@@ -35,7 +35,10 @@
         "orphan_tender_daemons",
         "convergence_state_validity",
         "outcome_rubric_validity",
-        "projects_base_misconfig"
+        "projects_base_misconfig",
+        "agy_cli",
+        "agy_port_sync",
+        "pstack_plugin"
       ],
       "description": "The doctor check name to remediate"
     },

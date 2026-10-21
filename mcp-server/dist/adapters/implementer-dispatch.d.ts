@@ -31,6 +31,7 @@ export interface BuildImplementerDispatchArgs {
     readonly projectKey?: string;
     readonly probeScope?: string;
     readonly verifyClaudeLogin?: boolean;
+    readonly potetoMode?: boolean;
 }
 export declare function buildImplementerDispatch(args: BuildImplementerDispatchArgs): Promise<ImplementerDispatch>;
 //# sourceMappingURL=implementer-dispatch.d.ts.map
