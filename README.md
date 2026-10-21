@@ -1,19 +1,27 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE // AGENT-FLYWHEEL v3.26.0 ▓▒░
+░▒▓ CLAUDE · AGY · OPENCODE // AGENT-FLYWHEEL v3.26.0 ▓▒░
 ```
 
-**Multi-agent coding flywheel for Claude Code, OpenCode, and Antigravity (`agy`).**
-Scan → discover → plan → implement → review — with checkpoints, gates, and adversarial review at every seam.
+**Multi-agent coding flywheel for Claude Code, Google Antigravity (`agy`), and OpenCode.**  
+Scan → discover → plan → beads → NTM swarm → review → wrap-up — with atomic checkpoints, pre-code interrogation (`pstack`), SHA-coupled verification ledgers, and adversarial review at every risky seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.26.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.26.0-blue.svg)](CHANGELOG.md)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
-[![Node](https://img.shields.io/badge/node-%E2%89%A518.18-brightgreen)](#)
+[![Antigravity Port](https://img.shields.io/badge/Antigravity_(agy)-validated-8A2BE2)](docs/agy.md)
+[![OpenCode Port](https://img.shields.io/badge/OpenCode-port-00ADD8)](docs/opencode.md)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520.0-brightgreen)](#installation)
 [![CI](https://github.com/burningportra/agent-flywheel-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/burningportra/agent-flywheel-plugin/actions)
 
-</div>
+<h3>Quick Install</h3>
+
+```bash
+curl -sSL https://raw.githubusercontent.com/burningportra/agent-flywheel-plugin/main/install.sh | bash
+```
+
+**Or inside Claude Code:**
 
 ```bash
 /plugin marketplace add burningportra/agent-flywheel-plugin
@@ -22,136 +30,142 @@ Scan → discover → plan → implement → review — with checkpoints, gates,
 /agent-flywheel:flywheel-setup
 ```
 
-Then `/agent-flywheel:start` and you're off.
+**Or sync the Antigravity (`agy`) / OpenCode ports from a checkout:**
+
+```bash
+bash scripts/sync-agy.sh --write
+bash scripts/sync-opencode.sh --write
+```
+
+</div>
 
 ---
 
 ## TL;DR
 
-### The problem
+### The Problem
 
-Coding agents stall halfway. They pick up a task, lose context, hit a rate limit, leave half-finished work, skip the review pass that would catch their own bugs, and cannot resume cleanly across sessions. Multi-agent fan-out is worse — agents trample each other's files, lose track of which work is in flight, and there's no audit trail when something goes wrong.
+Coding agents stall halfway. A single agent picks up a feature, loses context, rationalizes skipping tests, leaves half-finished files on disk, and cannot resume cleanly after `/clear` or a crash. Multi-agent fan-out is worse: parallel agents overwrite each other's files, drift from the architectural plan, close issues without proving their code works, and leave zero audit trail when something breaks.
 
-### The solution
+### The Solution
 
-A six-phase loop with state on disk, gates between every step, and adversarial review at the risky seams. Every user decision flows through `AskUserQuestion` (no implicit choices). Every multi-agent fan-out goes through NTM + Agent Mail (no raw tmux, no `&` background shells). Every closed bead carries a versioned **Completion Evidence** attestation in `.pi-flywheel/completion/<beadId>.json` that the coordinator validates before advancing the wave.
+`agent-flywheel` turns multi-agent coding into a deterministic six-phase state machine backed by an MCP server (`25 flywheel_* tools`), a graph issue tracker (`br` + `bv`), a tmux swarm orchestrator (`ntm`), a file-reservation bus (`agent-mail`), and **Poteto (`pstack`) verification gates**. Every user decision routes through a structured menu (`AskUserQuestion` / `ask_question`), every closed bead writes a Zod-validated completion attestation (`.pi-flywheel/completion/<id>.json`), and every verification verdict is cryptographically coupled to its diff via `git patch-id --stable` in `.pi-flywheel/ledger.tsv`.
 
 ```
-scan ──> discover ──> plan ──> implement ──> review ──> wrap-up
-  │         │           │          │            │           │
-  └─────────┴───── checkpoint after every step ─┴───────────┘
-            (drift check on resume; structured-error routing)
+  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │ 1. SCAN  ├───►│2.DISCOVER├───►│ 3. PLAN  ├───►│ 4. BEADS ├───►│5. SWARM  ├───►│6. REVIEW │
+  └────┬─────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘
+       │               │               │               │               │               │
+       └───────────────┴───────────────┴───────────────┴───────────────┴───────────────┘
+                                               │
+                     Atomic .pi-flywheel/checkpoint.json + .pi-flywheel/ledger.tsv
+                   (resumable across sessions; 43 structured FlywheelErrorCode gates)
 ```
 
-### Why use it?
+### Why Use `agent-flywheel`?
 
-| | agent-flywheel | Raw Claude Code | Aider / Cline | SWE-agent / OpenHands |
-|---|---|---|---|---|
-| Resumable across sessions | ✅ atomic checkpoint | ✗ context-window-bound | partial (chat history) | partial |
-| Multi-agent swarm | ✅ NTM + Agent Mail | ✗ | ✗ | partial (single-agent) |
-| File-reservation conflict prevention | ✅ pre-commit guard | ✗ | ✗ | ✗ |
-| Adversarial review (duels) | ✅ 2-agent cross-scoring | ✗ | ✗ | ✗ |
-| Structured error contracts | ✅ 36-code FlywheelErrorCode | ✗ string parsing | ✗ | ✗ |
-| Completion attestation ledger | ✅ Zod-validated JSON | ✗ | ✗ | ✗ |
-| Bead-graph dependency view | ✅ `bv` + Cytoscape viewer | ✗ | ✗ | ✗ |
-| Auto-recovery (stalled beads, drift) | ✅ tender daemon + 4-min looper | ✗ | ✗ | partial |
-| Doctor / setup / healthcheck triage | ✅ 24-check sweep | ✗ | ✗ | ✗ |
+| Feature | What It Does |
+|---|---|
+| **Atomic Session Checkpoints** | Persists phase, goal, active beads, and git HEAD to `.pi-flywheel/checkpoint.json` on every step; resumes cleanly across `/clear`, crashes, or machines with automatic drift detection. |
+| **Multi-Model NTM Swarms** | Spawns mixed Claude (`--cc`), Pi (`--pi` on frontier/balanced models via Vercel AI Gateway or provider logins), Gemini (`--gmi`), and Antigravity (`--agy`) panes in `tmux` with staggered robot-send dispatch. |
+| **File-Reservation Guardrails** | Enforces exclusive Agent Mail file reservations (`reserveOrFail`) before any edit and blocks conflicting commits via a pre-commit guard and `RESERVE001` lint rule. |
+| **Poteto (`pstack`) Pre-Code & Verification Gates** | Enforces pre-code research (`/why`), adversarial spec interrogation (`/interrogate`), ADRs (`/architect` + `decisions.tsv`), the **Plan Verification Triad** (`Verify, unit / live / perf`), and `git patch-id --stable` verification ledgers. |
+| **Adversarial Duels & Cross-Agent Review** | Routes high-stakes discovery, planning, reality-check, and P0/security reviews through 2-agent cross-scoring (`/dueling-idea-wizards`) and cross-family peer review (`flywheel_review(action: "cross-agent")`). |
+| **Multi-Harness Native Ports** | One source of truth in the repo emits validated plugins for **Claude Code**, **Google Antigravity (`agy`)** (`agy plugin validate --strict`), **OpenCode**, and **Codex**. |
+| **27-Check Toolchain Doctor & Auto-Remediate** | Diagnoses MCP, Agent Mail, `br`, `bv`, `ntm`, `cm`, `pi`, `agy`, port sync, and model compatibility in `<2s`, with one-tap fixes via `flywheel_remediate`. |
 
 ---
 
-## Quick example
+## Quick Example
 
 ```bash
-# In a Claude Code session, in any git repo:
+# 1. Start or resume the flywheel in any git repo
 /agent-flywheel:start
 
-# Banner + state detection. If beads are open, you get the resume menu.
-# Otherwise you see a fresh-start menu:
-#
-#   1. Scan & discover  ← profile + ranked ideas
-#   2. Set a goal       ← brainstorm + plan + implement
-#   3. Deslop pass      ← isomorphism-preserving refactor
-#   4. Duel             ← adversarial 2-agent ideation
+# 2. (Optional) Run Poteto (pstack) pre-code gates before planning:
+#    /why → /interrogate (docs/specs/<slug>-interrogation.md) → /architect (docs/architecture/<slug>-adr.md)
+node scripts/check-plan.mjs docs/plans/2026-10-21-feature--synthesized.md
+node scripts/check-bead-verify.mjs docs/plans/2026-10-21-feature--synthesized.md --json
 
-# Pick "Set a goal". Type the goal. Pick "Full flywheel".
-# The flywheel runs /brainstorming, generates a plan via 3 parallel
-# planners (Claude plus two Pi panes on frontier models you pick),
-# splits it into beads, and asks you to approve.
+# 3. Polish the bead graph (up to 6 rounds / 2 zero-change rounds) + run bv robot triage
+node skills/agent-flywheel/scripts/fw-call.mjs flywheel_approve_beads \
+  '{"cwd":".","action":"converge-polish","round":1,"changesMade":0}'
 
-# After approval, if another Mac on your network answers SSH (a
-# MacBook Air, say), it asks where the swarm runs. On that Mac the
-# panes work in a clone, and each wave's commits, bead closes, and
-# completion reports sync back before the wave is verified.
-# Then it asks which models the Pi panes run, and
-# spawns the swarm (ntm for cc, tmux panes for Pi, and Pi panes on
-# gemini-4-argon for the Gemini lane; the gemini CLI never runs):
-node mcp-server/dist/scripts/swarm-spawn.js agent-flywheel --label impl \
-  --cc=2 --pi=2 --pi-model=<provider>/<model> --gmi=2
+# 4. Spawn a mixed-model NTM swarm (Claude Opus + Pi GLM-5.3 / Muse-Spark + Antigravity lane)
+node mcp-server/dist/scripts/swarm-spawn.js my-project --label impl \
+  --cc=2:opus --pi=2 --pi-model=zai/glm-5.3 --agy=1:pro
 
-# Each pane gets a marching-orders message via Agent Mail. The
-# tender daemon nudges stalled panes. When all beads close,
-# `flywheel_review` spawns 5 fresh-eyes reviewers per risky bead
-# (or 2-agent adversarial duel for p0 / security-path beads).
+# 5. Supervise in-flight panes with the tender daemon (nudges stalled panes, tracks heartbeats)
+node mcp-server/dist/scripts/tender-daemon.js \
+  --session=my-project--impl --cwd="$PWD" --project-key="$PWD" --coordinator=BlueLake &
 
-# Wrap-up commits CHANGELOG entries, bumps the version, rebuilds
-# dist/, and writes a postmortem entry to docs/solutions/.
+# 6. Stamp SHA/patch-id-coupled verification onto each closed bead (.pi-flywheel/ledger.tsv)
+node skills/agent-flywheel/scripts/fw-call.mjs flywheel_approve_beads \
+  '{"cwd":".","action":"verify-bead","beadId":"my-project-abc","verdict":"verified","baseSha":"ec96fc1","headSha":"fe4b4be"}'
+
+# 7. Advance the wave (gates on CompletionReportSchemaV1 + patch-id verification in Poteto mode)
+node skills/agent-flywheel/scripts/fw-call.mjs flywheel_advance_wave \
+  '{"cwd":".","completedBeadIds":["my-project-abc"]}'
+
+# 8. Run cross-agent peer review (picks a model family different from the implementer's)
+node skills/agent-flywheel/scripts/fw-call.mjs flywheel_review \
+  '{"cwd":".","action":"cross-agent","beadId":"my-project-abc"}'
 ```
 
 ---
 
-## Design philosophy
+## Three Execution Tracks
 
-1. **State lives on disk; the server is stateless.** Every phase boundary writes `.pi-flywheel/checkpoint.json` atomically. The MCP server reads it and writes it; nothing else holds session state. Resume across machines, across `/clear`, across crashes.
+All three tracks share the same `.pi-flywheel/checkpoint.json` state, `br` bead graph, and NTM swarm dispatcher — you choose the rigor level per cycle from the `/start` menus:
 
-2. **One lever per commit.** Refactors land as isomorphism-preserving Edits (the `simplify-and-refactor-code-isomorphically` skill enforces this). Reviewers can bisect.
-
-3. **Every decision is a labeled question.** `AskUserQuestion` is the only sanctioned way to ask the user anything. No implicit "shall I proceed?" prose. No silent choices.
-
-4. **Multi-agent fan-out is mandatory through NTM.** Raw `Task`/`Agent` calls for fan-out, backgrounded shells, and `tmux split-window` are review-bounce conditions. NTM provides the canonical pane registry, Agent Mail integration, stuck-pane detection, and stagger.
-
-5. **Structured errors over string matching.** Every `flywheel_*` tool returns errors as tagged `FlywheelErrorCode` codes (36 of them) inside a Zod-validated envelope. The orchestrator branches on `result.data.error.code`, never on human-readable text.
-
-6. **Adversarial review at risky seams.** Discovery, planning, reality-check, and review can all be routed through `/dueling-idea-wizards`: two independent agents (Claude + Codex, optionally + Gemini) brainstorm separately, cross-score 0–1000, reveal, and synthesize. Beads created from a duel carry a `## Provenance` block downstream.
-
-7. **Completion is evidence-backed, not narrative.** Every closed bead writes a `CompletionReportSchemaV1` JSON file with UBS results, verify-command exitCodes, self-review summary, and bead-close verification. `flywheel_advance_wave` gates on it (Stage 1 warn-only by default; flip `FW_ATTESTATION_REQUIRED=1` for hard-block).
+| Seam | Standard Track | High-Stakes Duel Track | Poteto (`pstack`) Track (`poteto: true`) |
+|---|---|---|---|
+| **Pre-Plan** | Phase 0.5 `/brainstorming` + 4-question goal deepening | `/dueling-idea-wizards --mode=ideas` (2-agent 0–1000 cross-scoring) | `/why` (4 `preCodeResearch` areas) + `/interrogate` (`docs/specs/<slug>-interrogation.md`) + `/architect` (`docs/architecture/<slug>-adr.md` + `decisions.tsv`) |
+| **Plan (Step 5)** | `flywheel_plan(mode: "standard" \| "deep")` (Claude + 2 Pi planners) | `flywheel_plan(mode: "duel")` (`--mode=architecture` adversarial synthesis) | `flywheel_plan(mode: "deep", poteto: true, preCodeResearch)` + `scripts/check-plan.mjs` |
+| **Beads (Step 6)** | `br create` + `flywheel_approve_beads(action: "start")` | Beads carry `## Provenance` (scores, surviving critique, steelman) | Every bead carries `Verify, unit / live / perf` triad (`scripts/check-bead-verify.mjs`) + `converge-polish` loop |
+| **Wave Gate (Step 7)** | `CompletionReportSchemaV1` (`ubs`, `verify[]`, `selfReview`) | Same + provenance context injected into implementer prompt | Hard-gates `flywheel_advance_wave` on `git patch-id --stable` verdict in `.pi-flywheel/ledger.tsv` (`verification_missing`, `verification_failed`, `verification_sha_drift`) |
+| **Review (Step 8)** | 5-agent fresh-eyes (`hit-me`) + `converge` loop | 2-agent adversarial duel (`--mode=security\|reliability`) | `cross-agent` decorrelated model-family review + `/interrogate` (Code Judo, Lead Judgment, Comment Sicko) |
 
 ---
 
-## What's new in v3.26.0 (2026-10-21)
+## Design Philosophy
 
-- **Antigravity (`agy`) mirror port & `flywheel_emit_agy`.** `scripts/sync-agy.sh` and `flywheel_emit_agy({ cwd, targetDir, mode: "check" | "write" | "prune" })` emit the Antigravity plugin under `~/.gemini/antigravity/plugins/agent-flywheel` from `agy/manifest.json` and validate with `agy plugin validate --strict --json`. Includes `AntigravityAdapter`, `ratioByLane: { cc, pi, gmi, agy }`, `--agy=N[:model[:effort]]` swarm lane validation, and the `agy_cli`, `agy_port_sync`, and `pstack_plugin` doctor checks (`docs/agy.md`).
-- **Poteto (`pstack`) mode & SHA-coupled verification ledger.** `flywheel_plan({ poteto: true, preCodeResearch })` gates planning on pre-code interrogation (`docs/specs/<slug>-interrogation.md`), ADR (`docs/architecture/<slug>-adr.md`), and the 4 `preCodeResearch` areas. Vendored Hybrid Core-6 `pstack` skills (`poteto-mode`, `interrogate`, `architect`, `plan`, `verify`, `why` + `references/`), `scripts/check-plan.mjs`, and `scripts/check-bead-verify.mjs` enforce the Plan Verification Triad (`Verify, unit / live / perf`). `flywheel_approve_beads(action: "verify-bead")` stamps `git patch-id --stable`-coupled verdicts into `.pi-flywheel/completion/<beadId>.json` and `.pi-flywheel/ledger.tsv`, enforced at wave boundaries by `flywheel_advance_wave`.
-- **Complete Flywheel Guide convergence & cross-agent review loops.** `bv-runner.ts` wires `bv --robot-triage|next|plan|insights`, `flywheel_approve_beads(action: "converge-polish")` tracks multi-round bead polish convergence, and `flywheel_review(action: "converge" | "cross-agent")` drives fresh-eyes convergence and decorrelated cross-family peer review with self-annealing CASS rule drafts.
-
-## What's new in v3.18.0 (2026-05-15)
-
-The reality-check hardening release. A self-driven reality check ran the full `/agent-flywheel:start → Reality check → Full pipeline` loop and closed 19 gap-closure beads with a 4-pane all-cc swarm. Highlights are the rule changes and lint/remediate gates that prevent the same drift class from re-emerging.
-
-- **NTM pane priority — canonical mixed `cc:cod:gem` 1:1:1.** AGENTS.md, `_inflight_prompt.md`, `_reality_check.md`, `SKILL.md`, `_implement.md`, `_planning.md`, and `_deslop.md` all reconciled to the single rule with a documented substitution ladder (`gmi → cod → pi → cc`). Supersedes the v3.12.0 cod-first rule and the older pi-first remnants. (claude-orchestrator-ao9u + 2gno + 2dcn + 1ogv + 3ihi)
-- **`PANE001` lint rule.** New `mcp-server/src/lint/rules/pane001.ts` parses AGENTS.md for the canonical pane-priority block and flags any skill body that disagrees. Severity is `warn` for one release cycle (matches the existing `RESERVE001` rollout) before promoting to `error`. CI runs it via the existing `lint:skill` job. (claude-orchestrator-34ok)
-- **`flywheel_remediate codex_config_compat` handler.** The doctor check was already flagging `~/.codex/config.toml` with `model = "gpt-5*"` as ChatGPT-account-incompatible; the remediate dispatch entry was `null`. Now there's a `buildPlan / execute / verifyProbe` handler that comments out the offending line with a millisecond-precision timestamped backup, default `dry_run` mode. (claude-orchestrator-3s58)
-- **`gemini_model_compat` doctor check (sweep count 21 → 22).** New check probes Gemini CLI's reachable model against an allowlist (currently `{gemini-3.1-flash-preview, ...}` per `mcp-server/src/model-detection.ts`). Surfaces yellow when the CLI is pinned to an unsupported model so the pre-flight gate (below) downgrades the `--gmi` lane before crash. (claude-orchestrator-37n6)
-- **Pre-flight model-config gate before `--cod` / `--gmi` spawns.** Every pre-flight in `_inflight_prompt.md`, `_implement.md`, `_planning.md`, `_reality_check.md`, `_deslop.md` now checks `codex_config_compat` + `gemini_model_compat` and downgrades the affected lane (`--cod=N → 0, bump --cc by N`; same for `--gmi`) with a one-line warning instead of crashing on the first pane spawn. Fixes the 2026-05-15 `gpt-5.5-xhigh` 400 crash. (claude-orchestrator-2wcd)
-
-Also: Step 0c now surfaces **yellow** doctor checks above the menu (was red-only); README sweep-count + skill-count drift reconciled; two stale `docs/skill-refine-*-proposed.md` proposal docs archived to `docs/archive/` with disposition tables.
-
-## What's new in v3.17.0 (2026-05-14)
-
-The fresh-eyes auto-trigger release. During long implementation runs, the coordinator fires an automatic fresh-eyes review when commits accumulate past a configurable threshold — catching issues mid-wave instead of waiting for the post-wave gate. Blocking verdicts auto-synthesize beads from each finding (all severities) and surface a four-option Approve/Reject gate so the operator stays in control.
-
-- **Commit-batch counter + threshold.** New `state.commitBatchCounter`, `commitBatchThreshold`, `lastBatchReviewSha`, `batchReviewSynthesizedBeads` fields on `FlywheelState`. Default threshold `8` (env: `FW_COMMIT_BATCH_THRESHOLD`; Pre-flight `AskUserQuestion` offers Off / 5 / 8 / 12). `0` or unset preserves v3.16.0 behavior — fully opt-in.
-- **`flywheel_advance_wave` returns `batch_review_due`.** When the threshold is crossed, the tool returns `{ nextStep: { kind: "batch_review_due", reviewSha, lastBaselineSha }, waveComplete: false }` INSTEAD of `nextWave`, gating the next dispatch on the review verdict. Baseline advances at dispatch time so in-flight commits during review don't double-trigger.
-- **`flywheel_review` `action: "batch_review"` + synthesized beads.** New action dispatches the fresh-eyes prompt via NTM `--robot-send` (reusing warm context) or Agent fallback. Persists verdict to `.pi-flywheel/batch-reviews/<sha-range>.json`. Blocking verdicts auto-synthesize beads (all severities — low/medium/high/critical) tagged `auto-batch-review`, with well-defined partial-rollback semantics. Malformed `Finding[]` falls back to `needs_attention` mode + records a CASS note.
-- **`mcp-server/src/commit-batch.ts`.** Five pure-ish helpers: `countCommitsSinceLastBatchReview`, `shouldTriggerBatchReview`, `recordBatchReview`, `synthesizeBeadsFromFindings`, `rollbackSynthesizedBeads` — all inputs Zod-validated via `FindingSchema` + `BatchReviewVerdictSchema`.
-- **`buildFreshEyesPrompt(opts)` extracted from `gates.ts`.** Both `runGuidedGates` and the new `batch_review` action call this. With `opts.emitStructuredFindings === true`, the prompt appends a `STRUCTURED FINDINGS REQUIRED` JSON contract.
-
-Earlier highlights: noob-onboarding installers + tutorial-bead + `projects_base_misconfig` doctor check (v3.16.0) · duel-winner runtime safety: `flywheel_observe`, Completion Evidence Attestation Stage 1, `reserveOrFail` + `RESERVE001` lint rule (v3.15.0) · `flywheel_doctor` (v3.4) · bead templates with effort tiers (v3.4) · `flywheel_remediate` one-tap doctor fixes (v3.7) · `flywheel_calibrate` per-template duration aggregator (v3.7) · `flywheel_get_skill` bundled skill loader with 4-layer drift defense (v3.7) · read-only bead-graph viewer with cycle highlighting (v3.7).
+1. **State lives on disk; the server is stateless.** Every phase boundary writes `.pi-flywheel/checkpoint.json` atomically. Resume across machines, across `/clear`, and across process restarts without losing your place.
+2. **Every decision is a labeled question.** `AskUserQuestion` (`ask_question` in Antigravity) is the only sanctioned way to ask the user anything. No implicit *"shall I proceed?"* prose; no silent defaults.
+3. **Multi-agent fan-out goes through NTM + Agent Mail.** Raw `Task`/`Agent` fan-out loops, backgrounded `&` shells, and raw `tmux split-window` calls are blocked by review and lint rules (`PANE001`, `RESERVE001`). NTM owns the pane lifecycle; Agent Mail owns file reservations.
+4. **Structured errors over string matching.** Every `flywheel_*` tool returns errors as one of **43 typed `FlywheelErrorCode` values** inside a Zod-validated envelope. The coordinator branches on `result.structuredContent.data.error.code`, never on prose.
+5. **Verification is SHA-coupled, not narrative.** In Poteto mode (`potetoMode: true` or `FW_VERIFICATION_REQUIRED=1`), a bead cannot advance the wave until `flywheel_approve_beads(action: "verify-bead")` records a `verified` verdict tied to the commit range's `git patch-id --stable`. Rebasing preserves the verdict; editing a file invalidates it (`verification_sha_drift`).
+6. **Decorrelated models catch correlated blind spots.** Deep planning fans out across Claude (`correctness`) and two frontier Pi models (`ergonomics`, `robustness`). `flywheel_review(action: "cross-agent")` routes review to a model family different from the implementer's and drafts a self-annealing CASS rule on rejection.
 
 ---
 
-## Install
+## How `agent-flywheel` Compares
 
-**macOS / Linux:**
+| Capability | `agent-flywheel` (v3.26.0) | Raw Claude Code / AGY | Aider / Cline | SWE-agent / OpenHands |
+|---|---|---|---|---|
+| **Resumable across sessions** | ✅ Atomic `.pi-flywheel/checkpoint.json` | ❌ Context-window bound | ⚠️ Chat history only | ⚠️ Container-bound |
+| **Multi-model parallel swarm** | ✅ NTM (`cc` + `pi` + `gmi` + `agy` panes) | ❌ Single-session | ❌ Single-session | ❌ Single-agent |
+| **File-conflict prevention** | ✅ Agent Mail `reserveOrFail` + pre-commit guard | ❌ None | ❌ None | ❌ None |
+| **Pre-code spec & ADR gates (`pstack`)** | ✅ `/why` + `/interrogate` + `/architect` | ❌ None | ❌ None | ❌ None |
+| **SHA-coupled verification ledger** | ✅ `git patch-id --stable` in `ledger.tsv` | ❌ Narrative claims | ❌ Narrative claims | ⚠️ Test exit code only |
+| **Adversarial review & cross-family grading** | ✅ Duels + `cross-agent` + `flywheel_grade_outcome` | ❌ Self-review | ❌ None | ❌ None |
+| **Structured error contracts** | ✅ 43-code `FlywheelErrorCode` | ❌ Unstructured prose | ❌ Unstructured prose | ❌ Unstructured prose |
+| **Dependency graph triage** | ✅ `bv --robot-triage\|next\|plan\|insights` + Cytoscape | ❌ Flat todo list | ❌ None | ❌ None |
+| **Toolchain health & auto-remediation** | ✅ 27-check `flywheel_doctor` + `flywheel_remediate` | ❌ Manual | ❌ Manual | ❌ Manual |
+
+**When to use `agent-flywheel`:**
+- Multi-file features, refactors, ports, or architectural migrations that span 3–30+ beads across multiple waves.
+- High-stakes changes where you want adversarial 3-planner synthesis, pre-code interrogation (`pstack`), and cryptographic proof that every bead's diff was verified.
+- Multi-Mac setups where you want to offload a 6-pane swarm to a secondary Mac over SSH (`flywheel_swarm_host`).
+
+**When `agent-flywheel` might be overkill:**
+- A 5-line typo or one-file hotfix — use `/agent-flywheel:flywheel-fix` (fast path) or a direct edit instead of the full 6-phase loop.
+
+---
+
+## Installation
+
+### 1. One-Liner Installer (macOS / Linux / WSL2)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/burningportra/agent-flywheel-plugin/main/install.sh | bash
@@ -163,36 +177,46 @@ curl -sSL https://raw.githubusercontent.com/burningportra/agent-flywheel-plugin/
 iwr -useb https://raw.githubusercontent.com/burningportra/agent-flywheel-plugin/main/install.ps1 | iex
 ```
 
-**Verify the script before running** (recommended) — SHA-256 of the v3.16.0 release:
-
+**Verify installer checksums (optional):**
 - `install.sh` → `1ef009cdfc67edee0629d8edd6d7adad48d75e1440a9e298244a56cbf706153e`
 - `install.ps1` → `0e3883868133f7095477ffe96ede772c8e43604c2dd9b6b87089537f839e87db`
 
-The installer detects your OS + package manager, installs Claude Code + the required CLIs (`br`, `bv`, `cm`, `dcg`, `ntm`), starts the `agent-mail` HTTP service on `:8765`, and prints the three Claude Code commands you run to finish setup. Flags: `--noninteractive` (CI), `--skip-launch`, `--skip-mcp-register`, `--skip-agent-mail`. Log lands at `~/.agent-flywheel/install.log`.
+Flags: `--noninteractive` (CI), `--skip-launch`, `--skip-mcp-register`, `--skip-agent-mail`, `--with-opencode`. Logs write to `~/.agent-flywheel/install.log`.
 
-### First time?
+### 2. Manual Install (Homebrew + Claude Code Marketplace)
 
-After install, run `/agent-flywheel:start` — the flywheel detects fresh projects and offers a 5-min guided tour that runs a real micro-bead end-to-end (scan → plan → bead → implement → commit) so you see the loop fire once on real work. The tour is skippable and reversible (`Roll back` option at the end undoes the commit + removes the tutorial bead).
+```bash
+# 1. Install Claude Code & required CLIs
+brew install anthropic/cc/claude
+brew install burningportra/tap/{br,bv,cm,dcg,ntm,agent-mail}
 
-<details>
-<summary>Manual install (no curl|bash)</summary>
+# 2. Start the Agent Mail HTTP coordinator on :8765
+nohup am serve-http --port 8765 &
 
-1. **Claude Code:** `brew install anthropic/cc/claude` or `npm install -g @anthropic-ai/claude-cli`
-2. **Required CLIs:** `brew install burningportra/tap/{br,bv,cm,dcg,ntm}`
-3. **agent-mail:** `brew install burningportra/tap/agent-mail` then `nohup am serve-http --port 8765 &`
-4. **Inside Claude Code:**
-   ```
-   /plugin marketplace add burningportra/agent-flywheel-plugin
-   /plugin install agent-flywheel@agent-flywheel
-   /agent-flywheel:flywheel-setup
-   ```
+# 3. Inside Claude Code, install the plugin and run setup
+/plugin marketplace add burningportra/agent-flywheel-plugin
+/plugin install agent-flywheel@agent-flywheel
+/reload-plugins
+/agent-flywheel:flywheel-setup
+```
 
-`/agent-flywheel:flywheel-setup` runs the same detection + batch-install flow the curl|bash installer ends with, so you can pick this path if you prefer to read every step before it executes.
+### 3. Google Antigravity (`agy`) & OpenCode Ports
 
-</details>
+The repository is the single source of truth. Derived ports are generated and validated from manifest-owned sources (`agy/manifest.json` and `opencode/manifest.json`):
 
-<details>
-<summary>From source (contributors)</summary>
+```bash
+# Sync and validate the Antigravity (agy) plugin port (53 skills, 3 lifecycle hooks, rules/AGENTS.md <= 24 KB)
+bash scripts/sync-agy.sh --write
+bash scripts/sync-agy.sh --write --target ~/.gemini/config/plugins/agent-flywheel
+agy plugin validate ~/.gemini/antigravity/plugins/agent-flywheel --strict --json
+
+# Sync the OpenCode plugin port
+bash scripts/sync-opencode.sh --write
+```
+
+See **[docs/agy.md](docs/agy.md)** and **[docs/opencode.md](docs/opencode.md)** for full operator guides.
+
+### 4. From Source (Contributors)
 
 ```bash
 git clone https://github.com/burningportra/agent-flywheel-plugin.git
@@ -202,311 +226,314 @@ npm run build --prefix mcp-server
 claude --plugin-dir .
 ```
 
-After editing `mcp-server/src/`, rebuild with `npm run build --prefix mcp-server` and commit the updated `mcp-server/dist/` in the same PR. The `dist-drift` CI job enforces this.
+> **Note:** `mcp-server/dist/` and `mcp-server/dist/skills.bundle.json` are committed so the plugin runs immediately after install without a build step. After editing `mcp-server/src/` or `skills/`, run `npm run build --prefix mcp-server` and commit `mcp-server/dist/`.
 
-</details>
+### What Gets Installed
 
-### What gets installed
-
-| Tier | CLI | Purpose | Source |
+| Tier | CLI | Purpose | Upstream Repo |
 |---|---|---|---|
-| Required | `br` | Bead tracker (issue graph) | [Dicklesworthstone/beads_rust](https://github.com/Dicklesworthstone/beads_rust) |
-| Required | `bv` | Bead visualizer + dependency triage | [Dicklesworthstone/beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) |
-| Required | `agent-mail` | Multi-agent coordination over HTTP | [Dicklesworthstone/mcp_agent_mail_rust](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) (Rust port — primary; [Python build](https://github.com/Dicklesworthstone/mcp_agent_mail) still works on the same transport) |
-| Recommended | `ntm` | Parallel tmux-pane orchestration (tmux-based — Linux/macOS/WSL2 only) | [Dicklesworthstone/ntm](https://github.com/Dicklesworthstone/ntm) |
-| Recommended | `dcg` | Destructive-command guard | [Dicklesworthstone/destructive_command_guard](https://github.com/Dicklesworthstone/destructive_command_guard) |
-| Recommended | `cass` | Session search across past agent runs | [Dicklesworthstone/coding_agent_session_search](https://github.com/Dicklesworthstone/coding_agent_session_search) |
-| Recommended | `cm` | Persistent CASS memory | [Dicklesworthstone/cass_memory_system](https://github.com/Dicklesworthstone/cass_memory_system) |
-
-Prerequisites: [Claude Code](https://github.com/anthropics/claude-code) (latest) and Node.js ≥ 20. On native Windows, `ntm` is unavailable (tmux-only) — the installer surfaces a WSL2 recommendation for full parallel-swarm features; the auto-swarm path falls back to sequential `Agent()` dispatch otherwise.
-
-### OpenCode (derived / preview)
-
-agent-flywheel is a Claude Code plugin first — an **OpenCode port** is generated from the same repo sources by `scripts/sync-opencode.sh`. It's a derived artifact: the repo stays the source of truth, so you re-run the sync after repo updates instead of hand-editing the installed OpenCode files. From a full checkout, walk `scripts/sync-opencode.sh --check` → `--dry-run` → `--write` (or `install.sh --with-opencode`). See **[docs/opencode.md](docs/opencode.md)** for prerequisites, the ownership boundary, first run, and troubleshooting. Preview status: v1 ships the sync toolchain plus a Claude-ism stale-report; semantic tool-call translation lands in v2.
+| **Required** | `br` | Bead tracker (graph issue tracker + ready-frontier) | [Dicklesworthstone/beads_rust](https://github.com/Dicklesworthstone/beads_rust) |
+| **Required** | `bv` | Bead visualizer + `--robot-triage\|next\|plan\|insights` | [Dicklesworthstone/beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) |
+| **Required** | `agent-mail` (`am`) | Multi-agent HTTP coordination + file reservations (`:8765`) | [Dicklesworthstone/mcp_agent_mail_rust](https://github.com/Dicklesworthstone/mcp_agent_mail_rust) |
+| **Recommended** | `ntm` | Named-tmux-manager for parallel multi-model swarms | [Dicklesworthstone/ntm](https://github.com/Dicklesworthstone/ntm) |
+| **Recommended** | `pi` | Multi-provider coding agent CLI (Vercel AI Gateway, Z.ai, xAI, Meta) | `@mariozechner/pi-coding-agent` |
+| **Recommended** | `agy` | Google Antigravity CLI (`agy plugin validate`, `--agy` lane) | Google Antigravity (`agy` ≥ 1.4) |
+| **Recommended** | `dcg` | Destructive-command guard | [Dicklesworthstone/destructive_command_guard](https://github.com/Dicklesworthstone/destructive_command_guard) |
+| **Recommended** | `cass` / `cm` | Episodic transcript search + persistent procedural memory | [Dicklesworthstone/cass_memory_system](https://github.com/Dicklesworthstone/cass_memory_system) |
 
 ---
 
-## Quick start
+## Quick Start
 
-```
-/agent-flywheel:start
-```
+1. **Launch the flywheel** in your repository:
+   ```text
+   /agent-flywheel:start
+   ```
+   *(First time in a repo? The flywheel offers a skippable, reversible 5-minute guided tour that runs one micro-bead end-to-end.)*
+2. **Inspect the pre-flight banner**: Step 0 runs `flywheel_doctor`, `flywheel_observe`, and `flywheel_profile` in parallel (~1.5s) and displays branch, bead counts, Agent Mail, NTM swarm ratio (`cc:pi 2:4`), and any non-green checks.
+3. **Pick your entry path** via `AskUserQuestion`:
+   - **Scan & discover** → profile the repo and generate ranked improvement ideas (`Standard`, `Deep`, or `Duel`).
+   - **Set a goal** → 4-question professional depth pass → Phase 0.5 `/brainstorming` → 3-agent Deep Plan (`Standard`, `Ambitious`, or `Poteto pstack`).
+   - **Approve beads & launch swarm** → polish bead graph (`converge-polish`), choose Pi/Claude implementer models, and dispatch waves through NTM.
+4. **Review & wrap up** → verify completion attestations (`flywheel_verify_beads`), run compliance audit (`flywheel_compliance_audit`), grade against the cycle rubric (`flywheel_grade_outcome`), audit `.pi-flywheel/ledger.tsv`, bump version, and store learnings to CASS (`docs/solutions/`).
 
-The flywheel will:
-1. Print a banner with version, branch, bead counts, Agent-Mail and NTM status.
-2. Run a 2-second `flywheel_doctor` smoke check.
-3. Show a state-aware menu (resume / fresh-start / open-beads).
-4. Route through scan → discover → plan → implement → review based on your pick.
+### Diagnostic Triage Chain
 
-Stuck? Run the diagnostic triage chain:
-
-| Order | Command | Role | Run when |
+| Order | Command | Role | When to Run |
 |---|---|---|---|
-| 1 | `/agent-flywheel:flywheel-doctor` | Read-only snapshot, 24 checks, ~2s | First — always safe |
-| 2 | `/agent-flywheel:flywheel-setup` | Apply fixes (install / register / configure) | Only if doctor is yellow / red |
-| 3 | `/agent-flywheel:flywheel-healthcheck` | Deep periodic audit (codebase + dep graph) | Periodically; not for setup problems |
+| **1** | `/agent-flywheel:flywheel-doctor` | Read-only 27-check sweep (~1.5s) | First — always safe, never mutates |
+| **2** | `/agent-flywheel:flywheel-setup` | Interactive prerequisite installer & `flywheel_remediate` runner | When doctor surfaces yellow or red checks |
+| **3** | `/agent-flywheel:flywheel-healthcheck` | Deep periodic audit (codebase + dependency + bead graph) | Periodically across long-lived projects |
 
 ---
 
-## Command reference
+## Command & MCP Tool Reference
 
-| Command | Description |
-|---|---|
-| `/agent-flywheel:start` | Full flywheel: scan → plan → implement → review |
-| `/agent-flywheel:flywheel-stop` | Stop session and reset state |
-| `/agent-flywheel:flywheel-status` | Bead progress, inbox messages, next steps |
-| `/agent-flywheel:flywheel-setup` | Check and install prerequisites |
-| `/agent-flywheel:flywheel-cleanup` | Remove orphaned git worktrees |
-| `/agent-flywheel:flywheel-swarm` | Launch parallel swarm of implementation agents |
-| `/agent-flywheel:flywheel-swarm-status` | Swarm health and agent messages |
-| `/agent-flywheel:flywheel-swarm-stop` | Stop all swarm agents |
-| `/agent-flywheel:flywheel-research` | Deep research on an external GitHub repo |
-| `/agent-flywheel:flywheel-drift-check` | Has the code drifted from the plan? |
-| `/agent-flywheel:flywheel-rollback` | Roll back a completed bead |
-| `/agent-flywheel:flywheel-fix` | Fast-path targeted fix (no full flywheel) |
-| `/agent-flywheel:flywheel-audit` | 4-agent codebase audit (bugs/security/tests/dead code) |
-| `/agent-flywheel:flywheel-scan` | Targeted scan of specific paths or concerns |
-| `/agent-flywheel:flywheel-refine-skills` | Improve all skills from session evidence |
-| `/agent-flywheel:flywheel-refine-skill` | Refine a specific skill |
-| `/agent-flywheel:flywheel-tool-feedback` | Submit feedback on agent-flywheel behavior |
-| `/agent-flywheel:flywheel-healthcheck` | Full dependency and codebase health check |
-| `/agent-flywheel:flywheel-doctor` | One-shot diagnostic of toolchain dependencies |
-| `/agent-flywheel:flywheel-duel` | State-aware adversarial duel — wraps `/dueling-idea-wizards` |
-| `/agent-flywheel:flywheel-reality-check` | Gap analysis: AGENTS.md / README / plan vs actual code |
-| `/agent-flywheel:flywheel-speedup` | Make something fast: profile, optimize in place or re-architect behind the same API, canary with auto-rollback |
-| `/agent-flywheel:memory` | Search or store CASS long-term memory |
-| `npm run bead-viewer` | Open the read-only bead-graph viewer (Cytoscape, `127.0.0.1`) |
+### Slash Commands (`commands/*.md` / `cmd-*` skills in `agy`)
 
-### High-stakes track
-
-The flywheel surfaces `/dueling-idea-wizards` as one extra row in the menus you already see when running `/agent-flywheel:start`:
-
-| Seam | Trigger | What happens |
+| Command | Description | Example |
 |---|---|---|
-| **Discover** (Step 3) | "Duel" row in the depth menu | Two agents independently brainstorm 5 ideas each, cross-score 0–1000, reveal, synthesize. Consensus winners + contested ideas land in the goal-selection menu with provenance attached. |
-| **Plan** (Step 5) | "Duel plan" row in the plan-mode menu | `--mode=architecture`. The synthesized plan goes into `docs/plans/<date>-<slug>-duel.md` with an "Adversarial review" section. |
-| **Reality check** | "Duel reality-check" row in `/flywheel-reality-check` | Two agents independently produce gap reports vs. AGENTS.md / README / plans, cross-rate severity. Consensus gaps become beads; contested gaps surface to you. |
-| **Review** (Step 9) | Auto-routed for risky beads (p0, security path, breaking change) | `--mode=security|reliability`. Non-risky beads keep the standard 5-agent fresh-eyes review. |
+| `/agent-flywheel:start` | Start or resume the full 6-phase coding flywheel | `/agent-flywheel:start` |
+| `/agent-flywheel:flywheel-doctor` | 27-check read-only diagnostic of every dependency and port | `/agent-flywheel:flywheel-doctor` |
+| `/agent-flywheel:flywheel-setup` | Install/configure missing prerequisites and run remediations | `/agent-flywheel:flywheel-setup` |
+| `/agent-flywheel:flywheel-status` | Show current phase, bead progress, and Agent Mail inbox | `/agent-flywheel:flywheel-status` |
+| `/agent-flywheel:flywheel-swarm` | Launch a parallel NTM swarm on ready beads | `/agent-flywheel:flywheel-swarm` |
+| `/agent-flywheel:flywheel-swarm-status` | Inspect running swarm panes, heartbeats, and bead status | `/agent-flywheel:flywheel-swarm-status` |
+| `/agent-flywheel:flywheel-swarm-stop` | Gracefully stop swarm panes and release file reservations | `/agent-flywheel:flywheel-swarm-stop` |
+| `/agent-flywheel:flywheel-duel` | Run a state-aware `/dueling-idea-wizards` adversarial duel | `/agent-flywheel:flywheel-duel` |
+| `/agent-flywheel:flywheel-reality-check` | Vision-vs-code gap analysis (`AGENTS.md` / `README.md` / plans vs code) | `/agent-flywheel:flywheel-reality-check` |
+| `/agent-flywheel:flywheel-speedup` | Profile, freeze e2e behavior, optimize or re-architect, and canary under load | `/agent-flywheel:flywheel-speedup` |
+| `/agent-flywheel:flywheel-audit` | 4-agent parallel audit for bugs, security, test gaps, and dead code | `/agent-flywheel:flywheel-audit` |
+| `/agent-flywheel:flywheel-fix` | Fast-path targeted fix without running the full 6-phase ceremony | `/agent-flywheel:flywheel-fix fix null check in parser` |
+| `/agent-flywheel:flywheel-drift-check` | Check whether implementation has drifted from the active plan | `/agent-flywheel:flywheel-drift-check` |
+| `/agent-flywheel:flywheel-rollback` | Revert a completed bead's commits and reopen the bead | `/agent-flywheel:flywheel-rollback <bead-id>` |
+| `/agent-flywheel:flywheel-cleanup` | Prune orphaned git worktrees and flag stale `WIZARD_*.md` files | `/agent-flywheel:flywheel-cleanup` |
+| `/agent-flywheel:flywheel-compound-refresh` | Sweep `docs/solutions/` to Keep / Update / Consolidate / Replace learnings | `/agent-flywheel:flywheel-compound-refresh` |
+| `/agent-flywheel:flywheel-research` | Deep architectural research on an external GitHub repository | `/agent-flywheel:flywheel-research owner/repo` |
+| `/agent-flywheel:flywheel-scan` | Targeted scan of specific paths or concerns | `/agent-flywheel:flywheel-scan src/auth` |
+| `/agent-flywheel:flywheel-refine-skill` | Refine a specific skill from session evidence | `/agent-flywheel:flywheel-refine-skill start` |
+| `/agent-flywheel:flywheel-refine-skills` | Review and refine all loaded skills from session evidence | `/agent-flywheel:flywheel-refine-skills` |
+| `/agent-flywheel:flywheel-bead-viewer` | Launch the local Cytoscape bead-graph viewer (`http://127.0.0.1`) | `/agent-flywheel:flywheel-bead-viewer` |
+| `/agent-flywheel:flywheel-stop` | Stop the active flywheel session and reset checkpoint state | `/agent-flywheel:flywheel-stop` |
 
-Pre-conditions: ntm + ≥ 2 of {cc, cod, gmi} healthy (run `/flywheel-doctor` to verify). Cost: ~20–55 min per duel.
+### MCP Tools (`25 flywheel_* tools`)
+
+If the MCP server is not mounted directly in your harness, call any tool via the bundled stdio helper [`skills/agent-flywheel/scripts/fw-call.mjs`](skills/agent-flywheel/scripts/fw-call.mjs):
+
+```bash
+node skills/agent-flywheel/scripts/fw-call.mjs <tool_name> '<json_args>' [--data | --text | --full]
+```
+
+| Tool | Purpose & Key Actions |
+|---|---|
+| `flywheel_profile` | Repo profile with git-HEAD-keyed cache (`.pi-flywheel/profile-cache.json`). Always call first. |
+| `flywheel_observe` | Single-call session snapshot (`git`, `checkpoint`, `beads`, `agentMail`, `ntm`, `recentPlans`, `topErrorCodes`, `attestations`). |
+| `flywheel_doctor` | 27-check health sweep + `preflightBanner` + `report.swarm` (`label`, `spawnFlags`, `ratioByLane`). |
+| `flywheel_remediate` | One-tap canonical fix for failing doctor checks (`agent_mail_liveness`, `agy_port_sync`, `checkpoint_validity`, `cli_binary`, `codex_config_compat`, `dist_drift`, `mcp_connectivity`, `orphaned_worktrees`). |
+| `flywheel_discover` | Surface ranked improvement ideas after a profile pass. |
+| `flywheel_select` | Set `selectedGoal`, compute `goalSlug`, and transition to planning. |
+| `flywheel_pi_models` | `action: "list" \| "choose"` — probe reachable Pi models + Vercel AI Gateway catalog and persist per-role picks. |
+| `flywheel_plan` | `mode: "standard" \| "deep" \| "duel"`, `ambition: "standard" \| "ambitious"`, `poteto?: boolean`, `preCodeResearch?: {...}`. |
+| `flywheel_convergence` | Read-only multi-signal plan convergence score + B6 oscillation detection. |
+| `flywheel_synthesize_rubric` | `action: "synthesize" \| "validate" \| "edit" \| "regenerate" \| "skip"` — manage `.pi-flywheel/plans/<slug>/rubric.md`. |
+| `flywheel_approve_beads` | `action: "start" \| "polish" \| "reject" \| "advanced" \| "git-diff-review" \| "remediate" \| "converge-polish" \| "verify-bead"`. |
+| `flywheel_swarm_host` | `action: "list" \| "choose" \| "sync" \| "release"` — offload NTM swarms to another Mac over SSH + rsync. |
+| `flywheel_advance_wave` | Close completed wave, enforce Stage-1 attestation + Poteto SHA/patch-id verification gates, surface `nextWave[]`. |
+| `flywheel_verify_beads` | Reconcile closed beads against git commits and validate `.pi-flywheel/completion/<id>.json`. |
+| `flywheel_compliance_audit` | Audit closed beads against plan requirements (`threshold: 700`); auto-reopens false-closed beads. |
+| `flywheel_review` | `action: "hit-me" \| "looks-good" \| "skip" \| "report" \| "batch_review" \| "converge" \| "cross-agent"`. |
+| `flywheel_grade_outcome` | Spawn decorrelated grader (`codex` primary, fresh-CC fallback) against `rubric.md` and persist verdict JSON. |
+| `flywheel_rescue` | Build a Codex rescue packet (`plan` / `implement` / `review` stall recovery) and log to CASS. |
+| `flywheel_memory` | `operation: "search" \| "store" \| "draft_postmortem" \| "draft_solution_doc" \| "refresh_learnings"`. |
+| `flywheel_calibrate` | Aggregate closed bead durations by `Template: <id>` and write `.pi-flywheel/calibration.json`. |
+| `flywheel_get_skill` | Serve any of the 58 bundled skills or `references/*.md` bodies in one MCP round-trip (`skills.bundle.json`). |
+| `flywheel_emit_agy` | `mode: "check" \| "write" \| "prune"` — run `scripts/sync-agy.sh --json` to sync/validate the Antigravity plugin port. |
+| `flywheel_emit_codex` | Emit `AGENTS.md` and `.codex/skills/*.md` inside `cwd`. |
+| `flywheel_capabilities` | Introspect required/optional input fields and enum values for any `flywheel_*` tool. |
+| `flywheel_robot_docs` | Machine-readable tool schemas, error catalog, and workflow graph for autonomous callers. |
 
 ---
 
 ## Configuration
 
-### Environment variables
+### Environment Variables
 
-| Var | Default | Effect |
+| Variable | Default | Effect |
 |---|---|---|
-| `FW_LOG_LEVEL` | `warn` | `debug` / `info` / `warn` / `error`. Logs are JSON-per-line on stderr. |
-| `FW_ATTESTATION_REQUIRED` | unset (warn-only) | `=1` flips Stage 1 completion-attestation gate to hard-block. |
-| `FW_SKILL_BUNDLE` | on | `=off` bypasses the bundled skills loader (forces disk reads — useful when editing skills live). |
-| `ORCH_LOG_LEVEL` | `warn` | Same as `FW_LOG_LEVEL`; legacy alias. |
+| `FW_LOG_LEVEL` | `warn` | `debug` / `info` / `warn` / `error`. Writes structured JSON lines to stderr only. |
+| `FW_ATTESTATION_REQUIRED` | unset (warn-only) | `=1` flips Stage 1 completion-attestation gate in `flywheel_advance_wave` to hard-block (`attestation_missing`, `attestation_invalid`). |
+| `FW_VERIFICATION_REQUIRED` | unset (enabled automatically when `potetoMode: true`) | `=1` requires a `git patch-id --stable`-coupled `verified` verdict in `.pi-flywheel/ledger.tsv` before `flywheel_advance_wave` advances (`verification_missing`, `verification_failed`, `verification_sha_drift`). |
+| `FW_COMMIT_BATCH_THRESHOLD` | `8` | Number of commits before `flywheel_advance_wave` triggers an automatic mid-wave fresh-eyes `batch_review` (`0` disables). |
+| `FW_SKILL_BUNDLE` | `on` | `=off` bypasses `mcp-server/dist/skills.bundle.json` and reads `skills/` directly from disk. |
 
-### flywheel.config.yaml
+### `flywheel.config.yaml`
 
-The flywheel reads `~/.config/agent-flywheel/flywheel.config.yaml` (or `$XDG_CONFIG_HOME/agent-flywheel/`), then `flywheel.config.yaml` at the repo root, and a key set in the repo file wins. To keep a CLI you don't use out of every swarm, switch its lane off:
+Reads `~/.config/agent-flywheel/flywheel.config.yaml`, then `./flywheel.config.yaml` at the repo root (repo keys win):
 
 ```yaml
+# Disable any CLI lane you don't use; its share moves down the substitution ladder (gmi -> pi -> cod -> cc)
 lanes:
-  gemini: false   # Gemini's share goes to Pi; codex and pi take the same switch
+  gemini: false
+  codex: true
+  pi: true
+  agy: true
 ```
 
-A switched-off lane's share moves down the substitution ladder without a degraded-swarm warning, and `/flywheel-doctor` shows it as disabled rather than missing.
-
-### Runtime files
-
-| Path | Purpose |
-|---|---|
-| `.pi-flywheel/checkpoint.json` | Atomic session state. Never edit directly — use `flywheel_*` tools. |
-| `.pi-flywheel/error-counts.json` | Telemetry spool for `FlywheelErrorCode` aggregation. |
-| `.pi-flywheel/completion/<beadId>.json` | Per-bead completion attestation (v3.15.0+). |
-| `.pi-flywheel/profile-cache.json` | Repo-profile cache, keyed on git HEAD. |
-| `.pi-flywheel/tender-events.log` | Tender-daemon event log (NDJSON). |
-| `.pi-flywheel/pi-models.json` | The Pi models you last picked per role. |
-| `.pi-flywheel/cache/pi-route-probes.json` | Which models your Pi logins can run, rechecked daily. A swarm host's probes go in `pi-route-probes.<host>.json`. |
-| `.pi-flywheel/swarm-host.json` | The Mac this checkout's swarm runs on, while one is chosen. `flywheel_swarm_host` writes and removes it. |
-| `~/.config/agent-flywheel/swarm-hosts.json` | Macs you ran a swarm on before, so they show up even when Bonjour misses them. |
-| `docs/plans/` | Plan artifacts from deep-plan + duel-plan sessions. |
-| `docs/duels/` | Duel synthesis reports. |
-| `docs/solutions/` | Distilled session learnings (durable memory). |
-
-### .mcp.json
+### `.mcp.json` (Claude Code) & `mcp_config.json` (Antigravity `agy`)
 
 ```json
 {
-  "agent-mail": {
-    "type": "http",
-    "url": "http://127.0.0.1:8765/mcp"
-  },
-  "agent-flywheel": {
-    "type": "stdio",
-    "command": "node",
-    "args": ["./mcp-server/dist/server.js"]
+  "mcpServers": {
+    "agent-mail": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    },
+    "agent-flywheel": {
+      "command": "node",
+      "args": ["/absolute/path/to/agent-flywheel-plugin/mcp-server/dist/server.js"],
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "/absolute/path/to/agent-flywheel-plugin"
+      }
+    }
   }
 }
 ```
 
-Do not use `"type": "sse"` or `"type": "url"` for agent-mail — use `"http"`.
+### Runtime State Files
+
+| Path | Purpose |
+|---|---|
+| `.pi-flywheel/checkpoint.json` | Atomic session state (`phase`, `selectedGoal`, `potetoMode`, `preCodeResearch`, `activeBeadIds`, `polishRound`, `reviewConvergence`). Never edit by hand. |
+| `.pi-flywheel/completion/<beadId>.json` | Per-bead `CompletionReportSchemaV1` attestation (`ubs`, `verify[]`, `selfReview`, `beadClosedVerified`, and optional `verification` patch-id block). |
+| `.pi-flywheel/ledger.tsv` | Append-only TSV verification ledger (`recorded_at`, `bead_id`, `verdict`, `base_sha`, `head_sha`, `patch_id`, `verifier`, `evidence`). |
+| `.pi-flywheel/plans/<slug>/rubric.md` | Cycle-level outcome rubric (`c1`..`cN`) consumed by `flywheel_grade_outcome`. |
+| `.pi-flywheel/plans/<slug>/convergence.json` | Multi-signal plan convergence state + B6 oscillation detector. |
+| `.pi-flywheel/pi-models.json` | Persisted Pi model choices per role (`ergonomics`, `robustness`, `implementer`). |
+| `decisions.tsv` | Append-only Architecture Decision Record log written by `/architect` in Poteto mode. |
+| `docs/specs/<slug>-interrogation.md` | Adversarial spec interrogation artifact required before `flywheel_plan({ poteto: true })`. |
+| `docs/architecture/<slug>-adr.md` | ADR artifact required before `flywheel_plan({ poteto: true })`. |
+| `docs/plans/` · `docs/duels/` · `docs/solutions/` | Synthesized plans, duel reports, and durable CASS solution documents. |
 
 ---
 
 ## Architecture
 
 ```
-claude --plugin-dir .
-│
-├── commands/*.md          ← Natural-language slash commands (26)
-├── skills/*/SKILL.md      ← 42 skills + 10 phase sub-files (start/_*.md)
-├── hooks/hooks.json       ← SessionStart banner + tool checks
-│
-├── .mcp.json
-│    ├── agent-mail (http) ── coordination: messaging, file reservations
-│    └── agent-flywheel (stdio) ── state machine + br/bv/git CLI glue
-│
-└── mcp-server/
-     ├── src/                          ← TypeScript (strict, NodeNext, ESM)
-     │    ├── server.ts                ← MCP tool registration
-     │    ├── tools/                   ← 14 flywheel_* tools
-     │    │    ├── observe.ts          ← session-state snapshot (v3.11)
-     │    │    ├── doctor.ts           ← 24-check toolchain probe
-     │    │    ├── remediate.ts        ← one-tap doctor fixes
-     │    │    ├── advance-wave.ts     ← wave gating + attestation read
-     │    │    ├── verify-beads.ts     ← bead-close reconciliation
-     │    │    └── …
-     │    ├── checkpoint.ts            ← atomic state persistence
-     │    ├── beads.ts                 ← br CLI wrapper
-     │    ├── agent-mail.ts            ← agent-mail JSON-RPC client
-     │    ├── agent-mail-helpers.ts    ← reserveOrFail (v3.11)
-     │    ├── completion-report.ts     ← Zod schema + read/validate (v3.11)
-     │    ├── tender.ts + tender-daemon.ts ← swarm health monitor
-     │    ├── deep-plan.ts             ← 3-agent parallel planning
-     │    ├── plan-simulation.ts       ← swarm-vs-serial routing
-     │    ├── episodic-memory.ts       ← postmortem + learnings synthesis
-     │    ├── lint/                    ← SKILL.md linter (6 rules incl. RESERVE001)
-     │    ├── errors.ts                ← FlywheelErrorCode + envelope + errMsg helper
-     │    └── skills-bundle.ts         ← bundled skill loader, 4-layer drift defense
-     ├── dist/                         ← compiled output (committed; dist-drift CI gates it)
-     └── scripts/
-          ├── lint-skill.ts
-          ├── build-skills-bundle.ts
-          ├── check-skills-bundle.ts
-          └── bead-viewer.ts           ← read-only Cytoscape graph (127.0.0.1)
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                   Harnesses (Single Repo Source of Truth)                     │
+│  • Claude Code (.claude-plugin/plugin.json)                                   │
+│  • Google Antigravity (`agy`) (agy/manifest.json → scripts/sync-agy.sh)       │
+│  • OpenCode (opencode/manifest.json → scripts/sync-opencode.sh)               │
+│  • Codex (flywheel_emit_codex → AGENTS.md + .codex/skills/*.md)               │
+└───────────────────────────────────────┬───────────────────────────────────────┘
+                                        │ stdio JSON-RPC (never stdout logs)
+                                        ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                 agent-flywheel MCP Server (mcp-server/src/)                   │
+│  • 25 flywheel_* tools + 50 input JSON schemas + 58 bundled skill bodies      │
+│  • 43 typed FlywheelErrorCode envelopes + atomic .pi-flywheel/checkpoint.json │
+│  • Poteto (`pstack`) gates: check-plan.mjs, check-bead-verify.mjs, patch-id   │
+│  • bv-runner.ts: `bv --robot-triage | --robot-next | --robot-plan | insights` │
+└───────────┬───────────────────────────┬───────────────────────────┬───────────┘
+            │                           │                           │
+            ▼                           ▼                           ▼
+┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
+│  Bead Graph & Memory  │   │  NTM Swarm + Tender   │   │  Agent Mail (:8765)   │
+│  • br (beads_rust)    │   │  • swarm-spawn.js     │   │  • macro_start_session│
+│  • bv (beads_viewer)  │   │  • --cc / --pi /      │   │  • reserveOrFail()    │
+│  • cm / cass memory   │   │    --gmi / --agy      │   │  • pre-commit guard   │
+│  • ledger.tsv (SHA)   │   │  • tender-daemon.js   │   │  • completion mail    │
+└───────────────────────┘   └───────────────────────┘   └───────────────────────┘
 ```
+
+### Models Used
+
+| Role | Model / Lane |
+|---|---|
+| **Correctness Plan Agent** | `claude-opus-4-7` (`--cc=1`) |
+| **Ergonomics Plan Agent** | Frontier Pi model chosen via `flywheel_pi_models` (`--pi=1`, e.g. `zai/glm-5.3`, `xai/grok-4.7`; `claude-sonnet-4-6` fallback) |
+| **Robustness Plan Agent** | Frontier Pi model chosen via `flywheel_pi_models` (`--pi=1`, e.g. `meta/muse-spark-1.3`; `codex` fallback) |
+| **Swarm Implementers** | Mixed `--cc=2:opus` + `--pi=2` (alternated balanced Pi models) + `--gmi=2` (`gemini-4-argon` via Pi) + optional `--agy=N[:model[:effort]]` |
+| **Cross-Agent & Fresh-Eyes Reviewers** | Decorrelated model family (`flywheel_review(action: "cross-agent")`) or 5-perspective `claude-sonnet-4-6` |
 
 ---
 
-## Models used
+## What's New
 
-| Role | Model |
-|---|---|
-| Correctness plan agent | `claude-opus-4-7` |
-| Ergonomics plan agent | Pi on a frontier model you pick from your Pi logins or the Vercel AI Gateway (`claude-sonnet-4-6` without Pi) |
-| Robustness plan agent | Pi on a frontier model you pick from your Pi logins or the Vercel AI Gateway (`codex` without Pi) |
-| Pi implementation panes | One or two balanced models you pick, alternated across the Pi panes |
-| Swarm implementation agents | `claude-haiku-4-5` (lightweight) |
-| Review agents | `claude-sonnet-4-6` |
+### v3.26.0 (2026-10-21) — Antigravity (`agy`) Port, Poteto (`pstack`) Mode & Convergence Loops
+
+- **Antigravity (`agy`) Mirror Port & `flywheel_emit_agy`.** `scripts/sync-agy.sh` (`scripts/agy/{sync,rewrite-body,emit-hooks,validate}.mjs`) and `flywheel_emit_agy` render a 53-skill Antigravity plugin (`plugin.json`, `mcp_config.json`, `hooks.json`, condensed `rules/AGENTS.md` ≤ 24 KB) that passes `agy plugin validate --strict --json` with zero findings. Includes `AntigravityAdapter`, `ratioByLane: { cc, pi, gmi, agy }`, `--agy=N[:model[:effort]]` validation (`resolveAgySlug`), and `agy_cli` / `agy_port_sync` / `pstack_plugin` doctor checks ([docs/agy.md](docs/agy.md)).
+- **Poteto (`pstack`) Mode & SHA-Coupled Verification Ledger.** `flywheel_plan({ poteto: true, preCodeResearch })` gates planning on `/why` (4 research areas), `/interrogate` (`docs/specs/<slug>-interrogation.md`), and `/architect` (`docs/architecture/<slug>-adr.md` + `decisions.tsv`). Vendored Hybrid Core-6 `pstack` skills (`poteto-mode`, `interrogate`, `architect`, `plan`, `verify`, `why` + `references/*.md`), `scripts/check-plan.mjs`, and `scripts/check-bead-verify.mjs` enforce the Plan Verification Triad (`Verify, unit / live / perf`). `flywheel_approve_beads(action: "verify-bead")` stamps `git patch-id --stable` verdicts into `.pi-flywheel/completion/<id>.json` and `.pi-flywheel/ledger.tsv`, enforced by `flywheel_advance_wave`.
+- **Convergence Loops & Durable Operator Skill.** Added `mcp-server/src/bv-runner.ts` (`bv --robot-triage|next|plan|insights`), `flywheel_approve_beads(action: "converge-polish")`, `flywheel_review(action: "converge" | "cross-agent")` with self-annealing CASS rule drafts, and the standalone [`skills/agent-flywheel/SKILL.md`](skills/agent-flywheel/SKILL.md) operator skill + [`fw-call.mjs`](skills/agent-flywheel/scripts/fw-call.mjs) stdio helper.
+
+<details>
+<summary>Earlier releases (v3.17.0 – v3.25.2)</summary>
+
+- **v3.25.0 – v3.25.2:** 4-question goal-deepening pass before `flywheel_select`, fault-tolerant `br list` status normalization (`bead-status.ts`), and hermetic doctor unit tests.
+- **v3.21.0 – v3.24.0:** `flywheel_pi_models` live Vercel AI Gateway + provider auth probing, `flywheel_swarm_host` multi-Mac SSH/Bonjour swarm offload, and 2.5× `/start` cold-start speedup (`history: 0` on `flywheel_memory`).
+- **v3.18.0:** Canonical mixed pane priority + `PANE001` lint rule, `codex_config_compat` auto-remediation, and `gemini_model_compat` doctor probe.
+- **v3.17.0:** Automatic mid-wave fresh-eyes `batch_review` triggered every N commits (`FW_COMMIT_BATCH_THRESHOLD=8`).
+
+See **[CHANGELOG.md](CHANGELOG.md)** for the complete version history.
+
+</details>
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
+| Symptom / Error Code | Cause | Copy-Paste Fix |
 |---|---|---|
-| Banner says `MCP: not configured` | Plugin install incomplete | `/agent-flywheel:flywheel-doctor` → `/agent-flywheel:flywheel-setup` |
-| Banner says `Agent Mail: offline` | `am serve-http` not running | `am serve-http` (or `mcp-agent-mail serve` if `am` not on PATH); legacy fallback: `uv run python -m mcp_agent_mail.cli serve-http` |
-| Banner says `NTM: installed but not configured` | Project not under `ntm config show` `projects_base` | Either `ntm config set projects_base <parent-dir>` or symlink your project under the existing base |
-| `dist-drift` CI failure | `mcp-server/src/` edited without rebuilding `dist/` | `npm run build --prefix mcp-server && git add mcp-server/dist/` |
-| `lint:skill` CI failure | New AskUserQuestion / slash reference / placeholder issue in a SKILL.md | `npm run lint:skill --prefix mcp-server` locally; fix or `npm run lint:skill:update-baseline` |
-| Swarm agents idle / stuck | Tender daemon not running | Check `.pi-flywheel/tender-events.log`; restart with `node mcp-server/dist/scripts/tender-daemon.js --session=<...>` |
-| `flywheel_advance_wave` returns `attestation_missing` | A closed bead has no `.pi-flywheel/completion/<id>.json` | Implementor must write the report (template in `skills/start/_implement.md`); or set `FW_ATTESTATION_REQUIRED=` (unset) for warn-only |
-| Repeated agent-mail file-reservation conflicts | Upstream advisory-enforcement bug | Use `reserveOrFail()` from `mcp-server/src/agent-mail-helpers.ts` — never call `agentMailRPC("file_reservation_paths")` directly (`RESERVE001` lint rule enforces this) |
-| `Resource is temporarily busy ... mailbox activity lock is busy` from `am doctor` | The live Agent Mail daemon holds `.mailbox.activity.lock` | Run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`; do not delete lock files. Claude/Pi hooks block mutating `am doctor` commands from swarm panes. |
+| `agy_port_sync` yellow in `flywheel_doctor` | Repo skills/hooks updated since last Antigravity sync | `bash scripts/sync-agy.sh --write` (or `flywheel_remediate({ checkName: "agy_port_sync", mode: "execute", autoConfirm: true })`) |
+| `poteto_prerequisite_missing` / `pre_code_research_incomplete` | `flywheel_plan({ poteto: true })` called before `/why`, `/interrogate`, or `/architect` artifacts exist | Write `docs/specs/<slug>-interrogation.md` and `docs/architecture/<slug>-adr.md`, and pass all 4 `preCodeResearch` keys (`codebase`, `gitHistory`, `libraryDocs`, `priorDecisions`) |
+| `verification_missing` / `verification_sha_drift` on `flywheel_advance_wave` | Closed bead lacks a `verified` verdict in `.pi-flywheel/ledger.tsv` or its diff changed after verification | Run `node skills/agent-flywheel/scripts/fw-call.mjs flywheel_approve_beads '{"cwd":".","action":"verify-bead","beadId":"<id>","verdict":"verified","baseSha":"<base>","headSha":"<head>"}'` |
+| `attestation_missing` / `attestation_invalid` | Closed bead has no valid `.pi-flywheel/completion/<id>.json` | Write the completion JSON matching `CompletionReportSchemaV1` (`mcp-server/src/completion-report.ts`) |
+| Banner says `Agent Mail: offline` | `am serve-http` is not running on `127.0.0.1:8765` | `nohup am serve-http --port 8765 &` (verify with `curl -s http://127.0.0.1:8765/health/liveness`) |
+| `Resource is temporarily busy ... mailbox activity lock is busy` | Mutating `am doctor` ran while Agent Mail daemon held `.mailbox.activity.lock` | Never delete `.lock` files; run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })` |
+| `dist-drift` or `check:skills-bundle` CI failure | `mcp-server/src/` or `skills/` edited without rebuilding `mcp-server/dist/` | `npm --prefix mcp-server run build && git add mcp-server/dist/` |
+| `lint:skill` CI failure (`PANE001`, `RESERVE001`) | Skill markdown violated pane-priority or `reserveOrFail` lint rules | `npm --prefix mcp-server run lint:skill` to inspect; fix the offending `skills/start/*.md` line |
+| Banner says `NTM: installed but not configured` | Project directory sits outside `ntm config show` `projects_base` | `ntm config set projects_base "$(dirname "$PWD")"` |
 
-For deeper traces:
+For full debug traces on stderr:
 
 ```bash
 FW_LOG_LEVEL=debug claude --plugin-dir .
 ```
 
-Logs go to stderr as one JSON object per line. Stdout is reserved for the MCP JSON-RPC channel — never use `console.log` in `mcp-server/src/` (the project's `createLogger(ctx)` writes to stderr only).
-
 ---
 
 ## Limitations
 
-- **macOS-first ecosystem.** The recommended CLIs (`br`, `bv`, `ntm`, etc.) all run on Linux too, but the install path through the [ACFS stack](https://github.com/DavidSchargel/dicklesworthstone-acfs-stack-for-macos) is mac-tuned. Linux users compile from source.
-- **Requires Claude Code.** Not provider-agnostic. Codex emission is supported via `flywheel_emit_codex`, but Claude Code is the source of truth.
-- **Stateful by design.** `.pi-flywheel/checkpoint.json` is the session anchor. If you do work in the repo without flywheel awareness (manual commits, branch surgery), the next `/start` will surface a drift menu — that's the contract, not a bug.
-- **Multi-agent fan-out depends on NTM.** Without NTM, parallelism falls back to single-agent serial. Single-agent flows still work but lose the swarm speed-up.
-- **Heavy dependency tree.** A full install pulls br + bv + ntm + agent-mail + dcg + cass + cm. `/flywheel-setup` and the ACFS stack make this one command, but it's still a real install footprint.
-- **Adversarial duels need ≥ 2 healthy CLIs.** `/dueling-idea-wizards` requires Claude + at least one of {Codex, Gemini}. With only Claude available, the flywheel offers a "Deep" or "Triangulated" fallback row instead.
-- **A swarm on another Mac needs SSH and the same CLIs there.** The other Mac needs Remote Login on, this Mac's key in its `authorized_keys`, and git, ntm, tmux, br, am, and rsync. Claude Code keeps its login in the Keychain, which SSH sessions can't read, so cc panes run there only after `claude setup-token` with `CLAUDE_CODE_OAUTH_TOKEN` exported in that Mac's `~/.zshenv`; until then its swarm runs on Pi and Codex. A closed lid on battery sleeps it mid-wave.
-- **Built for solo / small-team flow.** Compound engineering across many concurrent humans isn't the design center. The bead graph is the coordination surface, not Git PR review.
+- **macOS / Linux / WSL2 primary target.** `ntm` relies on `tmux`. On native Windows without WSL2, parallel NTM swarms are unavailable and execution falls back to sequential single-agent dispatch.
+- **Claude Code repo is the authoring source of truth.** While the plugin runs natively in Google Antigravity (`agy`) and OpenCode, edits to skills, hooks, or MCP tools must be made in this repository and synced out via `scripts/sync-agy.sh --write` / `scripts/sync-opencode.sh --write` (hand-edits in derived ports are backed up as `[LOCAL]` and overwritten).
+- **`--agy` panes are interactive/inspection lanes in NTM.** `swarm-spawn.js` spawns `--agy=N[:model[:effort]]` panes when `ntm` supports `--agy`, but automated wave bead assignment targets `--cc`, `--pi`, and `--gmi` panes.
+- **Stateful by design.** Manual commits or branch resets outside the flywheel trigger a drift-resolution menu on the next `/agent-flywheel:start`.
+- **Remote Mac swarm offload requires SSH + Keychain token setup.** Offloading `--cc` panes via `flywheel_swarm_host` requires `CLAUDE_CODE_OAUTH_TOKEN` in the remote Mac's `~/.zshenv` (via `claude setup-token`), since SSH sessions cannot read the macOS GUI Keychain.
 
 ---
 
 ## FAQ
 
-**Q: Do I need ntm and Agent Mail to use this?**
-No — single-agent flows work without them. NTM and Agent Mail are required for parallel swarms (`/flywheel-swarm`) and recommended for everything else. The doctor will tell you what's missing in `<2s`.
+**Q: Do I need `ntm` and `agent-mail` for single-agent work?**  
+No. Single-agent flows (`Scan → Plan → Beads → Serial Implement → Review`) work with only `br` and `bv`. `ntm` and `agent-mail` are required only for multi-agent parallel swarms and adversarial duels.
 
-**Q: What happens if I `/clear` mid-session?**
-Nothing breaks. State is on disk in `.pi-flywheel/checkpoint.json`. Re-run `/agent-flywheel:start` and you'll get the resume menu with a drift check.
+**Q: How do I use `agent-flywheel` inside Google Antigravity (`agy`)?**  
+Run `bash scripts/sync-agy.sh --write` and `bash scripts/sync-agy.sh --write --target ~/.gemini/config/plugins/agent-flywheel`. Antigravity loads the `agent-flywheel` plugin (`53 skills`, `AGENTS.md` rules, lifecycle hooks, and MCP server). You can also invoke any `flywheel_*` tool directly via `node skills/agent-flywheel/scripts/fw-call.mjs <tool> '<json>'`.
 
-**Q: Can I use this with Codex instead of Claude Code?**
-Partially. The MCP tools work, but the source of truth is Claude Code. For Codex you can emit a Codex-native skill bundle via `flywheel_emit_codex(cwd, targetDir)`, which writes `AGENTS.md` + `.codex/skills/<name>.md`. Round-trip drift-tested.
+**Q: What is Poteto (`pstack`) mode and when should I enable it?**  
+Poteto mode integrates [Poteto's `pstack`](https://github.com/cursor/plugins/tree/main/pstack) discipline: before planning, you run `/why` (4-area evidence gathering), `/interrogate` (adversarial spec stress-testing), and `/architect` (types/signatures + ADR in `decisions.tsv`). Every bead requires a `Verify, unit / live / perf` triad, and every wave boundary requires a `git patch-id --stable`-coupled verification entry in `.pi-flywheel/ledger.tsv`. Enable it for architectural changes, new subsystems, or high-risk refactors.
 
-**Q: How does the flywheel decide when to use a duel vs. standard generator?**
-Phase-aware. Discovery, planning, and reality-check have an explicit "Duel" row in their menus. Review auto-routes to a duel for risky beads (priority p0, security path, breaking change). Everywhere else uses the standard single-agent or 5-agent path.
+**Q: What happens if I rebase my branch after verifying beads in Poteto mode?**  
+Nothing breaks. Because `verify-bead` hashes the diff via `git patch-id --stable` (which strips commit SHAs and line numbers), a clean rebase preserves the patch-id and keeps the `verified` status valid. Only an actual code edit to the bead's diff triggers `verification_sha_drift`.
 
-**Q: Why so many CLIs?**
-Each one is a load-bearing specialist. `br` is the bead graph, `bv` is the dependency triage, `ntm` is the pane registry, `agent-mail` is the file-reservation bus. We orchestrate them rather than reinvent any of them. Credit for all of these belongs to [Jeffrey Emanuel (Dicklesworthstone)](https://github.com/Dicklesworthstone) — see Acknowledgments.
+**Q: What happens if I `/clear` or restart my terminal mid-session?**  
+All state is persisted in `.pi-flywheel/checkpoint.json` and `.pi-flywheel/ledger.tsv`. Re-running `/agent-flywheel:start` detects the active checkpoint, checks for git drift, and resumes at the exact wave and step where you left off.
 
-**Q: Is the `dist/` commit really intentional?**
-Yes. The MCP server runs immediately after `/plugin install` with no Node build step on the user's machine. The `dist-drift` CI job ensures `mcp-server/dist/` always matches `mcp-server/src/`.
+**Q: How does `flywheel_review(action: "cross-agent")` prevent rubber-stamping?**  
+It inspects the implementer's model family (`claude`, `pi`, `gemini`, or `codex`) from the completion report and generates a peer-review prompt routed to a *different* model family. If a bead was previously rejected (`rejectedReason`), it also synthesizes a `selfAnnealingRule` ready to store in CASS (`flywheel_memory(operation: "store")`).
 
-**Q: What's the difference between `flywheel-doctor`, `flywheel-setup`, and `flywheel-healthcheck`?**
-`doctor` is a 2-second read-only snapshot — run first, always safe. `setup` is the apply-fixes step — only run if doctor is yellow/red. `healthcheck` is a deep periodic audit (codebase + dep graph + bead graph) — run on a cadence, not for setup problems.
+**Q: Why is `mcp-server/dist/` committed to git?**  
+So `/plugin install` and `scripts/sync-agy.sh` work immediately on any machine without a build step. The `dist-drift` and `check:skills-bundle` CI checks fail any PR where `mcp-server/dist/` is out of sync with `mcp-server/src/` or `skills/`.
 
-**Q: How do I roll back a bad bead?**
-`/agent-flywheel:flywheel-rollback <bead-id>`. Reverts the bead's commits, re-opens the bead, and updates the checkpoint.
+**Q: How do I roll back a bad bead implementation?**  
+Run `/agent-flywheel:flywheel-rollback <bead-id>`. It reverts the bead's commits, reopens the bead in `br`, and updates `.pi-flywheel/checkpoint.json`.
 
 ---
 
 ## Acknowledgments
 
-agent-flywheel sits on top of an ecosystem of upstream tools authored by **Jeffrey Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)). The flywheel orchestrates them; it doesn't replace them.
+`agent-flywheel` orchestrates an upstream CLI ecosystem authored by **Jeffrey Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)) alongside **Poteto's [`pstack`](https://github.com/cursor/plugins/tree/main/pstack)** workflow playbooks:
 
-| Tool | Role | Repo |
+| Upstream Project | Role in `agent-flywheel` | Repository |
 |---|---|---|
-| **br** (`beads_rust`) | Issue tracker as a graph; ready-work computation | <https://github.com/Dicklesworthstone/beads_rust> |
-| **bv** (`beads_viewer`) | Dependency-aware bead triage and dashboards | <https://github.com/Dicklesworthstone/beads_viewer> |
-| **ntm** | Named-tmux-manager — parallel pane orchestration with robot-send addressing | <https://github.com/Dicklesworthstone/ntm> |
-| **agent-mail** (`mcp_agent_mail_rust`) | Multi-agent coordination over HTTP — file reservations, messaging, pre-commit guard | <https://github.com/Dicklesworthstone/mcp_agent_mail_rust> |
-| **agent-mail (legacy)** | Python build of the same protocol | <https://github.com/Dicklesworthstone/mcp_agent_mail> |
-| **dcg** (`destructive_command_guard`) | Two-person rule for destructive commands | <https://github.com/Dicklesworthstone/destructive_command_guard> |
-| **cass** (`coding_agent_session_search`) | Search every past agent session by transcript | <https://github.com/Dicklesworthstone/coding_agent_session_search> |
-| **cm** (`cass_memory_system`) | Persistent procedural memory for agents | <https://github.com/Dicklesworthstone/cass_memory_system> |
-| **ACFS stack** | One-shot installer for the full mac-side ecosystem | <https://github.com/DavidSchargel/dicklesworthstone-acfs-stack-for-macos> |
-
-Without these, the flywheel is just a state machine with nothing to coordinate. With them, it's a coding swarm that observes, reserves, retries, and learns.
-
----
-
-## Using agent-flywheel with Codex
-
-agent-flywheel's skills can be emitted in Codex native format (`AGENTS.md` + `.codex/skills/<name>.md`) via the `flywheel_emit_codex` MCP tool. Point it at any destination directory inside your project; skill source files are never modified, and the round-trip is drift-tested. The emitter is single-target by design — for runtimes other than Codex, keep Claude Code as the source of truth.
-
-```
-flywheel_emit_codex(cwd: "/path/to/project", targetDir: ".")
-```
-
----
-
-## Tool name deprecation
-
-The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names remain registered as deprecated aliases for back-compat with legacy installs and dispatch to the same runners. They will be removed in v4.0; prefer the `flywheel_*` names in new code and docs.
+| **`br` (`beads_rust`)** | Graph issue tracker and ready-work frontier calculation | <https://github.com/Dicklesworthstone/beads_rust> |
+| **`bv` (`beads_viewer`)** | Dependency-aware bead triage (`--robot-triage\|next\|plan\|insights`) | <https://github.com/Dicklesworthstone/beads_viewer> |
+| **`ntm`** | Named-tmux-manager for multi-pane swarm spawning and `--robot-send` | <https://github.com/Dicklesworthstone/ntm> |
+| **`agent-mail` (`mcp_agent_mail_rust`)** | Multi-agent HTTP coordination, messaging, and file reservations | <https://github.com/Dicklesworthstone/mcp_agent_mail_rust> |
+| **`dcg` (`destructive_command_guard`)** | Guardrail against destructive shell/git operations | <https://github.com/Dicklesworthstone/destructive_command_guard> |
+| **`cass` & `cm`** | Episodic session search and persistent procedural memory | <https://github.com/Dicklesworthstone/cass_memory_system> |
+| **`pstack` (Poteto)** | `/poteto-mode`, `/interrogate`, `/architect`, `/why`, `check-plan.mjs`, and verification discipline | <https://github.com/cursor/plugins/tree/main/pstack> |
+| **ACFS Stack** | One-shot macOS installer for the full Dicklesworthstone CLI stack | <https://github.com/DavidSchargel/dicklesworthstone-acfs-stack-for-macos> |
 
 ---
 
@@ -518,6 +545,6 @@ The MCP tools were renamed from `orch_*` to `flywheel_*`. The `orch_*` names rem
 
 ## License
 
-MIT. See [LICENSE](LICENSE) (or the repo root) for the full text.
+MIT. See [LICENSE](LICENSE) for full text.
 
 Repository: <https://github.com/burningportra/agent-flywheel-plugin>
