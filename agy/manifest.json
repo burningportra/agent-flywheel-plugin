@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 1,
+  "kind": "agy-port-manifest",
+  "generatedNote": "Hand-authored source of truth for bead agent-flywheel-plugin-dm1. The Claude Code plugin repo remains the source of truth; this manifest owns the AGY mirror boundary. Discovery is DYNAMIC: skills[]/commands[] are cross-checked against the live tree (inventory_missing / inventory_unclassified), same contract as opencode/manifest.json.",
+  "repoSourceOfTruth": true,
+  "target": "~/.gemini/antigravity/plugins/agent-flywheel",
+  "rulesMaxBytes": 24000,
+  "skillBodyMaxBytes": 24000,
+  "discovery": {
+    "skillDirPattern": "^(flywheel-.+|start)$",
+    "commandFilePattern": "^(flywheel-.+|start)\\.md$",
+    "skillsRoot": "skills",
+    "commandsRoot": "commands",
+    "note": "Managed iff the dir matches skillDirPattern and contains SKILL.md, or the file matches commandFilePattern. Non-flywheel skills are outside the ownership boundary."
+  },
+  "pluginJson": {
+    "source": "agy/plugin.json",
+    "target": "plugin.json",
+    "mirrorCopy": ".agy-plugin/plugin.json",
+    "allowedFields": [
+      "name",
+      "displayName",
+      "version",
+      "description",
+      "logo",
+      "suggestedPrompts",
+      "disabled"
+    ],
+    "note": "agy plugin validate --strict rejects unknown fields; plugin.json carries EXACTLY the 7 allowed fields. A byte-identical copy lands at .agy-plugin/plugin.json for directory-scoped consumers."
+  },
+  "logo": {
+    "source": "agy/logo.svg",
+    "target": "logo.svg"
+  },
+  "mcp": {
+    "source": "agy/.mcp.json",
+    "target": "mcp_config.json",
+    "rootToken": "${PLUGIN_ROOT}",
+    "serverName": "agent-flywheel",
+    "note": "AGY loads mcp_config.json (its strict validator rejects .mcp.json as a Claude-Code-only name). ${PLUGIN_ROOT} is rewritten to the absolute repo root at render time; the emitted server entry runs node <repo>/mcp-server/dist/server.js with CLAUDE_PLUGIN_ROOT=<repo>."
+  },
+  "rules": {
+    "source": "agy/rules/AGENTS.md",
+    "target": "rules/AGENTS.md",
+    "maxBytes": 24000,
+    "note": "AGY silently truncates rule files above 24,000 bytes; the authored file stays <= 20,000."
+  },
+  "hooks": [
+    {
+      "source": {
+        "event": "PreToolUse",
+        "matcher": "Bash",
+        "if": [
+          "Bash(*doctor*)",
+          "Bash(*DOCTOR*)",
+          "Bash(*activity.lock*)"
+        ],
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js"
+      },
+      "event": "PreToolUse",
+      "matcher": "run_command",
+      "name": "agent-flywheel-guard",
+      "wrapper": "hooks/agent-mail-guard.sh",
+      "portable": true,
+      "note": "AGY has no if-filter; the wrapper applies the guard patterns to toolCall.args.CommandLine itself and prints {\"decision\":\"allow\"} or {\"decision\":\"deny\",\"reason\":...}."
+    },
+    {
+      "source": {
+        "event": "SessionStart",
+        "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh node ${CLAUDE_PLUGIN_ROOT}/hooks/startup.js"
+      },
+      "event": "SessionStart",
+      "name": "agent-flywheel-startup",
+      "wrapper": "hooks/startup.sh",
+      "portable": true,
+      "note": "Wrapper runs the repo startup.js, wraps its stdout as injectSteps[0].systemMessage (capped at 8 KB), and always prints valid JSON."
+    },
+    {
+      "source": {
+        "event": "Stop",
+        "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js --release-reservations"
+      },
+      "event": "Stop",
+      "name": "agent-flywheel-stop",
+      "wrapper": "hooks/release-reservations.sh",
+      "portable": true,
+      "note": "Releases Agent Mail file reservations and prints {}; never returns decision:\"continue\" so it cannot trap the loop."
+    },
+    {
+      "source": {
+        "event": "PostToolUse",
+        "matcher": "flywheel_approve_beads",
+        "command": "echo Bead approval processed..."
+      },
+      "event": null,
+      "portable": false,
+      "reason": "AGY PostToolUse must print a JSON object (echo prints plain text) and the AGY-side MCP tool name is not known at sync time."
+    },
+    {
+      "source": {
+        "event": "SubagentStop",
+        "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/_run-hook.sh node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-mail-guard.js --release-reservations"
+      },
+      "event": null,
+      "portable": false,
+      "reason": "AGY has no SubagentStop event; the Stop wrapper covers release."
+    }
+  ],
+  "skills": [
+    {
+      "name": "flywheel-audit",
+      "source": "skills/flywheel-audit/",
+      "target": "skills/flywheel-audit/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-cleanup",
+      "source": "skills/flywheel-cleanup/",
+      "target": "skills/flywheel-cleanup/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-compound-refresh",
+      "source": "skills/flywheel-compound-refresh/",
+      "target": "skills/flywheel-compound-refresh/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-doctor",
+      "source": "skills/flywheel-doctor/",
+      "target": "skills/flywheel-doctor/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-drift-check",
+      "source": "skills/flywheel-drift-check/",
+      "target": "skills/flywheel-drift-check/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-duel",
+      "source": "skills/flywheel-duel/",
+      "target": "skills/flywheel-duel/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-fix",
+      "source": "skills/flywheel-fix/",
+      "target": "skills/flywheel-fix/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-healthcheck",
+      "source": "skills/flywheel-healthcheck/",
+      "target": "skills/flywheel-healthcheck/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-mine-patterns",
+      "source": "skills/flywheel-mine-patterns/",
+      "target": "skills/flywheel-mine-patterns/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-reality-check",
+      "source": "skills/flywheel-reality-check/",
+      "target": "skills/flywheel-reality-check/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-refine-skill",
+      "source": "skills/flywheel-refine-skill/",
+      "target": "skills/flywheel-refine-skill/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-refine-skills",
+      "source": "skills/flywheel-refine-skills/",
+      "target": "skills/flywheel-refine-skills/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-research",
+      "source": "skills/flywheel-research/",
+      "target": "skills/flywheel-research/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-rollback",
+      "source": "skills/flywheel-rollback/",
+      "target": "skills/flywheel-rollback/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-scan",
+      "source": "skills/flywheel-scan/",
+      "target": "skills/flywheel-scan/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-setup",
+      "source": "skills/flywheel-setup/",
+      "target": "skills/flywheel-setup/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-speedup",
+      "source": "skills/flywheel-speedup/",
+      "target": "skills/flywheel-speedup/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-status",
+      "source": "skills/flywheel-status/",
+      "target": "skills/flywheel-status/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-stop",
+      "source": "skills/flywheel-stop/",
+      "target": "skills/flywheel-stop/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-swarm",
+      "source": "skills/flywheel-swarm/",
+      "target": "skills/flywheel-swarm/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-swarm-status",
+      "source": "skills/flywheel-swarm-status/",
+      "target": "skills/flywheel-swarm-status/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-swarm-stop",
+      "source": "skills/flywheel-swarm-stop/",
+      "target": "skills/flywheel-swarm-stop/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "flywheel-tool-feedback",
+      "source": "skills/flywheel-tool-feedback/",
+      "target": "skills/flywheel-tool-feedback/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    },
+    {
+      "name": "start",
+      "source": "skills/start/",
+      "target": "skills/start/",
+      "kind": "skill-dir",
+      "transformProfile": "agy-skill"
+    }
+  ],
+  "commands": [
+    {
+      "name": "flywheel-audit",
+      "source": "commands/flywheel-audit.md",
+      "target": "skills/cmd-flywheel-audit/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-bead-viewer",
+      "source": "commands/flywheel-bead-viewer.md",
+      "target": "skills/cmd-flywheel-bead-viewer/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-cleanup",
+      "source": "commands/flywheel-cleanup.md",
+      "target": "skills/cmd-flywheel-cleanup/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-compound-refresh",
+      "source": "commands/flywheel-compound-refresh.md",
+      "target": "skills/cmd-flywheel-compound-refresh/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-doctor",
+      "source": "commands/flywheel-doctor.md",
+      "target": "skills/cmd-flywheel-doctor/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-drift-check",
+      "source": "commands/flywheel-drift-check.md",
+      "target": "skills/cmd-flywheel-drift-check/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-duel",
+      "source": "commands/flywheel-duel.md",
+      "target": "skills/cmd-flywheel-duel/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-fix",
+      "source": "commands/flywheel-fix.md",
+      "target": "skills/cmd-flywheel-fix/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-healthcheck",
+      "source": "commands/flywheel-healthcheck.md",
+      "target": "skills/cmd-flywheel-healthcheck/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-reality-check",
+      "source": "commands/flywheel-reality-check.md",
+      "target": "skills/cmd-flywheel-reality-check/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-refine-skill",
+      "source": "commands/flywheel-refine-skill.md",
+      "target": "skills/cmd-flywheel-refine-skill/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-refine-skills",
+      "source": "commands/flywheel-refine-skills.md",
+      "target": "skills/cmd-flywheel-refine-skills/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-research",
+      "source": "commands/flywheel-research.md",
+      "target": "skills/cmd-flywheel-research/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-rollback",
+      "source": "commands/flywheel-rollback.md",
+      "target": "skills/cmd-flywheel-rollback/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-scan",
+      "source": "commands/flywheel-scan.md",
+      "target": "skills/cmd-flywheel-scan/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-setup",
+      "source": "commands/flywheel-setup.md",
+      "target": "skills/cmd-flywheel-setup/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-speedup",
+      "source": "commands/flywheel-speedup.md",
+      "target": "skills/cmd-flywheel-speedup/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-status",
+      "source": "commands/flywheel-status.md",
+      "target": "skills/cmd-flywheel-status/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-stop",
+      "source": "commands/flywheel-stop.md",
+      "target": "skills/cmd-flywheel-stop/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-swarm",
+      "source": "commands/flywheel-swarm.md",
+      "target": "skills/cmd-flywheel-swarm/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-swarm-status",
+      "source": "commands/flywheel-swarm-status.md",
+      "target": "skills/cmd-flywheel-swarm-status/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-swarm-stop",
+      "source": "commands/flywheel-swarm-stop.md",
+      "target": "skills/cmd-flywheel-swarm-stop/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "flywheel-tool-feedback",
+      "source": "commands/flywheel-tool-feedback.md",
+      "target": "skills/cmd-flywheel-tool-feedback/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    },
+    {
+      "name": "start",
+      "source": "commands/start.md",
+      "target": "skills/cmd-start/SKILL.md",
+      "kind": "command-to-skill",
+      "transformProfile": "agy-command"
+    }
+  ],
+  "ownership": {
+    "note": "The sync owns EXACTLY the enumerated source/target pairs plus plugin.json, .agy-plugin/plugin.json, mcp_config.json, hooks.json, hooks/*.sh|mjs, rules/AGENTS.md, logo.svg, and .sync-state.json inside the target. It never treats a parent directory as an ownership target.",
+    "neverOwn": [
+      "skills",
+      "skills/",
+      "commands",
+      "commands/",
+      "agy",
+      "agy/",
+      "hooks",
+      "hooks/",
+      "plugins",
+      "plugins/",
+      ".",
+      "/",
+      "~/.gemini/config/mcp_config.json",
+      "~/.gemini/config/config.json",
+      "~/.gemini/config/hooks.json"
+    ]
+  }
+}

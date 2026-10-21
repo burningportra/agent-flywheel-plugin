@@ -1,0 +1,13 @@
+{
+  "name": "agent-flywheel",
+  "displayName": "Agent Flywheel",
+  "version": "3.25.2",
+  "description": "Multi-agent coding flywheel — deep planning, parallel swarm execution, guided review gates, and honest verification. Drives scan → discover → plan → implement → review cycles through the flywheel MCP server.",
+  "logo": "logo.svg",
+  "suggestedPrompts": [
+    "Start or resume the agentic coding flywheel",
+    "Run a flywheel doctor health sweep and explain the failing checks",
+    "Show current flywheel status, bead progress, and inbox messages"
+  ],
+  "disabled": false
+}

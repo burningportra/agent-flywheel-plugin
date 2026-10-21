@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "agent-flywheel": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/mcp-server/dist/server.js"],
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${PLUGIN_ROOT}"
+      }
+    }
+  }
+}
