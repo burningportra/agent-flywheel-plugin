@@ -31,11 +31,156 @@ import {
   goalBeadProgramLabel,
   resolveDispatchBeadProgramScope,
 } from './bead-program.js';
+import {
+  appendVerificationLedger,
+  assessVerification,
+  computePatchId,
+  readCompletionReport,
+  type VerificationBlock,
+} from '../completion-report.js';
+import type { ExecFn } from '../exec.js';
+import type { CheckpointState } from '../state.js';
 
 const log = createLogger('advance-wave');
 const execFileAsync = promisify(execFile);
 
 const GIT_TIMEOUT_MS = 5_000;
+const PATCH_ID_TIMEOUT_MS = 30_000;
+
+type VerificationFailureCode = 'verification_failed' | 'verification_sha_drift' | 'verification_missing';
+
+export interface VerificationGateFailure {
+  beadId: string;
+  code: VerificationFailureCode;
+  message: string;
+}
+
+export interface VerificationGateResult {
+  checked: string[];
+  failures: VerificationGateFailure[];
+  /** Beads whose verified change now sits on different commits with the same patch id. */
+  rebased: Array<{ beadId: string; fromHeadSha: string; toHeadSha: string }>;
+}
+
+/** Most severe first: a failed verdict outranks a stale one, which outranks none. */
+const VERIFICATION_FAILURE_ORDER: VerificationFailureCode[] = [
+  'verification_failed',
+  'verification_sha_drift',
+  'verification_missing',
+];
+
+export function isVerificationRequired(state: FlywheelState): boolean {
+  return (state as CheckpointState).potetoMode === true ||
+    process.env.FW_VERIFICATION_REQUIRED?.trim() === '1';
+}
+
+/**
+ * The commits that carry a verified bead's change on the current branch.
+ * The verified range itself when its head is still an ancestor of HEAD;
+ * otherwise (rebase, amend) the commits on HEAD whose message names the bead,
+ * from the parent of the oldest to the newest. Null when neither exists.
+ */
+async function currentBeadRange(
+  exec: ExecFn,
+  cwd: string,
+  beadId: string,
+  block: VerificationBlock,
+  signal: AbortSignal | undefined,
+): Promise<{ baseSha: string; headSha: string } | null> {
+  const opts = { cwd, timeout: GIT_TIMEOUT_MS, signal };
+  const ancestor = await exec('git', ['merge-base', '--is-ancestor', block.headSha, 'HEAD'], opts);
+  if (ancestor.code === 0) return { baseSha: block.baseSha, headSha: block.headSha };
+
+  const logResult = await exec('git', ['log', '--format=%H', '--fixed-strings', `--grep=${beadId}`, 'HEAD'], opts);
+  const commits = logResult.code === 0 ? logResult.stdout.split('\n').map((l) => l.trim()).filter(Boolean) : [];
+  if (commits.length === 0) return null;
+  const parent = await exec('git', ['rev-parse', '--verify', `${commits[commits.length - 1]}^`], opts);
+  if (parent.code !== 0) return null;
+  return { baseSha: parent.stdout.trim(), headSha: commits[0] };
+}
+
+/**
+ * Check that every bead carries an independent `verified` verdict that still
+ * matches the code on this branch, by patch id, so a rebase keeps the verdict
+ * and an edit after verification voids it. Each verdict change this finds
+ * (stale, or carried to new commits) is appended to the verification ledger.
+ */
+export async function checkWaveVerification(opts: {
+  exec: ExecFn;
+  cwd: string;
+  beadIds: string[];
+  ledgerPath?: string;
+  signal?: AbortSignal;
+}): Promise<VerificationGateResult> {
+  const { exec, cwd, beadIds, ledgerPath, signal } = opts;
+  const failures: VerificationGateFailure[] = [];
+  const rebased: VerificationGateResult['rebased'] = [];
+
+  const record = async (beadId: string, verification: VerificationBlock): Promise<void> => {
+    try {
+      await appendVerificationLedger(cwd, { beadId, verification, recordedAt: new Date().toISOString() }, { ledgerPath });
+    } catch (err: unknown) {
+      log.warn('verification ledger append failed', { beadId, err: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  for (const beadId of beadIds) {
+    const read = await readCompletionReport(cwd, beadId);
+    const block = read.ok ? read.report.verification : undefined;
+    if (block?.verdict !== 'verified') {
+      const assessed = assessVerification(block, { headSha: '', patchId: null });
+      if (!assessed.ok) {
+        failures.push({
+          beadId,
+          code: assessed.code,
+          message: read.ok ? assessed.message : `no readable completion report (${read.error.code})`,
+        });
+      }
+      continue;
+    }
+
+    const range = await currentBeadRange(exec, cwd, beadId, block, signal);
+    if (!range) {
+      const message = `verified head ${block.headSha} is not on HEAD and no commit on HEAD names ${beadId}`;
+      failures.push({ beadId, code: 'verification_sha_drift', message });
+      await record(beadId, { ...block, verdict: 'needs-verification', evidence: [message] });
+      continue;
+    }
+
+    let patchId: string | null;
+    try {
+      patchId = await computePatchId(exec, cwd, range.baseSha, range.headSha, { timeout: PATCH_ID_TIMEOUT_MS, signal });
+    } catch (err: unknown) {
+      const message = `could not compute the patch id of ${range.baseSha}..${range.headSha}: ${err instanceof Error ? err.message : String(err)}`;
+      failures.push({ beadId, code: 'verification_sha_drift', message });
+      continue;
+    }
+
+    const assessed = assessVerification(block, { headSha: range.headSha, patchId });
+    if (!assessed.ok) {
+      failures.push({ beadId, code: assessed.code, message: assessed.message });
+      await record(beadId, {
+        ...block,
+        ...range,
+        verdict: 'needs-verification',
+        patchId: patchId ?? undefined,
+        evidence: [assessed.message],
+      });
+      continue;
+    }
+    if (assessed.rebased) {
+      rebased.push({ beadId, fromHeadSha: block.headSha, toHeadSha: range.headSha });
+      await record(beadId, {
+        ...block,
+        ...range,
+        evidence: [`patch id carried from ${block.headSha} to ${range.headSha} by flywheel_advance_wave`],
+      });
+    }
+  }
+
+  failures.sort((a, b) => VERIFICATION_FAILURE_ORDER.indexOf(a.code) - VERIFICATION_FAILURE_ORDER.indexOf(b.code));
+  return { checked: [...beadIds], failures, rebased };
+}
 
 export interface AdvanceWaveOutcome {
   verification: VerifyBeadsOutcome;
@@ -92,6 +237,8 @@ export interface AdvanceWaveOutcome {
    *  verdicts that landed, and ranges still waiting on their reviewer. */
   /** Set when the swarm runs on another Mac: whether this wave's commits and beads reached it. */
   swarmHost?: SwarmHostHandoff;
+  /** Set when poteto mode or `FW_VERIFICATION_REQUIRED=1` ran the verification gate and it passed. */
+  verificationGate?: Pick<VerificationGateResult, 'checked' | 'rebased'>;
   batchReviews?: {
     filed: Array<{ shaRange: string; beadIds: string[] }>;
     pending: string[];
@@ -307,6 +454,41 @@ export async function runAdvanceWave(
     !required &&
     (verification.missingEvidence.length > 0 || verification.invalidEvidence.length > 0);
 
+  // Step 1.55: poteto mode / FW_VERIFICATION_REQUIRED=1 — every closed bead
+  // needs an independent `verified` verdict that still matches its code.
+  let verificationGate: AdvanceWaveOutcome['verificationGate'];
+  if (isVerificationRequired(state)) {
+    const closedIds = [...new Set([
+      ...verification.verified,
+      ...verification.autoClosed.map((entry) => entry.beadId),
+    ])];
+    const gate = await checkWaveVerification({
+      exec,
+      cwd,
+      beadIds: closedIds,
+      ledgerPath: (state as CheckpointState).verificationLedgerPath,
+      signal,
+    });
+    if (gate.failures.length > 0) {
+      const code = gate.failures[0].code;
+      return makeToolError(
+        'flywheel_advance_wave',
+        state.phase,
+        code,
+        `Cannot advance wave — ${gate.failures.length} closed bead(s) lack a current verified verdict: ${gate.failures.map((f) => `${f.beadId} (${f.code}: ${f.message})`).join('; ')}`,
+        {
+          hint: 'Have an independent verifier run flywheel_approve_beads(action: "verify-bead") on each listed bead against the current HEAD, then call flywheel_advance_wave again.',
+          details: { failures: gate.failures, rebased: gate.rebased },
+        },
+      );
+    }
+    verificationGate = { checked: gate.checked, rebased: gate.rebased };
+  }
+  const gateFields: Pick<AdvanceWaveOutcome, 'verificationGate'> = verificationGate ? { verificationGate } : {};
+  const gateLine = verificationGate
+    ? [`Verification gate: ${verificationGate.checked.length} bead(s) verified against HEAD${verificationGate.rebased.length > 0 ? `, ${verificationGate.rebased.length} carried across a rebase by patch id` : ''}.`]
+    : [];
+
   // Step 1.6: file beads from batch-review verdicts that landed since the last
   // call, so they join this wave's frontier without the coordinator asking.
   const batchReviews = await applyLandedBatchReviews(cwd, state, signal);
@@ -404,10 +586,11 @@ export async function runAdvanceWave(
       needsEvidence,
       convergence: convergenceRec,
       ...batchFields,
+      ...gateFields,
     };
     return okResult(
       state.phase,
-      [`Wave verified. Queue drained — no more beads to dispatch.${formattedProgramWarnings}`, ...reviewLines].join('\n'),
+      [`Wave verified. Queue drained — no more beads to dispatch.${formattedProgramWarnings}`, ...gateLine, ...reviewLines].join('\n'),
       outcome,
     );
   }
@@ -451,11 +634,13 @@ export async function runAdvanceWave(
     needsEvidence,
     convergence: convergenceRec,
     ...batchFields,
+    ...gateFields,
     ...(swarmHost ? { swarmHost } : {}),
   };
 
   const lines = [
     `Wave verified (${verification.verified.length}/${args.closedBeadIds.length} closed).`,
+    ...gateLine,
   ];
   if (formattedProgramWarnings) lines.push(formattedProgramWarnings.trim());
   if (needsEvidence) {
