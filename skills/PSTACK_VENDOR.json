@@ -1,0 +1,111 @@
+{
+  "upstreamRepo": "https://github.com/cursor/plugins/tree/main/pstack",
+  "upstreamVersion": "0.15.29",
+  "vendoredAt": "2026-10-21T20:46:44.678Z",
+  "skills": [
+    "poteto-mode",
+    "interrogate",
+    "architect",
+    "why"
+  ],
+  "missingUpstream": [
+    "plan",
+    "verify"
+  ],
+  "frontmatterPolicy": "normalized to name+description only; stripped keys per skill in frontmatterStripped",
+  "frontmatterStripped": {
+    "poteto-mode": [
+      "disable-model-invocation",
+      "icon",
+      "color"
+    ],
+    "interrogate": [
+      "disable-model-invocation"
+    ],
+    "architect": [
+      "disable-model-invocation"
+    ],
+    "why": [
+      "disable-model-invocation"
+    ]
+  },
+  "notes": "plan/verify have no corresponding skill in upstream pstack v0.15.29; not vendored. Only SKILL.md + references/ vendored per skill (playbooks/, scripts/ skipped except check-plan.mjs -> scripts/).",
+  "files": {
+    "skills/poteto-mode/SKILL.md": {
+      "sha256": "54833447dd95dfd1755ea6ee768becce804307a22182f1f7d7f1c7b82d3a01e2",
+      "upstreamSha256": "2755f102e7a6d0496b429d1031a22fb353e1f3d523543367caeaae5c4ed6f544"
+    },
+    "skills/interrogate/SKILL.md": {
+      "sha256": "6f429cbe059b00404ea84ef20b093087e44861265d01a4f39e189e2a8c7ed89e",
+      "upstreamSha256": "a16dfe179005abc22a4651b82f25b0c8ab953284276efe4e6dc341958fb63647"
+    },
+    "skills/architect/SKILL.md": {
+      "sha256": "ed4b3ac29682bd8fa5dbdc9553e5fdf68921b9bde4aa00b9e402e850b41f46ab",
+      "upstreamSha256": "31f8e97a52bfa5432edd61f68ade2a8632ef0bacbc2d2a6802d7a0e6821944ac"
+    },
+    "skills/why/SKILL.md": {
+      "sha256": "108b5055df1b4099473291be7d8bd4279eb167a212ffa5f2f44db0593a084802",
+      "upstreamSha256": "144d42e7712723d763e607bc0a969e5f1cdf83ec7228519d87677cc534571bed"
+    },
+    "skills/poteto-mode/references/bugbot-triage.md": {
+      "sha256": "b2d146c770d8d3593e1ef3d77b668039b8e1f78093ea1a86f1d45d7f99614309"
+    },
+    "skills/interrogate/references/code-quality-review.md": {
+      "sha256": "79162fda183eafd40d51661fbb5e151c7ba250f89e506ba17f5bd135dcbd50a8"
+    },
+    "skills/interrogate/references/lead-judgment.md": {
+      "sha256": "355f5195a76bc75a655125292369f2a8231a2b61fabe5188d8f1386060922b87"
+    },
+    "skills/interrogate/references/reviewer-prompt.md": {
+      "sha256": "f6005cc2b535006fca97a96c5bfda49df57312eedf1ffd8d1aaaf3eb33817c25"
+    },
+    "skills/interrogate/references/rubric.md": {
+      "sha256": "0f9c6bdb0b96e26dbde5f6407f417e0c02f54080e7a1268d8994f3c3ec6c5ac0"
+    },
+    "skills/architect/references/design-red-flags.md": {
+      "sha256": "d0e639e4cc588ec865f930d3a4111faad60987ae36925917e319d7ceca7c69ce"
+    },
+    "skills/architect/references/rationale-template.md": {
+      "sha256": "0cedfccdc7b47fc881febd5a8293eecbc542c20f8df825639904a8102d2eb5d3"
+    },
+    "skills/architect/references/runner-prompt.md": {
+      "sha256": "21dd5314aab778c5007228027a4591d97693fbec6ab86524037772b63f40948e"
+    },
+    "skills/why/references/epistemics.md": {
+      "sha256": "d54a2361b2d5973bc3fe2edf62f446d87935974d4b40d47f23b9529f956ca758"
+    },
+    "skills/why/references/investigator-prompt.md": {
+      "sha256": "c44afba186f899094f3694e6c9d6de5d14ff7c4ce28b787a9f50fc789c9a7fc3"
+    },
+    "skills/why/references/source-playbook.md": {
+      "sha256": "9ae9dcb9d09111c9facc68510331c5aba4aed9b1b057314ff1fc0e166ad3993a"
+    },
+    "skills/why/references/sources/code-archaeology.md": {
+      "sha256": "a4a3970e9db448054aed676f3f7feeee667b4b69f0bd57c8fd72b751be687cc7"
+    },
+    "skills/why/references/sources/databricks.md": {
+      "sha256": "236ede7aab6454662a992db088a5393537a5233a4c26719c93188f9e174488f6"
+    },
+    "skills/why/references/sources/datadog.md": {
+      "sha256": "b139faac5dc11b8f26c8255dce6033c1a6ac143b038d3dd103f2034c5dbec9cd"
+    },
+    "skills/why/references/sources/incident-postmortem.md": {
+      "sha256": "bf2661f1a81c37700884a45b77d6289be0c802b065febced31990e6564510839"
+    },
+    "skills/why/references/sources/linear.md": {
+      "sha256": "01304e7f1badfcfb78babbb0edcadeb3cc8dd3f713793420cdff24ba190f907c"
+    },
+    "skills/why/references/sources/notion.md": {
+      "sha256": "3bcfa695c49dfad4ac036d5d7181c12585f55ac04f1936198d16ab75a2788997"
+    },
+    "skills/why/references/sources/sentry.md": {
+      "sha256": "2d4f83048eac1df530b399e2aed75dd7c9c18577b7665420aaeb96d0ceb0b702"
+    },
+    "skills/why/references/sources/slack.md": {
+      "sha256": "3bc6309f5c7b26ace3b919dbd7f7b048861dd2020f910fe24f656cc74b3b661c"
+    },
+    "skills/why/references/synthesizer-prompt.md": {
+      "sha256": "11c62671aa7b7a6e3d36929ffe2b59bf95e6ca664eee4d93e6ee527dd3390ddb"
+    }
+  }
+}
