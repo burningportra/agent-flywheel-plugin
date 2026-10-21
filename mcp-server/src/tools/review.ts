@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import type { ToolContext, McpToolResult, Bead, ReviewArgs, FlywheelPhase, ReviewMode } from '../types.js';
+import type { ToolContext, McpToolResult, Bead, ReviewArgs, FlywheelPhase, FlywheelState, ReviewMode } from '../types.js';
 import type { FlywheelErrorCode } from '../errors.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { createLogger } from '../logger.js';
@@ -9,6 +9,7 @@ import { buildFreshEyesPrompt } from '../gates.js';
 import type { AppliedBatchReview } from '../commit-batch.js';
 import { applyBatchReviewVerdict, batchReviewVerdictPath, recordBatchReviewDispatch } from '../commit-batch.js';
 import { readMemory } from '../memory.js';
+import { completionReportPath, readCompletionReport } from '../completion-report.js';
 import {
   filterBeadsForProgram,
   formatBeadProgramWarnings,
@@ -191,6 +192,14 @@ export async function runReview(ctx: ToolContext, args: ReviewArgs): Promise<Mcp
   // bead), so this branch runs BEFORE the beadId guard below.
   if (args.action === 'batch_review') {
     return handleBatchReview(ctx, args);
+  }
+  // `converge` and `cross-agent` aren't in ReviewArgs['action'] yet, so compare as a string.
+  const action: string = args.action;
+  if (action === 'converge') {
+    return handleConverge(ctx, args);
+  }
+  if (action === 'cross-agent') {
+    return handleCrossAgent(ctx, args as ReviewArgs & CrossAgentArgs);
   }
 
   if (!args.beadId) {
@@ -478,7 +487,226 @@ Use the assigned lens. Follow the selected review mode. Report concrete findings
     'unsupported_action',
     `Unknown action: ${args.action}. Valid: hit-me, looks-good, skip, batch_review, report`,
     { beadId, action: args.action },
-    'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer), "batch_review" (T4 fresh-eyes auto-trigger over a sha range), or "report" (headless completion).',
+    'Pass action as one of: "hit-me" (spawn reviewers), "looks-good" (accept), "skip" (defer), "batch_review" (T4 fresh-eyes auto-trigger over a sha range), "report" (headless completion), "converge" (record a fresh-eyes round), or "cross-agent" (peer review by another model family).',
+  );
+}
+
+// ── action="converge" handler ───────────────────────────────────
+//
+// Fresh-eyes review repeats until two rounds in a row find nothing, or five
+// rounds have run. Each call records one finished round for a bead.
+
+export const MAX_FRESH_EYES_ROUNDS = 5;
+export const CLEAN_STREAK_TARGET = 2;
+
+export interface ReviewIteration {
+  round: number;
+  cleanStreak: number;
+  converged: boolean;
+  lastFindingCount: number;
+}
+
+type ReviewIterationState = FlywheelState & { reviewIterations?: Record<string, ReviewIteration> };
+
+/** Key for rounds recorded without a beadId (a whole-cycle review). */
+const CYCLE_REVIEW_KEY = '__cycle__';
+
+function convergenceReason(iteration: ReviewIteration): string {
+  if (iteration.cleanStreak >= CLEAN_STREAK_TARGET) return 'two_consecutive_clean_rounds';
+  if (iteration.round >= MAX_FRESH_EYES_ROUNDS) return 'max_rounds_reached';
+  return 'continue_review';
+}
+
+async function handleConverge(ctx: ToolContext, args: ReviewArgs): Promise<McpToolResult> {
+  const state = ctx.state as ReviewIterationState;
+  const findingCount = args.findingCount ?? 0;
+  if (!Number.isInteger(findingCount) || findingCount < 0) {
+    return errorResult(
+      state.phase,
+      'invalid_input',
+      `findingCount must be a non-negative integer for action="converge", got ${JSON.stringify(args.findingCount)}.`,
+      { findingCount: args.findingCount },
+      'Pass the number of findings this fresh-eyes round reported, or 0 for a clean round.',
+    );
+  }
+  const key = args.beadId || CYCLE_REVIEW_KEY;
+  // Another field may share this name with a different shape; only a map is ours.
+  const iterations =
+    typeof state.reviewIterations === 'object' && state.reviewIterations !== null ? state.reviewIterations : {};
+  const previous = iterations[key];
+
+  let iteration: ReviewIteration;
+  if (previous?.converged) {
+    iteration = previous;
+  } else {
+    const round = Math.min((previous?.round ?? 0) + 1, MAX_FRESH_EYES_ROUNDS);
+    const cleanStreak = findingCount === 0 ? (previous?.cleanStreak ?? 0) + 1 : 0;
+    iteration = {
+      round,
+      cleanStreak,
+      converged: cleanStreak >= CLEAN_STREAK_TARGET || round >= MAX_FRESH_EYES_ROUNDS,
+      lastFindingCount: findingCount,
+    };
+    state.reviewIterations = { ...iterations, [key]: iteration };
+    await ctx.saveState(state);
+  }
+
+  const reason = convergenceReason(iteration);
+  const next = iteration.converged
+    ? 'Fresh-eyes review has converged; move on.'
+    : `Run another fresh-eyes round, then call flywheel_review with action="converge" and its findingCount.`;
+  return okResult(
+    state.phase,
+    `Review round ${iteration.round}/${MAX_FRESH_EYES_ROUNDS} for ${key}: ${iteration.lastFindingCount} finding(s), clean streak ${iteration.cleanStreak}. ${next}`,
+    {
+      kind: 'review_convergence',
+      beadId: key,
+      round: iteration.round,
+      cleanStreak: iteration.cleanStreak,
+      converged: iteration.converged,
+      maxRounds: MAX_FRESH_EYES_ROUNDS,
+      reason,
+    },
+  );
+}
+
+// ── action="cross-agent" handler ────────────────────────────────
+//
+// A reviewer from a different model family than the implementer reads the
+// bead's commits, so the review doesn't share the implementer's blind spots.
+
+export type ModelFamily = 'claude' | 'pi' | 'gemini' | 'codex' | 'unknown';
+
+interface CrossAgentArgs {
+  rejectedReason?: string;
+}
+
+const LANE_FAMILY: Record<string, ModelFamily> = {
+  cc: 'claude',
+  claude: 'claude',
+  pi: 'pi',
+  gmi: 'gemini',
+  gem: 'gemini',
+  gemini: 'gemini',
+  agy: 'gemini',
+  cod: 'codex',
+  codex: 'codex',
+};
+
+const REVIEWER_FAMILY: Record<ModelFamily, ModelFamily> = {
+  claude: 'pi',
+  pi: 'claude',
+  gemini: 'claude',
+  codex: 'claude',
+  unknown: 'pi',
+};
+
+function familyFromModel(model: string): ModelFamily {
+  const lower = model.toLowerCase();
+  if (/claude|opus|sonnet|haiku/.test(lower)) return 'claude';
+  if (lower.includes('gemini')) return 'gemini';
+  if (/gpt|codex/.test(lower)) return 'codex';
+  if (lower.includes('/')) return 'pi';
+  return 'unknown';
+}
+
+/** swarm-spawn pane titles end in `__cc_1`, `__pi_1`, `__pi_gmi_1`, `__agy_1`, or `__cod_1`. */
+function familyFromPaneName(paneName: string): ModelFamily {
+  const match = /__(pi_gmi|cc|cod|gmi|agy|pi)_\d+(?:_[^_]*)?$/.exec(paneName);
+  if (!match) return 'unknown';
+  return match[1] === 'pi_gmi' ? 'gemini' : LANE_FAMILY[match[1]!] ?? 'unknown';
+}
+
+/**
+ * The schema strips keys it doesn't know, so `lane` and `model`, which some
+ * implementers add to their report, are read from the raw file.
+ */
+async function implementerFamily(cwd: string, beadId: string, paneName: string | undefined): Promise<ModelFamily> {
+  let extra: { lane?: unknown; model?: unknown } = {};
+  try {
+    extra = JSON.parse(await fs.readFile(completionReportPath(cwd, beadId), 'utf8')) as typeof extra;
+  } catch {
+    // readCompletionReport already parsed this file; a race here just loses the extras.
+  }
+  if (typeof extra.lane === 'string' && LANE_FAMILY[extra.lane.toLowerCase()]) {
+    return LANE_FAMILY[extra.lane.toLowerCase()]!;
+  }
+  if (typeof extra.model === 'string') {
+    const family = familyFromModel(extra.model);
+    if (family !== 'unknown') return family;
+  }
+  return paneName ? familyFromPaneName(paneName) : 'unknown';
+}
+
+async function handleCrossAgent(ctx: ToolContext, args: ReviewArgs & CrossAgentArgs): Promise<McpToolResult> {
+  const { state, cwd } = ctx;
+  const beadId = args.beadId;
+  if (!beadId) {
+    return errorResult(
+      state.phase,
+      'invalid_input',
+      'beadId is required for action="cross-agent".',
+      undefined,
+      'Pass the beadId whose implementation should get a cross-agent peer review.',
+    );
+  }
+  const read = await readCompletionReport(cwd, beadId);
+  if (!read.ok) {
+    return errorResult(
+      state.phase,
+      'missing_prerequisite',
+      `Cross-agent review needs ${beadId}'s completion report: ${read.error.message}`,
+      { beadId, reason: read.error.code, path: read.error.path },
+      `The implementer writes .pi-flywheel/completion/${beadId}.json when it closes the bead; ask it to write a valid one, then retry.`,
+    );
+  }
+  const report = read.report;
+  const implementer = await implementerFamily(cwd, beadId, report.paneName);
+  const reviewer = REVIEWER_FAMILY[implementer];
+  const rejectedReason = args.rejectedReason?.trim() || undefined;
+
+  const commits =
+    report.commits.length > 0
+      ? report.commits.map((sha) => `- \`git show ${sha}\``).join('\n')
+      : '- (no commits listed; review the changed files at HEAD)';
+  const files =
+    report.changedFiles.length > 0 ? report.changedFiles.map((file) => `- ${file}`).join('\n') : '- (none listed)';
+  const prompt = [
+    `You are a ${reviewer} reviewer doing a cross-agent peer review of bead ${beadId}.`,
+    `A ${implementer === 'unknown' ? 'model of unknown family' : `${implementer} model`} (${report.agentName}) implemented it, so look for what that model would miss rather than re-checking its own self-review.`,
+    '',
+    'Commits to inspect:',
+    commits,
+    '',
+    'Changed files:',
+    files,
+    '',
+    `Read the bead with \`br show ${beadId}\` and check every acceptance criterion against the diff. Report each finding with file:line, the failure it causes, and a fix. Do not edit code.`,
+    ...(rejectedReason ? ['', `An earlier review rejected this bead: ${rejectedReason}. Check that the fix addresses it.`] : []),
+    '',
+    `When done, the coordinator calls flywheel_review with action="converge", beadId="${beadId}", and findingCount set to the number of findings.`,
+  ].join('\n');
+
+  const selfAnnealingRule = rejectedReason
+    ? {
+        operation: 'store' as const,
+        category: 'review-rejection',
+        beadId,
+        rule: `Prevention rule for ${beadId}: ${rejectedReason}`,
+      }
+    : null;
+
+  return okResult(
+    state.phase,
+    `Cross-agent review for ${beadId}: implementer ${implementer}, reviewer ${reviewer}. Send structuredContent.data.prompt to a ${reviewer} pane.${selfAnnealingRule ? ' Store structuredContent.data.selfAnnealingRule with flywheel_memory.' : ''}`,
+    {
+      kind: 'cross_agent_review',
+      beadId,
+      implementerFamily: implementer,
+      reviewerFamily: reviewer,
+      prompt,
+      selfAnnealingRule,
+    },
   );
 }
 
