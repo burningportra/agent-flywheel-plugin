@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.28.0] - 2026-10-22
+
+### Added
+
+- **Explicit `includePi` opt-in flag across swarm lane splitting and dispatch (`agent-flywheel-plugin-iwj`).** `splitBeadsByProvider`, `swarmMixFor`, `buildImplementerDispatch`, `flywheel_approve_beads(action: "start")`, and `flywheel_advance_wave` now accept `includePi?: boolean`. When `agy` is available, `includePi: false` (default) splits `cc:agy 1:1` (`--cc=3 --agy=3` for 6 panes), while `includePi: true` splits `cc:pi:agy 1:1:1` (`--cc=2 --pi=2 --agy=2` for 6 panes) with graceful fallback and warnings if `pi` or `claude` is unavailable.
+- **`br_config_latency` doctor check (#29) and `flywheel_remediate` handler (`agent-flywheel-plugin-o3u`).** `flywheel_doctor` now checks `<cwd>/.beads/config.yaml` for `no_auto_flush: true` and `metrics.disabled: true` so `br update` never exceeds the 5000ms `flywheel_approve_beads` timeout on external APFS/SMB volumes. `flywheel_remediate({ checkName: "br_config_latency", mode: "execute", autoConfirm: true })` idempotently enables both settings and writes a `.beads/config.yaml.bak` backup when modifying an existing file.
+
+### Fixed
+
+- **Bounded Agent Mail CLI and MCP timeout guards in implementer prompts (`agent-flywheel-plugin-7ux`).** `adaptPromptForAgy`, `adaptPromptForPi`, `adaptPromptForGemini`, and `adaptPromptForClaude` now wrap `am` CLI invocations (`am macros start-session`, `am file_reservations reserve`, `am mail send`, `am file_reservations release`) in a 10-second `perl -e 'alarm 10; exec @ARGV' --` timeout guard (`AGENT_MAIL_CLI_TIMEOUT_SECONDS = 10`) and instruct implementer panes to proceed without blocking if Agent Mail's background git archive queue stalls.
+
 ## [3.27.0] - 2026-10-22
 
 ### Added

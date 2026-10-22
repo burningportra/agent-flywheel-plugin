@@ -1,14 +1,14 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE · AGY · OPENCODE // AGENT-FLYWHEEL v3.27.0 ▓▒░
+░▒▓ CLAUDE · AGY · OPENCODE // AGENT-FLYWHEEL v3.28.0 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code, Google Antigravity (`agy`), and OpenCode.**  
 Scan → discover → plan → beads → NTM swarm → review → wrap-up — with atomic checkpoints, pre-code interrogation (`pstack`), SHA-coupled verification ledgers, and adversarial review at every risky seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.27.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.28.0-blue.svg)](CHANGELOG.md)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
 [![Antigravity Port](https://img.shields.io/badge/Antigravity_(agy)-validated-8A2BE2)](docs/agy.md)
 [![OpenCode Port](https://img.shields.io/badge/OpenCode-port-00ADD8)](docs/opencode.md)
