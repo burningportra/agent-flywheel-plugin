@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
 import { normalizeText } from "../utils/text-normalize.js";
 const BASELINE_SCHEMA_VERSION = 1;
 export const RULESET_VERSION = 1;
@@ -15,20 +14,37 @@ export function toRepoRelativePosix(file, repoRoot) {
     const rel = path.relative(repoRoot, abs);
     return rel.split(path.sep).join("/");
 }
-const BaselineEntrySchema = z.object({
-    ruleId: z.string(),
-    rulesetVersion: z.number().int().nonnegative(),
-    file: z.string(),
-    line: z.number().int().positive(),
-    fingerprint: z.string(),
-    reason: z.string().default(""),
-});
-const BaselineFileSchema = z.object({
-    schemaVersion: z.literal(1),
-    rulesetVersion: z.number().int().nonnegative(),
-    generated: z.string(),
-    entries: z.array(BaselineEntrySchema),
-});
+const isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+const isCount = (v) => Number.isSafeInteger(v) && v >= 0;
+function readEntry(v) {
+    if (!isRecord(v))
+        return null;
+    const { ruleId, rulesetVersion, file, line, fingerprint, reason = "" } = v;
+    if (typeof ruleId !== "string" || !isCount(rulesetVersion) || typeof file !== "string")
+        return null;
+    if (!Number.isSafeInteger(line) || line <= 0)
+        return null;
+    if (typeof fingerprint !== "string" || typeof reason !== "string")
+        return null;
+    return { ruleId, rulesetVersion, file, line: line, fingerprint, reason };
+}
+// Accepts exactly what BaselineFileSchema accepts and returns the same shape,
+// without zod. Anything it can't vouch for goes to zod for the real error.
+function readBaselineFile(v) {
+    if (!isRecord(v))
+        return null;
+    const { schemaVersion, rulesetVersion, generated, entries } = v;
+    if (schemaVersion !== 1 || !isCount(rulesetVersion) || typeof generated !== "string" || !Array.isArray(entries))
+        return null;
+    const read = [];
+    for (const e of entries) {
+        const entry = readEntry(e);
+        if (!entry)
+            return null;
+        read.push(entry);
+    }
+    return { schemaVersion, rulesetVersion, generated, entries: read };
+}
 // CRLF -> LF MUST run BEFORE fingerprint computation. Otherwise mac dev vs
 // linux CI produce different fingerprints for identical content.
 export function normalizeSourceForFingerprint(source) {
@@ -55,6 +71,10 @@ export async function loadBaseline(path) {
         throw err;
     }
     const parsed = JSON.parse(normalizeText(text));
+    const baseline = readBaselineFile(parsed);
+    if (baseline)
+        return baseline;
+    const { BaselineFileSchema } = await import("./baseline-schema.js");
     return BaselineFileSchema.parse(parsed);
 }
 export async function saveBaseline(path, baseline) {

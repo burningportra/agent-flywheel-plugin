@@ -1,7 +1,7 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import type { Root, Code, Heading, RootContent } from "mdast";
-import { FlywheelError } from "../errors.js";
+import { FlywheelError } from "../errors-core.js";
 import type {
   AskUserQuestionCall,
   AuqOption,

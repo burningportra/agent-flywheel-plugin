@@ -1,5 +1,5 @@
 import type { Document, Finding, Rule, RuleContext } from "./types.js";
-import { errMsg } from "../errors.js";
+import { errMsg } from "../errors-core.js";
 
 export interface RunRuleResult {
   findings: Finding[];

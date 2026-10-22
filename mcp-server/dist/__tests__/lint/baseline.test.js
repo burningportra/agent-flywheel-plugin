@@ -108,6 +108,37 @@ describe("loadBaseline / saveBaseline", () => {
         const text = await readFile(file, "utf8");
         expect(text.endsWith("\n")).toBe(true);
     });
+    const entry = { ruleId: "r1", rulesetVersion: 1, file: "x.md", line: 2, fingerprint: "sha256:zzz", reason: "why" };
+    const file = (entries, extra = {}) => ({
+        schemaVersion: 1,
+        rulesetVersion: 1,
+        generated: "2026-04-15T00:00:00Z",
+        entries,
+        ...extra,
+    });
+    it.each([
+        ["valid", file([entry])],
+        ["missing reason", file([{ ...entry, reason: undefined }])],
+        ["extra keys", file([{ ...entry, note: "x" }], { tool: "lint" })],
+        ["line 0", file([{ ...entry, line: 0 }])],
+        ["fractional line", file([{ ...entry, line: 1.5 }])],
+        ["negative rulesetVersion", file([entry], { rulesetVersion: -1 })],
+        ["null reason", file([{ ...entry, reason: null }])],
+        ["entry is an array", file([[entry]])],
+        ["entries not an array", file([], { entries: {} })],
+        ["schemaVersion 2", file([entry], { schemaVersion: 2 })],
+    ])("agrees with BaselineFileSchema on %s", async (_name, content) => {
+        const { BaselineFileSchema } = await import("../../lint/baseline-schema.js");
+        const p = path.join(tmp, "cmp.json");
+        await writeFile(p, JSON.stringify(content), "utf8");
+        const expected = BaselineFileSchema.safeParse(JSON.parse(JSON.stringify(content)));
+        if (expected.success) {
+            expect(JSON.stringify(await loadBaseline(p))).toBe(JSON.stringify(expected.data));
+        }
+        else {
+            await expect(loadBaseline(p)).rejects.toThrow(expected.error.message);
+        }
+    });
 });
 describe("applyBaseline", () => {
     const source = "alpha\nbeta\ngamma\ndelta";

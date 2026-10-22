@@ -1,4 +1,4 @@
-import { errMsg } from "../errors.js";
+import { errMsg } from "../errors-core.js";
 /**
  * Run a single rule with isolation + timeout. Never throws.
  * - try/catch around rule.check(): caught errors become internalError.

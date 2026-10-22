@@ -1,7 +1,6 @@
 import { parse } from "./parser.js";
 import { runRule } from "./runRule.js";
 export { createLintLogger } from "./logger.js";
-export { LintConfigSchema } from "./config.js";
 export { computeExitCode, EXIT_CLEAN, EXIT_FINDINGS, EXIT_INTERNAL, EXIT_INVALID_ARGS, EXIT_FILE_ERROR, } from "./exitCodes.js";
 export { runRule } from "./runRule.js";
 export async function lint(opts) {

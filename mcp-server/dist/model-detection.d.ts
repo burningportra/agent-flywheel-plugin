@@ -19,6 +19,10 @@ export declare const CURRENT_MODEL_IDS: {
 };
 /** The only Gemini model the flywheel runs, through Pi on the Vercel AI Gateway. */
 export declare const CURRENT_GEMINI_MODEL_ID = "gemini-4-argon";
+export declare const PI_GATEWAY_PROVIDER = "vercel-ai-gateway";
+/** The swarm's Gemini lane is Pi running this model on the gateway; no other Gemini model runs anywhere. */
+export declare const GEMINI_GATEWAY_ID = "google/gemini-4-argon";
+export declare const GEMINI_LANE_MODEL = "vercel-ai-gateway/google/gemini-4-argon";
 export declare const DEEP_PLAN_MODELS: {
     readonly correctness: "opus";
     readonly ergonomics: "sonnet";

@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import * as path from "node:path";
 import type { Document, Finding, Rule, RuleContext } from "../types.js";
-import { GEMINI_LANE_MODEL } from "../../pi-models.js";
+import { GEMINI_LANE_MODEL } from "../../model-detection.js";
 
 /**
  * PANE001 — NTM pane-priority drift between AGENTS.md canonical rule and

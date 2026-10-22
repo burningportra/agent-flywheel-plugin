@@ -1,6 +1,6 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
-import { FlywheelError } from "../errors.js";
+import { FlywheelError } from "../errors-core.js";
 const HTML_TAG_ALLOWLIST = new Set([
     "br",
     "em",

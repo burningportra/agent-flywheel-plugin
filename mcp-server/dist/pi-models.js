@@ -10,13 +10,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { writeAtomic } from './atomic-write.js';
-import { CURRENT_GEMINI_MODEL_ID } from './model-detection.js';
-export const PI_GATEWAY_PROVIDER = 'vercel-ai-gateway';
+import { CURRENT_GEMINI_MODEL_ID, GEMINI_GATEWAY_ID, GEMINI_LANE_MODEL, PI_GATEWAY_PROVIDER } from './model-detection.js';
 export const GATEWAY_CATALOG_URL = 'https://ai-gateway.vercel.sh/v1/models';
 export const GATEWAY_LEADERBOARD_URL = 'https://vercel.com/api/ai/leaderboard-export?dataset=models&modality=text&format=json';
-/** The swarm's Gemini lane is Pi running this model on the gateway; no other Gemini model runs anywhere. */
-export const GEMINI_GATEWAY_ID = `google/${CURRENT_GEMINI_MODEL_ID}`;
-export const GEMINI_LANE_MODEL = `${PI_GATEWAY_PROVIDER}/${GEMINI_GATEWAY_ID}`;
+export { GEMINI_GATEWAY_ID, GEMINI_LANE_MODEL, PI_GATEWAY_PROVIDER };
 export const PI_LANE_ROLES = ['robustness', 'ergonomics', 'implementer'];
 export const PI_ROLE_PROFILE = {
     robustness: 'frontier',

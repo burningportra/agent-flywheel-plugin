@@ -22,7 +22,6 @@ export type {
 } from "./types.js";
 export { createLintLogger } from "./logger.js";
 export type { LintLogger } from "./logger.js";
-export { LintConfigSchema, type LintConfig } from "./config.js";
 export {
   computeExitCode,
   EXIT_CLEAN,

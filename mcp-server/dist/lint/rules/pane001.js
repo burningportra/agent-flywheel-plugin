@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import * as path from "node:path";
-import { GEMINI_LANE_MODEL } from "../../pi-models.js";
+import { GEMINI_LANE_MODEL } from "../../model-detection.js";
 const DEFAULT_LADDER_LANES = ["cc", "cod", "gmi", "pi"];
 const ALL_LANES = ["cc", "cod", "gmi", "pi", "agy"];
 /**

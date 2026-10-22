@@ -8,12 +8,10 @@
  */
 import { z } from 'zod';
 import type { ExecFn } from './exec.js';
-export declare const PI_GATEWAY_PROVIDER = "vercel-ai-gateway";
+import { GEMINI_GATEWAY_ID, GEMINI_LANE_MODEL, PI_GATEWAY_PROVIDER } from './model-detection.js';
 export declare const GATEWAY_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
 export declare const GATEWAY_LEADERBOARD_URL = "https://vercel.com/api/ai/leaderboard-export?dataset=models&modality=text&format=json";
-/** The swarm's Gemini lane is Pi running this model on the gateway; no other Gemini model runs anywhere. */
-export declare const GEMINI_GATEWAY_ID = "google/gemini-4-argon";
-export declare const GEMINI_LANE_MODEL = "vercel-ai-gateway/google/gemini-4-argon";
+export { GEMINI_GATEWAY_ID, GEMINI_LANE_MODEL, PI_GATEWAY_PROVIDER };
 export declare const PI_LANE_ROLES: readonly ["robustness", "ergonomics", "implementer"];
 export type PiLaneRole = (typeof PI_LANE_ROLES)[number];
 /**
@@ -286,5 +284,4 @@ export declare function checkPiLaneReady(exec: ExecFn, opts: {
     ready: boolean;
     detail: string;
 }>;
-export {};
 //# sourceMappingURL=pi-models.d.ts.map
