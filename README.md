@@ -1,14 +1,14 @@
 <div align="center">
 
 ```
-░▒▓ CLAUDE · AGY · OPENCODE // AGENT-FLYWHEEL v3.26.0 ▓▒░
+░▒▓ CLAUDE · AGY · OPENCODE // AGENT-FLYWHEEL v3.27.0 ▓▒░
 ```
 
 **Multi-agent coding flywheel for Claude Code, Google Antigravity (`agy`), and OpenCode.**  
 Scan → discover → plan → beads → NTM swarm → review → wrap-up — with atomic checkpoints, pre-code interrogation (`pstack`), SHA-coupled verification ledgers, and adversarial review at every risky seam.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Version](https://img.shields.io/badge/version-3.26.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.27.0-blue.svg)](CHANGELOG.md)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-orange)](https://github.com/anthropics/claude-code)
 [![Antigravity Port](https://img.shields.io/badge/Antigravity_(agy)-validated-8A2BE2)](docs/agy.md)
 [![OpenCode Port](https://img.shields.io/badge/OpenCode-port-00ADD8)](docs/opencode.md)
@@ -141,17 +141,17 @@ All three tracks share the same `.pi-flywheel/checkpoint.json` state, `br` bead 
 
 ## How `agent-flywheel` Compares
 
-| Capability | `agent-flywheel` (v3.26.0) | Raw Claude Code / AGY | Aider / Cline | SWE-agent / OpenHands |
+| Capability | `agent-flywheel` (v3.27.0) | Raw Claude Code / AGY | Aider / Cline | SWE-agent / OpenHands |
 |---|---|---|---|---|
 | **Resumable across sessions** | ✅ Atomic `.pi-flywheel/checkpoint.json` | ❌ Context-window bound | ⚠️ Chat history only | ⚠️ Container-bound |
-| **Multi-model parallel swarm** | ✅ NTM (`cc` + `pi` + `gmi` + `agy` panes) | ❌ Single-session | ❌ Single-session | ❌ Single-agent |
+| **Multi-model parallel swarm** | ✅ NTM (`cc` + `agy` default, optional `pi`/`gmi`) | ❌ Single-session | ❌ Single-session | ❌ Single-agent |
 | **File-conflict prevention** | ✅ Agent Mail `reserveOrFail` + pre-commit guard | ❌ None | ❌ None | ❌ None |
 | **Pre-code spec & ADR gates (`pstack`)** | ✅ `/why` + `/interrogate` + `/architect` | ❌ None | ❌ None | ❌ None |
 | **SHA-coupled verification ledger** | ✅ `git patch-id --stable` in `ledger.tsv` | ❌ Narrative claims | ❌ Narrative claims | ⚠️ Test exit code only |
 | **Adversarial review & cross-family grading** | ✅ Duels + `cross-agent` + `flywheel_grade_outcome` | ❌ Self-review | ❌ None | ❌ None |
 | **Structured error contracts** | ✅ 43-code `FlywheelErrorCode` | ❌ Unstructured prose | ❌ Unstructured prose | ❌ Unstructured prose |
 | **Dependency graph triage** | ✅ `bv --robot-triage\|next\|plan\|insights` + Cytoscape | ❌ Flat todo list | ❌ None | ❌ None |
-| **Toolchain health & auto-remediation** | ✅ 27-check `flywheel_doctor` + `flywheel_remediate` | ❌ Manual | ❌ Manual | ❌ Manual |
+| **Toolchain health & auto-remediation** | ✅ 28-check `flywheel_doctor` + `flywheel_remediate` | ❌ Manual | ❌ Manual | ❌ Manual |
 
 **When to use `agent-flywheel`:**
 - Multi-file features, refactors, ports, or architectural migrations that span 3–30+ beads across multiple waves.
@@ -439,6 +439,12 @@ lanes:
 ---
 
 ## What's New
+
+### v3.27.0 (2026-10-22) — First-Class Claude + AGY Swarm Default (Pi Opt-In) & `prompt-suggester` Doctor Check
+
+- **Claude + AGY Default Swarm Lanes (`cc:agy 1:1`, Pi Opt-In).** `detectCliCapabilities`, `splitBeadsByProvider`, `swarmMixFor`, `adaptPromptForAgy`, `buildImplementerDispatch`, and `flywheel_doctor` now default to a 50/50 **Claude + AGY** (`--cc=3 --agy=3`) swarm split whenever `agy` is available, with **Pi (`--pi`)** as an explicit opt-in across `/start`, `/flywheel-swarm`, deep plan, in-flight resume, and reality-check. Added `lanes.agy` toggle in `flywheel.config.yaml` and native AGY implementer prompt adaptation (`run_command`, `read_file`, `edit_file`, `write_file`).
+- **`prompt_suggester_plugin` Doctor Check (Check #28).** `flywheel_doctor` now checks optional `prompt-suggester` installations across Claude Code and Antigravity (`~/.claude/plugins/prompt-suggester`, `~/.gemini/config/plugins/prompt-suggester`, `~/.gemini/antigravity/plugins/prompt-suggester`), validating manifests and `hooks/suggester-hook.mjs`.
+- **Goal-Scoped Bead Commits & Trimmed Polish Insights.** Added `scripts/commit-goal-beads.mjs` for selective goal-labelled `.beads/issues.jsonl` commits, `expectedProgramLabel` + `untaggedActiveBeadIds` diagnostics on `beads_missing`, and `withoutPerBeadStats` trimming on `converge-polish`.
 
 ### v3.26.0 (2026-10-21) — Antigravity (`agy`) Port, Poteto (`pstack`) Mode & Convergence Loops
 

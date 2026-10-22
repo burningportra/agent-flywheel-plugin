@@ -11,6 +11,10 @@
       "kind": "json"
     },
     {
+      "path": "agy/plugin.json",
+      "kind": "json"
+    },
+    {
       "path": ".claude-plugin/marketplace.json",
       "kind": "json",
       "//": "Top-level manifest has no `version` field today; included so future schema changes are picked up automatically.",
