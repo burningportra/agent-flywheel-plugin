@@ -174,6 +174,16 @@ function walkMd(dir: string): string[] {
   return out;
 }
 
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
+// Starts work early without an unhandled rejection when an earlier step returns first.
+function settle<T>(p: Promise<T>): Promise<Settled<T>> {
+  return p.then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+}
+
 export function resolveRepoRoot(scriptUrl: string): string {
   const here = path.dirname(fileURLToPath(scriptUrl));
   const mcpServerRoot = isCompiledScript(scriptUrl)
@@ -197,29 +207,55 @@ async function main(): Promise<number> {
     return 3;
   }
 
-  const lintMod = (await import(`${lintBase}/index.js`)) as unknown as LintModule;
-  const baselineMod = (await import(`${lintBase}/baseline.js`)) as unknown as BaselineModule;
-  const reportersMod = (await import(`${lintBase}/reporters/index.js`)) as unknown as ReportersModule;
-  const registryMod = (await import(`${lintBase}/skillRegistry.js`)) as unknown as SkillRegistryModule;
-
-  const auq = (await import(`${lintBase}/rules/askUserQuestion.js`)) as unknown as { auqRules: unknown[] };
-  const slash = (await import(`${lintBase}/rules/slashReferences.js`)) as unknown as { slash001: unknown };
-  const place = (await import(`${lintBase}/rules/placeholders.js`)) as unknown as { place001: unknown };
-  const impl = (await import(`${lintBase}/rules/implicitDecisions.js`)) as unknown as { impl001: unknown };
-  const err = (await import(`${lintBase}/rules/errorCodeReferences.js`)) as unknown as { err001: unknown };
-  const reserve = (await import(`${lintBase}/rules/reserve001.js`)) as unknown as { reserve001: unknown };
-  const pane = (await import(`${lintBase}/rules/pane001.js`)) as unknown as { pane001: unknown };
-  const tone = (await import(`${lintBase}/rules/tone001.js`)) as unknown as { tone001: unknown };
-  const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001, tone.tone001];
+  // Module imports, the .md reads, the registry (manifest) load and the baseline
+  // load are independent, so they run together; results are still checked in
+  // the original order so errors and output don't change.
+  const modulesLoad = Promise.all([
+    import(`${lintBase}/index.js`),
+    import(`${lintBase}/baseline.js`),
+    import(`${lintBase}/reporters/index.js`),
+    import(`${lintBase}/skillRegistry.js`),
+    import(`${lintBase}/rules/askUserQuestion.js`),
+    import(`${lintBase}/rules/slashReferences.js`),
+    import(`${lintBase}/rules/placeholders.js`),
+    import(`${lintBase}/rules/implicitDecisions.js`),
+    import(`${lintBase}/rules/errorCodeReferences.js`),
+    import(`${lintBase}/rules/reserve001.js`),
+    import(`${lintBase}/rules/pane001.js`),
+    import(`${lintBase}/rules/tone001.js`),
+  ]);
 
   const repoRoot = resolveRepoRoot(import.meta.url);
 
   const dirAbs = path.resolve(process.cwd(), opts.dir);
-  let files: string[];
+  let files: string[] = [];
+  let walkError: unknown = null;
   try {
     files = walkMd(dirAbs);
   } catch (e) {
-    process.stderr.write(`lint-skill-dir: cannot read ${dirAbs}: ${String(e)}\n`);
+    walkError = e;
+  }
+  const reads = files.map((file) => settle(readFile(file, "utf8")));
+
+  const [lintMod, baselineMod, reportersMod, registryMod, auq, slash, place, impl, err, reserve, pane, tone] =
+    (await modulesLoad) as unknown as [
+      LintModule,
+      BaselineModule,
+      ReportersModule,
+      SkillRegistryModule,
+      { auqRules: unknown[] },
+      { slash001: unknown },
+      { place001: unknown },
+      { impl001: unknown },
+      { err001: unknown },
+      { reserve001: unknown },
+      { pane001: unknown },
+      { tone001: unknown },
+    ];
+  const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001, tone.tone001];
+
+  if (walkError !== null) {
+    process.stderr.write(`lint-skill-dir: cannot read ${dirAbs}: ${String(walkError)}\n`);
     return 4;
   }
   if (files.length === 0) {
@@ -227,7 +263,12 @@ async function main(): Promise<number> {
     return 4;
   }
 
-  const registry = await registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci });
+  const registryLoad = settle(registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci }));
+  const baselineLoad = opts.baseline && !opts.updateBaseline ? settle(baselineMod.loadBaseline(opts.baseline)) : null;
+
+  const registryResult = await registryLoad;
+  if (!registryResult.ok) throw registryResult.error;
+  const registry = registryResult.value;
 
   // One lint per file, then merge findings.
   const allFindings: Finding[] = [];
@@ -237,15 +278,13 @@ async function main(): Promise<number> {
   // emit the same global findings on every per-file lint pass; without dedupe
   // the baseline collects N copies.
   const seen = new Set<string>();
-  for (const file of files) {
-    let raw: string;
-    try {
-      raw = await readFile(file, "utf8");
-    } catch (e) {
-      process.stderr.write(`lint-skill-dir: cannot read ${file}: ${String(e)}\n`);
+  for (const [i, file] of files.entries()) {
+    const read = await reads[i];
+    if (!read.ok) {
+      process.stderr.write(`lint-skill-dir: cannot read ${file}: ${String(read.error)}\n`);
       return 4;
     }
-    const source = baselineMod.normalizeSourceForFingerprint(raw);
+    const source = baselineMod.normalizeSourceForFingerprint(read.value);
     perFileSources.set(file, source);
     const result = await lintMod.lint({
       source,
@@ -299,13 +338,12 @@ async function main(): Promise<number> {
   let liveFindings: Finding[] = [];
   let baselinedCount = 0;
   if (opts.baseline) {
-    let bf: unknown;
-    try {
-      bf = await baselineMod.loadBaseline(opts.baseline);
-    } catch (e) {
-      process.stderr.write(`lint-skill-dir: failed to load baseline ${opts.baseline}: ${String(e)}\n`);
+    const loaded = await baselineLoad!;
+    if (!loaded.ok) {
+      process.stderr.write(`lint-skill-dir: failed to load baseline ${opts.baseline}: ${String(loaded.error)}\n`);
       return 4;
     }
+    const bf = loaded.value;
     // Reject baseline entries with empty reasons — a baseline is "fix later, not
     // forgotten", and an unexplained entry is indistinguishable from a mistake.
     // The error prints the offenders so a reviewer can patch them in one pass.

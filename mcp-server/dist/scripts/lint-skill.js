@@ -27,18 +27,20 @@ import { fileURLToPath } from "node:url";
 const isCompiled = import.meta.url.includes("/dist/scripts/");
 const lintBase = isCompiled ? "../lint" : "../src/lint";
 async function loadLintModules() {
-    const lintMod = (await import(`${lintBase}/index.js`));
-    const registryMod = (await import(`${lintBase}/skillRegistry.js`));
-    const baselineMod = (await import(`${lintBase}/baseline.js`));
-    const manifestMod = (await import(`${lintBase}/manifest.js`));
-    const reportersMod = (await import(`${lintBase}/reporters/index.js`));
-    const auq = (await import(`${lintBase}/rules/askUserQuestion.js`));
-    const slashMod = (await import(`${lintBase}/rules/slashReferences.js`));
-    const placeMod = (await import(`${lintBase}/rules/placeholders.js`));
-    const implMod = (await import(`${lintBase}/rules/implicitDecisions.js`));
-    const errMod = (await import(`${lintBase}/rules/errorCodeReferences.js`));
-    const reserveMod = (await import(`${lintBase}/rules/reserve001.js`));
-    const paneMod = (await import(`${lintBase}/rules/pane001.js`));
+    const [lintMod, registryMod, baselineMod, manifestMod, reportersMod, auq, slashMod, placeMod, implMod, errMod, reserveMod, paneMod] = (await Promise.all([
+        import(`${lintBase}/index.js`),
+        import(`${lintBase}/skillRegistry.js`),
+        import(`${lintBase}/baseline.js`),
+        import(`${lintBase}/manifest.js`),
+        import(`${lintBase}/reporters/index.js`),
+        import(`${lintBase}/rules/askUserQuestion.js`),
+        import(`${lintBase}/rules/slashReferences.js`),
+        import(`${lintBase}/rules/placeholders.js`),
+        import(`${lintBase}/rules/implicitDecisions.js`),
+        import(`${lintBase}/rules/errorCodeReferences.js`),
+        import(`${lintBase}/rules/reserve001.js`),
+        import(`${lintBase}/rules/pane001.js`),
+    ]));
     const rules = {
         rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001, paneMod.pane001],
     };
@@ -239,6 +241,10 @@ async function readSourceFile(file, maxBytes) {
     }
     return await readFile(file, "utf8");
 }
+// Starts work early without an unhandled rejection when an earlier step returns first.
+function settle(p) {
+    return p.then((value) => ({ ok: true, value }), (error) => ({ ok: false, error }));
+}
 export async function main(argv) {
     const { opts, error } = parseArgs(argv);
     if (error) {
@@ -256,8 +262,19 @@ export async function main(argv) {
         process.stdout.write(v + "\n");
         return 0;
     }
+    // The SKILL.md read, module imports, registry (manifest) load and baseline load
+    // are independent, so they run together; results are still checked in the
+    // original order so errors and output don't change.
+    const filePath = opts.file ? path.resolve(process.cwd(), opts.file) : "";
+    const rawRead = opts.file && !opts.updateManifest ? settle(readSourceFile(filePath, opts.maxBytes)) : null;
     const { lintMod, registryMod, baselineMod, manifestMod, reportersMod, rules } = await loadLintModules();
     const repoRoot = findRepoRoot();
+    const registryLoad = opts.updateManifest
+        ? null
+        : settle(registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci }));
+    const baselineLoad = opts.baseline && !opts.updateBaseline && !opts.updateManifest
+        ? settle(baselineMod.loadBaseline(opts.baseline))
+        : null;
     if (opts.updateManifest) {
         const manifestPath = path.join(repoRoot, DEFAULT_MANIFEST_REL);
         try {
@@ -275,18 +292,17 @@ export async function main(argv) {
         process.stderr.write("lint-skill: --file is required (use --help for usage)\n");
         return lintMod.EXIT_INVALID_ARGS;
     }
-    const filePath = path.resolve(process.cwd(), opts.file);
-    let raw;
-    try {
-        raw = await readSourceFile(filePath, opts.maxBytes);
-    }
-    catch (err) {
-        process.stderr.write(`lint-skill: cannot read ${filePath}: ${String(err)}\n`);
+    const rawResult = await rawRead;
+    if (!rawResult.ok) {
+        process.stderr.write(`lint-skill: cannot read ${filePath}: ${String(rawResult.error)}\n`);
         return lintMod.EXIT_FILE_ERROR;
     }
-    const source = baselineMod.normalizeSourceForFingerprint(raw);
+    const source = baselineMod.normalizeSourceForFingerprint(rawResult.value);
     const ruleSet = pickRules(rules.rules, opts.rule);
-    const registry = await registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci });
+    const registryResult = await registryLoad;
+    if (!registryResult.ok)
+        throw registryResult.error;
+    const registry = registryResult.value;
     let result;
     try {
         result = await lintMod.lint({
@@ -318,14 +334,12 @@ export async function main(argv) {
         }
     }
     if (opts.baseline) {
-        let bf;
-        try {
-            bf = await baselineMod.loadBaseline(opts.baseline);
-        }
-        catch (err) {
-            process.stderr.write(`lint-skill: failed to load baseline ${opts.baseline}: ${String(err)}\n`);
+        const loaded = await baselineLoad;
+        if (!loaded.ok) {
+            process.stderr.write(`lint-skill: failed to load baseline ${opts.baseline}: ${String(loaded.error)}\n`);
             return lintMod.EXIT_FILE_ERROR;
         }
+        const bf = loaded.value;
         const { live, baselined } = baselineMod.applyBaseline(result.findings, bf, source, repoRoot);
         result = { findings: [...live, ...baselined], internalErrors: result.internalErrors };
     }

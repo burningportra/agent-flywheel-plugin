@@ -110,6 +110,10 @@ function walkMd(dir) {
     }
     return out;
 }
+// Starts work early without an unhandled rejection when an earlier step returns first.
+function settle(p) {
+    return p.then((value) => ({ ok: true, value }), (error) => ({ ok: false, error }));
+}
 export function resolveRepoRoot(scriptUrl) {
     const here = path.dirname(fileURLToPath(scriptUrl));
     const mcpServerRoot = isCompiledScript(scriptUrl)
@@ -131,34 +135,50 @@ async function main() {
         process.stderr.write("lint-skill-dir: --dir is required\n");
         return 3;
     }
-    const lintMod = (await import(`${lintBase}/index.js`));
-    const baselineMod = (await import(`${lintBase}/baseline.js`));
-    const reportersMod = (await import(`${lintBase}/reporters/index.js`));
-    const registryMod = (await import(`${lintBase}/skillRegistry.js`));
-    const auq = (await import(`${lintBase}/rules/askUserQuestion.js`));
-    const slash = (await import(`${lintBase}/rules/slashReferences.js`));
-    const place = (await import(`${lintBase}/rules/placeholders.js`));
-    const impl = (await import(`${lintBase}/rules/implicitDecisions.js`));
-    const err = (await import(`${lintBase}/rules/errorCodeReferences.js`));
-    const reserve = (await import(`${lintBase}/rules/reserve001.js`));
-    const pane = (await import(`${lintBase}/rules/pane001.js`));
-    const tone = (await import(`${lintBase}/rules/tone001.js`));
-    const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001, tone.tone001];
+    // Module imports, the .md reads, the registry (manifest) load and the baseline
+    // load are independent, so they run together; results are still checked in
+    // the original order so errors and output don't change.
+    const modulesLoad = Promise.all([
+        import(`${lintBase}/index.js`),
+        import(`${lintBase}/baseline.js`),
+        import(`${lintBase}/reporters/index.js`),
+        import(`${lintBase}/skillRegistry.js`),
+        import(`${lintBase}/rules/askUserQuestion.js`),
+        import(`${lintBase}/rules/slashReferences.js`),
+        import(`${lintBase}/rules/placeholders.js`),
+        import(`${lintBase}/rules/implicitDecisions.js`),
+        import(`${lintBase}/rules/errorCodeReferences.js`),
+        import(`${lintBase}/rules/reserve001.js`),
+        import(`${lintBase}/rules/pane001.js`),
+        import(`${lintBase}/rules/tone001.js`),
+    ]);
     const repoRoot = resolveRepoRoot(import.meta.url);
     const dirAbs = path.resolve(process.cwd(), opts.dir);
-    let files;
+    let files = [];
+    let walkError = null;
     try {
         files = walkMd(dirAbs);
     }
     catch (e) {
-        process.stderr.write(`lint-skill-dir: cannot read ${dirAbs}: ${String(e)}\n`);
+        walkError = e;
+    }
+    const reads = files.map((file) => settle(readFile(file, "utf8")));
+    const [lintMod, baselineMod, reportersMod, registryMod, auq, slash, place, impl, err, reserve, pane, tone] = (await modulesLoad);
+    const rules = [...auq.auqRules, slash.slash001, place.place001, impl.impl001, err.err001, reserve.reserve001, pane.pane001, tone.tone001];
+    if (walkError !== null) {
+        process.stderr.write(`lint-skill-dir: cannot read ${dirAbs}: ${String(walkError)}\n`);
         return 4;
     }
     if (files.length === 0) {
         process.stderr.write(`lint-skill-dir: no .md files under ${dirAbs}\n`);
         return 4;
     }
-    const registry = await registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci });
+    const registryLoad = settle(registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci }));
+    const baselineLoad = opts.baseline && !opts.updateBaseline ? settle(baselineMod.loadBaseline(opts.baseline)) : null;
+    const registryResult = await registryLoad;
+    if (!registryResult.ok)
+        throw registryResult.error;
+    const registry = registryResult.value;
     // One lint per file, then merge findings.
     const allFindings = [];
     const perFileSources = new Map();
@@ -166,16 +186,13 @@ async function main() {
     // emit the same global findings on every per-file lint pass; without dedupe
     // the baseline collects N copies.
     const seen = new Set();
-    for (const file of files) {
-        let raw;
-        try {
-            raw = await readFile(file, "utf8");
-        }
-        catch (e) {
-            process.stderr.write(`lint-skill-dir: cannot read ${file}: ${String(e)}\n`);
+    for (const [i, file] of files.entries()) {
+        const read = await reads[i];
+        if (!read.ok) {
+            process.stderr.write(`lint-skill-dir: cannot read ${file}: ${String(read.error)}\n`);
             return 4;
         }
-        const source = baselineMod.normalizeSourceForFingerprint(raw);
+        const source = baselineMod.normalizeSourceForFingerprint(read.value);
         perFileSources.set(file, source);
         const result = await lintMod.lint({
             source,
@@ -224,14 +241,12 @@ async function main() {
     let liveFindings = [];
     let baselinedCount = 0;
     if (opts.baseline) {
-        let bf;
-        try {
-            bf = await baselineMod.loadBaseline(opts.baseline);
-        }
-        catch (e) {
-            process.stderr.write(`lint-skill-dir: failed to load baseline ${opts.baseline}: ${String(e)}\n`);
+        const loaded = await baselineLoad;
+        if (!loaded.ok) {
+            process.stderr.write(`lint-skill-dir: failed to load baseline ${opts.baseline}: ${String(loaded.error)}\n`);
             return 4;
         }
+        const bf = loaded.value;
         // Reject baseline entries with empty reasons — a baseline is "fix later, not
         // forgotten", and an unexplained entry is indistinguishable from a mistake.
         // The error prints the offenders so a reviewer can patch them in one pass.

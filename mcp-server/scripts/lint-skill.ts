@@ -86,18 +86,34 @@ async function loadLintModules(): Promise<{
   reportersMod: ReportersModule;
   rules: RulesModule;
 }> {
-  const lintMod = (await import(`${lintBase}/index.js`)) as unknown as LintModule;
-  const registryMod = (await import(`${lintBase}/skillRegistry.js`)) as unknown as SkillRegistryModule;
-  const baselineMod = (await import(`${lintBase}/baseline.js`)) as unknown as BaselineModule;
-  const manifestMod = (await import(`${lintBase}/manifest.js`)) as unknown as ManifestModule;
-  const reportersMod = (await import(`${lintBase}/reporters/index.js`)) as unknown as ReportersModule;
-  const auq = (await import(`${lintBase}/rules/askUserQuestion.js`)) as unknown as { auqRules: unknown[] };
-  const slashMod = (await import(`${lintBase}/rules/slashReferences.js`)) as unknown as { slash001: unknown };
-  const placeMod = (await import(`${lintBase}/rules/placeholders.js`)) as unknown as { place001: unknown };
-  const implMod = (await import(`${lintBase}/rules/implicitDecisions.js`)) as unknown as { impl001: unknown };
-  const errMod = (await import(`${lintBase}/rules/errorCodeReferences.js`)) as unknown as { err001: unknown };
-  const reserveMod = (await import(`${lintBase}/rules/reserve001.js`)) as unknown as { reserve001: unknown };
-  const paneMod = (await import(`${lintBase}/rules/pane001.js`)) as unknown as { pane001: unknown };
+  const [lintMod, registryMod, baselineMod, manifestMod, reportersMod, auq, slashMod, placeMod, implMod, errMod, reserveMod, paneMod] =
+    (await Promise.all([
+      import(`${lintBase}/index.js`),
+      import(`${lintBase}/skillRegistry.js`),
+      import(`${lintBase}/baseline.js`),
+      import(`${lintBase}/manifest.js`),
+      import(`${lintBase}/reporters/index.js`),
+      import(`${lintBase}/rules/askUserQuestion.js`),
+      import(`${lintBase}/rules/slashReferences.js`),
+      import(`${lintBase}/rules/placeholders.js`),
+      import(`${lintBase}/rules/implicitDecisions.js`),
+      import(`${lintBase}/rules/errorCodeReferences.js`),
+      import(`${lintBase}/rules/reserve001.js`),
+      import(`${lintBase}/rules/pane001.js`),
+    ])) as unknown as [
+      LintModule,
+      SkillRegistryModule,
+      BaselineModule,
+      ManifestModule,
+      ReportersModule,
+      { auqRules: unknown[] },
+      { slash001: unknown },
+      { place001: unknown },
+      { impl001: unknown },
+      { err001: unknown },
+      { reserve001: unknown },
+      { pane001: unknown },
+    ];
   const rules: RulesModule = {
     rules: [...auq.auqRules, slashMod.slash001, placeMod.place001, implMod.impl001, errMod.err001, reserveMod.reserve001, paneMod.pane001],
   };
@@ -310,6 +326,16 @@ async function readSourceFile(file: string, maxBytes: number): Promise<string> {
   return await readFile(file, "utf8");
 }
 
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
+// Starts work early without an unhandled rejection when an earlier step returns first.
+function settle<T>(p: Promise<T>): Promise<Settled<T>> {
+  return p.then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+}
+
 export async function main(argv: string[]): Promise<number> {
   const { opts, error } = parseArgs(argv);
   if (error) {
@@ -329,10 +355,22 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
 
+  // The SKILL.md read, module imports, registry (manifest) load and baseline load
+  // are independent, so they run together; results are still checked in the
+  // original order so errors and output don't change.
+  const filePath = opts.file ? path.resolve(process.cwd(), opts.file) : "";
+  const rawRead = opts.file && !opts.updateManifest ? settle(readSourceFile(filePath, opts.maxBytes)) : null;
+
   const { lintMod, registryMod, baselineMod, manifestMod, reportersMod, rules } =
     await loadLintModules();
 
   const repoRoot = findRepoRoot();
+  const registryLoad = opts.updateManifest
+    ? null
+    : settle(registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci }));
+  const baselineLoad = opts.baseline && !opts.updateBaseline && !opts.updateManifest
+    ? settle(baselineMod.loadBaseline(opts.baseline))
+    : null;
 
   if (opts.updateManifest) {
     const manifestPath = path.join(repoRoot, DEFAULT_MANIFEST_REL);
@@ -352,20 +390,18 @@ export async function main(argv: string[]): Promise<number> {
     return lintMod.EXIT_INVALID_ARGS;
   }
 
-  const filePath = path.resolve(process.cwd(), opts.file);
-
-  let raw: string;
-  try {
-    raw = await readSourceFile(filePath, opts.maxBytes);
-  } catch (err) {
-    process.stderr.write(`lint-skill: cannot read ${filePath}: ${String(err)}\n`);
+  const rawResult = await rawRead!;
+  if (!rawResult.ok) {
+    process.stderr.write(`lint-skill: cannot read ${filePath}: ${String(rawResult.error)}\n`);
     return lintMod.EXIT_FILE_ERROR;
   }
 
-  const source = baselineMod.normalizeSourceForFingerprint(raw);
+  const source = baselineMod.normalizeSourceForFingerprint(rawResult.value);
   const ruleSet = pickRules(rules.rules, opts.rule);
 
-  const registry = await registryMod.loadSkillRegistry({ repoRoot, ci: opts.ci });
+  const registryResult = await registryLoad!;
+  if (!registryResult.ok) throw registryResult.error;
+  const registry = registryResult.value;
 
   let result: { findings: unknown[]; internalErrors: unknown[] };
   try {
@@ -398,13 +434,12 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   if (opts.baseline) {
-    let bf: unknown;
-    try {
-      bf = await baselineMod.loadBaseline(opts.baseline);
-    } catch (err) {
-      process.stderr.write(`lint-skill: failed to load baseline ${opts.baseline}: ${String(err)}\n`);
+    const loaded = await baselineLoad!;
+    if (!loaded.ok) {
+      process.stderr.write(`lint-skill: failed to load baseline ${opts.baseline}: ${String(loaded.error)}\n`);
       return lintMod.EXIT_FILE_ERROR;
     }
+    const bf = loaded.value;
     const { live, baselined } = baselineMod.applyBaseline(result.findings, bf, source, repoRoot);
     result = { findings: [...live, ...baselined], internalErrors: result.internalErrors };
   }
