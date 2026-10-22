@@ -1,34 +1,26 @@
 import { FLYWHEEL_ERROR_CODES } from "../../errors.js";
 import type { Document, Finding, Rule, RuleContext } from "../types.js";
 
-interface CodePattern {
-  code: string;
-  pattern: RegExp;
-}
-
 const STRUCTURED_CODE_RE =
   /\b(?:structuredContent\??\.[\w?.]*data\??\.error\??\.code|data\??\.error\??\.code|error\??\.code)\b/;
 const ERROR_TEXT_RE = /\b(?:error|errors|message|messages|text|stderr|exception)\b/i;
 const LEGACY_MATCH_RE =
   /\b(?:contains?|includes?|indexof|startswith|endswith|match|search|regex|regexp)\b|(?:===|==|!==|!=)/i;
 
-const CODE_PATTERNS: CodePattern[] = FLYWHEEL_ERROR_CODES.map((code) => ({
-  code,
-  pattern: new RegExp(`\\b${code.replace(/_/g, "[ _-]?")}\\b`, "i"),
-}));
+// One alternation with a capture group per code, built once. A regex returns
+// its leftmost match and, at that position, the first alternative that
+// matches, which is the same earliest-index, first-listed-code answer as
+// testing each code's pattern separately.
+const CODE_RE = new RegExp(
+  FLYWHEEL_ERROR_CODES.map((code) => `\\b(${code.replace(/_/g, "[ _-]?")})\\b`).join("|"),
+  "i",
+);
 
 function findCodeReference(line: string): { code: string; index: number } | null {
-  let best: { code: string; index: number } | null = null;
-  for (const { code, pattern } of CODE_PATTERNS) {
-    pattern.lastIndex = 0;
-    const match = pattern.exec(line);
-    if (!match) continue;
-    const index = match.index;
-    if (best === null || index < best.index) {
-      best = { code, index };
-    }
-  }
-  return best;
+  const match = CODE_RE.exec(line);
+  if (!match) return null;
+  const group = match.findIndex((value, i) => i > 0 && value !== undefined);
+  return { code: FLYWHEEL_ERROR_CODES[group - 1]!, index: match.index };
 }
 
 export const err001: Rule = {

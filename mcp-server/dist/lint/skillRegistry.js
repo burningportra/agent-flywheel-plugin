@@ -36,27 +36,30 @@ async function safeReaddir(dir, signal, timeoutMs) {
         isFile: e.isFile(),
     }));
 }
+// Probes every <dir>/<entry>/SKILL.md at once instead of one stat per await.
+// Promise.all keeps the readdir order, so the returned names are unchanged.
+async function skillNamesIn(dir, entries, timeoutMs) {
+    const probes = entries
+        .filter((entry) => entry.isDirectory)
+        .map(async (entry) => {
+        const skillMd = path.join(dir, entry.name, "SKILL.md");
+        try {
+            const st = await withTimeout(stat(skillMd), timeoutMs, `stat ${skillMd}`);
+            return st.isFile() ? entry.name.toLowerCase() : null;
+        }
+        catch {
+            // No SKILL.md in this directory; skip.
+            return null;
+        }
+    });
+    return (await Promise.all(probes)).filter((name) => name !== null);
+}
 async function loadRepoSkills(repoRoot, signal, timeoutMs) {
     const skillsDir = path.join(repoRoot, "skills");
     try {
         const entries = await safeReaddir(skillsDir, signal, timeoutMs);
-        const names = [];
-        for (const entry of entries) {
-            if (!entry.isDirectory)
-                continue;
-            checkAborted(signal);
-            const skillMd = path.join(skillsDir, entry.name, "SKILL.md");
-            try {
-                const st = await withTimeout(stat(skillMd), timeoutMs, `stat ${skillMd}`);
-                if (st.isFile()) {
-                    names.push(entry.name.toLowerCase());
-                }
-            }
-            catch {
-                // No SKILL.md in this directory; skip.
-            }
-        }
-        return names;
+        checkAborted(signal);
+        return await skillNamesIn(skillsDir, entries, timeoutMs);
     }
     catch (err) {
         log.debug("repo skills layer skipped", { err: String(err), dir: skillsDir });
@@ -123,10 +126,12 @@ async function loadAllowlist(allowlistAbs, signal, timeoutMs) {
     }
 }
 async function walkPluginsForSkills(root, signal, timeoutMs) {
-    const found = [];
+    // Sibling subtrees are walked concurrently; each call returns its own names
+    // and the parent concatenates them in readdir order, so the result matches
+    // a sequential depth-first walk.
     async function recur(dir, depth) {
         if (depth > MAX_PLUGIN_DEPTH)
-            return;
+            return [];
         checkAborted(signal);
         let entries;
         try {
@@ -134,41 +139,23 @@ async function walkPluginsForSkills(root, signal, timeoutMs) {
         }
         catch (err) {
             log.debug("plugins readdir failed", { dir, err: String(err) });
-            return;
+            return [];
         }
-        const isSkillsDir = path.basename(dir) === "skills";
-        if (isSkillsDir) {
-            for (const entry of entries) {
-                if (!entry.isDirectory)
-                    continue;
-                const skillMd = path.join(dir, entry.name, "SKILL.md");
-                try {
-                    const st = await withTimeout(stat(skillMd), timeoutMs, `stat ${skillMd}`);
-                    if (st.isFile()) {
-                        found.push(entry.name.toLowerCase());
-                    }
-                }
-                catch {
-                    // No SKILL.md; skip.
-                }
-            }
-            return;
+        if (path.basename(dir) === "skills") {
+            return skillNamesIn(dir, entries, timeoutMs);
         }
-        for (const entry of entries) {
-            if (!entry.isDirectory)
-                continue;
-            if (entry.name.startsWith("."))
-                continue;
-            await recur(path.join(dir, entry.name), depth + 1);
-        }
+        const children = await Promise.all(entries
+            .filter((entry) => entry.isDirectory && !entry.name.startsWith("."))
+            .map((entry) => recur(path.join(dir, entry.name), depth + 1)));
+        return children.flat();
     }
     try {
-        await recur(root, 0);
+        return await recur(root, 0);
     }
     catch (err) {
         log.debug("plugins walk aborted", { root, err: String(err) });
+        return [];
     }
-    return found;
 }
 function levenshtein(a, b) {
     if (a === b)

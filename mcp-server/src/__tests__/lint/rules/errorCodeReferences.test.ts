@@ -56,4 +56,13 @@ describe("ERR001", () => {
     const findings = await runRule(doc);
     expect(findings).toEqual([]);
   });
+
+  it("reports the code that appears first in the line, not first in FLYWHEEL_ERROR_CODES", async () => {
+    // not_found is listed after missing_prerequisite but appears earlier here.
+    const line = "If the error message includes not found or missing_prerequisite, stop.";
+    const findings = await runRule(await parseSource(`${line}\n`));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.message).toContain('"not_found"');
+    expect(findings[0]!.column).toBe(line.indexOf("not found") + 1);
+  });
 });

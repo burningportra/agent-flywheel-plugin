@@ -80,6 +80,28 @@ async function safeReaddir(
   }));
 }
 
+// Probes every <dir>/<entry>/SKILL.md at once instead of one stat per await.
+// Promise.all keeps the readdir order, so the returned names are unchanged.
+async function skillNamesIn(
+  dir: string,
+  entries: Array<{ name: string; isDirectory: boolean }>,
+  timeoutMs: number,
+): Promise<string[]> {
+  const probes = entries
+    .filter((entry) => entry.isDirectory)
+    .map(async (entry) => {
+      const skillMd = path.join(dir, entry.name, "SKILL.md");
+      try {
+        const st = await withTimeout(stat(skillMd), timeoutMs, `stat ${skillMd}`);
+        return st.isFile() ? entry.name.toLowerCase() : null;
+      } catch {
+        // No SKILL.md in this directory; skip.
+        return null;
+      }
+    });
+  return (await Promise.all(probes)).filter((name): name is string => name !== null);
+}
+
 async function loadRepoSkills(
   repoRoot: string,
   signal: AbortSignal | undefined,
@@ -88,21 +110,8 @@ async function loadRepoSkills(
   const skillsDir = path.join(repoRoot, "skills");
   try {
     const entries = await safeReaddir(skillsDir, signal, timeoutMs);
-    const names: string[] = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory) continue;
-      checkAborted(signal);
-      const skillMd = path.join(skillsDir, entry.name, "SKILL.md");
-      try {
-        const st = await withTimeout(stat(skillMd), timeoutMs, `stat ${skillMd}`);
-        if (st.isFile()) {
-          names.push(entry.name.toLowerCase());
-        }
-      } catch {
-        // No SKILL.md in this directory; skip.
-      }
-    }
-    return names;
+    checkAborted(signal);
+    return await skillNamesIn(skillsDir, entries, timeoutMs);
   } catch (err) {
     log.debug("repo skills layer skipped", { err: String(err), dir: skillsDir });
     return [];
@@ -178,47 +187,36 @@ async function walkPluginsForSkills(
   signal: AbortSignal | undefined,
   timeoutMs: number,
 ): Promise<string[]> {
-  const found: string[] = [];
-
-  async function recur(dir: string, depth: number): Promise<void> {
-    if (depth > MAX_PLUGIN_DEPTH) return;
+  // Sibling subtrees are walked concurrently; each call returns its own names
+  // and the parent concatenates them in readdir order, so the result matches
+  // a sequential depth-first walk.
+  async function recur(dir: string, depth: number): Promise<string[]> {
+    if (depth > MAX_PLUGIN_DEPTH) return [];
     checkAborted(signal);
     let entries: Array<{ name: string; isDirectory: boolean; isFile: boolean }>;
     try {
       entries = await safeReaddir(dir, signal, timeoutMs);
     } catch (err) {
       log.debug("plugins readdir failed", { dir, err: String(err) });
-      return;
+      return [];
     }
-    const isSkillsDir = path.basename(dir) === "skills";
-    if (isSkillsDir) {
-      for (const entry of entries) {
-        if (!entry.isDirectory) continue;
-        const skillMd = path.join(dir, entry.name, "SKILL.md");
-        try {
-          const st = await withTimeout(stat(skillMd), timeoutMs, `stat ${skillMd}`);
-          if (st.isFile()) {
-            found.push(entry.name.toLowerCase());
-          }
-        } catch {
-          // No SKILL.md; skip.
-        }
-      }
-      return;
+    if (path.basename(dir) === "skills") {
+      return skillNamesIn(dir, entries, timeoutMs);
     }
-    for (const entry of entries) {
-      if (!entry.isDirectory) continue;
-      if (entry.name.startsWith(".")) continue;
-      await recur(path.join(dir, entry.name), depth + 1);
-    }
+    const children = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory && !entry.name.startsWith("."))
+        .map((entry) => recur(path.join(dir, entry.name), depth + 1)),
+    );
+    return children.flat();
   }
 
   try {
-    await recur(root, 0);
+    return await recur(root, 0);
   } catch (err) {
     log.debug("plugins walk aborted", { root, err: String(err) });
+    return [];
   }
-  return found;
 }
 
 function levenshtein(a: string, b: string): number {
