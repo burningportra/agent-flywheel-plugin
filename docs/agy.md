@@ -111,15 +111,40 @@ Note the event-name vocabulary: AGY uses `PreToolUse`/`PostToolUse` and
 `PreInvocation`/`PostInvocation` — there is no `UserPromptSubmit`,
 `BeforeTool`, or `AfterTool` event, and no compaction event.
 
-## `--agy` swarm lanes
+## `--agy` swarm lanes (default Claude + AGY 1:1, Pi opt-in)
 
-ntm v1.37+ has a native `--agy N[:model[:effort]]` lane. AGY panes run the
-same `gemini-4-argon` model family the Gemini seat already runs through Pi
-on the Vercel gateway, so `--agy` is a *transport* for the Gemini seat, not
-a fourth model provider; the canonical `cc:pi:gem` 1:1:1 ratio and the
-gmi→pi→cod→cc substitution ladder are unchanged. `agy models` lists
-effort-suffixed slugs (`gemini-4-argon-low|medium|high`) and takes a
-separate `--effort` flag — always pass the pair, never a bare model name.
+ntm v1.37+ provides a native `--agy N[:model[:effort]]` lane. Starting in
+v3.27.0, when `agy` is on `PATH` (and not switched off via `lanes.agy: false`
+in `flywheel.config.yaml`), the flywheel defaults to a 50/50 **Claude + AGY**
+(`cc:agy 1:1`, `--cc=3 --agy=3`) swarm split:
+
+- **Engine & Prompt Adaptation:** `detectCliCapabilities`, `splitBeadsByProvider`,
+  `swarmMixFor`, and `buildImplementerDispatch` route half the wave to `cc` and
+  half to `agy` (`adaptPromptForAgy` injects AGY-native tool instructions:
+  `run_command`, `read_file`, `edit_file`, `write_file`).
+- **Interactive Lane Menus (`AskUserQuestion`):** `/start` (`_implement.md`,
+  `_planning.md`, `_inflight_prompt.md`, `_reality_check.md`) and
+  `/flywheel-swarm` present **Claude + AGY (Recommended)** first and
+  **Claude + AGY + Pi (optional Pi)** second. `flywheel_pi_models` is only
+  called when the operator opts into Pi (`--pi=N`).
+- **Dry-Run Preview (`--dry-run`):** Preview the exact `ntm spawn` arguments
+  and pane assignments without creating a tmux session:
+  ```bash
+  node mcp-server/dist/scripts/swarm-spawn.js <project> --label impl-test --cc=3 --agy=3 --dry-run
+  node mcp-server/dist/scripts/swarm-spawn.js <project> --label impl-test --cc=2 --agy=2 --pi=2 --pi-model=<provider/model> --dry-run
+  ```
+- **Model Slugs:** `agy models` lists effort-suffixed slugs
+  (`gemini-4-argon-low|medium|high`); `swarm-spawn.js` normalizes
+  `--agy=N:model:effort` via `resolveAgySlug`.
+
+## Doctor checks (`agy`, `pstack`, and `prompt-suggester`)
+
+`flywheel_doctor` includes four checks covering the Antigravity ecosystem:
+
+1. `agy_cli` — probes `agy --version` (non-blocking green when not installed).
+2. `agy_port_sync` — runs `scripts/sync-agy.sh --check --json`; auto-remediated via `flywheel_remediate({ checkName: "agy_port_sync", mode: "execute", autoConfirm: true })`.
+3. `pstack_plugin` — verifies vendored (`skills/PSTACK_VENDOR.json`) or installed `pstack` skills (`poteto-mode`, `interrogate`, `architect`, `why`).
+4. `prompt_suggester_plugin` — checks optional `prompt-suggester` installations across `~/.claude/plugins/prompt-suggester`, `~/.gemini/config/plugins/prompt-suggester`, and `~/.gemini/antigravity/plugins/prompt-suggester` (`plugin.json` / `gemini-extension.json` + `hooks/suggester-hook.mjs`).
 
 ## Troubleshooting
 
