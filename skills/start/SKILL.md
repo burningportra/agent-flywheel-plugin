@@ -11,6 +11,8 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 >
 > Present every user decision through `AskUserQuestion` with 2–4 labeled options (use Other for custom input). Prose questions, confirmation waits, and implicit choices are bugs.
 >
+> Free text in Other that asks for something (a question, an explanation, "eli5", a premortem) is a request, not a choice: answer it in prose first, then show the next menu.
+>
 > ## UNIVERSAL RULE 2: invoke specialist skills by name when they apply
 >
 > Invoke named or applicable specialist skills via the `Skill` tool instead of recreating them inline.

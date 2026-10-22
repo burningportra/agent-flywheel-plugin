@@ -16,7 +16,7 @@ import fs from "node:fs";
 import process from "node:process";
 
 const LANES = ["unit", "live", "perf"];
-const RUNNABLE = /^(npm|node|npx|bash|sh|cd|git|br|bv|bun|tsx|python3?|uv|cargo|make|ntm|am|agy|claude|codex|pi\s|flywheel_|curl|jq|gh|docker|tsc|vitest|eslint)\b/;
+const RUNNABLE = /^(npm|node|npx|bash|sh|cd|git|br|bv|bun|tsx|python3?|uv|cargo|make|ntm|am|agy|claude|codex|pi\s|flywheel_|curl|jq|gh|docker|tsc|vitest|eslint|bats|time)\b/;
 const PLACEHOLDER = /TODO|TBD|FIXME|\.\.\.|<[^>]+>|XXX/i;
 const BEAD_H = /^####\s+Bead\s+(.+)$/;
 const VERIFY_RE = /^-\s+\*\*Verify,\s*(unit|live|perf)\*\*:\s*(.*)$/;
@@ -38,7 +38,7 @@ function checkBead(title, text) {
       continue;
     }
     const spans = [...raw.matchAll(/`([^`]+)`/g)].map((m) => m[1].trim()).filter(Boolean);
-    const cmd = spans.find((s) => RUNNABLE.test(s)) ?? null;
+    const cmd = spans.find((s) => RUNNABLE.test(s)) ?? (spans.length === 0 && RUNNABLE.test(raw) ? raw : null);
     commands[lane] = cmd;
     if (cmd === null) warnings.push(`Verify, ${lane} has no runnable command: ${raw.slice(0, 100)}`);
     else if (PLACEHOLDER.test(cmd)) warnings.push(`Verify, ${lane} looks like a placeholder: ${cmd.slice(0, 100)}`);
@@ -78,7 +78,7 @@ function openBeads() {
     console.error(`check-bead-verify: cannot parse br output: ${String(err)}`);
     process.exit(2);
   }
-  const list = Array.isArray(beads) ? beads : (beads.beads ?? []);
+  const list = Array.isArray(beads) ? beads : (beads.issues ?? beads.beads ?? []);
   return list
     .filter((b) => !["closed", "merged", "done"].includes(String(b.status ?? "").toLowerCase()))
     .map((b) => ({ title: `${b.id}: ${b.title ?? ""}`, text: String(b.description ?? "") }));

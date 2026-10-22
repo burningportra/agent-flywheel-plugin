@@ -157,6 +157,30 @@ describe("scripts/check-bead-verify.mjs", () => {
     expect(strict.status).toBe(1);
     expect(strict.stdout).toContain("no runnable command");
   });
+
+  it("reads open beads from br's {issues: [...]} list output and accepts bare commands under --strict", () => {
+    const description = [
+      "- **Verify, unit**: npm test",
+      "- **Verify, live**: node dist/cli.js --help",
+      "- **Verify, perf**: time bats tests/cli.bats",
+    ].join("\n");
+    const listing = JSON.stringify({
+      issues: [
+        { id: "x-1", title: "Open bead", status: "open", description },
+        { id: "x-2", title: "Closed bead", status: "closed", description: "" },
+      ],
+    });
+    const fakeBr = writeTmp("br", `#!/bin/sh\ncat <<'EOF'\n${listing}\nEOF\n`);
+    execFileSync("chmod", ["+x", fakeBr]);
+    const stdout = execFileSync("node", [CHECK_BEAD_VERIFY, "--json", "--strict"], {
+      encoding: "utf8",
+      timeout: 30000,
+      env: { ...process.env, PATH: `${path.dirname(fakeBr)}:${process.env.PATH ?? ""}` },
+    });
+    const report = JSON.parse(stdout) as { ok: boolean; sources: { beads: unknown[] }[] };
+    expect(report.ok).toBe(true);
+    expect(report.sources[0].beads).toHaveLength(1);
+  });
 });
 
 describe("scripts/check-plan.mjs (vendored)", () => {

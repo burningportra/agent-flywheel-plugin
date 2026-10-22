@@ -4,7 +4,7 @@
 >
 > | Operation | Correct form | Common wrong form |
 > |-----------|--------------|-------------------|
-> | Create bead | `br create --title "..." --description "..." --priority <0-4> --type task` | `--issue-type` (use `-t` or `--type`) |
+> | Create bead | `br create --title "..." --description "..." --priority <0-4> --type task --labels "<goal-label>"` | `--issue-type` (use `-t` or `--type`); leaving out `--labels` |
 > | Add dependency | `br dep add <downstream> <upstream>` (positional) | `--depends-on` (does not exist) |
 > | Close bead with reason | `br close <id> --reason "..."` | `br update <id> --close-reason "..."` (does not exist) |
 > | Update status | `br update <id> --status <open\|in_progress\|deferred\|closed>` | `br update <id> --status done` (`done` is not a status) |
@@ -20,8 +20,10 @@
 
 1. Create the implementation bead.
    ```
-   br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority 2 --type task
+   br create --title "Verb phrase" --description "WHAT/WHY/HOW" --priority 2 --type task --labels "<goal-label>"
    ```
+
+   `<goal-label>` is the goal's program label, `flywheel-goal:<slug>:<hash>`; the `flywheel_approve_beads` "No open beads found" message prints it. Once any bead in the repo carries a `flywheel-goal:` label, `flywheel_approve_beads` counts only beads with the current goal's label, so unlabelled beads come back as `beads_missing`. If that happens after you created beads, add the label with `br update <id> --add-label "<goal-label>"`, re-run every check that ran on zero beads, and offer Launch only once the tool lists them.
 
    For `state.planSource === "duel"` or idea provenance `duel` / `reality-check-duel`, append this section to every description:
 
@@ -79,7 +81,7 @@ AskUserQuestion(questions: [{
 - **Polish further** → call `action: "polish"`, show the updated `br list`, and repeat this gate.
 - **Reject** → call `action: "reject"` and return to Step 3.
 
-To polish to a fixed point instead of one round per menu pass, call `flywheel_approve_beads({ cwd, action: "converge-polish" })` after each round of edits. Each call compares the bead graph with the previous call and reports convergence after two zero-change rounds in a row or six rounds; until then it asks for another round. Its response carries best-effort `bv` insights, and a missing `bv` only adds a warning. Between rounds, read the graph with `bv --robot-triage` (ranked open work), `bv --robot-next` (the single best next bead), `bv --robot-plan` (parallel tracks), and `bv --robot-insights` (bottlenecks and cycles). Bare `bv` opens an interactive view that blocks the session.
+To polish to a fixed point instead of one round per menu pass, call `flywheel_approve_beads({ cwd, action: "converge-polish" })` after each round of edits. Each call compares the bead graph with the previous call and reports convergence after two zero-change rounds in a row or six rounds; until then it asks for another round. Its response carries best-effort `bv` insights, and a missing `bv` only adds a warning. Between rounds, read the graph with `bv --robot-triage` (ranked open work), `bv --robot-next` (the single best next bead), `bv --robot-plan` (parallel tracks), and `bv --robot-insights` (bottlenecks and cycles). Bare `bv` opens an interactive view that blocks the session. Calling `converge-polish` again without editing beads is not a polish round, and a high quality score checks wording, not whether the design works; the Step 5.6 premortem in `_planning.md` covers design.
 
 Only `action: "start"` returns the launch score. A score request may call it early, but still ends at the launch-confirmation gate.
 

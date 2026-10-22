@@ -175,7 +175,7 @@ For **Ambitious**, run the Ambition pass below and pass `ambition: "ambitious"` 
    - **Depth:** Top-practitioner additions, raw material, instruments, ~10x numeric stretch, challenged assumption, and new knowledge.
    - **Range:** Deliverable as verbs + 3–5 fields (including 1 adversarial field).
    - **Floor:** Version that ships first + existence proof (`none found` if none).
-2. **Confirm rung and stretch:**
+2. **Confirm rung and stretch.** The `(Recommended)` tags below fit an open-ended goal. When the user asked for simple, minimal, KISS or fast work, or project rules or memory prefer speed, move both tags to the smallest rung and stretch that still meet the scope floor (`As asked`, `Obvious target`).
 
 ```
 AskUserQuestion(questions: [
@@ -202,6 +202,7 @@ AskUserQuestion(questions: [
 ])
 ```
 
+   When a later menu offers optional add-ons (multiSelect), include a "Keep the floor" option and say how many beads each pick adds.
 3. **Write `docs/brainstorms/<goal-slug>-<YYYY-MM-DD>-ambition.md`** (`## Goal ladder`, `## Stretch target`, `## Depth`, `## Range`, `## Outside judge`), state its path, and call `flywheel_plan` with `ambition: "ambitious"` in the same turn.
 
 ### Plan mode routes
@@ -296,7 +297,9 @@ AskUserQuestion(questions: [
 
 ## Step 5.6: Plan-ready gate
 
-Display a brief plan summary (path, lines, headers) and ask:
+Before the gate, run a short premortem on the plan: assume it failed six months from now and list the likely reasons. Check each one against primary sources, not summaries: the vendor's or host's own docs, the mounted platform MCP (read-only list calls), and the code itself (which process reads which file, how a deploy restarts what). Revise the plan for the failures that hold up and list them, with their fixes, in the plan and in the summary below. Bead polish scores check wording, not design, so this is the step that catches design faults.
+
+Display a brief plan summary (path, lines, headers, premortem fixes) and ask:
 
 ```
 AskUserQuestion(questions: [{
@@ -314,7 +317,7 @@ AskUserQuestion(questions: [{
 
 - **Create beads** → run Step 5.6.5 before `_beads.md`.
 - **Refine plan** → ask `Refine mode`: `Internal (Opus agent)` (Recommended), `planning-workflow (Codex via NTM)`, or `Triangulate` (`/multi-model-triangulation`), then return to Plan ready.
-- **Review plan** → print path, ask `Post-review` (`Looks good` / `Refine plan` / `Start over` / `Still reading`), and route back to Step 5.6.
+- **Review plan** → print path and a plain-words summary (what gets built, in what order, what the user must decide), then ask `Post-review` (`Looks good` / `Refine plan` / `Start over` / `Still reading`), and route back to Step 5.6.
 - **Start over** → delete plan file, clear `state.planDocument`, return to Step 3.
 
 ## Step 5.6.5: Rubric gate

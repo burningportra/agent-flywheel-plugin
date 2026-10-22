@@ -83,6 +83,8 @@ Read, without dumping raw output to the user:
 3. Recent `docs/adr/*.md` (top 5 by mtime) — settled decisions to avoid re-litigating
 4. `git log --oneline -10` — hot paths
 
+When a vendor's or hosting platform's rules decide the design (where code may run, what a volume or deploy can do), read the primary source before recommending an option: the vendor's own docs, or the mounted platform MCP with read-only list calls. Quote it, name it, and present your reading as an interpretation the user can overrule.
+
 If the raw goal spans multiple independent subsystems, **stop and decompose first**:
 
 ```
@@ -451,6 +453,8 @@ Grill complete → brainstorm=docs/brainstorms/<slug>-<date>.md adrs=<N> glossar
 ```
 
 3. Return control to the caller. **Do not** call `flywheel_plan` or create beads.
+
+**Goal replaced after approval.** If the user swaps in a different goal before the plan is registered, run the "Grill deltas only" path on the new goal (floor, non-goals, success criteria) and get a new Goal Card approved before `flywheel_select`. Mark the old goal's ADRs deferred rather than deleting them.
 
 ## Integration contract (for `skills/start`)
 
