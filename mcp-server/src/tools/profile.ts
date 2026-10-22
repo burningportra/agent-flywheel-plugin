@@ -4,6 +4,7 @@ import { profileRepo, loadCachedProfile, saveCachedProfile } from '../profiler.j
 import { parseBrList } from '../parsers.js';
 import { createLogger } from '../logger.js';
 import { runOpeningCeremony } from '../opening-ceremony.js';
+import { findPluginInstallRoot } from '../skills-bundle.js';
 import { VERSION } from '../version.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { goalBeadProgramLabel } from './bead-program.js';
@@ -144,9 +145,10 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
     }
   }
 
+  const pluginRoot = findPluginInstallRoot();
   const coordLine = hasBeads
-    ? `Coordination: beads (br CLI detected)`
-    : `Coordination: bare (no beads CLI detected — run \`br init\` to enable task tracking)`;
+    ? `Coordination: beads (br CLI detected) | pluginRoot: ${pluginRoot}`
+    : `Coordination: bare (no beads CLI detected — run \`br init\` to enable task tracking) | pluginRoot: ${pluginRoot}`;
 
   const roadmap = `**Workflow:** profile → discover → select → plan → approve_beads → implement → review`;
 
@@ -194,6 +196,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
     nextStep,
     data: {
       kind: 'profile_ready' as const,
+      pluginRoot,
       fromCache,
       selectedGoal: state.selectedGoal,
       coordination: {

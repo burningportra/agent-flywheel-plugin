@@ -77,6 +77,8 @@ export const SwarmMixSchema = z.object({
 export const DoctorReportSchema = z.object({
     version: z.literal(1),
     cwd: z.string(),
+    /** Resolved plugin install root (from CLAUDE_PLUGIN_ROOT or server module path). */
+    pluginRoot: z.string().optional(),
     overall: DoctorCheckSeveritySchema,
     /**
      * Count of red-severity checks. Exit code = 1 iff `criticalFails > 0`.

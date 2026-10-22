@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
-import { getSkill } from "../skills-bundle.js";
+import { findPluginInstallRoot, getSkill } from "../skills-bundle.js";
 import { resolveRealpath } from "../utils/path-safety.js";
 import { VERSION } from "../version.js";
 import { makeToolResult } from "./shared.js";
@@ -51,8 +51,8 @@ const GetSkillInputSchema = z.object({
         .string()
         .regex(/^[a-z0-9_-]+:[a-z0-9_-]+$/, "Use <plugin>:<skill-name> form"),
 });
-function renderSkillText(result) {
-    const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}, plugin v${VERSION}]`;
+function renderSkillText(result, pluginRoot) {
+    const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}, plugin v${VERSION}, pluginRoot: ${pluginRoot}]`;
     return `${header}\n\n${result.body}`;
 }
 export async function runGetSkill(ctx, args) {
@@ -74,15 +74,16 @@ export async function runGetSkill(ctx, args) {
         // has no skills bundle. Skills always resolve from the plugin install
         // root (CLAUDE_PLUGIN_ROOT or auto-detected from this module's location).
         const result = await getSkill(name);
+        const pluginRoot = findPluginInstallRoot();
         markSkillLoaded(ctx.cwd || parsed.data.cwd, name);
         const structured = {
             tool: "flywheel_get_skill",
             version: 1,
             status: "ok",
             phase: "idle",
-            data: { kind: "skill", skill: result, pluginVersion: VERSION },
+            data: { kind: "skill", skill: result, pluginVersion: VERSION, pluginRoot },
         };
-        return makeToolResult(renderSkillText(result), structured);
+        return makeToolResult(renderSkillText(result, pluginRoot), structured);
     }
     catch (err) {
         if (err instanceof FlywheelError) {

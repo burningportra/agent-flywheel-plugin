@@ -6,6 +6,7 @@ import { getRefinementModel } from '../model-detection.js';
 import { buildBeadCreationPrompt } from './bead-prompt.js';
 import { buildImplementerDispatch } from '../adapters/implementer-dispatch.js';
 import { handOffWave, resolveSwarmLane } from '../swarm-host.js';
+import { findPluginInstallRoot } from '../skills-bundle.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { acquireBeadMutex, releaseBeadMutex, makeConcurrentWriteError } from '../mutex.js';
 import { formatSkippedBrRows, parseBrList } from '../parsers.js';
@@ -736,6 +737,7 @@ async function handleStart(
     return prompt;
   };
   const dispatchData = {
+    pluginRoot: findPluginInstallRoot(),
     lanes: dispatch.lanes,
     prompts: dispatch.prompts,
     dispatch: {

@@ -213,13 +213,13 @@ AskUserQuestion(questions: [
 
 - **Standard plan:** Call `flywheel_plan({ cwd, mode: "standard" })`, then run Step 5.55 and Step 5.6.
 - **Duel plan:** Check NTM readiness (`_implement.md`) and `which claude codex gemini 2>/dev/null` (need ≥2 non-disabled healthy providers, else downgrade to Deep and print `Duel-plan downgraded to Deep — NTM unavailable`). Call `flywheel_plan({ cwd, mode: "duel" })`, run its `/dueling-idea-wizards` command, register the output via `flywheel_plan({ cwd, mode: "duel", planFile: "<output>" })`, and run Step 5.55.
-- **planning-workflow:** Set `PLAN_PATH=docs/plans/<date>-<goal-slug>-planning-workflow.md` (or `state.planDocument` during Step 5.6 refinement). Spawn reviewers via `swarm-spawn.js` and address each pane by its printed `index` so each lane writes its own revision file:
+- **planning-workflow:** Set `PLAN_PATH=docs/plans/<date>-<goal-slug>-planning-workflow.md` (or `state.planDocument` during Step 5.6 refinement) and `PLUGIN_ROOT` from `flywheel_doctor` / `flywheel_profile` `data.pluginRoot`. Spawn reviewers via `swarm-spawn.js` and address each pane by its printed `index` so each lane writes its own revision file:
 
 ```
 : "${PLAN_PATH:?Set PLAN_PATH before starting a review round}"
 SESSION="${NTM_PROJECT}--plan-review-round-<N>"
 # PANE001-OVERRIDE: review rounds keep one cc, cod and gmi reviewer; AGENTS.md "Deep plan exception".
-node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label plan-review-round-<N> --cc=1 --cod=1 --gmi=1
+node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label plan-review-round-<N> --cc=1 --cod=1 --gmi=1
 # Then, for each printed pane, with LANE set to its lane (cc, cod, gmi) and INDEX to its index:
 ntm --robot-send="$SESSION" --panes="$INDEX" --msg="Invoke the /planning-workflow skill and apply its review-round guidance to the plan at $PLAN_PATH. Write YOUR revised plan to ${PLAN_PATH%.md}-round-<N>-${LANE}.md; do not touch the canonical plan file."
 ```
@@ -246,7 +246,7 @@ Omit `--gmi=1` when `gemini_cli` is disabled/non-green or `gemini_model_compat` 
      ```bash
      SESSION="${NTM_PROJECT}--deep-plan-<slug>"
      # PANE001-OVERRIDE: deep plan is one Claude lens plus two AGY/Pi lenses; AGENTS.md "Deep plan exception".
-     node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label deep-plan-<slug> --cc=1 --pi=2 --pi-model="$PI_ROBUSTNESS_MODEL" --pi-model="$PI_ERGONOMICS_MODEL" --pi-name=deep-plan
+     node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label deep-plan-<slug> --cc=1 --pi=2 --pi-model="$PI_ROBUSTNESS_MODEL" --pi-model="$PI_ERGONOMICS_MODEL" --pi-name=deep-plan
      ```
      Send prompts by printed `index` via `ntm --robot-send="$SESSION" --panes=<index> --msg="<prompt>"`. Each planner writes `docs/plans/<date>-<perspective>.md` (`correctness`, `robustness`, `ergonomics`) and mails `[deep-plan] <perspective> plan` (use background `Agent()` tasks when `NTM_AVAILABLE=false`).
   4. Tend with `--robot-is-working`, `--robot-tail`, and `tmux capture-pane -p -t <paneId>`, then spawn `Agent(model: "opus", name: "plan-synthesizer")` to write `docs/plans/<date>-<goal-slug>-synthesized.md` (agreement report + `+/-/~` diff summary + synthesized plan).

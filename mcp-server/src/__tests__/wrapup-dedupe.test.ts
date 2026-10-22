@@ -36,7 +36,7 @@ describe("wrap-up single-source procedures", () => {
     const cycleReset = section("#### Cycle-reset checklist", '> **"Done for now" also triggers team-drain.**');
 
     expect(cycleReset).toContain(
-      'sh "$CLAUDE_PLUGIN_ROOT/mcp-server/scripts/team-drain.sh" <team-name>...',
+      'sh "$PLUGIN_ROOT/mcp-server/scripts/team-drain.sh" <team-name>...',
     );
     expect(cycleReset).toContain("confirm that nothing owns it");
     expect(cycleReset).toContain("TeamDelete");

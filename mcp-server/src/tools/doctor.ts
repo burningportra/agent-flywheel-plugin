@@ -34,6 +34,7 @@ import { getAdapter } from '../adapters/platform/index.js';
 import type { HookAdapter, WorktreeScanRoot } from '../adapters/platform/index.js';
 import { resolveRealpathWithinRoot } from '../utils/path-safety.js';
 import { checkOrphanTenderDaemons } from '../checks/orphan-tender-daemons.js';
+import { findPluginInstallRoot } from '../skills-bundle.js';
 import { GEMINI_GATEWAY_ID, GEMINI_LANE_MODEL, readGeminiLaneListing } from '../pi-models.js';
 import {
   describeSyncAgySummary,
@@ -240,12 +241,14 @@ export async function runDoctorChecks(
 
   const startMs = now();
   const timestamp = new Date(startMs).toISOString();
+  const pluginRoot = findPluginInstallRoot();
 
   // Pre-aborted: return minimal partial report without running anything.
   if (signal?.aborted) {
     return {
       version: 1,
       cwd,
+      pluginRoot,
       overall: 'red',
       criticalFails: 0,
       partial: true,
@@ -412,6 +415,7 @@ export async function runDoctorChecks(
   return {
     version: 1,
     cwd,
+    pluginRoot,
     overall: severityFromCounts(checks, criticalFails),
     criticalFails,
     partial,

@@ -3,6 +3,7 @@ import { profileRepo, loadCachedProfile, saveCachedProfile } from '../profiler.j
 import { parseBrList } from '../parsers.js';
 import { createLogger } from '../logger.js';
 import { runOpeningCeremony } from '../opening-ceremony.js';
+import { findPluginInstallRoot } from '../skills-bundle.js';
 import { VERSION } from '../version.js';
 import { errMsg, makeFlywheelErrorResult } from '../errors.js';
 import { goalBeadProgramLabel } from './bead-program.js';
@@ -140,9 +141,10 @@ export async function runProfile(ctx, args) {
             }
         }
     }
+    const pluginRoot = findPluginInstallRoot();
     const coordLine = hasBeads
-        ? `Coordination: beads (br CLI detected)`
-        : `Coordination: bare (no beads CLI detected — run \`br init\` to enable task tracking)`;
+        ? `Coordination: beads (br CLI detected) | pluginRoot: ${pluginRoot}`
+        : `Coordination: bare (no beads CLI detected — run \`br init\` to enable task tracking) | pluginRoot: ${pluginRoot}`;
     const roadmap = `**Workflow:** profile → discover → select → plan → approve_beads → implement → review`;
     const goalSection = args.goal
         ? `\n\n### Goal\n${args.goal}\n\nSince a goal was provided, you can skip discovery and call \`flywheel_select\` directly with this goal, or call \`flywheel_discover\` to generate alternatives.`
@@ -183,6 +185,7 @@ export async function runProfile(ctx, args) {
         nextStep,
         data: {
             kind: 'profile_ready',
+            pluginRoot,
             fromCache,
             selectedGoal: state.selectedGoal,
             coordination: {

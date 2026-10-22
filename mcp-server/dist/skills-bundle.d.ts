@@ -44,6 +44,14 @@ export interface GetSkillResult {
     staleWarn?: boolean;
 }
 /**
+ * Locate the plugin install directory (the folder containing `mcp-server/`
+ * and `skills/`). Honors `CLAUDE_PLUGIN_ROOT` env var (set by Claude Code at
+ * launch time) so the bundle/disk lookups resolve against the plugin's own
+ * install — NOT the calling project's cwd. Falls back to walking up from
+ * `import.meta.url`, then to `process.cwd()`.
+ */
+export declare function findPluginInstallRoot(): string;
+/**
  * Load + verify the skills bundle. Returns null on integrity failure or any
  * IO error so the caller can transparently fall back to disk reads.
  *

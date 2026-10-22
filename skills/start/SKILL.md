@@ -41,7 +41,7 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 
 ### 0a. Detect version
 
-Take `VERSION` from `plugin v<version>` in the `flywheel_get_skill` header (`data.pluginVersion`), or read `$CLAUDE_PLUGIN_ROOT/mcp-server/package.json` (fallback `v?`).
+Take `VERSION` from `plugin v<version>` in the `flywheel_get_skill` header (`data.pluginVersion`), or read `$PLUGIN_ROOT/mcp-server/package.json` where `PLUGIN_ROOT` is `data.pluginRoot` (fallback `v?`).
 
 ### 0.banner: show this first
 

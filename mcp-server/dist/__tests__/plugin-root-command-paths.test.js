@@ -174,8 +174,22 @@ describe("plugin-root command paths", () => {
     });
     it("runs the bead viewer from the user's project directory", () => {
         const command = readFileSync(join(COMMANDS_ROOT, "flywheel-bead-viewer.md"), "utf8");
-        expect(command).toContain('node "$CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js"');
+        expect(command).toContain('node "$PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js"');
         expect(command).not.toMatch(/\bcd\s+mcp-server\b/);
+    });
+    it("does not depend on $CLAUDE_PLUGIN_ROOT in skills/start or commands", () => {
+        const startSkillFiles = walkMarkdown(join(SKILLS_ROOT, "start"));
+        const otherSkillFiles = [
+            join(SKILLS_ROOT, "flywheel-swarm", "SKILL.md"),
+            join(SKILLS_ROOT, "flywheel-setup", "SKILL.md"),
+            join(SKILLS_ROOT, "flywheel-healthcheck", "SKILL.md"),
+            join(SKILLS_ROOT, "flywheel-reality-check", "SKILL.md"),
+            join(COMMANDS_ROOT, "flywheel-bead-viewer.md"),
+        ];
+        for (const filePath of [...startSkillFiles, ...otherSkillFiles]) {
+            const content = readFileSync(filePath, "utf8");
+            expect(content, relative(REPO_ROOT, filePath)).not.toMatch(/\$\{?CLAUDE_PLUGIN_ROOT\b/);
+        }
     });
     it("roots every runnable plugin-bundled command in skills and commands", () => {
         const findings = [];

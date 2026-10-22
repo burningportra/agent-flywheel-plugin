@@ -22,7 +22,7 @@ const QUALITY_GATE_SIGNALS = [
     /completionreport/i,
 ];
 const BARE_AGENTS_MD = /\bAGENTS\.md\b/g;
-const PLUGIN_ROOT_PATH = /\$CLAUDE_PLUGIN_ROOT\s*\/\s*AGENTS\.md/i;
+const PLUGIN_ROOT_PATH = /\$(?:CLAUDE_)?PLUGIN_ROOT\s*\/\s*AGENTS\.md/i;
 /** True if any 3-line window in the file contains a quality-gate signal
  *  phrase AND an unqualified `AGENTS.md` reference without a nearby
  *  `$CLAUDE_PLUGIN_ROOT/AGENTS.md`. */

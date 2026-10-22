@@ -460,6 +460,30 @@ exit 0
           );
         }
       }
+      const tenderCalls = facts.toolUses.filter(
+        (t) =>
+          t.tool_name === "Bash" &&
+          typeof t.input["command"] === "string" &&
+          (t.input["command"] as string).includes("tender-daemon.js"),
+      );
+      if (tenderCalls.length === 0) {
+        violations.push(
+          "No Bash call launching `tender-daemon.js` observed during _implement.md dispatch.",
+        );
+      } else {
+        const badTenderCall = tenderCalls.find((t) => {
+          const cmd = String(t.input["command"] ?? "");
+          return (
+            cmd.includes(".claude/plugins/cache") ||
+            /(?:^|\s|")\/mcp-server\/dist\/scripts\/tender-daemon\.js/.test(cmd)
+          );
+        });
+        if (badTenderCall) {
+          violations.push(
+            `tender-daemon.js launched from wrong root (installed cache or empty $CLAUDE_PLUGIN_ROOT): ${String(badTenderCall.input["command"])}`,
+          );
+        }
+      }
       return violations;
     },
     maxTurns: 120,

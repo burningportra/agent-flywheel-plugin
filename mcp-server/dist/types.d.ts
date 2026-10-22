@@ -778,6 +778,7 @@ export type SwarmMix = z.infer<typeof SwarmMixSchema>;
 export declare const DoctorReportSchema: z.ZodObject<{
     version: z.ZodLiteral<1>;
     cwd: z.ZodString;
+    pluginRoot: z.ZodOptional<z.ZodString>;
     overall: z.ZodEnum<{
         green: "green";
         yellow: "yellow";

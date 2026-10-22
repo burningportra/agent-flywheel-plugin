@@ -4,7 +4,7 @@
 
 Run this procedure before each NTM spawn decision and after compaction or resume.
 
-1. Call `flywheel_doctor({ cwd })` and keep `data.report` as `DOCTOR_REPORT`.
+1. Call `flywheel_doctor({ cwd })` and keep `data.report` as `DOCTOR_REPORT` and `data.pluginRoot` as `PLUGIN_ROOT` (Claude Code does not export `CLAUDE_PLUGIN_ROOT` to `Bash`).
 2. Inspect `ntm_binary`, then `projects_base_misconfig`. For each non-green row, call `flywheel_remediate({ cwd, checkName: "<row name>", mode: "execute", autoConfirm: true })`, then rerun `flywheel_doctor`. Remediate each row once per procedure call.
 3. Read `NTM_AVAILABLE` and `NTM_PROJECT` from the final `DOCTOR_REPORT.ntm`. A missing `ntm` object means `NTM_AVAILABLE=false` with reason `incomplete`.
 
@@ -70,10 +70,11 @@ AskUserQuestion(questions: [{
 
 ### Start the durable tend cycle
 
-Start one tender daemon per wave before dispatch:
+Start one tender daemon per wave before dispatch (setting `PLUGIN_ROOT` from `data.pluginRoot` returned by `flywheel_doctor` or `flywheel_approve_beads`):
 
 ```bash
-nohup node $CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js \
+PLUGIN_ROOT="<data.pluginRoot>"
+nohup node "$PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js" \
   --session=agent-flywheel-plugin--impl-<goal-slug> \
   --project="$PWD" \
   --interval=30000 \
@@ -204,7 +205,7 @@ ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc, co
 
 ```bash
 SESSION="${NTM_PROJECT}--impl-<goal-slug>"
-node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
+node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
   --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod> --agy=<N_agy>
 ```
 

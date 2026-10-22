@@ -171,6 +171,7 @@ describe('flywheel_get_skill result shape', () => {
     expect(typeof skill?.body).toBe('string');
     expect(typeof skill?.frontmatter).toBe('object');
     expect(data?.pluginVersion).toBe(VERSION);
+    expect(data?.pluginRoot).toBe(tmp.dir);
   });
 
   it('returns not_found error envelope for missing skill', async () => {
@@ -194,6 +195,7 @@ describe('flywheel_get_skill result shape', () => {
     expect(text).toContain('agent-flywheel:start');
     expect(text).toContain('bundle');
     expect(text).toContain(`plugin v${VERSION}`);
+    expect(text).toContain(`pluginRoot: ${tmp.dir}`);
   });
 });
 

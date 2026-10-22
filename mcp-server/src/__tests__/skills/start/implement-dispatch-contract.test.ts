@@ -30,7 +30,7 @@ describe('server-owned wave-one implementer dispatch', () => {
     (relativePath) => {
       const content = read(relativePath);
 
-      expect(content).toContain('node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug>');
+      expect(content).toContain('node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug>');
       expect(content).toContain('--cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>');
       expect(content).toContain('flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })');
       expect(content).toContain('data.piModels.implementer');

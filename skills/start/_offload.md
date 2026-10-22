@@ -27,7 +27,7 @@ This session keeps coordinating either way: questions, plugin tools, reviews, an
 These adjust `_inflight_prompt.md`'s operator spec:
 
 - Items 2 and 3 use `SWARM_FLAGS` from step 3 above. `flywheel_pi_models` with the implementer role already checks the models against that Mac's Pi logins.
-- Item 6: copy the wrapper into the clone with `$RUN sh -c 'mkdir -p .pi-flywheel && cat > .pi-flywheel/build-mutex.sh && chmod +x .pi-flywheel/build-mutex.sh' < "$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh"`, and point each pane prompt at `.pi-flywheel/build-mutex.sh`. Item 8's `rch` runs where the pane runs; when `$RUN which rch` fails, use the repo's own build and test commands inside the wrapper.
+- Item 6: copy the wrapper into the clone with `$RUN sh -c 'mkdir -p .pi-flywheel && cat > .pi-flywheel/build-mutex.sh && chmod +x .pi-flywheel/build-mutex.sh' < "$PLUGIN_ROOT/scripts/build-mutex.sh"` (with `PLUGIN_ROOT` from `data.pluginRoot`), and point each pane prompt at `.pi-flywheel/build-mutex.sh`. Item 8's `rch` runs where the pane runs; when `$RUN which rch` fails, use the repo's own build and test commands inside the wrapper.
 - Items 7, 10, and 11 run their `df`, `br`, and `ntm` commands through `$RUN`.
 - Item 13 calls `flywheel_swarm_host({ cwd, action: "sync" })` before the review.
 

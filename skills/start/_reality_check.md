@@ -39,10 +39,10 @@ Route on the answer:
 
 Dispatch this exact prompt to the working agent (you, in the current turn, OR an Explore subagent if the project is large enough that loading both docs and the code investigation will blow context):
 
-> ❯ Read the plugin's own `$CLAUDE_PLUGIN_ROOT/AGENTS.md` and the project's `README.md` end-to-end. Then use your code investigation agent mode to understand the code, the technical architecture, and the project's purpose. Then apply /reality-check-for-project.
+> ❯ Read the plugin's own `$PLUGIN_ROOT/AGENTS.md` (where `PLUGIN_ROOT` is `data.pluginRoot` from `flywheel_doctor` / `flywheel_profile`) and the project's `README.md` end-to-end. Then use your code investigation agent mode to understand the code, the technical architecture, and the project's purpose. Then apply /reality-check-for-project.
 
 Concretely:
-1. `Read` the plugin's own `$CLAUDE_PLUGIN_ROOT/AGENTS.md` end-to-end (the project's own `AGENTS.md`, if any, is a separate file and may not have the quality-gate section).
+1. `Read` the plugin's own `$PLUGIN_ROOT/AGENTS.md` end-to-end (the project's own `AGENTS.md`, if any, is a separate file and may not have the quality-gate section).
 2. `Read` README.md (root) end-to-end.
 3. `Glob` for any other markdown plan/spec docs (`docs/plans/*.md`, `docs/*.md`, `*.md` at root) and read them too — the reality-check skill's Variant A asks for "every markdown plan/spec document".
 4. Spawn an Explore subagent (or use the Explore tool) to map architecture, technical purpose, and what's *actually* implemented vs aspirational. Capture findings.
@@ -101,8 +101,8 @@ When Phase 2 returns, the user has a fully self-contained bead graph representin
 
 Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 
-> ❯ Read the plugin's own `$CLAUDE_PLUGIN_ROOT/AGENTS.md` and the project's `README.md` end-to-end. Then use your code investigation agent mode to understand the code, the technical architecture, and the project's purpose.
->
+> ❯ Read the plugin's own `$PLUGIN_ROOT/AGENTS.md` and the project's `README.md` end-to-end. Then use your code investigation agent mode to understand the code, the technical architecture, and the project's purpose.
+
 > Then execute the remaining bead tasks you created, in dependency order.
 >
 > Don't forget to mark beads as you work on them. Use the /ntm swarm and /vibing-with-ntm skills to implement things in the optimal way according to /bv; launch a six-pane swarm on the lanes in `DOCTOR_REPORT.swarm.spawnFlags`, which the server builds from AGENTS.md NTM pane priority, the substitution ladder, and the `lanes:` switches in flywheel.config.yaml, and use your looping feature to check in on the swarm every 3 minutes and feed more instructions to any idle agents.
@@ -112,11 +112,11 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 1. **Shared swarm pre-conditions.** Execute the **NTM and provider readiness**, **Agent Mail bootstrap**, **Disk-space guard**, and **Tender-daemon spawn** steps in `_inflight_prompt.md`. Its first step executes `_implement.md` **Pre-flight: resolve NTM readiness** and uses the final doctor result. An unavailable result takes the D1 single-agent fallback instead of continuing to §4b. This full-pipeline route uses the shared unattended lane downgrades because the depth choice already authorized the swarm.
 2. **Reality-check lane requirement.** Require a green `claude_cli` row. The shared substitution ladder handles non-green or disabled `pi` and `gmi` rows. If neither peer remains, surface the existing cc-only or abort choice.
 3. **Bead snapshot.** Run `br list --json` and `br ready --json`. Reopen any stalled in-progress bead under the rule in `_inflight_prompt.md`.
-4. **Build mutex.** Put `"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch build` in every implementation agent's STEP 2 prompt so the six panes do not compile at once. The coordinator expands `$CLAUDE_PLUGIN_ROOT` before pasting into the `--msg` string so the pane sees an absolute path. Do not use `flock`; macOS does not ship it. Repo-relative `scripts/build-mutex.sh` breaks in a user's project.
+4. **Build mutex.** Put `"$PLUGIN_ROOT/scripts/build-mutex.sh" rch build` in every implementation agent's STEP 2 prompt so the six panes do not compile at once. The coordinator expands `$PLUGIN_ROOT` (`data.pluginRoot`) before pasting into the `--msg` string so the pane sees an absolute path. Do not use `flock`; macOS does not ship it. Repo-relative `scripts/build-mutex.sh` breaks in a user's project.
 
 ### 4b. Spawn the swarm
 
-Set `SWARM_FLAGS = DOCTOR_REPORT.swarm.spawnFlags`, pick the Pi model, and spawn as in `_inflight_prompt.md` steps 2 and 3, with a different label: `node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label reality-check-closure $SWARM_FLAGS --pi-model="$PI_IMPL_MODEL" --pi-name=closure`, dropping `--pi-model` when `SWARM_FLAGS` has no Pi lane. The server already applied AGENTS.md "NTM pane priority", the substitution ladder, the `lanes:` switches, and the Gemini model check, so don't add a lane the flags leave out. `--cc=6` is the cc-only floor; log the degradation. Address panes by the `index` values the script prints.
+Set `SWARM_FLAGS = DOCTOR_REPORT.swarm.spawnFlags`, pick the Pi model, and spawn as in `_inflight_prompt.md` steps 2 and 3, with a different label: `node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label reality-check-closure $SWARM_FLAGS --pi-model="$PI_IMPL_MODEL" --pi-name=closure`, dropping `--pi-model` when `SWARM_FLAGS` has no Pi lane. The server already applied AGENTS.md "NTM pane priority", the substitution ladder, the `lanes:` switches, and the Gemini model check, so don't add a lane the flags leave out. `--cc=6` is the cc-only floor; log the degradation. Address panes by the `index` values the script prints.
 
 
 ### 4c. Supervision (3-min looper default; ntm controller alternative)
@@ -142,4 +142,4 @@ Enter the canonical monitor loop documented in `_implement.md` Pre-loop / Implem
 - All gap-closure beads closed AND review converged → `kill -TERM $tender_daemon_pid`, leave NTM session alive, transition to Step 9.5 wrap-up via `_wrapup.md`.
 - User interrupts via the looper or directly → pause politely; do NOT force-stop agents until user confirms.
 - New gaps surfaced mid-execution (Phase 3 implementation reveals more aspirational-vs-real divergence) → run another `Skill: reality-check-for-project` Phase 5 (refinement round). Do NOT silently expand scope; surface via `AskUserQuestion` first.
-- Build mutex wait/deadlock detected (`"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh"` waits >5min) → escalate via `/slb` two-person approval before killing.
+- Build mutex wait/deadlock detected (`"$PLUGIN_ROOT/scripts/build-mutex.sh"` waits >5min) → escalate via `/slb` two-person approval before killing.

@@ -101,13 +101,12 @@ export async function runScenario(opts) {
     const shimDir = `${cwd}/.pi-flywheel/eval-bin`;
     const prevPath = process.env.PATH;
     process.env.PATH = prevPath ? `${shimDir}:${prevPath}` : shimDir;
-    // Point CLAUDE_PLUGIN_ROOT at the worktree so skills that reference
-    // `$CLAUDE_PLUGIN_ROOT/mcp-server/...` (e.g. `_implement.md:76` for the
-    // tender-daemon) don't pick up the installed `~/.claude/plugins/cache/...`
-    // copy. Without this override an installed daemon can escape the
-    // worktree and keep running past the SDK's exit — see teardown below.
+    // Leave CLAUDE_PLUGIN_ROOT unset in the parent process so the Agent SDK's
+    // Bash tool matches interactive Claude Code (where CLAUDE_PLUGIN_ROOT is
+    // empty in Bash). Skills must resolve the plugin root from MCP tool output
+    // (`data.pluginRoot`) rather than `$CLAUDE_PLUGIN_ROOT` (agent-flywheel-plugin-mce).
     const prevPluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-    process.env.CLAUDE_PLUGIN_ROOT = cwd;
+    delete process.env.CLAUDE_PLUGIN_ROOT;
     const iterator = query({
         prompt: scenario.goal,
         options: {

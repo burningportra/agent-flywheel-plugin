@@ -44,7 +44,7 @@
    - **Verify, perf**: <command that measures the path the bead touches>
    ```
 
-   Check the open beads with `node "${CLAUDE_PLUGIN_ROOT}/scripts/check-bead-verify.mjs" --strict` (it reads `br list --json`, or pass plan files to check their `#### Bead` sections). A missing or empty line is an error; a line with no runnable command, or with a TODO or angle-bracket placeholder, is a warning that `--strict` turns into an error. Fix every finding before Step 6.
+   Check the open beads with `node "${PLUGIN_ROOT}/scripts/check-bead-verify.mjs" --strict` (where `PLUGIN_ROOT` is `data.pluginRoot` from `flywheel_doctor` / `flywheel_profile`; it reads `br list --json`, or pass plan files to check their `#### Bead` sections). A missing or empty line is an error; a line with no runnable command, or with a TODO or angle-bracket placeholder, is a warning that `--strict` turns into an error. Fix every finding before Step 6.
 
 2. When the acceptance criteria require automated tests, create a companion test bead that depends on the implementation bead.
    ```

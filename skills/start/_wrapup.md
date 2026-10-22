@@ -277,7 +277,7 @@ Actions:
 
 1. **Delete the checkpoint:** `rm -f .pi-flywheel/checkpoint.json` (Bash). Without this, the next cycle inherits the prior `selectedGoal` / `activeBeadIds` / `phase` and the new "Resume session" drift check fires unnecessarily.
 2. **Verify no impl agents remain.** Run `TaskList`; if any impl-* tasks are still listed, retire and force-stop them per the Step 9 pause checklist before continuing.
-3. **Drain active teams.** List the teams created by this session. Add an older team only after `TaskList` and the live agent state confirm that nothing owns it. If the list is non-empty, run `sh "$CLAUDE_PLUGIN_ROOT/mcp-server/scripts/team-drain.sh" <team-name>...`. The script prepares only those configs and prints one team name per line. Call `TeamDelete` for each printed name, then verify that none of the named teams remains under `~/.claude/teams/`.
+3. **Drain active teams.** List the teams created by this session. Add an older team only after `TaskList` and the live agent state confirm that nothing owns it. If the list is non-empty, run `sh "$PLUGIN_ROOT/mcp-server/scripts/team-drain.sh" <team-name>...` (with `PLUGIN_ROOT` from `data.pluginRoot`). The script prepares only those configs and prints one team name per line. Call `TeamDelete` for each printed name, then verify that none of the named teams remains under `~/.claude/teams/`.
 4. **Confirm clean tree:** run `git status -s`. If uncommitted changes exist, present:
    ```
    AskUserQuestion(questions: [{

@@ -11,7 +11,7 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 
 0. **Invoke `/vibing-with-ntm`.** Use the `Skill` tool with `vibing-with-ntm`. Follow its guidance for session bootstrap (NTM project resolution, Agent Mail, beads claim) and pane-tending (looper cadence, stuck-pane ladder, completion polling). The rest of this skill assumes its conventions are loaded.
 
-1. Run the swarm-host gate in `skills/start/_offload.md`, then call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`. Assign `START_DATA = result.structuredContent.data`. Its `data.lanes` groups the beads by lane, and `data.prompts` holds one server-built prompt per ready bead.
+1. Run the swarm-host gate in `skills/start/_offload.md`, then call `flywheel_approve_beads(action="start", coordinatorName="<current Agent Mail name>")`. Assign `START_DATA = result.structuredContent.data` and `PLUGIN_ROOT = START_DATA.pluginRoot`. Its `data.lanes` groups the beads by lane, and `data.prompts` holds one server-built prompt per ready bead.
 
 2. If `START_DATA.readyCount === 0`, say "No beads are ready for implementation. Run /agent-flywheel:start to create a plan first."
 
@@ -37,7 +37,7 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
    When `N_pi` is above 0, call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })`, ask `data.questions[0]` with `AskUserQuestion`, call it again with `action: "choose"` and the answer as `picks.implementer`, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. Stop if `list` fails or `piReady` is false. Then spawn the counts:
    ```bash
    IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
-   node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
+   node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
      --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod> --agy=<N_agy>
    ```
    Drop `--pi` and `--pi-model` when `N_pi` is 0, and drop `--agy` when `N_agy` is 0. The script runs `ntm spawn` for the cc, cod, and agy lanes, adds any pi and gmi panes as Pi (gmi on `gemini-4-argon`), and prints `{ session, panes: [{ lane, index, paneId }], errors }`. Address panes by the printed `index` with `--panes=N`. Singular `--pane=N` broadcasts to every pane, and ntm reports Pi panes as type `unknown`, so don't add `--type`. On a non-zero exit, show `errors` to the user.

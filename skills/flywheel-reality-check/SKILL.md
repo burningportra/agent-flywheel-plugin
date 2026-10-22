@@ -16,7 +16,7 @@ This skill is a thin pointer to the canonical reality-check sub-flow at `skills/
 
 ## Instructions
 
-1. **Read** `skills/start/_reality_check.md` end-to-end (resolve via `$CLAUDE_PLUGIN_ROOT/skills/start/_reality_check.md` or fall back to the cache path under `~/.claude/plugins/cache/agent-flywheel/agent-flywheel/<VERSION>/skills/start/_reality_check.md`).
+1. **Load** `skills/start/_reality_check.md` end-to-end via `flywheel_get_skill({ cwd, name: "agent-flywheel:start_reality_check" })` (or resolve via `$PLUGIN_ROOT/skills/start/_reality_check.md` using `data.pluginRoot` from `flywheel_doctor`, or fall back to `~/.claude/plugins/cache/agent-flywheel/agent-flywheel/<VERSION>/skills/start/_reality_check.md`).
 
 2. Execute its depth-selection `AskUserQuestion` (Reality check only / Reality check + beads / Full pipeline) and route to the matching section verbatim. Do NOT pick a depth unilaterally — per the start-skill's UNIVERSAL RULE 1, this is a labeled-option decision.
 

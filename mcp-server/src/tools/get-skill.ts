@@ -11,7 +11,7 @@
 import { z } from "zod";
 
 import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
-import { getSkill, type GetSkillResult } from "../skills-bundle.js";
+import { findPluginInstallRoot, getSkill, type GetSkillResult } from "../skills-bundle.js";
 import type { McpToolResult, ToolContext } from "../types.js";
 import { resolveRealpath } from "../utils/path-safety.js";
 import { VERSION } from "../version.js";
@@ -72,11 +72,13 @@ type GetSkillStructuredContent = {
     skill: GetSkillResult;
     /** The running plugin's version, so the start screen needs no shell call to print it. */
     pluginVersion: string;
+    /** Resolved plugin install root (CLAUDE_PLUGIN_ROOT or server module path), for Bash commands in skills. */
+    pluginRoot: string;
   };
 };
 
-function renderSkillText(result: GetSkillResult): string {
-  const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}, plugin v${VERSION}]`;
+function renderSkillText(result: GetSkillResult, pluginRoot: string): string {
+  const header = `# ${result.name}  [source: ${result.source}${result.staleWarn ? ", stale" : ""}, plugin v${VERSION}, pluginRoot: ${pluginRoot}]`;
   return `${header}\n\n${result.body}`;
 }
 
@@ -104,15 +106,16 @@ export async function runGetSkill(
     // has no skills bundle. Skills always resolve from the plugin install
     // root (CLAUDE_PLUGIN_ROOT or auto-detected from this module's location).
     const result = await getSkill(name);
+    const pluginRoot = findPluginInstallRoot();
     markSkillLoaded(ctx.cwd || parsed.data.cwd, name);
     const structured: GetSkillStructuredContent = {
       tool: "flywheel_get_skill",
       version: 1,
       status: "ok",
       phase: "idle",
-      data: { kind: "skill", skill: result, pluginVersion: VERSION },
+      data: { kind: "skill", skill: result, pluginVersion: VERSION, pluginRoot },
     };
-    return makeToolResult(renderSkillText(result), structured);
+    return makeToolResult(renderSkillText(result, pluginRoot), structured);
   } catch (err: unknown) {
     if (err instanceof FlywheelError) {
       return makeFlywheelErrorResult("flywheel_get_skill", "idle", {

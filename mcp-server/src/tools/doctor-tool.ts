@@ -14,6 +14,7 @@ import { classifyExecError, errMsg, makeFlywheelErrorResult } from '../errors.js
 import { isFirstRun } from '../first-run.js';
 import { renderPreflightBanner } from '../preflight.js';
 import { parseBrList } from '../br-parser.js';
+import { findPluginInstallRoot } from '../skills-bundle.js';
 import { makeToolResult } from './shared.js';
 import { runDoctorChecks } from './doctor.js';
 
@@ -49,7 +50,8 @@ const FW_LOG_LEVEL_TIP =
  * escape hatch without grepping the README.
  */
 export function renderDoctorReportText(report: DoctorReport): string {
-  const header = `flywheel doctor — overall: ${glyphFor(report.overall)} (${report.elapsedMs}ms${report.partial ? ', partial' : ''})`;
+  const rootSuffix = report.pluginRoot ? ` [pluginRoot: ${report.pluginRoot}]` : '';
+  const header = `flywheel doctor — overall: ${glyphFor(report.overall)} (${report.elapsedMs}ms${report.partial ? ', partial' : ''})${rootSuffix}`;
   const lines = report.checks.map((c) => {
     const base = `${glyphFor(c.severity)} ${c.name}: ${c.message}`;
     return c.hint ? `${base} [hint: ${c.hint}]` : base;
@@ -70,6 +72,7 @@ type DoctorStructuredContent = {
   phase: 'doctor';
   data: {
     kind: 'doctor_report';
+    pluginRoot: string;
     report: DoctorReport;
     preflightBanner: string | null;
     firstRun: boolean;
@@ -154,6 +157,7 @@ export async function runDoctor(
       runDoctorChecks(ctx.cwd, ctx.signal),
     ]);
     const preflightBanner = renderPreflightBanner(report);
+    const pluginRoot = report.pluginRoot ?? findPluginInstallRoot();
     const structured: DoctorStructuredContent = {
       tool: 'flywheel_doctor',
       version: 1,
@@ -161,6 +165,7 @@ export async function runDoctor(
       phase: 'doctor',
       data: {
         kind: 'doctor_report',
+        pluginRoot,
         report,
         preflightBanner,
         firstRun,

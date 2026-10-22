@@ -25,9 +25,10 @@ with cycle highlighting and click-to-detail. Read-only — no PATCH/POST routes.
 
 ```bash
 cd <project-root>
-node "$CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js" --port 0   # ephemeral port (default)
-node "$CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js" --port 7331  # fixed port
-node "$CLAUDE_PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js" --no-open    # don't auto-launch browser
+PLUGIN_ROOT="<data.pluginRoot from flywheel_doctor>"
+node "$PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js" --port 0   # ephemeral port (default)
+node "$PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js" --port 7331  # fixed port
+node "$PLUGIN_ROOT/mcp-server/dist/scripts/bead-viewer.js" --no-open    # don't auto-launch browser
 ```
 
 ## Security

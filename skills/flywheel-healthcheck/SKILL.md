@@ -25,7 +25,7 @@ Status:    `"ok" | "error"` (errors carry `data.kind:"error"` + `data.error.{cod
 - `curl -s --max-time 3 http://127.0.0.1:8765/health/liveness` — agent-mail
 - `git status --short` — repo cleanliness
 - `ls .pi-flywheel/checkpoint.json 2>/dev/null` — checkpoint state
-- `ls "$CLAUDE_PLUGIN_ROOT/mcp-server/dist/server.js" 2>/dev/null` — MCP server built
+- `ls "$PLUGIN_ROOT/mcp-server/dist/server.js" 2>/dev/null` — MCP server built (with `PLUGIN_ROOT` from `flywheel_doctor` `data.pluginRoot`)
 
 **Codebase health** (use Agent(Explore)):
 - TODO/FIXME count: `grep -r "TODO\|FIXME\|HACK" --include="*.ts" | wc -l`

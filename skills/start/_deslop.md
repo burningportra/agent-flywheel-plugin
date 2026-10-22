@@ -37,10 +37,10 @@ Route on the answer:
 
 ## Step 2: Single-pass invocation (verbatim prompt)
 
-> ❯ Read the plugin's own `$CLAUDE_PLUGIN_ROOT/AGENTS.md` and the project's `README.md` end-to-end. Then use your code investigation agent mode to understand the code, the technical architecture, and the project's purpose. Then apply the /simplify-and-refactor-code-isomorphically skill.
+> ❯ Read the plugin's own `$PLUGIN_ROOT/AGENTS.md` (where `PLUGIN_ROOT` is `data.pluginRoot` from `flywheel_doctor` / `flywheel_profile`) and the project's `README.md` end-to-end. Then use your code investigation agent mode to understand the code, the technical architecture, and the project's purpose. Then apply the /simplify-and-refactor-code-isomorphically skill.
 
 Concretely:
-1. `Read` the plugin's own `$CLAUDE_PLUGIN_ROOT/AGENTS.md` end-to-end (the project's own `AGENTS.md`, if any, is a separate file).
+1. `Read` the plugin's own `$PLUGIN_ROOT/AGENTS.md` end-to-end (the project's own `AGENTS.md`, if any, is a separate file).
 2. `Read` README.md (root) end-to-end.
 3. Spawn an Explore subagent (or use the Explore tool) to map architecture + technical purpose. Capture findings.
 4. Invoke the skill via the `Skill` tool: `Skill(skill: "simplify-and-refactor-code-isomorphically")`.
@@ -112,8 +112,8 @@ ntm --robot-send="$SESSION" --panes=<N> --type=cod --msg='## STEP 0 — AGENT MA
 Invoke /simplify-and-refactor-code-isomorphically scoped to <area-assignment>/. Follow the skill verbatim — baseline, duplication map, candidates, isomorphism cards, narrow edits, ledger. Do NOT touch files outside your reserved area; coordinate via Agent Mail if you need to.
 
 ## STEP 2 — VALIDATE (project-level build mutex — see Step 4d)
-"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch build  # waits for sibling agents
-"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch test
+"$PLUGIN_ROOT/scripts/build-mutex.sh" rch build  # waits for sibling agents
+"$PLUGIN_ROOT/scripts/build-mutex.sh" rch test
 Both must pass. If a test that passed at baseline now fails, your edit broke isomorphism — REVERT, do not commit.
 
 ## STEP 3 — COMMIT (one lever per commit — skill rule)
@@ -135,10 +135,10 @@ sleep 30   # stagger
 Five Codex agents finishing edits simultaneously and all running `rch build` at once will saturate disk + CPU and cause spurious failures. Enforce serialization via the portable wrapper, which the coordinator expands and bakes into every pane prompt's STEP 2 (above). The wrapper lives inside the plugin, so pane prompts receive the plugin-rooted path, not a repo-relative one:
 
 ```bash
-"$CLAUDE_PLUGIN_ROOT/scripts/build-mutex.sh" rch build
+"$PLUGIN_ROOT/scripts/build-mutex.sh" rch build
 ```
 
-The coordinator substitutes `$CLAUDE_PLUGIN_ROOT` in the `--msg` string before sending so the pane sees an absolute path. The wrapper uses an atomic `mkdir` lock under `.pi-flywheel/` and does not need the Linux-only `flock` binary. If a pane waits >5 min on the lock, escalate via `/slb` two-person approval before killing.
+The coordinator substitutes `$PLUGIN_ROOT` (`data.pluginRoot`) in the `--msg` string before sending so the pane sees an absolute path. The wrapper uses an atomic `mkdir` lock under `.pi-flywheel/` and does not need the Linux-only `flock` binary. If a pane waits >5 min on the lock, escalate via `/slb` two-person approval before killing.
 
 ### 4e. Supervision (looper default; ntm controller alternative)
 

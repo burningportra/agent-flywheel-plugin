@@ -93,6 +93,9 @@ describe('I4 — flywheel_doctor tool registration', () => {
             expect(sc.status).toBe('ok');
             expect(sc.phase).toBe('doctor');
             expect(sc.data.kind).toBe('doctor_report');
+            expect(typeof sc.data.pluginRoot).toBe('string');
+            expect(sc.data.pluginRoot.length).toBeGreaterThan(0);
+            expect(sc.data.report.pluginRoot).toBe(sc.data.pluginRoot);
             // The structured report must validate against DoctorReportSchema.
             const parsed = DoctorReportSchema.safeParse(sc.data.report);
             expect(parsed.success).toBe(true);
@@ -115,8 +118,9 @@ describe('I4 — flywheel_doctor tool registration', () => {
                 'minimal',
                 '--json',
             ], { cwd, timeout: 5000, signal: undefined });
-            // Text render should include the overall glyph header.
+            // Text render should include the overall glyph header and pluginRoot.
             expect(result.content[0].text).toMatch(/flywheel doctor — overall:/);
+            expect(result.content[0]?.text).toContain(`[pluginRoot: ${sc.data.pluginRoot}]`);
             if (sc.data.preflightBanner !== null) {
                 expect(result.content[0].text).toContain(sc.data.preflightBanner);
             }

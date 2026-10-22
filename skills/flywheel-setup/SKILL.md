@@ -28,7 +28,7 @@ On refusal, fall through to individual tool checks.
 
 ## 1. MCP server (build)
 
-The compiled `mcp-server/dist/` is committed with the plugin, so it should work out of the box after `/plugin install`. Verify `mcp-server/dist/server.js` exists relative to the plugin root. If missing (e.g. contributor checkout without dist), instruct: `cd "$CLAUDE_PLUGIN_ROOT/mcp-server" && npm ci && npm run build`.
+The compiled `mcp-server/dist/` is committed with the plugin, so it should work out of the box after `/plugin install`. Verify `mcp-server/dist/server.js` exists relative to the plugin root (`PLUGIN_ROOT = data.pluginRoot` from `flywheel_doctor` / `flywheel_profile`). If missing (e.g. contributor checkout without dist), instruct: `cd "$PLUGIN_ROOT/mcp-server" && npm ci && npm run build`.
 
 ## 2. MCP server (registered)
 

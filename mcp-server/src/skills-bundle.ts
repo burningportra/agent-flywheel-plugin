@@ -102,7 +102,7 @@ function sha256Hex(data: string | Buffer): string {
  * install — NOT the calling project's cwd. Falls back to walking up from
  * `import.meta.url`, then to `process.cwd()`.
  */
-function findPluginInstallRoot(): string {
+export function findPluginInstallRoot(): string {
   const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (envRoot && envRoot.length > 0) return path.resolve(envRoot);
   const here = path.dirname(fileURLToPath(import.meta.url));
