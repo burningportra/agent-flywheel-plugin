@@ -30,6 +30,10 @@ storage.sqlite3-wal
 /.ntm/
 /.pi-orchestrator/
 /.simplify-ledger/
+/.audit/
+/.tokenade/
+/*.tokenade-original
+/evals/
 /refactor/
 
 # Vendored dev copy of mcp-agent-mail (not part of the plugin distribution)
