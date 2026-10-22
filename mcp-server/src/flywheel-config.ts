@@ -36,9 +36,10 @@ export interface FlywheelConfigLanes {
   gemini: boolean;
   codex: boolean;
   pi: boolean;
+  agy: boolean;
 }
 
-export const CONFIGURABLE_LANES = ['gemini', 'codex', 'pi'] as const;
+export const CONFIGURABLE_LANES = ['gemini', 'codex', 'pi', 'agy'] as const;
 
 export interface FlywheelConfig {
   convergence: FlywheelConfigConvergence;
@@ -88,6 +89,7 @@ export const DEFAULT_CONFIG: FlywheelConfig = {
     gemini: true,
     codex: true,
     pi: true,
+    agy: true,
   },
 };
 
@@ -316,6 +318,7 @@ export function loadFlywheelConfigWithWarnings(cwd: string): FlywheelConfigResul
       gemini: pickBoolean(layers, 'lanes', 'gemini', DEFAULT_CONFIG.lanes.gemini),
       codex: pickBoolean(layers, 'lanes', 'codex', DEFAULT_CONFIG.lanes.codex),
       pi: pickBoolean(layers, 'lanes', 'pi', DEFAULT_CONFIG.lanes.pi),
+      agy: pickBoolean(layers, 'lanes', 'agy', DEFAULT_CONFIG.lanes.agy),
     },
   };
   return {

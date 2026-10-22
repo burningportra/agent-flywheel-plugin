@@ -30,7 +30,7 @@ describe('flywheel.config.yaml lanes', () => {
   }
 
   it('turns every lane on by default', () => {
-    expect(loadFlywheelConfig(repo).lanes).toEqual({ gemini: true, codex: true, pi: true });
+    expect(loadFlywheelConfig(repo).lanes).toEqual({ gemini: true, codex: true, pi: true, agy: true });
   });
 
   it('reads the user-level file under XDG_CONFIG_HOME', () => {
@@ -40,7 +40,7 @@ describe('flywheel.config.yaml lanes', () => {
 
     expect(userConfigPath()).toBe(file);
     expect(result.userSource).toBe(file);
-    expect(result.config.lanes).toEqual({ gemini: false, codex: true, pi: true });
+    expect(result.config.lanes).toEqual({ gemini: false, codex: true, pi: true, agy: true });
     expect(result.warnings).toEqual([]);
   });
 
@@ -50,7 +50,7 @@ describe('flywheel.config.yaml lanes', () => {
 
     const { lanes, convergence } = loadFlywheelConfig(repo);
 
-    expect(lanes).toEqual({ gemini: true, codex: false, pi: true });
+    expect(lanes).toEqual({ gemini: true, codex: false, pi: true, agy: true });
     expect(convergence.gate_advance_wave).toBe(false);
   });
 
@@ -59,7 +59,7 @@ describe('flywheel.config.yaml lanes', () => {
 
     const result = loadFlywheelConfigWithWarnings(repo);
 
-    expect(result.config.lanes).toEqual({ gemini: true, codex: true, pi: true });
+    expect(result.config.lanes).toEqual({ gemini: true, codex: true, pi: true, agy: true });
     expect(result.warnings).toEqual([
       expect.objectContaining({ kind: 'unknown_key', path: 'lanes.gemeni', suggestion: 'lanes.gemini', file }),
       expect.objectContaining({ kind: 'wrong_type', path: 'lanes.pi', file }),

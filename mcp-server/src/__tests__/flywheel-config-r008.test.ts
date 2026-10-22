@@ -115,6 +115,15 @@ describe('R-008 — loadFlywheelConfigWithWarnings', () => {
     expect(wrongType?.path).toBe('convergence.gate_advance_wave');
   });
 
+  it('enables the agy lane by default and reads lanes.agy from the file', () => {
+    expect(DEFAULT_CONFIG.lanes.agy).toBe(true);
+    writeFileSync(join(tmp, 'flywheel.config.yaml'), `lanes:\n  agy: false\n`);
+    const result = loadFlywheelConfigWithWarnings(tmp);
+    expect(result.config.lanes.agy).toBe(false);
+    expect(result.config.lanes.pi).toBe(true);
+    expect(result.warnings).toEqual([]);
+  });
+
   it('loadFlywheelConfig (legacy thin wrapper) still returns just the config', () => {
     writeFileSync(join(tmp, 'flywheel.config.yaml'), `convergence:\n  gate_advance_wave: false\n`);
     const config = loadFlywheelConfig(tmp);

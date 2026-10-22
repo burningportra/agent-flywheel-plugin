@@ -18,8 +18,8 @@ import { CURRENT_GEMINI_MODEL_ID } from '../model-detection.js';
 export type { AdaptedPrompt, BeadDispatchContext };
 
 interface TerminalPromptIdentity {
-  readonly provider: 'claude' | 'pi' | 'gemini';
-  readonly program: 'claude-code' | 'pi';
+  readonly provider: 'claude' | 'pi' | 'gemini' | 'agy';
+  readonly program: 'claude-code' | 'pi' | 'agy';
   readonly model: string;
   /** Pi panes run with `--no-approve`, which skips project MCP servers, so they reach Agent Mail through the `am` CLI. */
   readonly agentMail: 'mcp' | 'cli';
@@ -69,6 +69,9 @@ function agentMailSteps(
   return {
     bootstrap: [
       'This pane has no Agent Mail MCP tools. Run these `am` CLI commands in your shell instead.',
+      ...(identity.provider === 'agy'
+        ? ['Use AGY native tools: run_command for shell commands, read_file for reading, edit_file for editing, write_file for writing.']
+        : []),
       `0a. am macros start-session --project ${project} --program ${identity.program} --model ${identity.model} --agent-name ${agent} --task ${shellQuote(task)} --json`,
       `0b. am file_reservations reserve ${project} ${agent} <path>... --exclusive --ttl 3600 --reason ${shellQuote(bead.beadId)} for every file you plan to edit. If the output lists conflicts, retry 3x with 30s backoff.`,
       `0c. ${send(`[impl] ${bead.beadId} started`, "'started'")}`,
@@ -184,6 +187,17 @@ export function adaptPromptForGemini(
     provider: 'gemini',
     program: 'pi',
     model: CURRENT_GEMINI_MODEL_ID,
+    agentMail: 'cli',
+  });
+}
+
+export function adaptPromptForAgy(
+  bead: BeadDispatchContext,
+): AdaptedPrompt {
+  return adaptPromptForTerminal(bead, {
+    provider: 'agy',
+    program: 'agy',
+    model: 'agy',
     agentMail: 'cli',
   });
 }

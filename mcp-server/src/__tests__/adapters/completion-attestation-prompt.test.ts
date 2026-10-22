@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { adaptPromptForClaude, adaptPromptForGemini } from '../../adapters/claude-prompt.js';
+import { adaptPromptForAgy, adaptPromptForClaude, adaptPromptForGemini } from '../../adapters/claude-prompt.js';
 import {
   adaptPromptForCodex,
   type AdaptedPrompt,
@@ -25,6 +25,7 @@ const adapters = [
   ['claude', adaptPromptForClaude],
   ['codex', adaptPromptForCodex],
   ['gemini', adaptPromptForGemini],
+  ['agy', adaptPromptForAgy],
 ] satisfies ReadonlyArray<
   readonly [string, (bead: BeadDispatchContext) => AdaptedPrompt]
 >;
@@ -80,5 +81,23 @@ describe.each(adapters)('%s completion attestation prompt', (_provider, adapt) =
 
     expect(report.beadId).toBe(context.beadId);
     expect(report.agentName).toBe(context.agentName);
+  });
+});
+
+describe('agy implementer prompt', () => {
+  it('points the pane at AGY native tools and the am CLI under program agy', () => {
+    const adapted = adaptPromptForAgy(context);
+
+    expect(adapted.provider).toBe('agy');
+    expect(adapted.prompt).toContain('Use AGY native tools:');
+    expect(adapted.prompt).toContain('--program agy --model agy');
+    expect(adapted.prompt.indexOf('Use AGY native tools:')).toBeLessThan(
+      adapted.prompt.indexOf('0a. am macros start-session'),
+    );
+  });
+
+  it('leaves the AGY tool line out of other providers', () => {
+    expect(adaptPromptForGemini(context).prompt).not.toContain('Use AGY native tools:');
+    expect(adaptPromptForClaude(context).prompt).not.toContain('Use AGY native tools:');
   });
 });
