@@ -247,6 +247,9 @@ Omit `--gmi=1` when `gemini_cli` is disabled/non-green or `gemini_model_compat` 
      ```bash
      SESSION="${NTM_PROJECT}--deep-plan-<slug>"
      # PANE001-OVERRIDE: deep plan is one Claude lens plus two AGY/Pi lenses; AGENTS.md "Deep plan exception".
+     # Default (Claude + AGY):
+     node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label deep-plan-<slug> --cc=1 --agy=2
+     # Or when Claude + Pi (optional Pi) was selected:
      node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label deep-plan-<slug> --cc=1 --pi=2 --pi-model="$PI_ROBUSTNESS_MODEL" --pi-model="$PI_ERGONOMICS_MODEL" --pi-name=deep-plan
      ```
      Send prompts by printed `index` via `ntm --robot-send="$SESSION" --panes=<index> --msg="<prompt>"`. Each planner writes `docs/plans/<date>-<perspective>.md` (`correctness`, `robustness`, `ergonomics`) and mails `[deep-plan] <perspective> plan` (use background `Agent()` tasks when `NTM_AVAILABLE=false`).

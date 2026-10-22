@@ -710,7 +710,7 @@ Focus deeply on your assigned perspective lens.`;
     : '';
 
   const piDispatch = piLanes
-    ? ' Entries with runner="pi-pane" run in Pi panes on the models the user picks with flywheel_pi_models (roles robustness and ergonomics). The Deep plan recipe in skills/start/_planning.md adds them to the deep-plan NTM session with swarm-spawn.js.'
+    ? ' Entries with runner="pi-pane" run by default in AGY panes (--cc=1 --agy=2) or optionally in Pi panes (--cc=1 --pi=2) on the models the user picks with flywheel_pi_models (roles robustness and ergonomics). The Deep plan recipe in skills/start/_planning.md adds them to the deep-plan NTM session with swarm-spawn.js.'
     : '';
 
   const payload = {

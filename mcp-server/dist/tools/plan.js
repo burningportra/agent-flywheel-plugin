@@ -531,7 +531,7 @@ Focus deeply on your assigned perspective lens.`;
         ? '\n\nAmbition mode: the synthesized plan keeps the charter\'s target rung, stretch target, and floor-first phase order. Where plans disagree on how far to climb, keep the more ambitious path that still has an outside judge and a fallback. Do not average ambition down.'
         : '';
     const piDispatch = piLanes
-        ? ' Entries with runner="pi-pane" run in Pi panes on the models the user picks with flywheel_pi_models (roles robustness and ergonomics). The Deep plan recipe in skills/start/_planning.md adds them to the deep-plan NTM session with swarm-spawn.js.'
+        ? ' Entries with runner="pi-pane" run by default in AGY panes (--cc=1 --agy=2) or optionally in Pi panes (--cc=1 --pi=2) on the models the user picks with flywheel_pi_models (roles robustness and ergonomics). The Deep plan recipe in skills/start/_planning.md adds them to the deep-plan NTM session with swarm-spawn.js.'
         : '';
     const payload = {
         kind: 'deep_plan_spawn',

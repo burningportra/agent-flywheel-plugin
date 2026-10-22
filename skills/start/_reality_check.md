@@ -116,7 +116,7 @@ Only run this section in **"Full pipeline"** mode. Dispatch this exact prompt:
 
 ### 4b. Spawn the swarm
 
-Set `SWARM_FLAGS = DOCTOR_REPORT.swarm.spawnFlags`, pick the Pi model, and spawn as in `_inflight_prompt.md` steps 2 and 3, with a different label: `node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label reality-check-closure $SWARM_FLAGS --pi-model="$PI_IMPL_MODEL" --pi-name=closure`, dropping `--pi-model` when `SWARM_FLAGS` has no Pi lane. The server already applied AGENTS.md "NTM pane priority", the substitution ladder, the `lanes:` switches, and the Gemini model check, so don't add a lane the flags leave out. `--cc=6` is the cc-only floor; log the degradation. Address panes by the `index` values the script prints.
+Set `SWARM_FLAGS = DOCTOR_REPORT.swarm.spawnFlags`, ask the `"Swarm lanes"` `AskUserQuestion` menu (`Claude + AGY (Recommended)` `--cc=3 --agy=3` vs `Claude + AGY + Pi (optional Pi)` `--cc=2 --agy=2 --pi=2`; only call `flywheel_pi_models` when Pi is selected), and spawn as in `_inflight_prompt.md` steps 2 and 3, with a different label: `node "${PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label reality-check-closure $SWARM_FLAGS --pi-model="$PI_IMPL_MODEL" --pi-name=closure`, dropping `--pi-model` and `--pi-name` when `SWARM_FLAGS` has no Pi lane. The server already applied AGENTS.md "NTM pane priority", the substitution ladder, the `lanes:` switches, and the Gemini model check, so don't add a lane the flags leave out. `--cc=6` is the cc-only floor; log the degradation. Address panes by the `index` values the script prints.
 
 
 ### 4c. Supervision (3-min looper default; ntm controller alternative)
