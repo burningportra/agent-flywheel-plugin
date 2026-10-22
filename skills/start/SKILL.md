@@ -17,15 +17,15 @@ Run the agent-flywheel for this project. $ARGUMENTS (optional: initial goal or `
 >
 > ## UNIVERSAL RULE 3: load phase instructions on demand with `flywheel_get_skill`
 >
-> At each phase boundary, call `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })` before executing that phase:
+> At each phase boundary — and unconditionally on resume whenever `state.phase !== "idle"` — the **first tool call** for that phase **must** be `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })` before calling `flywheel_plan`, `flywheel_approve_beads`, `flywheel_review`, `flywheel_verify_beads`, `flywheel_grade_outcome`, or `flywheel_advance_wave`:
 >
-> | Phase | Skill name | Sub-file | Steps |
+> | Phase (`state.phase`) | Skill name | Sub-file | Steps |
 > |-------|-----------|----------|-------|
-> | Planning | `agent-flywheel:start_planning` | `_planning.md` | 5, 5.55, 5.6 |
-> | Bead creation & approval | `agent-flywheel:start_beads` | `_beads.md` | 5.5, 6 |
-> | Implementation | `agent-flywheel:start_implement` | `_implement.md` | 7 |
-> | Review & loop | `agent-flywheel:start_review` | `_review.md` | 8, 9, 9.25, 9.4 |
-> | Wrap-up & post-flywheel | `agent-flywheel:start_wrapup` | `_wrapup.md` | 9.5–12 |
+> | Planning (`planning`) | `agent-flywheel:start_planning` | `_planning.md` | 5, 5.55, 5.6 |
+> | Bead creation & approval (`creating_beads`/`refining_beads`) | `agent-flywheel:start_beads` | `_beads.md` | 5.5, 6 |
+> | Implementation (`implementing`) | `agent-flywheel:start_implement` | `_implement.md` | 7 |
+> | Review & loop (`reviewing`) | `agent-flywheel:start_review` | `_review.md` | 8, 9, 9.25, 9.4 |
+> | Wrap-up & post-flywheel (`wrapup`) | `agent-flywheel:start_wrapup` | `_wrapup.md` | 9.5–12 |
 > | Reality check | `agent-flywheel:start_reality_check` | `_reality_check.md` | gap analysis |
 > | Deslop pass | `agent-flywheel:start_deslop` | `_deslop.md` | Step 9.5 |
 > | Saturation suite | `agent-flywheel:start_saturation` | `_saturation.md` | saturation |
@@ -55,6 +55,7 @@ Take `VERSION` from `plugin v<version>` in the `flywheel_get_skill` header (`dat
 
 Capture any prompt beyond `/start <args>` as `USER_INPUT`. Run Steps 0a–0d first, then apply this Step 0e override when `USER_INPUT` is non-empty (multi-paragraph/Markdown/`docs/plans/*.md` = plan; ≤300 chars without headings = goal; longer prose = ambiguous):
 
+- **Active-checkpoint resume (`state.phase !== "idle"`):** When `state.phase !== "idle"` and `USER_INPUT` matches `state.selectedGoal` or continues that saved phase, skip Goal deepening/framing — the **first tool call must be `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })`** (`state.phase = "reviewing"` → `agent-flywheel:start_review`) before calling `flywheel_review` or any phase tool.
 - **Plan-shaped:**
   ```
   AskUserQuestion(questions: [{
@@ -318,7 +319,7 @@ AskUserQuestion(questions: [{
 | **Simplify pass** | Load `skills/start/_deslop.md` and present its mode gate. |
 | **Duel** | Invoke `/agent-flywheel:flywheel-duel` (checks `which claude codex gemini`), then resume the phase it returns. |
 | **Reality check** | Load `skills/start/_reality_check.md` and present its depth gate. |
-| **Resume session** | Run **drift check** below before jumping to the saved phase. |
+| **Resume session** | Run **drift check** below; if clean (or **Force resume**), the first tool call must be `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })` before any phase tool. |
 | **Work on beads** | Run **Work-on-beads sub-menu** below before `flywheel_approve_beads`. |
 | **New goal / Scan & discover** | Delete checkpoint if New goal; proceed to Step 2. |
 | **Set a goal** | Read `<goal>` from Other, run **Goal deepening**, run **Goal framing mode** unless concrete and ≤300 chars, call `flywheel_select`, load `_planning.md`, and continue through Steps 4.5 and 5 in the same turn. |
@@ -359,6 +360,8 @@ AskUserQuestion(questions: [{
   multiSelect: false
 }])
 ```
+
+If no drift (or **Force resume**), and whenever `state.phase !== "idle"`, the **first tool call must be `flywheel_get_skill({ cwd, name: "agent-flywheel:start_<phase>" })`** (`state.phase = "reviewing"` → `agent-flywheel:start_review`) before calling `flywheel_review` or any phase tool.
 
 #### Research repo — mode selection
 

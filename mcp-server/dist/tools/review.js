@@ -7,6 +7,7 @@ import { buildFreshEyesPrompt } from '../gates.js';
 import { applyBatchReviewVerdict, batchReviewVerdictPath, recordBatchReviewDispatch } from '../commit-batch.js';
 import { readMemory } from '../memory.js';
 import { completionReportPath, readCompletionReport } from '../completion-report.js';
+import { hasLoadedSkill } from './get-skill.js';
 import { filterBeadsForProgram, formatBeadProgramWarnings, goalBeadProgramLabel, resolveDispatchBeadProgramScope, } from './bead-program.js';
 const log = createLogger('review');
 // ─── Review-mode matrix (bead agent-flywheel-plugin-f0j) ──────────────
@@ -101,6 +102,9 @@ function parseBrShowBead(raw) {
         const parsed = JSON.parse(raw);
         if (looksLikeBead(parsed))
             return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0 && looksLikeBead(parsed[0])) {
+            return parsed[0];
+        }
         if (parsed && typeof parsed === 'object') {
             const candidateKeys = ['bead', 'issue', 'data', 'result'];
             for (const key of candidateKeys) {
@@ -133,6 +137,19 @@ function looksLikeBead(value) {
  */
 export async function runReview(ctx, args) {
     const { exec, cwd, state, saveState, signal } = ctx;
+    // ── Guard: Universal Rule 3 phase-skill load (agent-flywheel-plugin-ni8) ──
+    // When a `/start` session is active in this server process (`agent-flywheel:start`
+    // has been loaded for `cwd`), `agent-flywheel:start_review` MUST be loaded via
+    // `flywheel_get_skill` before `flywheel_review` runs.
+    if (hasLoadedSkill(cwd, 'agent-flywheel:start') &&
+        !hasLoadedSkill(cwd, 'agent-flywheel:start_review')) {
+        const callExpr = `flywheel_get_skill({ cwd: ${JSON.stringify(cwd)}, name: "agent-flywheel:start_review" })`;
+        return errorResult(state.phase, 'missing_prerequisite', `start_review_not_loaded: Universal Rule 3 requires loading the review phase skill before calling flywheel_review. Call ${callExpr} first, then retry flywheel_review.`, {
+            reason: 'start_review_not_loaded',
+            requiredSkill: 'agent-flywheel:start_review',
+            phase: state.phase,
+        }, `Call ${callExpr} first, then retry flywheel_review.`);
+    }
     // ── action: batch_review (T4 — fresh-eyes auto-trigger) ──────
     // Does NOT use a beadId (it reviews a sha-range of commits, not a single
     // bead), so this branch runs BEFORE the beadId guard below.

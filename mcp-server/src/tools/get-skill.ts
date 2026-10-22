@@ -13,8 +13,45 @@ import { z } from "zod";
 import { FlywheelError, classifyExecError, errMsg, makeFlywheelErrorResult } from "../errors.js";
 import { getSkill, type GetSkillResult } from "../skills-bundle.js";
 import type { McpToolResult, ToolContext } from "../types.js";
+import { resolveRealpath } from "../utils/path-safety.js";
 import { VERSION } from "../version.js";
 import { makeToolResult } from "./shared.js";
+
+const _loadedSkillsByCwd = new Map<string, Set<string>>();
+
+function cwdKeys(cwd: string): string[] {
+  const raw = cwd.trim();
+  if (!raw) return [];
+  const resolved = resolveRealpath(raw, { label: "cwd" });
+  if (resolved.ok && resolved.realPath !== raw) {
+    return [raw, resolved.realPath];
+  }
+  return [raw];
+}
+
+export function markSkillLoaded(cwd: string, skillName: string): void {
+  for (const key of cwdKeys(cwd)) {
+    let set = _loadedSkillsByCwd.get(key);
+    if (!set) {
+      set = new Set<string>();
+      _loadedSkillsByCwd.set(key, set);
+    }
+    set.add(skillName);
+  }
+}
+
+export function hasLoadedSkill(cwd: string, skillName: string): boolean {
+  for (const key of cwdKeys(cwd)) {
+    if (_loadedSkillsByCwd.get(key)?.has(skillName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function _resetLoadedSkillsLedger(): void {
+  _loadedSkillsByCwd.clear();
+}
 
 const GetSkillInputSchema = z.object({
   cwd: z.string(),
@@ -67,6 +104,7 @@ export async function runGetSkill(
     // has no skills bundle. Skills always resolve from the plugin install
     // root (CLAUDE_PLUGIN_ROOT or auto-detected from this module's location).
     const result = await getSkill(name);
+    markSkillLoaded(ctx.cwd || parsed.data.cwd, name);
     const structured: GetSkillStructuredContent = {
       tool: "flywheel_get_skill",
       version: 1,

@@ -9,6 +9,9 @@
  */
 import { z } from "zod";
 import type { McpToolResult, ToolContext } from "../types.js";
+export declare function markSkillLoaded(cwd: string, skillName: string): void;
+export declare function hasLoadedSkill(cwd: string, skillName: string): boolean;
+export declare function _resetLoadedSkillsLedger(): void;
 declare const GetSkillInputSchema: z.ZodObject<{
     cwd: z.ZodString;
     name: z.ZodString;

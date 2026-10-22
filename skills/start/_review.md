@@ -1,8 +1,8 @@
 # Review & Loop — Steps 8, 9, 9.25, 9.4
 
-## Step 8.0: Pick a review mode
+## Step 8.0: Pick a review mode (for `Fresh-eyes` / `hit-me` wave reviewers)
 
-Choose one mode for the wave from the latest doctor report and `git status --porcelain`:
+When spawning wave reviewers (`Fresh-eyes` / `action: "hit-me"` in Step 8 below; skip this prompt when the operator picks **Looks good** or **Self review** in Step 8), choose one mode for the wave from the latest doctor report and `git status --porcelain`:
 
 - Green doctor and clean tree: recommend **Autofix**.
 - Yellow doctor: recommend **Report-only**.
