@@ -9,6 +9,10 @@
  */
 import type { AdaptedPrompt, BeadDispatchContext } from './codex-prompt.js';
 export type { AdaptedPrompt, BeadDispatchContext };
+/** Agent Mail's background git archive queue can hold an `am` call for 40+ seconds, so panes cap each one. */
+export declare const AGENT_MAIL_CLI_TIMEOUT_SECONDS = 10;
+/** Prefix for an `am` command: SIGALRM survives `exec`, so a stalled `am` exits 142 after the timeout. */
+export declare const AGENT_MAIL_CLI_TIMEOUT_GUARD = "perl -e 'alarm 10; exec @ARGV' --";
 export declare function adaptPromptForClaude(bead: BeadDispatchContext): AdaptedPrompt;
 export declare function adaptPromptForPi(bead: BeadDispatchContext): AdaptedPrompt;
 /** The Gemini lane is a Pi pane running {@link CURRENT_GEMINI_MODEL_ID}. */

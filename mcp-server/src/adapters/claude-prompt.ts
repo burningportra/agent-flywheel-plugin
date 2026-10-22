@@ -33,6 +33,18 @@ interface AgentMailSteps {
 const AGENT_MAIL_SAFETY =
   'Do NOT run `am doctor repair`, `am doctor archive-normalize`, or delete `.mailbox.activity.lock`; if Agent Mail looks busy/unhealthy, report it to the coordinator and ask them to run `flywheel_remediate({ checkName: "agent_mail_liveness", mode: "execute", autoConfirm: true })`.';
 
+/** Agent Mail's background git archive queue can hold an `am` call for 40+ seconds, so panes cap each one. */
+export const AGENT_MAIL_CLI_TIMEOUT_SECONDS = 10;
+
+/** Prefix for an `am` command: SIGALRM survives `exec`, so a stalled `am` exits 142 after the timeout. */
+export const AGENT_MAIL_CLI_TIMEOUT_GUARD = `perl -e 'alarm ${AGENT_MAIL_CLI_TIMEOUT_SECONDS}; exec @ARGV' --`;
+
+const AGENT_MAIL_CLI_TIMEOUT_RULE =
+  `Agent Mail's background archive queue can stall an \`am\` command for 40+ seconds. Run every \`am\` command in this prompt (0a-0c and STEP 4) behind \`${AGENT_MAIL_CLI_TIMEOUT_GUARD}\`, e.g. \`${AGENT_MAIL_CLI_TIMEOUT_GUARD} am macros start-session ...\`, or with a ${AGENT_MAIL_CLI_TIMEOUT_SECONDS}s tool timeout. If one times out (exit 142), don't retry it in a loop or run \`am doctor\`: carry on with the bead and note the timed-out command in your completion message.`;
+
+const AGENT_MAIL_MCP_TIMEOUT_RULE =
+  `If an Agent Mail MCP call takes longer than ${AGENT_MAIL_CLI_TIMEOUT_SECONDS}s (archive-queue contention), proceed without it instead of retrying in a loop or running \`am doctor\`, and note the skipped call in your completion message.`;
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -54,7 +66,7 @@ function agentMailSteps(
         `      agent_name='${bead.agentName}')`,
         '0b. file_reservation_paths for every file you plan to edit. Retry 3x with 30s backoff.',
         `0c. send_message to '${bead.coordinatorName}' subject '[impl] ${bead.beadId} started'.`,
-        `0d. Agent Mail runtime safety: use the Agent Mail MCP/HTTP tools only. ${AGENT_MAIL_SAFETY}`,
+        `0d. Agent Mail runtime safety: use the Agent Mail MCP/HTTP tools only. ${AGENT_MAIL_SAFETY} ${AGENT_MAIL_MCP_TIMEOUT_RULE}`,
       ],
       report: [
         '- release_file_reservations.',
@@ -69,13 +81,14 @@ function agentMailSteps(
   return {
     bootstrap: [
       'This pane has no Agent Mail MCP tools. Run these `am` CLI commands in your shell instead.',
+      AGENT_MAIL_CLI_TIMEOUT_RULE,
       ...(identity.provider === 'agy'
         ? ['Use AGY native tools: run_command for shell commands, read_file for reading, edit_file for editing, write_file for writing.']
         : []),
       `0a. am macros start-session --project ${project} --program ${identity.program} --model ${identity.model} --agent-name ${agent} --task ${shellQuote(task)} --json`,
       `0b. am file_reservations reserve ${project} ${agent} <path>... --exclusive --ttl 3600 --reason ${shellQuote(bead.beadId)} for every file you plan to edit. If the output lists conflicts, retry 3x with 30s backoff.`,
       `0c. ${send(`[impl] ${bead.beadId} started`, "'started'")}`,
-      `0d. Agent Mail runtime safety: ${AGENT_MAIL_SAFETY}`,
+      `0d. Agent Mail runtime safety: ${AGENT_MAIL_SAFETY} Keep the ${AGENT_MAIL_CLI_TIMEOUT_SECONDS}s guard on every \`am\` command.`,
     ],
     report: [
       `- am file_reservations release ${project} ${agent}`,
