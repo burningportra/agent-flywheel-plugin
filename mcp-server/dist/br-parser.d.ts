@@ -5,6 +5,7 @@ export declare const BrListRowSchema: z.ZodPipe<z.ZodObject<{
     status: z.ZodDefault<z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodEnum<{
         open: "open";
         in_progress: "in_progress";
+        blocked: "blocked";
         closed: "closed";
         deferred: "deferred";
     }>>>;
@@ -22,7 +23,7 @@ export declare const BrListRowSchema: z.ZodPipe<z.ZodObject<{
     closed_ts: string | undefined;
     id: string;
     title: string;
-    status: "open" | "in_progress" | "closed" | "deferred";
+    status: "open" | "in_progress" | "blocked" | "closed" | "deferred";
     description: string | undefined;
     priority?: number | undefined;
     labels?: string[] | undefined;
@@ -32,7 +33,7 @@ export declare const BrListRowSchema: z.ZodPipe<z.ZodObject<{
     [x: string]: unknown;
     id: string;
     title: string;
-    status: "open" | "in_progress" | "closed" | "deferred";
+    status: "open" | "in_progress" | "blocked" | "closed" | "deferred";
     description: string | undefined;
     priority?: number | undefined;
     labels?: string[] | undefined;

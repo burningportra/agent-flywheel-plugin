@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { ExecFn } from '../exec.js';
+import { isActiveBeadStatus } from '../bead-status.js';
 import { formatSkippedBrRows, parseBrList } from '../parsers.js';
 import type { Bead, BeadProgramScope } from '../types.js';
 
@@ -61,7 +62,7 @@ function hasAnyFlywheelGoalLabel(beads: readonly Bead[]): boolean {
 }
 
 function activeBeads(beads: readonly Bead[]): Bead[] {
-  return beads.filter((bead) => bead.status === 'open' || bead.status === 'in_progress');
+  return beads.filter((bead) => isActiveBeadStatus(bead.status));
 }
 
 export function resolveBeadProgram(

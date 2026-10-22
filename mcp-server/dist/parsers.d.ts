@@ -38,6 +38,7 @@ export declare const BeadSchema: z.ZodObject<{
     status: z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodEnum<{
         open: "open";
         in_progress: "in_progress";
+        blocked: "blocked";
         closed: "closed";
         deferred: "deferred";
     }>>;

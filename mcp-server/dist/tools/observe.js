@@ -282,6 +282,7 @@ async function probeBeads(ctx) {
     const emptyCounts = {
         open: 0,
         in_progress: 0,
+        blocked: 0,
         closed: 0,
         deferred: 0,
         total: 0,

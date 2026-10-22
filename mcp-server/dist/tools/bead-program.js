@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isActiveBeadStatus } from '../bead-status.js';
 import { formatSkippedBrRows, parseBrList } from '../parsers.js';
 export const FLYWHEEL_GOAL_LABEL_PREFIX = 'flywheel-goal:';
 // `br create` rejects labels over 50 characters: prefix (14) + slug + ':' + hash (8).
@@ -30,7 +31,7 @@ function hasAnyFlywheelGoalLabel(beads) {
     return beads.some((bead) => bead.labels?.some(isFlywheelGoalLabel) ?? false);
 }
 function activeBeads(beads) {
-    return beads.filter((bead) => bead.status === 'open' || bead.status === 'in_progress');
+    return beads.filter((bead) => isActiveBeadStatus(bead.status));
 }
 export function resolveBeadProgram(allBeads, expectedLabel) {
     if (!hasAnyFlywheelGoalLabel(allBeads)) {

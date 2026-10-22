@@ -197,7 +197,7 @@ describe('structured contract and state coherence', () => {
         expect(state.repoProfile?.entrypoints).toEqual(structured.data.profileSummary.entrypoints);
         expect(state.coordinationStrategy).toBe(structured.data.coordination.backend);
         expect(state.coordinationBackend?.beads).toBe(structured.data.coordination.beadsAvailable);
-        expect(structured.data.existingBeads).toEqual({ openCount: 1, deferredCount: 1 });
+        expect(structured.data.existingBeads).toEqual({ openCount: 1, blockedCount: 0, deferredCount: 1 });
         expect(result.content[0].text).toContain('Coordination: beads');
         expect(result.content[0].text).toContain('1 open/in-progress');
         expect(result.content[0].text).toContain('Call `flywheel_discover`');

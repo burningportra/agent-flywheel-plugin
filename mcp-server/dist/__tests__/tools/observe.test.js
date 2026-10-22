@@ -227,6 +227,7 @@ describe('flywheel_observe — bead counts', () => {
                     respond: ok(JSON.stringify([
                         { id: 'b-1', title: 'One', status: 'open', priority: 1 },
                         { id: 'b-2', title: 'Two', status: 'in_progress', priority: 2 },
+                        { id: 'b-3', title: 'Three', status: 'blocked', priority: 2 },
                     ])),
                 },
                 { match: brReady, respond: ok(readyRows) },
@@ -235,7 +236,8 @@ describe('flywheel_observe — bead counts', () => {
             const result = await runObserve(makeCtx(cwd, exec), { cwd });
             const sc = result.structuredContent;
             expect(sc.data.report.beads.initialized).toBe(true);
-            expect(sc.data.report.beads.counts).toMatchObject({ open: 1, in_progress: 1, total: 2 });
+            expect(sc.data.report.beads.counts).toEqual({ open: 1, in_progress: 1, blocked: 1, closed: 0, deferred: 0, total: 3 });
+            expect(sc.data.report.beads.warning).toBeUndefined();
             expect(sc.data.report.beads.ready.map((r) => r.id)).toEqual(['b-1']);
         }
         finally {

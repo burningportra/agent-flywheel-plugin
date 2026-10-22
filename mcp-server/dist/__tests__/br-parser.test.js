@@ -44,5 +44,16 @@ describe('br-parser — statuses and descriptions br accepts', () => {
         expect(result.rows.map((row) => [row.id, row.status, row.description])).toEqual([['bead-1', 'closed', undefined]]);
         expect(result.rejected).toBe(1);
     });
+    it('keeps a blocked row as blocked instead of rejecting it', () => {
+        const raw = JSON.stringify({
+            issues: [
+                { id: 'bead-1', title: 'Ready', status: 'open' },
+                { id: 'bead-2', title: 'Waiting on upstream', status: 'blocked', priority: 1 },
+            ],
+        });
+        const result = parseBrList(raw);
+        expect(result.rows.map((row) => [row.id, row.status])).toEqual([['bead-1', 'open'], ['bead-2', 'blocked']]);
+        expect(result.rejected).toBe(0);
+    });
 });
 //# sourceMappingURL=br-parser.test.js.map

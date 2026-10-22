@@ -1,18 +1,21 @@
 import { z } from "zod";
 
-export const BEAD_STATUSES = ["open", "in_progress", "closed", "deferred"] as const;
+export const BEAD_STATUSES = ["open", "in_progress", "blocked", "closed", "deferred"] as const;
 
 export type BeadStatus = (typeof BEAD_STATUSES)[number];
 
 export const BeadStatusSchema = z.enum(BEAD_STATUSES);
 
+/** Unfinished work: open, in progress, or waiting on a blocker. Deferred and closed beads are not. */
+export function isActiveBeadStatus(status: BeadStatus): boolean {
+  return status === "open" || status === "in_progress" || status === "blocked";
+}
+
 // br stores any string passed to `br update --status`, so these are the ones
-// with an obvious flywheel meaning. `blocked` stays open because `br ready`
-// already holds it back; `pinned` beads are standing context, not work.
+// with an obvious flywheel meaning. `pinned` beads are standing context, not work.
 const BR_STATUS_ALIASES: ReadonlyMap<string, BeadStatus> = new Map([
   ["completed", "closed"],
   ["done", "closed"],
-  ["blocked", "open"],
   ["pinned", "deferred"],
 ]);
 

@@ -415,6 +415,7 @@ describe('runProfile', () => {
         foundationGaps: ['- No AGENTS.md found. Consider creating one for agent guidance.'],
         existingBeads: {
           openCount: 1,
+          blockedCount: 0,
           deferredCount: 0,
         },
         profileSummary: {
@@ -473,6 +474,7 @@ describe('runProfile', () => {
         foundationGaps: ['- No AGENTS.md found. Consider creating one for agent guidance.'],
         existingBeads: {
           openCount: 1,
+          blockedCount: 0,
           deferredCount: 0,
         },
         profileSummary: {

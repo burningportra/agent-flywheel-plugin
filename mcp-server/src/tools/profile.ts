@@ -119,6 +119,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
   // ── Beads status ──────────────────────────────────────────────
   let beadStatus = '';
   let openBeadCount = 0;
+  let blockedBeadCount = 0;
   let deferredBeadCount = 0;
   if (hasBeads) {
     const brListResult = await exec('br', ['list', '--json'], { cwd, timeout: 10000, signal });
@@ -126,11 +127,13 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
       const parsed = parseBrList(brListResult.stdout);
       if (parsed.ok) {
         const open = parsed.data.filter(b => b.status === 'open' || b.status === 'in_progress');
+        const blocked = parsed.data.filter(b => b.status === 'blocked');
         const deferred = parsed.data.filter(b => b.status === 'deferred');
         openBeadCount = open.length;
+        blockedBeadCount = blocked.length;
         deferredBeadCount = deferred.length;
-        if (open.length > 0 || deferred.length > 0) {
-          beadStatus = `\n\n### Existing Beads\n- ${open.length} open/in-progress\n- ${deferred.length} deferred`;
+        if (open.length > 0 || blocked.length > 0 || deferred.length > 0) {
+          beadStatus = `\n\n### Existing Beads\n- ${open.length} open/in-progress\n- ${blocked.length} blocked\n- ${deferred.length} deferred`;
           if (open.length > 0) {
             beadStatus += `\n\nTo work on existing beads, call \`flywheel_approve_beads\` with action="start".`;
           }
@@ -200,6 +203,7 @@ export async function runProfile(ctx: ToolContext, args: ProfileArgs): Promise<M
       foundationGaps,
       existingBeads: {
         openCount: openBeadCount,
+        blockedCount: blockedBeadCount,
         deferredCount: deferredBeadCount,
       },
       profileSummary: {

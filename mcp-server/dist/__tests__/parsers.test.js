@@ -133,7 +133,7 @@ describe('parseBrList', () => {
     });
     it.each([
         ['done', 'closed'],
-        ['blocked', 'open'],
+        ['blocked', 'blocked'],
         ['pinned', 'deferred'],
     ])('maps br status %s to %s', (raw, expected) => {
         const result = parseBrList(JSON.stringify([validBead({ status: raw })]));

@@ -4,7 +4,7 @@ import { resilientExec, brExec, brExecJson } from "./cli-exec.js";
 import { createLogger } from "./logger.js";
 import { errMsg } from "./errors.js";
 import { parseBvInsights, parseBvNextPicks, parseBvNextPick } from "./parsers.js";
-import { normalizeBrStatus } from "./bead-status.js";
+import { isActiveBeadStatus, normalizeBrStatus } from "./bead-status.js";
 
 const log = createLogger("beads");
 
@@ -599,7 +599,7 @@ async function validateBeads(
 
   // Try bv insights first for richer analysis
   const insights = await bvInsights(exec, cwd);
-  const openBeadIds = new Set(allBeadsForFilter.filter((b) => b.status === "open" || b.status === "in_progress").map((b) => b.id));
+  const openBeadIds = new Set(allBeadsForFilter.filter((b) => isActiveBeadStatus(b.status)).map((b) => b.id));
 
   if (insights) {
     // Use bv data for cycles and orphans — but filter to open beads only
@@ -638,7 +638,7 @@ async function validateBeads(
     }
 
     try {
-      const openBeads = allBeadsForFilter.filter((b) => b.status === "open" || b.status === "in_progress");
+      const openBeads = allBeadsForFilter.filter((b) => isActiveBeadStatus(b.status));
       if (openBeads.length > 1) {
         const hasDeps = new Set<string>();
         const isDependedOn = new Set<string>();
@@ -673,7 +673,7 @@ async function validateBeads(
   try {
     for (const bead of allBeadsForFilter) {
       const desc = bead.description ?? "";
-      if (bead.status === "open" || bead.status === "in_progress") {
+      if (isActiveBeadStatus(bead.status)) {
         if (desc.length === 0) {
           shallowBeads.push({ id: bead.id, reason: "Empty description" });
         } else if (desc.length < 50) {
@@ -683,7 +683,8 @@ async function validateBeads(
         }
       }
 
-      if (bead.status !== "open") continue;
+      // Template hygiene applies to beads nobody has started, blocked ones included.
+      if (bead.status !== "open" && bead.status !== "blocked") continue;
 
       const lines = desc.split("\n");
       const hasFilesSection = desc.includes("### Files:") || /^[-*]\s+(?:src|lib|test|tests|dist|docs)\/\S+/m.test(desc);
@@ -764,7 +765,7 @@ async function qualityCheckBeads(
 ): Promise<{ passed: boolean; failures: QualityFailure[] }> {
   const failures: QualityFailure[] = [];
   const allBeads = await readBeads(exec, cwd);
-  const openBeads = allBeads.filter((b) => b.status === "open" || b.status === "in_progress");
+  const openBeads = allBeads.filter((b) => isActiveBeadStatus(b.status));
 
   if (openBeads.length === 0) return { passed: true, failures };
 
@@ -856,12 +857,14 @@ export function getBeadsSummary(beads: Bead[]): string {
   let closed = 0;
   let inProgress = 0;
   let open = 0;
+  let blocked = 0;
   let deferred = 0;
 
   for (const bead of beads) {
     const status = bead.status ?? "open";
     if (status === "closed") closed++;
     else if (status === "in_progress") inProgress++;
+    else if (status === "blocked") blocked++;
     else if (status === "deferred") deferred++;
     else open++;
   }
@@ -870,6 +873,7 @@ export function getBeadsSummary(beads: Bead[]): string {
   if (closed > 0) parts.push(`${closed} closed`);
   if (inProgress > 0) parts.push(`${inProgress} in-progress`);
   if (open > 0) parts.push(`${open} open`);
+  if (blocked > 0) parts.push(`${blocked} blocked`);
   if (deferred > 0) parts.push(`${deferred} deferred`);
   return parts.join(", ") || "unknown";
 }
