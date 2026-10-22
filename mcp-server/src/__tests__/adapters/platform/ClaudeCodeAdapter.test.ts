@@ -51,6 +51,20 @@ describe('ClaudeCodeAdapter — pluginRoot / installedPluginManifestPath', () =>
     }
   });
 
+  it('resolves installedPluginManifestPath from CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json when root plugin.json is absent', () => {
+    const dir = makeTmp();
+    try {
+      mkdirSync(join(dir, '.claude-plugin'), { recursive: true });
+      writeFileSync(join(dir, '.claude-plugin', 'plugin.json'), JSON.stringify({ version: '8.8.8' }));
+      process.env.CLAUDE_PLUGIN_ROOT = dir;
+      const adapter = new ClaudeCodeAdapter();
+      expect(adapter.installedPluginManifestPath()).toBe(join(dir, '.claude-plugin', 'plugin.json'));
+      expect(adapter.getInstalledVersion()).toBe('8.8.8');
+    } finally {
+      cleanup(dir);
+    }
+  });
+
   it('returns null when neither CLAUDE_PLUGIN_ROOT manifest nor home cache exists', () => {
     const dir = makeTmp();
     try {

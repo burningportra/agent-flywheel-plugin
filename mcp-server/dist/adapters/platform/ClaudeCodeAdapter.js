@@ -35,14 +35,18 @@ export class ClaudeCodeAdapter {
         return env && env.length > 0 ? env : null;
     }
     installedPluginManifestPath() {
+        const candidates = [];
         const root = this.pluginRoot();
         if (root) {
-            const p = join(root, 'plugin.json');
-            if (existsSync(p))
-                return p;
+            candidates.push(join(root, 'plugin.json'), join(root, '.claude-plugin', 'plugin.json'));
         }
-        const fallback = join(homedir(), '.claude', 'plugins', CLAUDE_PLUGIN_NAME, 'plugin.json');
-        return existsSync(fallback) ? fallback : null;
+        const homePluginDir = join(homedir(), '.claude', 'plugins', CLAUDE_PLUGIN_NAME);
+        candidates.push(join(homePluginDir, 'plugin.json'), join(homePluginDir, '.claude-plugin', 'plugin.json'));
+        for (const candidate of candidates) {
+            if (existsSync(candidate))
+                return candidate;
+        }
+        return null;
     }
     worktreeScanRoots() {
         return CLAUDE_WORKTREE_ROOTS;
