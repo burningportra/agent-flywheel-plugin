@@ -443,4 +443,27 @@ describe('runCli', () => {
     expect(await runCli(['proj', '--label=x', '--cc=1', '--pi=1', `--pi-model=${GLM}`], { ...failed.deps, exec: noPi.exec })).toBe(1);
     expect(JSON.parse(failed.out.join('')).errors).toHaveLength(1);
   });
+
+  it('previews ntmArgs and planned panes with --dry-run without calling exec', async () => {
+    const dry = io();
+    const exec = vi.fn<ExecFn>(async () => {
+      throw new Error('exec should not be called in --dry-run mode');
+    });
+    expect(await runCli(['proj', '--label=impl-dry', '--cc=3', '--agy=3', '--dry-run'], { ...dry.deps, exec })).toBe(0);
+    expect(exec).not.toHaveBeenCalled();
+    expect(JSON.parse(dry.out.join(''))).toEqual({
+      session: 'proj--impl-dry',
+      dryRun: true,
+      ntmArgs: ['spawn', 'proj', '--label', 'impl-dry', '--no-user', '--cc=3', '--agy=3', '--stagger-mode=smart'],
+      panes: [
+        { lane: 'cc', index: 0, paneId: 'dry-run-0', title: 'proj--impl-dry__cc_1' },
+        { lane: 'cc', index: 1, paneId: 'dry-run-1', title: 'proj--impl-dry__cc_2' },
+        { lane: 'cc', index: 2, paneId: 'dry-run-2', title: 'proj--impl-dry__cc_3' },
+        { lane: 'agy', index: 3, paneId: 'dry-run-3', title: 'proj--impl-dry__agy_1' },
+        { lane: 'agy', index: 4, paneId: 'dry-run-4', title: 'proj--impl-dry__agy_2' },
+        { lane: 'agy', index: 5, paneId: 'dry-run-5', title: 'proj--impl-dry__agy_3' },
+      ],
+      errors: [],
+    });
+  });
 });

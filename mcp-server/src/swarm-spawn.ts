@@ -40,6 +40,7 @@ export interface SwarmSpawnArgs {
   piName: string;
   ntmArgs: string[];
   cwd: string;
+  dryRun?: boolean;
 }
 
 export interface SwarmPane {
@@ -54,6 +55,8 @@ export interface SwarmSpawnResult {
   session: string;
   panes: SwarmPane[];
   errors: string[];
+  dryRun?: boolean;
+  ntmArgs?: string[];
 }
 
 function usageText(): string {
@@ -117,7 +120,15 @@ export function parseSwarmSpawnArgs(
     const eq = token.indexOf('=');
     const key = eq === -1 ? token.slice(2) : token.slice(2, eq);
     let value = eq === -1 ? undefined : token.slice(eq + 1);
-    if (value === undefined) {
+    if (key === 'dry-run' && value === undefined) {
+      const next = own[i + 1];
+      if (next === 'true' || next === 'false') {
+        value = next;
+        i++;
+      } else {
+        value = 'true';
+      }
+    } else if (value === undefined) {
       value = own[i + 1];
       if (value === undefined || value.startsWith('--')) return { ok: false, error: `--${key} needs a value` };
       i++;
@@ -125,7 +136,7 @@ export function parseSwarmSpawnArgs(
     values.set(key, [...(values.get(key) ?? []), value]);
   }
 
-  const known = new Set(['label', 'cc', 'cod', 'agy', 'gmi', 'pi', 'pi-model', 'pi-name']);
+  const known = new Set(['label', 'cc', 'cod', 'agy', 'gmi', 'pi', 'pi-model', 'pi-name', 'dry-run']);
   for (const key of values.keys()) {
     if (!known.has(key)) return { ok: false, error: `unknown flag --${key} (pass ntm spawn flags after --)` };
   }
@@ -166,10 +177,26 @@ export function parseSwarmSpawnArgs(
   }
   const piName = values.get('pi-name')?.at(-1) ?? label;
   if (!/^[A-Za-z0-9._-]+$/.test(piName)) return { ok: false, error: '--pi-name allows letters, digits, . _ -' };
+  const dryRunVal = values.get('dry-run')?.at(-1);
+  if (dryRunVal !== undefined && dryRunVal !== 'true' && dryRunVal !== 'false') {
+    return { ok: false, error: `--dry-run=${dryRunVal} must be true or false` };
+  }
+  const dryRun = dryRunVal === 'true';
 
   return {
     ok: true,
-    args: { project: positional[0]!, label, ntmLanes, piCount, piModels, gmiCount, piName, ntmArgs, cwd },
+    args: {
+      project: positional[0]!,
+      label,
+      ntmLanes,
+      piCount,
+      piModels,
+      gmiCount,
+      piName,
+      ntmArgs,
+      cwd,
+      ...(dryRun ? { dryRun: true } : {}),
+    },
   };
 }
 
@@ -244,6 +271,37 @@ export function classifyPanes(
 
 export async function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<SwarmSpawnResult> {
   const session = `${args.project}--${args.label}`;
+  const planned = planPiPanes(args, session);
+  if (args.dryRun) {
+    const ntmArgs = buildNtmSpawnArgs(args);
+    const panes: SwarmPane[] = [];
+    for (const lane of NTM_LANES) {
+      const val = args.ntmLanes[lane];
+      const count = laneCount(val);
+      const model = laneModel(val);
+      for (let i = 0; i < count; i++) {
+        const index = panes.length;
+        panes.push({
+          lane,
+          index,
+          paneId: `dry-run-${index}`,
+          title: `${session}__${lane}_${i + 1}${model ? `_${model}` : ''}`,
+          ...(model ? { model } : {}),
+        });
+      }
+    }
+    for (const pane of planned) {
+      const index = panes.length;
+      panes.push({
+        lane: pane.lane,
+        index,
+        paneId: `dry-run-${index}`,
+        title: pane.title,
+        model: pane.model,
+      });
+    }
+    return { session, dryRun: true, ntmArgs, panes, errors: [] };
+  }
   const target = `${session}:0`;
   const errors: string[] = [];
   const run = async (cmd: string, cmdArgs: string[], timeout = TMUX_TIMEOUT_MS) => {
@@ -254,7 +312,6 @@ export async function spawnSwarm(args: SwarmSpawnArgs, exec: ExecFn): Promise<Sw
     }
   };
 
-  const planned = planPiPanes(args, session);
   let piBin = 'pi';
   if (planned.length > 0) {
     const which = await run('which', ['pi']);

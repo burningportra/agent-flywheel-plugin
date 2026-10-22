@@ -24,6 +24,7 @@ export interface SwarmSpawnArgs {
     piName: string;
     ntmArgs: string[];
     cwd: string;
+    dryRun?: boolean;
 }
 export interface SwarmPane {
     lane: SwarmLane | 'unknown';
@@ -36,6 +37,8 @@ export interface SwarmSpawnResult {
     session: string;
     panes: SwarmPane[];
     errors: string[];
+    dryRun?: boolean;
+    ntmArgs?: string[];
 }
 export declare function laneCount(value: string | undefined): number;
 export declare function laneModel(value: string | undefined): string | undefined;
