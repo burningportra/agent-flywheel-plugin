@@ -104,19 +104,20 @@ code; single foreground Bash invocations that complete in-band (linter,
 test, build); Pi/AGY panes added by `mcp-server/dist/scripts/swarm-spawn.js`
 (it owns the session's pane lifecycle).
 
-Canonical swarm spawn (Claude : Pi : Gemini-lane at equal share; AGY panes
-are an Antigravity transport for the Gemini seat — same model, `--agy`
-lane):
+Canonical swarm spawn asks the user (`AskUserQuestion` header `"Swarm lanes"`) to choose **Claude + AGY (`--cc` + `--agy`) (Recommended)** or optionally include **Pi (`--pi`)** (calling `flywheel_pi_models` only when Pi is selected):
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> \
-  --label <purpose> --cc=2 --pi=2 --pi-model=<provider>/<model> --gmi=2
+  --label <purpose> --cc=3 --agy=3
+# Or with optional Pi:
+node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" <project> \
+  --label <purpose> --cc=2 --agy=2 --pi=2 --pi-model=<provider>/<model>
 ```
 
 Address panes by the printed `index` via `ntm --robot-send --panes=<index>`.
 If a provider lane is unavailable the doctor's lane rows say so and the
-substitution ladder (gmi→pi→cod→cc) applies. Deep plan runs
-`--cc=1 --pi=2` (correctness + robustness + ergonomics planners).
+substitution ladder (gmi→pi→cod→cc) applies. Deep plan defaults to
+`--cc=1 --agy=2` (or optional `--cc=1 --pi=2` for correctness + robustness + ergonomics planners).
 
 ## Bead lifecycle
 

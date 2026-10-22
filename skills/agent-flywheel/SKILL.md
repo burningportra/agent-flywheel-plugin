@@ -104,15 +104,17 @@ Use Poteto mode (`poteto: true`) when the user requests `pstack` / `poteto-mode`
 
 ## 5. Multi-Agent NTM Swarm Quick Recipe
 
-1. **Choose Pi & Claude Models**:
-   - Call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })`, ask via `ask_question`, then persist with `action: "choose"`.
+1. **Choose Swarm Lanes (`AskUserQuestion` header `"Swarm lanes"`)**:
+   - **Claude + AGY (Recommended):** Spawn `--cc` + `--agy` panes (`--cc=3 --agy=3` for 6 panes) — no Pi setup required.
+   - **Claude + AGY + Pi (optional Pi):** Include `--pi=N`, then call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })`, ask via `ask_question`, and persist with `action: "choose"`.
+   - **Claude only:** Spawn `--cc=N` panes.
 2. **Spawn the NTM Swarm**:
    ```bash
    node "/Volumes/1tb/Projects/agent-flywheel-plugin/mcp-server/dist/scripts/swarm-spawn.js" \
-     <project> --label <purpose> --cc=2:opus --pi=2 --pi-model=<provider>/<model> [--gmi=N] [--agy=N[:model[:effort]]]
+     <project> --label <purpose> --cc=3:opus --agy=3 [--pi=N --pi-model=<provider>/<model>]
    ```
-   - Read the printed `SESSION=<name>` and `PANE <index> (<type>)`.
-   - Note: `--agy` panes are spawned via `ntm` for interactive inspection/triage; automated bead wave dispatch targets `--cc`, `--pi`, and `--gmi`.
+   - Read the printed `session` and `panes: [{ lane, index, paneId, model }]`.
+   - When **Claude + AGY** is selected, route non-`cc` bead prompts to the `agy` panes by printed `index`.
 3. **Dispatch Marching Orders & Supervise**:
    - Send marching orders with `ntm --robot-send=<session> --panes=<index> --msg="..."` (staggered 5s between panes).
    - Start the tender daemon:

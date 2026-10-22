@@ -174,24 +174,43 @@ AskUserQuestion(questions: [{
 
 In unattended runs, apply the recommended remediation. Stop if compatibility stays non-green. Never rewrite the returned lanes by hand.
 
-When `NTM_AVAILABLE=true`, count the panes per lane from the returned lanes: `N_cc`, `N_pi`, `N_gmi`, and `N_cod`. Codex lanes appear only when Pi or Gemini fell back. When `N_pi` is above 0, ask which models the Pi panes run, because the models a login can run and the gateway's top models both change every few weeks:
+When `NTM_AVAILABLE=true`, count the panes per lane from the returned lanes: `N_cc`, `N_pi`, `N_gmi`, and `N_cod`. Codex lanes appear only when Pi or Gemini fell back. Before asking for Pi models, let the operator choose whether to swarm via Claude + Antigravity (`--cc` + `--agy`) or optionally include Pi (`--pi`):
+
+```
+AskUserQuestion(questions: [{
+  question: "Which agent lanes should this wave's swarm run?",
+  header: "Swarm lanes",
+  options: [
+    { label: "Claude + AGY (Recommended)", description: "Spawn Claude (--cc) + Antigravity (--agy) panes — remap non-cc shares to --agy and skip Pi setup" },
+    { label: "Claude + AGY + Pi (optional Pi)", description: "Keep Pi lanes active (--pi=<N_pi>), route Gemini share to --agy/--gmi, and pick Pi models" },
+    { label: "Claude only (--cc)", description: "Run all wave beads on Claude (--cc) panes" }
+  ],
+  multiSelect: false
+}])
+```
+
+- **Claude + AGY (Recommended):** Set `N_agy = N_pi + N_gmi`, `N_pi = 0`, `N_gmi = 0` (if `DOCTOR_REPORT` shows `agy_cli` unavailable, fold into `N_cc` instead). Skip `flywheel_pi_models` and send `pi`/`gmi` prompt records to the spawned `agy` panes by printed `index`.
+- **Claude + AGY + Pi (optional Pi):** Keep `N_pi` above 0 (moving `N_gmi` to `N_agy` when `agy_cli` is green) and run the `flywheel_pi_models` selection below.
+- **Claude only (--cc):** Fold all non-`cc` counts into `N_cc` (`N_pi = 0`, `N_gmi = 0`, `N_agy = 0`, `N_cod = 0`).
+
+When `N_pi` is above 0, ask which models the Pi panes run, because the models a login can run and the gateway's top models both change every few weeks:
 
 1. Call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })` and pass `data.questions[0]` to `AskUserQuestion` unchanged. It is multi-select, and its first options are the user's last picks.
 2. Call `flywheel_pi_models({ cwd, action: "choose", picks: { implementer: "<answer>" } })` with the answer string unchanged, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. It holds one model, or a comma-separated list that `swarm-spawn.js` alternates across the Pi panes. An `invalid_input` result lists close ids in `error.details.suggestions`; ask again with those. If `list` fails or `piReady` is false, tell the user that the Pi lanes can't start and stop before spawning.
 
 When `N_cc` is above 0, also ask which model the Claude panes run and pass it as `--cc=<N_cc>:<model>`. Without the `:<model>` suffix they start on the CLI default, which can be a generation behind the coordinator. After spawning, read each pane's footer with `tmux capture-pane -p -t <paneId>` and confirm its model. To change a running Claude pane's model, send `/model <id>` then `/clear`. To change a Pi pane, run `tmux respawn-pane -k -t <paneId> -c <repo> "pi --model <id> --thinking high --no-approve"`.
 
-ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc and cod lanes and adds the Pi panes to the same session with tmux. It runs the gmi panes as Pi on `gemini-4-argon`, since ntm's gmi lane starts the gemini CLI:
+ntm 1.36.1 has no `pi` lane, so `swarm-spawn.js` runs `ntm spawn` for the cc, cod, and agy lanes and adds the Pi panes to the same session with tmux. It runs the gmi panes as Pi on `gemini-4-argon`, since ntm's gmi lane starts the gemini CLI:
 
 ```bash
 SESSION="${NTM_PROJECT}--impl-<goal-slug>"
 node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
-  --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>
+  --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod> --agy=<N_agy>
 ```
 
-Drop `--pi` and `--pi-model` when `N_pi` is 0. The script prints `{ session, panes: [{ lane, index, paneId, model? }], errors }`. A non-zero exit lists what failed in `errors`; tell the user and give the prompts that have no pane to `Agent()` workers as in the fallback below.
+Drop `--pi` and `--pi-model` when `N_pi` is 0, and drop `--agy` when `N_agy` is 0. The script prints `{ session, panes: [{ lane, index, paneId, model? }], errors }`. A non-zero exit lists what failed in `errors`; tell the user and give the prompts that have no pane to `Agent()` workers as in the fallback below.
 
-The five lanes the script takes are `--cc` (Claude), `--pi` (Pi on the picked models), `--gmi` (Pi on gemini-4-argon), `--cod` (Codex), and `--agy` (Antigravity). Add `--agy=<N>[:<model>[:<effort>]]` only when the user asks for Antigravity panes and the doctor's `agy_cli` row is green. `agy models` prints only effort-suffixed slugs such as `gemini-4-argon-high`, so pass that slug or a model plus effort (`--agy=1:gemini-4-argon:high`), which the script joins into the slug. ntm spawns agy panes on its own lane, but the wave dispatch assigns them no beads, so send them work you route yourself by pane index, such as an extra reviewer.
+The five lanes the script takes are `--cc` (Claude), `--agy` (Antigravity), `--pi` (optional Pi on the picked models), `--gmi` (Pi on gemini-4-argon), and `--cod` (Codex). Pass `--agy=<N_agy>[:<model>[:<effort>]]` when `DOCTOR_REPORT`'s `agy_cli` row is green. `agy models` prints only effort-suffixed slugs such as `gemini-4-argon-high`, so pass that slug or a model plus effort (`--agy=3:gemini-4-argon:high`), which the script joins into the slug. When **Claude + AGY** was selected, send the wave's `pi` and `gmi` prompt records to the `agy` panes by printed `index`.
 
 Process prompt records in array order. Send each record unchanged to the next unused pane whose `lane` matches the record's `lane`, by that pane's `index`:
 

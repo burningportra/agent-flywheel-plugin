@@ -17,13 +17,30 @@ Launch a parallel swarm of implementation agents. $ARGUMENTS
 
 3. Bootstrap Agent Mail, create `swarm-<goal-slug>`, and resolve `$NTM_PROJECT` through the readiness procedure in `_implement.md`. Use the lane counts exactly as returned, since the server already applied lane availability and fallback.
 
-4. Create one task per `START_DATA.prompts[]` record. Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. When `N_pi` is above 0, call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })`, ask `data.questions[0]` with `AskUserQuestion`, call it again with `action: "choose"` and the answer as `picks.implementer`, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. Stop if `list` fails or `piReady` is false. Then spawn the returned counts:
+4. Create one task per `START_DATA.prompts[]` record. Derive each `N_*` from the matching `START_DATA.lanes[].beadIds.length`. Before calling `flywheel_pi_models`, ask which lanes to run via `AskUserQuestion`:
+   ```
+   AskUserQuestion(questions: [{
+     question: "Which agent lanes should this swarm run?",
+     header: "Swarm lanes",
+     options: [
+       { label: "Claude + AGY (Recommended)", description: "Spawn Claude (--cc) + Antigravity (--agy) panes — remap non-cc shares to --agy and skip Pi setup" },
+       { label: "Claude + AGY + Pi (optional Pi)", description: "Keep Pi lanes active (--pi=<N_pi>), route Gemini share to --agy/--gmi, and pick Pi models" },
+       { label: "Claude only (--cc)", description: "Run all wave beads on Claude (--cc) panes" }
+     ],
+     multiSelect: false
+   }])
+   ```
+   - **Claude + AGY (Recommended):** Set `N_agy = N_pi + N_gmi`, `N_pi = 0`, `N_gmi = 0` (or fold into `N_cc` if `agy_cli` is unavailable) and send `pi`/`gmi` prompts to the `agy` panes by printed `index`.
+   - **Claude + AGY + Pi (optional Pi):** Keep `N_pi` above 0 (moving `N_gmi` to `N_agy` when `agy_cli` is green).
+   - **Claude only (--cc):** Fold all non-`cc` counts into `N_cc` (`N_pi = 0`, `N_gmi = 0`, `N_agy = 0`, `N_cod = 0`).
+
+   When `N_pi` is above 0, call `flywheel_pi_models({ cwd, action: "list", roles: ["implementer"] })`, ask `data.questions[0]` with `AskUserQuestion`, call it again with `action: "choose"` and the answer as `picks.implementer`, and set `PI_IMPL_MODEL` from `data.piModels.implementer`. Stop if `list` fails or `piReady` is false. Then spawn the counts:
    ```bash
    IMPL_SESSION="${NTM_PROJECT}--impl-<goal-slug>"
    node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label impl-<goal-slug> \
-     --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod>
+     --cc=<N_cc> --pi=<N_pi> --pi-model="$PI_IMPL_MODEL" --pi-name=impl --gmi=<N_gmi> --cod=<N_cod> --agy=<N_agy>
    ```
-   Drop `--pi` and `--pi-model` when `N_pi` is 0. The script runs `ntm spawn` for the cc and cod lanes, adds the pi and gmi panes as Pi (gmi on `gemini-4-argon`), and prints `{ session, panes: [{ lane, index, paneId }], errors }`. Address panes by the printed `index` with `--panes=N`. Singular `--pane=N` broadcasts to every pane, and ntm reports Pi panes as type `unknown`, so don't add `--type`. On a non-zero exit, show `errors` to the user.
+   Drop `--pi` and `--pi-model` when `N_pi` is 0, and drop `--agy` when `N_agy` is 0. The script runs `ntm spawn` for the cc, cod, and agy lanes, adds any pi and gmi panes as Pi (gmi on `gemini-4-argon`), and prints `{ session, panes: [{ lane, index, paneId }], errors }`. Address panes by the printed `index` with `--panes=N`. Singular `--pane=N` broadcasts to every pane, and ntm reports Pi panes as type `unknown`, so don't add `--type`. On a non-zero exit, show `errors` to the user.
 
 5. Send every prompt unchanged to its assigned pane:
    ```bash

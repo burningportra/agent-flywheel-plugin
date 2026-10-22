@@ -227,12 +227,25 @@ ntm --robot-send="$SESSION" --panes="$INDEX" --msg="Invoke the /planning-workflo
 Omit `--gmi=1` when `gemini_cli` is disabled/non-green or `gemini_model_compat` is yellow. Wait with `ntm --robot-wait="$SESSION" --wait-until=idle --wait-transition` (and wait for `-round-<N>-gmi.md`), reconcile `-round-<N>-{cc,cod,gmi}.md` into `$PLAN_PATH`, and repeat up to 5 rounds until changes are minor. Register a new plan with `flywheel_plan({ cwd, mode: "deep", planFile: PLAN_PATH })` and run Step 5.55.
 
 - **Deep plan:**
-  1. Resolve NTM readiness (`_implement.md`). When `flywheel_plan` returns `runner: "pi-pane"`, call `flywheel_pi_models({ cwd, action: "list", roles: ["robustness", "ergonomics"] })`, pass `data.questions` to `AskUserQuestion`, and call `flywheel_pi_models({ cwd, action: "choose", picks: { robustness: "<answer>", ergonomics: "<answer>" } })` to set `PI_ROBUSTNESS_MODEL` and `PI_ERGONOMICS_MODEL`.
-  2. If Pi panes are unavailable (`piReady: false`), fall back to `--cc=2 --cod=1`. If `codex_config_compat` is yellow/red, ask via `AskUserQuestion` (`Apply fix and proceed (Recommended)` via `flywheel_remediate({ checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true })`, `Skip cod from swarm` (`--cc=3`), or `Continue anyway`).
-  3. Bootstrap `macro_start_session` and spawn the 3 planners:
+  1. Resolve NTM readiness (`_implement.md`), then ask which lanes the 3 deep-plan planners should run:
+     ```
+     AskUserQuestion(questions: [{
+       question: "Which lanes should run the 3 deep-plan lenses (correctness, robustness, ergonomics)?",
+       header: "Plan lanes",
+       options: [
+         { label: "Claude + AGY (Recommended)", description: "1 Claude + 2 Antigravity panes (--cc=1 --agy=2) — no Pi setup required" },
+         { label: "Claude + Pi (optional Pi)", description: "1 Claude + 2 Pi panes (--cc=1 --pi=2) and pick Pi models via flywheel_pi_models" },
+         { label: "Claude + Codex", description: "2 Claude + 1 Codex panes (--cc=2 --cod=1)" }
+       ],
+       multiSelect: false
+     }])
+     ```
+     Only when the user picks **Claude + Pi (optional Pi)** (and `flywheel_plan` returns `runner: "pi-pane"`), call `flywheel_pi_models({ cwd, action: "list", roles: ["robustness", "ergonomics"] })`, pass `data.questions` to `AskUserQuestion`, and call `flywheel_pi_models({ cwd, action: "choose", picks: { robustness: "<answer>", ergonomics: "<answer>" } })` to set `PI_ROBUSTNESS_MODEL` and `PI_ERGONOMICS_MODEL`.
+  2. If Pi panes are unavailable (`piReady: false`), fall back to `--cc=1 --agy=2` (or `--cc=2 --cod=1`). If `codex_config_compat` is yellow/red on a Codex route, ask via `AskUserQuestion` (`Apply fix and proceed (Recommended)` via `flywheel_remediate({ checkName: 'codex_config_compat', mode: 'execute', autoConfirm: true })`, `Skip cod from swarm` (`--cc=3`), or `Continue anyway`).
+  3. Bootstrap `macro_start_session` and spawn the 3 planners (using `--cc=1 --agy=2` for **Claude + AGY**, or the Pi flags below when **Claude + Pi** was chosen):
      ```bash
      SESSION="${NTM_PROJECT}--deep-plan-<slug>"
-     # PANE001-OVERRIDE: deep plan is one Claude lens plus two Pi lenses; AGENTS.md "Deep plan exception".
+     # PANE001-OVERRIDE: deep plan is one Claude lens plus two AGY/Pi lenses; AGENTS.md "Deep plan exception".
      node "${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/scripts/swarm-spawn.js" "$NTM_PROJECT" --label deep-plan-<slug> --cc=1 --pi=2 --pi-model="$PI_ROBUSTNESS_MODEL" --pi-model="$PI_ERGONOMICS_MODEL" --pi-name=deep-plan
      ```
      Send prompts by printed `index` via `ntm --robot-send="$SESSION" --panes=<index> --msg="<prompt>"`. Each planner writes `docs/plans/<date>-<perspective>.md` (`correctness`, `robustness`, `ergonomics`) and mails `[deep-plan] <perspective> plan` (use background `Agent()` tasks when `NTM_AVAILABLE=false`).

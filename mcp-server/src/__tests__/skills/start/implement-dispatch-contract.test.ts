@@ -39,6 +39,17 @@ describe('server-owned wave-one implementer dispatch', () => {
     },
   );
 
+  it.each(['skills/start/_implement.md', 'skills/start/_inflight_prompt.md', 'skills/flywheel-swarm/SKILL.md'])(
+    '%s asks the operator to choose Claude + AGY (Recommended) or optional Pi before calling flywheel_pi_models',
+    (relativePath) => {
+      const content = read(relativePath);
+
+      expect(content).toContain('header: "Swarm lanes"');
+      expect(content).toContain('label: "Claude + AGY (Recommended)"');
+      expect(content).toContain('label: "Claude + AGY + Pi (optional Pi)"');
+    },
+  );
+
   it('asks which model the Claude panes run and passes it as --cc=<N_cc>:<model>', () => {
     const content = read('skills/start/_implement.md');
 

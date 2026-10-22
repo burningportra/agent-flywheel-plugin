@@ -28,6 +28,12 @@ describe('server-owned wave-one implementer dispatch', () => {
         // ntm 1.36.1 rejects --pi on a raw spawn, and its gmi lane is the gemini CLI.
         expect(content).not.toMatch(/ntm spawn[^\n]*--(pi|gmi)=/);
     });
+    it.each(['skills/start/_implement.md', 'skills/start/_inflight_prompt.md', 'skills/flywheel-swarm/SKILL.md'])('%s asks the operator to choose Claude + AGY (Recommended) or optional Pi before calling flywheel_pi_models', (relativePath) => {
+        const content = read(relativePath);
+        expect(content).toContain('header: "Swarm lanes"');
+        expect(content).toContain('label: "Claude + AGY (Recommended)"');
+        expect(content).toContain('label: "Claude + AGY + Pi (optional Pi)"');
+    });
     it('asks which model the Claude panes run and passes it as --cc=<N_cc>:<model>', () => {
         const content = read('skills/start/_implement.md');
         expect(content).toContain('When `N_cc` is above 0, also ask which model the Claude panes run and pass it as `--cc=<N_cc>:<model>`.');
