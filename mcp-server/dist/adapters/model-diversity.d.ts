@@ -61,6 +61,15 @@ export interface DispatchPlan {
      */
     readonly ratio: string;
 }
+/** Options controlling provider lane selection in `splitBeadsByProvider` and `swarmMixFor`. */
+export interface SplitBeadsOptions {
+    /**
+     * When true and `caps.agy?.available` is true, include Pi as a 3rd primary
+     * lane alongside Claude + AGY (`cc:pi:agy` 1:1:1). When omitted or false,
+     * defaults to Claude + AGY (`cc:agy` 1:1).
+     */
+    readonly includePi?: boolean;
+}
 /**
  * Probe `which <bin>` for each provider. A zero exit code and a non-empty
  * stdout line means the CLI is on $PATH. We deliberately do NOT call
@@ -89,12 +98,12 @@ export declare const PRIMARY_PROVIDERS: readonly ["claude", "pi", "gemini"];
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
  */
-export declare function splitBeadsByProvider(beadIds: readonly string[], caps: CapabilitiesMap): DispatchPlan;
+export declare function splitBeadsByProvider(beadIds: readonly string[], caps: CapabilitiesMap, opts?: SplitBeadsOptions): DispatchPlan;
 /**
  * The lanes a swarm of `panes` panes gets on this host, split the way
  * implementation waves split beads. Undefined when no lane is usable.
  */
-export declare function swarmMixFor(caps: CapabilitiesMap, panes?: number): SwarmMix | undefined;
+export declare function swarmMixFor(caps: CapabilitiesMap, panes?: number, opts?: SplitBeadsOptions): SwarmMix | undefined;
 /**
  * Pick the right adapter for a provider. Centralised so the dispatch
  * loop can `adaptPromptFor(lane.provider, ctx)` without importing all

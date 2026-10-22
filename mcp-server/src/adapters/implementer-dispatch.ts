@@ -45,6 +45,8 @@ export interface BuildImplementerDispatchArgs {
   readonly probeScope?: string;
   readonly verifyClaudeLogin?: boolean;
   readonly potetoMode?: boolean;
+  /** Opt-in to include Pi alongside Claude + AGY (`cc:pi:agy` 1:1:1). Defaults to false (`cc:agy` 1:1). */
+  readonly includePi?: boolean;
 }
 
 const NTM_LANE = {
@@ -108,6 +110,7 @@ export async function buildImplementerDispatch(
   const plan = splitBeadsByProvider(
     args.beads.map((bead) => bead.id),
     capabilities,
+    args.includePi !== undefined ? { includePi: args.includePi } : undefined,
   );
   if (plan.lanes.length === 0) {
     return {

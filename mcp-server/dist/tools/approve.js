@@ -379,7 +379,7 @@ export async function runApprove(ctx, args) {
     }
     // action === 'start' — launch implementation. stop_reason is "manual_start"
     // because the polish loop was terminated by an explicit operator decision.
-    return handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix, args.coordinatorName ?? 'Coordinator', programWarnings);
+    return handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix, args.coordinatorName ?? 'Coordinator', programWarnings, args.includePi);
 }
 async function handlePlanApproval(ctx, args) {
     const { cwd, state, saveState } = ctx;
@@ -468,7 +468,7 @@ function buildPlanToBeadsPrompt(plan, goal, planPath, state) {
         nextAction: `After creating all beads, call \`flywheel_approve_beads\` with action="start" to review and launch.`,
     });
 }
-async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix, coordinatorName, programWarnings) {
+async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, matrix, coordinatorName, programWarnings, includePi) {
     const { exec, cwd, state, saveState, signal } = ctx;
     // Get ready beads (unblocked by dependencies)
     const brReadyResult = await exec('br', ['ready', '--limit', '0', '--json'], { cwd, timeout: 10000, signal });
@@ -509,6 +509,7 @@ async function handleStart(ctx, beads, roundHeader, beadList, convergenceScore, 
         probeScope: lane.probeScope,
         verifyClaudeLogin: lane.verifyClaudeLogin,
         potetoMode: state.potetoMode,
+        includePi,
     });
     if (dispatch.prompts.length !== ready.length) {
         return makeApproveError('No implementation CLI is available for the first wave.', state.phase, 'beads', 'cli_not_available', { warnings: dispatch.warnings }, 'Install at least one of claude, codex, or pi, then retry flywheel_approve_beads.');

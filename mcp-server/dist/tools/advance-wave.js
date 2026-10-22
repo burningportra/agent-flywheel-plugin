@@ -125,7 +125,7 @@ function isAttestationRequired() {
     // means warn-only (Stage 1 default — duel-agreed: PI2 reveal-phase
     // concession that hard-blocking on day-one breaks in-flight workflows).
     const v = process.env.FW_ATTESTATION_REQUIRED?.trim().toLowerCase();
-    return v != null && v !== '' && v !== '0' && v !== 'false';
+    return v !== undefined && v !== '' && v !== '0' && v !== 'false';
 }
 /** Score threshold for the auto-approve recommendation. */
 const AUTO_APPROVE_SCORE = 0.9;
@@ -407,6 +407,7 @@ export async function runAdvanceWave(ctx, args) {
         probeScope: lane.probeScope,
         verifyClaudeLogin: lane.verifyClaudeLogin,
         potetoMode: state.potetoMode,
+        includePi: args.includePi,
     });
     if (dispatch.prompts.length !== waveCandidates.length) {
         return makeToolError('flywheel_advance_wave', state.phase, 'cli_not_available', 'No implementation CLI is available for the next wave.', {

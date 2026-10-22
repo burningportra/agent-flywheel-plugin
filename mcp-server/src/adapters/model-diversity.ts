@@ -73,6 +73,16 @@ export interface DispatchPlan {
   readonly ratio: string;
 }
 
+/** Options controlling provider lane selection in `splitBeadsByProvider` and `swarmMixFor`. */
+export interface SplitBeadsOptions {
+  /**
+   * When true and `caps.agy?.available` is true, include Pi as a 3rd primary
+   * lane alongside Claude + AGY (`cc:pi:agy` 1:1:1). When omitted or false,
+   * defaults to Claude + AGY (`cc:agy` 1:1).
+   */
+  readonly includePi?: boolean;
+}
+
 // ─── CLI detection ────────────────────────────────────────────────────────
 
 const PROVIDER_BINARIES: Record<ModelProvider, string> = {
@@ -216,9 +226,10 @@ const FALLBACK_PRIORITY = {
 export function splitBeadsByProvider(
   beadIds: readonly string[],
   caps: CapabilitiesMap,
+  opts?: SplitBeadsOptions,
 ): DispatchPlan {
   if (caps.agy?.available) {
-    return splitWithAgy(beadIds, caps);
+    return splitWithAgy(beadIds, caps, opts);
   }
   const warnings: string[] = [];
   const availableProviders: ModelProvider[] = ROUTING_PROVIDERS.filter(
@@ -292,13 +303,19 @@ export function splitBeadsByProvider(
 /**
  * Default swarm split when the Antigravity (agy) lane is available: Claude and
  * agy split 50/50 (`cc:agy 1:1`) regardless of whether Gemini or Pi are
- * enabled (Pi remains opt-in). If Claude is unavailable, agy takes all beads.
+ * enabled (Pi remains opt-in). When `opts?.includePi === true`, Claude, Pi,
+ * and agy split 3-way (`cc:pi:agy 1:1:1`), falling back across the active
+ * slots if a provider is unavailable.
  */
-function splitWithAgy(beadIds: readonly string[], caps: CapabilitiesMap): DispatchPlan {
-  const slots: ModelProvider[] = ['claude', 'agy'];
+function splitWithAgy(
+  beadIds: readonly string[],
+  caps: CapabilitiesMap,
+  opts?: SplitBeadsOptions,
+): DispatchPlan {
+  const slots: ModelProvider[] = opts?.includePi ? ['claude', 'pi', 'agy'] : ['claude', 'agy'];
   const assigned = new Map<ModelProvider, string[]>(slots.map((provider) => [provider, []]));
   const warnings: string[] = [];
-  const claudeMissing = !caps.claude.available && !caps.claude.disabled;
+  const degraded = slots.some((p) => !caps[p]?.available && !caps[p]?.disabled);
 
   const n = beadIds.length;
   const base = Math.floor(n / slots.length);
@@ -326,7 +343,7 @@ function splitWithAgy(beadIds: readonly string[], caps: CapabilitiesMap): Dispat
     if (ids.length > 0) lanes.push({ provider, beadIds: ids });
   }
   const ratio = PRIMARY_PROVIDERS.map((p) => String(assigned.get(p)?.length ?? 0)).join(':');
-  return { lanes, warnings, degraded: claudeMissing, ratio };
+  return { lanes, warnings, degraded, ratio };
 }
 
 /** Each lane's `swarm-spawn.js` flag name. */
@@ -342,9 +359,13 @@ const SPAWN_LANE: Record<ModelProvider, string> = {
  * The lanes a swarm of `panes` panes gets on this host, split the way
  * implementation waves split beads. Undefined when no lane is usable.
  */
-export function swarmMixFor(caps: CapabilitiesMap, panes = 6): SwarmMix | undefined {
+export function swarmMixFor(
+  caps: CapabilitiesMap,
+  panes = 6,
+  opts?: SplitBeadsOptions,
+): SwarmMix | undefined {
   const slots = Array.from({ length: panes }, (_, i) => String(i));
-  const lanes = splitBeadsByProvider(slots, caps).lanes.map((lane) => ({
+  const lanes = splitBeadsByProvider(slots, caps, opts).lanes.map((lane) => ({
     name: SPAWN_LANE[lane.provider],
     panes: lane.beadIds.length,
   }));

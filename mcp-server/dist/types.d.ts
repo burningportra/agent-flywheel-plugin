@@ -610,6 +610,8 @@ export interface ApproveArgs {
     action: "start" | "polish" | "reject" | "advanced" | "git-diff-review" | "remediate";
     /** Agent Mail identity that receives wave-one start/done messages. */
     coordinatorName?: string;
+    /** Opt-in to include Pi alongside Claude + AGY (`cc:pi:agy` 1:1:1) when `action="start"`. Default is Claude + AGY (`cc:agy` 1:1). */
+    includePi?: boolean;
     advancedAction?: string;
     /** P2.4 / 2p5 — convergence threshold above which a polish call returns
      * stop_reason="convergence_reached" instead of scheduling another round.
@@ -686,6 +688,8 @@ export interface AdvanceWaveArgs {
     maxNextWave?: number;
     /** Agent Mail identity that receives next-wave start/done messages. */
     coordinatorName?: string;
+    /** Opt-in to include Pi alongside Claude + AGY (`cc:pi:agy` 1:1:1) for the next wave dispatch. Default is Claude + AGY (`cc:agy` 1:1). */
+    includePi?: boolean;
 }
 export interface MemoryArgs {
     cwd: string;

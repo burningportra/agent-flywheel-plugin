@@ -45,6 +45,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -190,6 +191,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -257,6 +259,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -361,6 +364,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -423,6 +427,10 @@ export declare const TOOLS: ({
                 description: string;
             };
             coordinatorName: {
+                type: string;
+                description: string;
+            };
+            includePi: {
                 type: string;
                 description: string;
             };
@@ -583,6 +591,7 @@ export declare const TOOLS: ({
             preCodeResearch?: undefined;
             source?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -651,6 +660,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -739,6 +749,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -799,6 +810,10 @@ export declare const TOOLS: ({
                 description: string;
             };
             coordinatorName: {
+                type: string;
+                description: string;
+            };
+            includePi: {
                 type: string;
                 description: string;
             };
@@ -903,6 +918,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -992,6 +1008,7 @@ export declare const TOOLS: ({
             source?: undefined;
             action?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1097,6 +1114,7 @@ export declare const TOOLS: ({
             source?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1170,6 +1188,7 @@ export declare const TOOLS: ({
             preCodeResearch?: undefined;
             source?: undefined;
             beadId?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1233,6 +1252,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1305,6 +1325,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1380,6 +1401,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1447,6 +1469,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1517,6 +1540,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1595,6 +1619,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1661,6 +1686,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1759,6 +1785,7 @@ export declare const TOOLS: ({
             source?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1826,6 +1853,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;
@@ -1895,6 +1923,7 @@ export declare const TOOLS: ({
             action?: undefined;
             beadId?: undefined;
             coordinatorName?: undefined;
+            includePi?: undefined;
             advancedAction?: undefined;
             remediation?: undefined;
             until_convergence_score?: undefined;

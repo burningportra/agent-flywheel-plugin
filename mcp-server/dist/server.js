@@ -178,6 +178,10 @@ const PRIMARY_TOOLS = [
                     type: 'string',
                     description: 'Agent Mail identity that receives implementer start/done messages when action=start.',
                 },
+                includePi: {
+                    type: 'boolean',
+                    description: 'Optional Pi lane opt-in when action=start. When true and agy is available, splits beads 1:1:1 across Claude, Pi, and AGY (cc:pi:agy) instead of the default 1:1 Claude + AGY (cc:agy) split.',
+                },
                 advancedAction: {
                     type: 'string',
                     enum: ['fresh-agent', 'same-agent', 'blunder-hunt', 'dedup', 'cross-model', 'graph-fix'],
@@ -333,6 +337,10 @@ const PRIMARY_TOOLS = [
                 coordinatorName: {
                     type: 'string',
                     description: 'Agent Mail identity that receives next-wave implementer start/done messages.',
+                },
+                includePi: {
+                    type: 'boolean',
+                    description: 'Optional Pi lane opt-in for next-wave dispatch. When true and agy is available, splits beads 1:1:1 across Claude, Pi, and AGY (cc:pi:agy) instead of the default 1:1 Claude + AGY (cc:agy) split.',
                 },
             },
             required: ['cwd', 'closedBeadIds'],

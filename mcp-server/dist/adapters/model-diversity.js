@@ -148,9 +148,9 @@ const FALLBACK_PRIORITY = {
  *   - beads are handed out in the order supplied (assumed priority-sorted
  *     by caller: highest-priority → first lane slot)
  */
-export function splitBeadsByProvider(beadIds, caps) {
+export function splitBeadsByProvider(beadIds, caps, opts) {
     if (caps.agy?.available) {
-        return splitWithAgy(beadIds, caps);
+        return splitWithAgy(beadIds, caps, opts);
     }
     const warnings = [];
     const availableProviders = ROUTING_PROVIDERS.filter((p) => caps[p]?.available);
@@ -208,13 +208,15 @@ export function splitBeadsByProvider(beadIds, caps) {
 /**
  * Default swarm split when the Antigravity (agy) lane is available: Claude and
  * agy split 50/50 (`cc:agy 1:1`) regardless of whether Gemini or Pi are
- * enabled (Pi remains opt-in). If Claude is unavailable, agy takes all beads.
+ * enabled (Pi remains opt-in). When `opts?.includePi === true`, Claude, Pi,
+ * and agy split 3-way (`cc:pi:agy 1:1:1`), falling back across the active
+ * slots if a provider is unavailable.
  */
-function splitWithAgy(beadIds, caps) {
-    const slots = ['claude', 'agy'];
+function splitWithAgy(beadIds, caps, opts) {
+    const slots = opts?.includePi ? ['claude', 'pi', 'agy'] : ['claude', 'agy'];
     const assigned = new Map(slots.map((provider) => [provider, []]));
     const warnings = [];
-    const claudeMissing = !caps.claude.available && !caps.claude.disabled;
+    const degraded = slots.some((p) => !caps[p]?.available && !caps[p]?.disabled);
     const n = beadIds.length;
     const base = Math.floor(n / slots.length);
     const extra = n % slots.length;
@@ -241,7 +243,7 @@ function splitWithAgy(beadIds, caps) {
             lanes.push({ provider, beadIds: ids });
     }
     const ratio = PRIMARY_PROVIDERS.map((p) => String(assigned.get(p)?.length ?? 0)).join(':');
-    return { lanes, warnings, degraded: claudeMissing, ratio };
+    return { lanes, warnings, degraded, ratio };
 }
 /** Each lane's `swarm-spawn.js` flag name. */
 const SPAWN_LANE = {
@@ -255,9 +257,9 @@ const SPAWN_LANE = {
  * The lanes a swarm of `panes` panes gets on this host, split the way
  * implementation waves split beads. Undefined when no lane is usable.
  */
-export function swarmMixFor(caps, panes = 6) {
+export function swarmMixFor(caps, panes = 6, opts) {
     const slots = Array.from({ length: panes }, (_, i) => String(i));
-    const lanes = splitBeadsByProvider(slots, caps).lanes.map((lane) => ({
+    const lanes = splitBeadsByProvider(slots, caps, opts).lanes.map((lane) => ({
         name: SPAWN_LANE[lane.provider],
         panes: lane.beadIds.length,
     }));

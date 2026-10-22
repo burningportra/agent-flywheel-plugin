@@ -46,7 +46,7 @@ export async function buildImplementerDispatch(args) {
         probeScope: args.probeScope,
         verifyClaudeLogin: args.verifyClaudeLogin,
     });
-    const plan = splitBeadsByProvider(args.beads.map((bead) => bead.id), capabilities);
+    const plan = splitBeadsByProvider(args.beads.map((bead) => bead.id), capabilities, args.includePi !== undefined ? { includePi: args.includePi } : undefined);
     if (plan.lanes.length === 0) {
         return {
             lanes: [],

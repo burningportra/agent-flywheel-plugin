@@ -526,6 +526,7 @@ export async function runApprove(ctx: ToolContext, args: ExtendedApproveArgs): P
     matrix,
     args.coordinatorName ?? 'Coordinator',
     programWarnings,
+    args.includePi,
   );
 }
 
@@ -672,6 +673,7 @@ async function handleStart(
   matrix: HotspotMatrix,
   coordinatorName: string,
   programWarnings: string,
+  includePi?: boolean,
 ): Promise<McpToolResult> {
   const { exec, cwd, state, saveState, signal } = ctx;
 
@@ -721,6 +723,7 @@ async function handleStart(
     probeScope: lane.probeScope,
     verifyClaudeLogin: lane.verifyClaudeLogin,
     potetoMode: state.potetoMode,
+    includePi,
   });
   if (dispatch.prompts.length !== ready.length) {
     return makeApproveError(
