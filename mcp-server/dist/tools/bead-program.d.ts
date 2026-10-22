@@ -6,6 +6,8 @@ export interface ResolvedBeadProgram {
         kind: 'tagged' | 'legacy';
     }>;
     beads: Bead[];
+    /** Active beads with no goal-program label; empty in legacy mode, where every active bead is in scope. */
+    untaggedIds: string[];
     warnings: string[];
 }
 export type DispatchBeadProgramResolution = {

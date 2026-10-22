@@ -50,4 +50,11 @@ export declare function shouldOfferCoordinatorSerial(matrix: HotspotMatrix): boo
  * action="advanced" — Advanced refinement (requires advancedAction param)
  */
 export declare function runApprove(ctx: ToolContext, args: ExtendedApproveArgs): Promise<McpToolResult>;
+/**
+ * `bv --robot-insights` carries two per-bead maps (`Stats`, `full_stats`) that
+ * cover every bead in the repository; on a 600-bead repo they are ~120k chars
+ * and push the converge-polish result past the MCP result limit. The ranked
+ * lists the polish loop reads (Bottlenecks, Keystones, ...) are kept.
+ */
+export declare function withoutPerBeadStats(data: unknown): unknown;
 //# sourceMappingURL=approve.d.ts.map

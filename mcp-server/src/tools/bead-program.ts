@@ -16,6 +16,8 @@ const GOAL_LABEL_SLUG_MAX_LENGTH =
 export interface ResolvedBeadProgram {
   scope: Extract<BeadProgramScope, { kind: 'tagged' | 'legacy' }>;
   beads: Bead[];
+  /** Active beads with no goal-program label; empty in legacy mode, where every active bead is in scope. */
+  untaggedIds: string[];
   warnings: string[];
 }
 
@@ -74,6 +76,7 @@ export function resolveBeadProgram(
     return {
       scope: { kind: 'legacy', label: expectedLabel },
       beads,
+      untaggedIds: [],
       warnings: [
         `No ${FLYWHEEL_GOAL_LABEL_PREFIX} labels exist; using legacy repository-wide scope for ${beads.length} active bead(s). Ownership across goals cannot be verified. Expected label: ${expectedLabel}.`,
       ],
@@ -102,6 +105,7 @@ export function resolveBeadProgram(
   return {
     scope: { kind: 'tagged', label: expectedLabel },
     beads,
+    untaggedIds: untagged.map((bead) => bead.id),
     warnings,
   };
 }

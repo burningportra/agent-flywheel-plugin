@@ -56,6 +56,8 @@
 
 3. Add dependency edges downstream-first, verify the graph with `br list`, then continue to Step 6. Use `br list` for previews because `flywheel_approve_beads` mutates state.
 
+4. Commit the beads with `node "${PLUGIN_ROOT}/scripts/commit-goal-beads.mjs" -m "<message>"` (add `--also <plan path>` for the plan). `br` rewrites the whole `.beads/issues.jsonl`, so a plain commit also takes other agents' uncommitted bead changes; the script commits only this goal's labelled lines and leaves the rest in the working file.
+
 The approval response supplies the canonical coverage and duplicate audit in `structuredContent.data.creationAudit`; do not recompute them here.
 
 ## Step 6: Review and approve beads

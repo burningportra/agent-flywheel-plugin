@@ -350,14 +350,19 @@ export async function runApprove(ctx: ToolContext, args: ExtendedApproveArgs): P
   if (beads.length === 0) {
     state.activeBeadIds = [];
     saveState(state);
+    const untaggedHint = program.untaggedIds.length > 0
+      ? `\n\nIf the untagged beads above belong to this goal, label them:\n\`\`\`bash\nbr update <id> --add-label "${expectedProgramLabel}"\n\`\`\``
+      : '';
     return makeApproveResult(
-      `No open beads found for ${expectedProgramLabel}. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..." --labels "${expectedProgramLabel}"\n\`\`\`${programWarnings}\n\nThen call \`flywheel_approve_beads\` again.`,
+      `No open beads found for ${expectedProgramLabel}. Create beads first using:\n\`\`\`bash\nbr create --title "..." --description "..." --labels "${expectedProgramLabel}"\n\`\`\`${programWarnings}${untaggedHint}\n\nThen call \`flywheel_approve_beads\` again.`,
       state.phase,
       'beads',
       {
         kind: 'beads_missing',
         activeBeadIds: [],
         readyForApproval: false,
+        expectedProgramLabel,
+        untaggedActiveBeadIds: program.untaggedIds,
       },
       makeNextToolStep('run_cli', 'Create at least one open bead with br create before returning to flywheel_approve_beads.')
     );
@@ -1279,6 +1284,18 @@ async function handleRemediate(
 const GIT_SHA_RE = /^[0-9a-f]{7,64}$/i;
 
 /**
+ * `bv --robot-insights` carries two per-bead maps (`Stats`, `full_stats`) that
+ * cover every bead in the repository; on a 600-bead repo they are ~120k chars
+ * and push the converge-polish result past the MCP result limit. The ranked
+ * lists the polish loop reads (Bottlenecks, Keystones, ...) are kept.
+ */
+export function withoutPerBeadStats(data: unknown): unknown {
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return data;
+  const { Stats: _stats, full_stats: _fullStats, ...rest } = data as Record<string, unknown>;
+  return rest;
+}
+
+/**
  * 6x Polish convergence loop. Each call snapshots the bead graph against
  * the previous call (the bead-mode flow primes the snapshot on first sight,
  * so round 1 already compares). Converges on 2 consecutive zero-change
@@ -1302,6 +1319,7 @@ async function handleConvergePolish(ctx: ToolContext, beads: Bead[]): Promise<Mc
   saveState(state);
 
   const bv = await runBvRobot(exec, cwd, 'insights', { signal });
+  const bvInsights = bv.available ? withoutPerBeadStats(bv.data) : null;
   const quality = computeBeadQualityScore(beads);
   const history = pc.length > 0
     ? pc.map((n, i) => `R${i + 1}: ${n} change${n !== 1 ? 's' : ''}`).join(', ')
@@ -1309,7 +1327,7 @@ async function handleConvergePolish(ctx: ToolContext, beads: Bead[]): Promise<Mc
   const header = `**Polish round ${state.polishRound}/${MAX_POLISH_ROUNDS}** (${history}) — quality ${(quality.score * 100).toFixed(0)} ${quality.label}`;
 
   const bvNote = bv.available
-    ? `\n\nBV insights attached in \`data.bvInsights\`.`
+    ? `\n\nBV insights attached in \`data.bvInsights\` (per-bead \`Stats\`/\`full_stats\` left out; run \`bv --robot-insights\` for them).`
     : `\n\nBV insights unavailable: ${bv.warning}`;
 
   if (state.polishConverged) {
@@ -1325,7 +1343,7 @@ async function handleConvergePolish(ctx: ToolContext, beads: Bead[]): Promise<Mc
         polishRound: state.polishRound,
         polishConverged: true,
         changes: [...pc],
-        bvInsights: bv.available ? bv.data : null,
+        bvInsights,
         ...(bv.warning ? { bvWarning: bv.warning } : {}),
         quality: { score: quality.score, summary: formatBeadQualityScore(quality) },
         activeBeadIds: state.activeBeadIds,
@@ -1346,7 +1364,7 @@ async function handleConvergePolish(ctx: ToolContext, beads: Bead[]): Promise<Mc
       polishRound: state.polishRound,
       polishConverged: false,
       changes: [...pc],
-      bvInsights: bv.available ? bv.data : null,
+      bvInsights,
       ...(bv.warning ? { bvWarning: bv.warning } : {}),
       quality: { score: quality.score, summary: formatBeadQualityScore(quality) },
       activeBeadIds: state.activeBeadIds,

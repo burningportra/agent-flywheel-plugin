@@ -39,6 +39,7 @@ export function resolveBeadProgram(allBeads, expectedLabel) {
         return {
             scope: { kind: 'legacy', label: expectedLabel },
             beads,
+            untaggedIds: [],
             warnings: [
                 `No ${FLYWHEEL_GOAL_LABEL_PREFIX} labels exist; using legacy repository-wide scope for ${beads.length} active bead(s). Ownership across goals cannot be verified. Expected label: ${expectedLabel}.`,
             ],
@@ -56,6 +57,7 @@ export function resolveBeadProgram(allBeads, expectedLabel) {
     return {
         scope: { kind: 'tagged', label: expectedLabel },
         beads,
+        untaggedIds: untagged.map((bead) => bead.id),
         warnings,
     };
 }

@@ -56,6 +56,7 @@ describe('goal bead program identity', () => {
             'legacy-open',
             'legacy-progress',
         ]);
+        expect(result.untaggedIds).toEqual([]);
         expect(result.warnings[0]).toContain('using legacy repository-wide scope');
     });
     it('does not fall back when another tagged program exists', () => {
@@ -67,6 +68,7 @@ describe('goal bead program identity', () => {
         ], labelA);
         expect(result.scope).toEqual({ kind: 'tagged', label: labelA });
         expect(result.beads).toEqual([]);
+        expect(result.untaggedIds).toEqual(['untagged-open']);
         expect(result.warnings).toEqual([
             `No active beads match ${labelA}; repository-wide fallback is disabled because other goal-program labels exist.`,
             `Excluded 1 untagged active bead(s) from ${labelA}: untagged-open.`,

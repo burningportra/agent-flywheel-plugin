@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createMockExec, makeState } from './helpers/mocks.js';
 import { runApprove, MAX_POLISH_ROUNDS } from '../tools/approve.js';
+import { goalBeadProgramLabel } from '../tools/bead-program.js';
 const HEAD = 'a'.repeat(40);
 const BASE = 'b'.repeat(40);
 const PATCH = 'c'.repeat(40);
@@ -41,7 +42,11 @@ function makePolishCtx(beads, stateOverrides = {}, cwd = '/fake/cwd') {
         {
             cmd: 'bv',
             args: ['--robot-insights'],
-            result: { code: 0, stdout: JSON.stringify({ health: 'ok' }), stderr: '' },
+            result: {
+                code: 0,
+                stdout: JSON.stringify({ health: 'ok', Stats: { OutDegree: { 'bead-1': 0 } }, full_stats: { pagerank: { 'bead-1': 1 } } }),
+                stderr: '',
+            },
         },
     ]);
     const state = makeState({
@@ -107,7 +112,21 @@ describe('converge-polish', () => {
         expect(d.stop_reason).toBe('max_rounds_hit');
         expect(state.polishConverged).toBe(true);
     });
-    it('attaches bvInsights when bv is healthy and degrades with a warning when not', async () => {
+    it('names the expected goal label and the untagged active beads when none match', async () => {
+        const label = goalBeadProgramLabel('Polish loop');
+        const { ctx } = makePolishCtx([
+            makeBead({ id: 'other-goal', labels: [goalBeadProgramLabel('Another goal')] }),
+            makeBead({ id: 'untagged-1' }),
+        ]);
+        const r = await runApprove(ctx, { cwd: '/fake/cwd', action: 'converge-polish' });
+        const d = dataOf(r);
+        expect(d.kind).toBe('beads_missing');
+        expect(d.expectedProgramLabel).toBe(label);
+        expect(d.untaggedActiveBeadIds).toEqual(['untagged-1']);
+        const text = r.content[0].text;
+        expect(text).toContain(`br update <id> --add-label "${label}"`);
+    });
+    it('attaches bvInsights without the per-bead stat maps, and degrades with a warning when bv is down', async () => {
         const { ctx } = makePolishCtx([makeBead()]);
         let d = dataOf(await runApprove(ctx, { cwd: '/fake/cwd', action: 'converge-polish' }));
         expect(d.bvInsights).toEqual({ health: 'ok' });
