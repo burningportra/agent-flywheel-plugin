@@ -10,6 +10,7 @@ import { checkpointValidityHandler } from './remediations/checkpoint_validity.js
 import { projectsBaseMisconfigHandler } from './remediations/projects_base_misconfig.js';
 import { orphanTenderDaemonsHandler } from './remediations/orphan_tender_daemons.js';
 import { codexConfigCompatHandler } from './remediations/codex_config_compat.js';
+import { brConfigLatencyHandler } from './remediations/br_config_latency.js';
 import { brBinaryHandler, bvBinaryHandler, ntmBinaryHandler, cmBinaryHandler, } from './remediations/cli_binary.js';
 import { describeSyncAgySummary, findSyncAgyScript, resolveAgyPortTarget, runSyncAgy, } from '../adapters/antigravity.js';
 const OUTPUT_CAP_BYTES = 4 * 1024;
@@ -134,6 +135,9 @@ export const REMEDIATION_REGISTRY = {
     pstack_plugin: null,
     // Installing or syncing prompt-suggester is user-managed.
     prompt_suggester_plugin: null,
+    // Sets the two keys in .beads/config.yaml; backs up an existing file to
+    // .beads/config.yaml.bak first.
+    br_config_latency: brConfigLatencyHandler,
 };
 function assertExhaustive(_) {
     throw new Error('Non-exhaustive registry');

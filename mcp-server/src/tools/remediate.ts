@@ -12,6 +12,7 @@ import { checkpointValidityHandler } from './remediations/checkpoint_validity.js
 import { projectsBaseMisconfigHandler } from './remediations/projects_base_misconfig.js';
 import { orphanTenderDaemonsHandler } from './remediations/orphan_tender_daemons.js';
 import { codexConfigCompatHandler } from './remediations/codex_config_compat.js';
+import { brConfigLatencyHandler } from './remediations/br_config_latency.js';
 import {
   brBinaryHandler,
   bvBinaryHandler,
@@ -183,6 +184,9 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   pstack_plugin: null,
   // Installing or syncing prompt-suggester is user-managed.
   prompt_suggester_plugin: null,
+  // Sets the two keys in .beads/config.yaml; backs up an existing file to
+  // .beads/config.yaml.bak first.
+  br_config_latency: brConfigLatencyHandler,
 };
 
 function assertExhaustive(_: never): never {

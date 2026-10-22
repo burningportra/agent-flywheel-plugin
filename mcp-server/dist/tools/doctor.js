@@ -15,6 +15,7 @@ import { statSync, readdirSync, readFileSync, realpathSync, existsSync } from 'n
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse as parseYaml } from 'yaml';
 import { newestMtime } from './shared.js';
 import { makeExec } from '../exec.js';
 import { readCheckpoint } from '../checkpoint.js';
@@ -111,6 +112,10 @@ export const DOCTOR_CHECK_NAMES = [
     // prompt-suggester optional next-prompt steering plugin across Claude Code
     // and Antigravity. Green when absent or valid; yellow when corrupt/incomplete.
     'prompt_suggester_plugin',
+    // `.beads/config.yaml` without `no_auto_flush: true` and
+    // `metrics.disabled: true` lets `br update` blow its 5000ms timeout on
+    // external APFS/SMB volumes. Green when `.beads` is absent. Auto-remediable.
+    'br_config_latency',
 ];
 // ─── Actionable hints ─────────────────────────────────────────────────────
 // DoctorCheck.hint must be a human-readable remediation sentence, not an
@@ -238,6 +243,7 @@ export async function runDoctorChecks(cwd, signal, options = {}) {
         () => checkAgyPortSync(exec, cwd, agyCliPromise, combined, now, options.agyPortTarget),
         () => checkPstackPlugin(cwd, combined, now, options.pstackVendorPath, options.installedPluginsPath),
         () => checkPromptSuggesterPlugin(combined, now, options.promptSuggesterPath),
+        () => checkBrConfigLatency(cwd, combined, now),
     ];
     const wrapped = checkFns.map((fn, idx) => semaphore.acquire().then(async (release) => {
         try {
@@ -564,6 +570,67 @@ async function checkPromptSuggesterPlugin(signal, now, promptSuggesterPath) {
         foundTargets.push(root);
     }
     return done('green', `prompt-suggester ${version} installed (${foundTargets.join(', ')})`);
+}
+export const BR_CONFIG_LATENCY_HINT = 'Run `flywheel_remediate({ checkName: "br_config_latency", mode: "execute", autoConfirm: true })` to set `no_auto_flush: true` and `metrics.disabled: true` in .beads/config.yaml so `br update` stays under its 5000ms timeout.';
+/**
+ * Lists the low-latency br settings `raw` (a `.beads/config.yaml` body) does
+ * not set. Throws when `raw` is not valid YAML.
+ */
+export function missingLowLatencyBrSettings(raw) {
+    const parsed = parseYaml(raw);
+    const root = typeof parsed === 'object' && parsed !== null ? parsed : {};
+    const metrics = root.metrics;
+    const missing = [];
+    if (root.no_auto_flush !== true)
+        missing.push('no_auto_flush: true');
+    if (typeof metrics !== 'object' || metrics === null || metrics.disabled !== true) {
+        missing.push('metrics.disabled: true');
+    }
+    return missing;
+}
+async function checkBrConfigLatency(cwd, signal, now) {
+    const start = now();
+    if (signal.aborted)
+        return abortedCheck('br_config_latency');
+    if (!existsSync(join(cwd, '.beads'))) {
+        return {
+            name: 'br_config_latency',
+            severity: 'green',
+            message: 'no .beads directory — nothing to tune',
+            durationMs: now() - start,
+        };
+    }
+    const configPath = join(cwd, '.beads', 'config.yaml');
+    let missing;
+    try {
+        missing = existsSync(configPath)
+            ? missingLowLatencyBrSettings(readFileSync(configPath, 'utf8'))
+            : ['no_auto_flush: true', 'metrics.disabled: true'];
+    }
+    catch (err) {
+        return {
+            name: 'br_config_latency',
+            severity: 'yellow',
+            message: `.beads/config.yaml unreadable: ${errMsg(err)}`,
+            hint: BR_CONFIG_LATENCY_HINT,
+            durationMs: now() - start,
+        };
+    }
+    if (missing.length > 0) {
+        return {
+            name: 'br_config_latency',
+            severity: 'yellow',
+            message: `.beads/config.yaml is missing ${missing.join(' and ')}`,
+            hint: BR_CONFIG_LATENCY_HINT,
+            durationMs: now() - start,
+        };
+    }
+    return {
+        name: 'br_config_latency',
+        severity: 'green',
+        message: '.beads/config.yaml sets no_auto_flush and metrics.disabled',
+        durationMs: now() - start,
+    };
 }
 /**
  * 1. MCP connectivity.

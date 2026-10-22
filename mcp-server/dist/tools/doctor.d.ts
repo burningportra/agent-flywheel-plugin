@@ -14,7 +14,7 @@
 import { type ExecFn } from '../exec.js';
 import type { DoctorCheck, DoctorCheckSeverity, DoctorReport, ErrorCodeTelemetry } from '../types.js';
 /** Canonical check names. Exported for test assertions. */
-export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "pi_cli", "swarm_model_ratio", "codex_config_compat", "gemini_model_compat", "rescues_last_30d", "npm_marketplace_version_drift", "orphan_tender_daemons", "convergence_state_validity", "outcome_rubric_validity", "projects_base_misconfig", "agy_cli", "agy_port_sync", "pstack_plugin", "prompt_suggester_plugin"];
+export declare const DOCTOR_CHECK_NAMES: readonly ["mcp_connectivity", "agent_mail_liveness", "br_binary", "bv_binary", "ntm_binary", "cm_binary", "node_version", "git_status", "dist_drift", "orphaned_worktrees", "checkpoint_validity", "claude_cli", "codex_cli", "gemini_cli", "pi_cli", "swarm_model_ratio", "codex_config_compat", "gemini_model_compat", "rescues_last_30d", "npm_marketplace_version_drift", "orphan_tender_daemons", "convergence_state_validity", "outcome_rubric_validity", "projects_base_misconfig", "agy_cli", "agy_port_sync", "pstack_plugin", "prompt_suggester_plugin", "br_config_latency"];
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
 export interface DoctorOptions {
     /** Override per-check timeout (ms). */
@@ -72,6 +72,12 @@ export declare function countCriticalFails(checks: DoctorCheck[]): number;
  *   set partial:true and override to red themselves)
  */
 export declare function computeOverallSeverity(checks: DoctorCheck[]): DoctorCheckSeverity;
+export declare const BR_CONFIG_LATENCY_HINT = "Run `flywheel_remediate({ checkName: \"br_config_latency\", mode: \"execute\", autoConfirm: true })` to set `no_auto_flush: true` and `metrics.disabled: true` in .beads/config.yaml so `br update` stays under its 5000ms timeout.";
+/**
+ * Lists the low-latency br settings `raw` (a `.beads/config.yaml` body) does
+ * not set. Throws when `raw` is not valid YAML.
+ */
+export declare function missingLowLatencyBrSettings(raw: string): string[];
 /**
  * 16. `rescues_last_30d` — synthesised count of `/codex:rescue` handoff
  * events recorded in CASS over the last 30 days. The rescue branches in

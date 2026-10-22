@@ -39,7 +39,8 @@
         "agy_cli",
         "agy_port_sync",
         "pstack_plugin",
-        "prompt_suggester_plugin"
+        "prompt_suggester_plugin",
+        "br_config_latency"
       ],
       "description": "The doctor check name to remediate"
     },
