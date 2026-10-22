@@ -144,6 +144,9 @@ export const DOCTOR_CHECK_NAMES = [
   // pstack skills, vendored in skills/PSTACK_VENDOR.json or installed as a
   // Claude Code plugin. Yellow when neither is found.
   'pstack_plugin',
+  // prompt-suggester optional next-prompt steering plugin across Claude Code
+  // and Antigravity. Green when absent or valid; yellow when corrupt/incomplete.
+  'prompt_suggester_plugin',
 ] as const;
 
 export type DoctorCheckName = (typeof DOCTOR_CHECK_NAMES)[number];
@@ -165,6 +168,8 @@ const AGY_PORT_SYNC_HINT =
   "Call flywheel_remediate({ checkName: 'agy_port_sync', mode: 'execute', autoConfirm: true }) to write the Antigravity port.";
 const PSTACK_PLUGIN_HINT =
   'Install the pstack plugin in Claude Code (`/plugin install pstack`) or vendor its skills with skills/PSTACK_VENDOR.json.';
+const PROMPT_SUGGESTER_PLUGIN_HINT =
+  'Reinstall or sync prompt-suggester under ~/.claude/plugins/prompt-suggester or ~/.gemini/config/plugins/prompt-suggester.';
 /** sync-agy.sh starts node and walks the port; ~4 s on a warm disk. */
 const AGY_SYNC_CHECK_TIMEOUT_MS = 8_000;
 const CLI_FAILURE_HINT =
@@ -220,6 +225,8 @@ export interface DoctorOptions {
   pstackVendorPath?: string | null;
   /** Override Claude Code's installed_plugins.json (tests). `null` skips it. */
   installedPluginsPath?: string | null;
+  /** Override path to prompt-suggester plugin directory (tests). `null` treats as absent. */
+  promptSuggesterPath?: string | null;
 }
 
 /**
@@ -351,6 +358,7 @@ export async function runDoctorChecks(
     () => checkAgyCli(agyCliPromise, combined, now),
     () => checkAgyPortSync(exec, cwd, agyCliPromise, combined, now, options.agyPortTarget),
     () => checkPstackPlugin(cwd, combined, now, options.pstackVendorPath, options.installedPluginsPath),
+    () => checkPromptSuggesterPlugin(combined, now, options.promptSuggesterPath),
   ];
 
   const wrapped = checkFns.map((fn, idx) =>
@@ -661,6 +669,77 @@ async function checkPstackPlugin(
     }
   }
   return done('yellow', 'pstack is neither vendored nor installed', PSTACK_PLUGIN_HINT);
+}
+
+async function checkPromptSuggesterPlugin(
+  signal: AbortSignal,
+  now: () => number,
+  promptSuggesterPath: string | null | undefined,
+): Promise<DoctorCheck> {
+  const start = now();
+  if (signal.aborted) return abortedCheck('prompt_suggester_plugin');
+  const done = (severity: DoctorCheckSeverity, message: string, hint?: string): DoctorCheck => ({
+    name: 'prompt_suggester_plugin',
+    severity,
+    message,
+    ...(hint ? { hint } : {}),
+    durationMs: now() - start,
+  });
+
+  const candidateRoots =
+    promptSuggesterPath === null
+      ? []
+      : typeof promptSuggesterPath === 'string'
+        ? [promptSuggesterPath]
+        : [
+            join(homedir(), '.claude', 'plugins', 'prompt-suggester'),
+            join(homedir(), '.gemini', 'config', 'plugins', 'prompt-suggester'),
+            join(homedir(), '.gemini', 'antigravity', 'plugins', 'prompt-suggester'),
+          ];
+
+  const existingRoots = candidateRoots.filter((root) => existsSync(root));
+  if (existingRoots.length === 0) {
+    return done('green', 'prompt-suggester not installed (optional next-prompt steering plugin)');
+  }
+
+  let version = '';
+  const foundTargets: string[] = [];
+  for (const root of existingRoots) {
+    const manifestCandidates = [
+      join(root, '.claude-plugin', 'plugin.json'),
+      join(root, 'gemini-extension.json'),
+      join(root, '.agy-plugin', 'plugin.json'),
+      join(root, 'plugin.json'),
+    ];
+    const manifestPath = manifestCandidates.find((p) => existsSync(p));
+    if (!manifestPath) {
+      return done(
+        'yellow',
+        `prompt-suggester at ${root} is missing plugin.json / gemini-extension.json`,
+        PROMPT_SUGGESTER_PLUGIN_HINT,
+      );
+    }
+    const rootVersion = readManifestVersion(manifestPath);
+    if (!rootVersion || rootVersion.trim().length === 0) {
+      return done(
+        'yellow',
+        `prompt-suggester manifest at ${manifestPath} is unreadable or missing a string version`,
+        PROMPT_SUGGESTER_PLUGIN_HINT,
+      );
+    }
+    const hookPath = join(root, 'hooks', 'suggester-hook.mjs');
+    if (!existsSync(hookPath)) {
+      return done(
+        'yellow',
+        `prompt-suggester at ${root} is missing hooks/suggester-hook.mjs`,
+        PROMPT_SUGGESTER_PLUGIN_HINT,
+      );
+    }
+    if (!version) version = rootVersion;
+    foundTargets.push(root);
+  }
+
+  return done('green', `prompt-suggester ${version} installed (${foundTargets.join(', ')})`);
 }
 
 /**

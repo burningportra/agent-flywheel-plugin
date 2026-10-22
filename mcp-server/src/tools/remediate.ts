@@ -181,6 +181,8 @@ export const REMEDIATION_REGISTRY: Record<DoctorCheckName, RemediationHandler | 
   agy_port_sync: agyPortSyncHandler,
   // Installing pstack is a Claude Code plugin action the user takes.
   pstack_plugin: null,
+  // Installing or syncing prompt-suggester is user-managed.
+  prompt_suggester_plugin: null,
 };
 
 function assertExhaustive(_: never): never {

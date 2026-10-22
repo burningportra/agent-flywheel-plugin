@@ -1284,3 +1284,98 @@ describe('cm probes', () => {
     }
   });
 });
+
+describe('prompt_suggester_plugin check', () => {
+  it('returns green when prompt-suggester is absent (promptSuggesterPath: null)', async () => {
+    const cwd = makeTmpCwd();
+    try {
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec: makeStubbedExec(allGreenStubs()),
+        codexConfigPath: null,
+        promptSuggesterPath: null,
+      });
+      const check = report.checks.find((c) => c.name === 'prompt_suggester_plugin');
+      expect(check).toMatchObject({
+        severity: 'green',
+        message: 'prompt-suggester not installed (optional next-prompt steering plugin)',
+      });
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
+  it('returns green when valid manifest and hooks/suggester-hook.mjs exist', async () => {
+    const cwd = makeTmpCwd();
+    const pluginDir = join(cwd, 'prompt-suggester');
+    mkdirSync(join(pluginDir, '.claude-plugin'), { recursive: true });
+    mkdirSync(join(pluginDir, 'hooks'), { recursive: true });
+    writeFileSync(
+      join(pluginDir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ name: 'prompt-suggester', version: '1.2.3' }),
+    );
+    writeFileSync(join(pluginDir, 'hooks', 'suggester-hook.mjs'), '// hook\n');
+    try {
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec: makeStubbedExec(allGreenStubs()),
+        codexConfigPath: null,
+        promptSuggesterPath: pluginDir,
+      });
+      const check = report.checks.find((c) => c.name === 'prompt_suggester_plugin');
+      expect(check).toMatchObject({
+        severity: 'green',
+        message: `prompt-suggester 1.2.3 installed (${pluginDir})`,
+      });
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
+  it('returns yellow when hooks/suggester-hook.mjs is missing', async () => {
+    const cwd = makeTmpCwd();
+    const pluginDir = join(cwd, 'prompt-suggester');
+    mkdirSync(join(pluginDir, '.claude-plugin'), { recursive: true });
+    writeFileSync(
+      join(pluginDir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ name: 'prompt-suggester', version: '1.2.3' }),
+    );
+    try {
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec: makeStubbedExec(allGreenStubs()),
+        codexConfigPath: null,
+        promptSuggesterPath: pluginDir,
+      });
+      const check = report.checks.find((c) => c.name === 'prompt_suggester_plugin');
+      expect(check?.severity).toBe('yellow');
+      expect(check?.message).toContain('hooks/suggester-hook.mjs');
+      expect(check?.hint).toBe(
+        'Reinstall or sync prompt-suggester under ~/.claude/plugins/prompt-suggester or ~/.gemini/config/plugins/prompt-suggester.',
+      );
+    } finally {
+      cleanup(cwd);
+    }
+  });
+
+  it('returns yellow when manifest JSON is corrupt or missing version', async () => {
+    const cwd = makeTmpCwd();
+    const pluginDir = join(cwd, 'prompt-suggester');
+    mkdirSync(join(pluginDir, '.claude-plugin'), { recursive: true });
+    mkdirSync(join(pluginDir, 'hooks'), { recursive: true });
+    writeFileSync(join(pluginDir, '.claude-plugin', 'plugin.json'), '{ corrupt json');
+    writeFileSync(join(pluginDir, 'hooks', 'suggester-hook.mjs'), '// hook\n');
+    try {
+      const report = await runDoctorChecks(cwd, undefined, {
+        exec: makeStubbedExec(allGreenStubs()),
+        codexConfigPath: null,
+        promptSuggesterPath: pluginDir,
+      });
+      const check = report.checks.find((c) => c.name === 'prompt_suggester_plugin');
+      expect(check?.severity).toBe('yellow');
+      expect(check?.message).toContain('unreadable or missing a string version');
+      expect(check?.hint).toBe(
+        'Reinstall or sync prompt-suggester under ~/.claude/plugins/prompt-suggester or ~/.gemini/config/plugins/prompt-suggester.',
+      );
+    } finally {
+      cleanup(cwd);
+    }
+  });
+});
