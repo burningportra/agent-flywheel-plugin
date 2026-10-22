@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { agentMailRPC, bootstrapCoordinator, matchesReservationPath, normalizeReservations, reserveFileReservations, unwrapRPC, _resetBootstrapDedupeForTest, } from '../agent-mail.js';
+import { agentMailRPC, bootstrapCoordinator, fetchInbox, matchesReservationPath, normalizeReservations, reserveFileReservations, unwrapRPC, _resetBootstrapDedupeForTest, } from '../agent-mail.js';
 // ─── Helpers ────────────────────────────────────────────────────
 /**
  * Build a mock ExecFn that returns a fixed result.
@@ -37,6 +37,53 @@ describe('agentMailRPC — ok:true on valid JSON-RPC success response', () => {
         if (result.ok) {
             expect(result.data).toEqual(payload);
         }
+    });
+    it('parses content[0].text as JSON when the server sends only text content', async () => {
+        const payload = [{ id: 53857, subject: 'hello' }];
+        const stdout = JSON.stringify({
+            jsonrpc: '2.0',
+            result: { content: [{ type: 'text', text: JSON.stringify(payload) }] },
+        });
+        const exec = makeExec({ code: 0, stdout, stderr: '' });
+        const result = await agentMailRPC(exec, 'fetch_inbox', { project_key: '/cwd', agent_name: 'A' });
+        expect(result).toEqual({ ok: true, data: payload });
+    });
+    it('keeps non-JSON text content as a string', async () => {
+        const stdout = JSON.stringify({ result: { content: [{ type: 'text', text: 'pong' }] } });
+        const exec = makeExec({ code: 0, stdout, stderr: '' });
+        const result = await agentMailRPC(exec, 'health_check', {});
+        expect(result).toEqual({ ok: true, data: 'pong' });
+    });
+    it('returns rpc_error when the tool result has isError: true', async () => {
+        const stdout = JSON.stringify({
+            result: {
+                content: [{ type: 'text', text: '{"error":{"type":"AGENT_NOT_FOUND"}}' }],
+                isError: true,
+            },
+        });
+        const exec = makeExec({ code: 0, stdout, stderr: '' });
+        const result = await agentMailRPC(exec, 'whois', { project_key: '/cwd', agent_name: 'Nope' });
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.error.kind).toBe('rpc_error');
+            expect(result.error.message).toContain('AGENT_NOT_FOUND');
+        }
+    });
+});
+describe('fetchInbox — payload shapes', () => {
+    it('returns the messages when the server sends a bare array as text content', async () => {
+        const messages = [{ id: 1, subject: '[impl] done' }, { id: 2, subject: 'ping' }];
+        const stdout = JSON.stringify({
+            result: { content: [{ type: 'text', text: JSON.stringify(messages) }] },
+        });
+        const exec = makeExec({ code: 0, stdout, stderr: '' });
+        expect(await fetchInbox(exec, '/cwd', 'A')).toEqual(messages);
+    });
+    it('still reads { messages } from structuredContent', async () => {
+        const messages = [{ id: 3 }];
+        const stdout = JSON.stringify({ result: { structuredContent: { messages } } });
+        const exec = makeExec({ code: 0, stdout, stderr: '' });
+        expect(await fetchInbox(exec, '/cwd', 'A')).toEqual(messages);
     });
 });
 // ─── agentMailRPC — network failure ────────────────────────────

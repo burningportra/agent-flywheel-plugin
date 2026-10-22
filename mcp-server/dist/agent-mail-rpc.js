@@ -1,5 +1,12 @@
 import { parseAgentMailResponse } from './parsers.js';
 export const AGENT_MAIL_URL = 'http://127.0.0.1:8765';
+function contentText(rpcResult) {
+    const content = rpcResult.content;
+    if (!Array.isArray(content))
+        return undefined;
+    const first = content[0];
+    return first?.type === 'text' && typeof first.text === 'string' ? first.text : undefined;
+}
 export async function agentMailRPC(exec, toolName, args) {
     const body = JSON.stringify({
         jsonrpc: '2.0',
@@ -49,9 +56,35 @@ export async function agentMailRPC(exec, toolName, args) {
         };
     }
     const rpcResult = parsed.data;
-    const data = (rpcResult !== null && rpcResult !== undefined && typeof rpcResult === 'object' && 'structuredContent' in rpcResult
-        ? rpcResult.structuredContent
-        : rpcResult);
+    const isObject = rpcResult !== null && rpcResult !== undefined && typeof rpcResult === 'object';
+    if (isObject && rpcResult.isError === true) {
+        const text = contentText(rpcResult);
+        return {
+            ok: false,
+            error: {
+                kind: 'rpc_error',
+                message: `Tool error from ${toolName}: ${text ?? 'no detail'}`,
+            },
+        };
+    }
+    // The Rust server's /api answers with only `content[0].text` (a JSON string)
+    // and no `structuredContent`, so parse the text when that's all there is.
+    let payload = rpcResult;
+    if (isObject && 'structuredContent' in rpcResult) {
+        payload = rpcResult.structuredContent;
+    }
+    else if (isObject) {
+        const text = contentText(rpcResult);
+        if (text !== undefined) {
+            try {
+                payload = JSON.parse(text);
+            }
+            catch {
+                payload = text;
+            }
+        }
+    }
+    const data = payload;
     if (data === null || data === undefined) {
         return {
             ok: false,

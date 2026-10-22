@@ -230,6 +230,7 @@ export async function fetchInbox(
     ...(options?.urgentOnly ? { urgent_only: true } : {}),
     ...(options?.includeBodies !== false ? { include_bodies: true } : {}),
   }));
+  if (Array.isArray(result)) return result;
   return result?.messages ?? result?.inbox ?? [];
 }
 
