@@ -310,6 +310,9 @@ export const SCENARIOS: Scenario[] = [
       // contract still requires NTM for the DISPATCH itself regardless
       // of which tending mode is picked.
       { headerContains: "supervision", option: "Looper-based" },
+      { headerContains: "swarm lanes", option: "Claude + AGY" },
+      { headerContains: "claude", option: "sonnet" },
+      { headerContains: "model", option: "sonnet" },
       // Goal-labelling (fires on checkpoint-resume when the stored goal
       // was redacted or missing).
       { headerContains: "goal", option: "Use default" },
@@ -334,6 +337,7 @@ export const SCENARIOS: Scenario[] = [
     prepareFixtures: async (worktree) => {
       const { mkdir, writeFile, chmod } = await import("node:fs/promises");
       const { execFileSync } = await import("node:child_process");
+      const { createHash } = await import("node:crypto");
       const { join } = await import("node:path");
       const binDir = join(worktree, ".pi-flywheel", "eval-bin");
       await mkdir(binDir, { recursive: true });
@@ -372,6 +376,40 @@ exit 0
       const ntmPath = join(binDir, "ntm");
       await writeFile(ntmPath, ntmShim, "utf8");
       await chmod(ntmPath, 0o755);
+      // `tmux` shim: `swarm-spawn.js` verifies the spawned session via
+      // `tmux has-session -t =<session>` and enumerates panes via
+      // `tmux list-panes -t <session>:0 -F '#{pane_index}\t#{pane_id}\t#{pane_title}'`.
+      const tmuxShim = `#!/usr/bin/env bash
+set -u
+case "\${1:-}" in
+  has-session)
+    exit 0
+    ;;
+  split-window)
+    echo "%3"
+    exit 0
+    ;;
+  list-panes)
+    session="eval--impl-resume"
+    for ((i=1; i<=$#; i++)); do
+      if [ "\${!i}" = "-t" ]; then
+        next=$((i+1))
+        target="\${!next:-}"
+        session="\${target%:*}"
+        break
+      fi
+    done
+    printf '1\\t%%1\\t%s__cc_1\\n2\\t%%2\\t%s__agy_1\\n' "$session" "$session"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`;
+      const tmuxPath = join(binDir, "tmux");
+      await writeFile(tmuxPath, tmuxShim, "utf8");
+      await chmod(tmuxPath, 0o755);
       // Create a real bead in `.beads/` so the orchestrator doesn't bail
       // out with "No beads" and ask whether to Treat-as-goal / Scan /
       // Pick-up-existing-plan. The orchestrator reads the beads DB via
@@ -394,24 +432,28 @@ exit 0
         { cwd: worktree, encoding: "utf8" },
       ).trim();
       const now = new Date().toISOString();
+      const state = {
+        phase: "implementing",
+        selectedGoal: "resume implementation — dispatch the ready beads via the standard swarm path",
+        goalSlug: "resume-implementation-dispatch",
+        constraints: [],
+        retryCount: 0,
+        maxRetries: 3,
+        maxReviewPasses: 2,
+        iterationRound: 0,
+        currentGateIndex: 0,
+        polishRound: 0,
+        polishChanges: [],
+        polishConverged: false,
+        activeBeadIds: [beadId],
+        currentBeadId: beadId,
+      };
       const checkpoint = {
         schemaVersion: 1,
         writtenAt: now,
         flywheelVersion: "eval-fixture",
-        state: {
-          phase: "implementing",
-          selectedGoal: "resume implementation — dispatch the ready beads via the standard swarm path",
-          goalSlug: "resume-implementation-dispatch",
-          constraints: [],
-          retryCount: 0,
-          maxRetries: 3,
-          maxReviewPasses: 2,
-          iterationRound: 0,
-          currentGateIndex: 0,
-          activeBeadIds: [beadId],
-          currentBeadId: beadId,
-        },
-        stateHash: "",
+        state,
+        stateHash: createHash("sha256").update(JSON.stringify(state)).digest("hex"),
       };
       await writeFile(
         join(worktree, ".pi-flywheel", "checkpoint.json"),

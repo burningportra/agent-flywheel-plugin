@@ -213,11 +213,13 @@ Drop `--pi` and `--pi-model` when `N_pi` is 0, and drop `--agy` when `N_agy` is 
 
 The five lanes the script takes are `--cc` (Claude), `--agy` (Antigravity), `--pi` (optional Pi on the picked models), `--gmi` (Pi on gemini-4-argon), and `--cod` (Codex). Pass `--agy=<N_agy>[:<model>[:<effort>]]` when `DOCTOR_REPORT`'s `agy_cli` row is green. `agy models` prints only effort-suffixed slugs such as `gemini-4-argon-high`, so pass that slug or a model plus effort (`--agy=3:gemini-4-argon:high`), which the script joins into the slug. When **Claude + AGY** was selected, send the wave's `pi` and `gmi` prompt records to the `agy` panes by printed `index`.
 
-Process prompt records in array order. Send each record unchanged to the next unused pane whose `lane` matches the record's `lane`, by that pane's `index`:
+Process prompt records in array order. Send each record unchanged (pass the full `data.prompts[].prompt` string verbatim, including the `.pi-flywheel/completion/<bead>.json` gate — never summarize or paraphrase) to the next unused pane whose `lane` matches the record's `lane`, by that pane's `index`:
 
 ```bash
 ntm --robot-send="$SESSION" --panes=<index of the next unused pane in this lane> --msg="<matching data.prompts[].prompt>"
 ```
+
+Ensure the wave's tender daemon (`node "$PLUGIN_ROOT/mcp-server/dist/scripts/tender-daemon.js" --session="$SESSION" ...` under "Start the durable tend cycle" above) is started right before or immediately after dispatching panes.
 
 Use `--panes=N` with numeric indices. `--pane=N` (singular) is silently broadcast to ALL panes. Don't add `--type`: ntm reports Pi panes as type `unknown`, and pane metadata may not exist yet during startup. Pi and gmi prompts reach Agent Mail through the `am` CLI because Pi panes run with `--no-approve` and load no project MCP servers.
 
