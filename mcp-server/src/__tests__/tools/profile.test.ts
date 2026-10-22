@@ -407,6 +407,7 @@ describe('runProfile', () => {
       data: {
         kind: 'profile_ready',
         fromCache: false,
+        pluginRoot: expect.any(String),
         selectedGoal: undefined,
         coordination: {
           backend: 'beads',
@@ -466,6 +467,7 @@ describe('runProfile', () => {
       data: {
         kind: 'profile_ready',
         fromCache: false,
+        pluginRoot: expect.any(String),
         selectedGoal: 'Improve test coverage',
         coordination: {
           backend: 'beads',

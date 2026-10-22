@@ -17,8 +17,8 @@ import type { ExecFn } from "./exec.js";
 export declare const COMPLETION_REPORT_DIR = ".pi-flywheel/completion";
 export declare const VERIFICATION_LEDGER_PATH = ".pi-flywheel/ledger.tsv";
 export declare const CompletionStatusEnum: z.ZodEnum<{
-    closed: "closed";
     blocked: "blocked";
+    closed: "closed";
     partial: "partial";
 }>;
 export type CompletionStatus = z.infer<typeof CompletionStatusEnum>;
@@ -61,8 +61,8 @@ export declare const CompletionReportSchemaV1: z.ZodObject<{
     agentName: z.ZodString;
     paneName: z.ZodOptional<z.ZodString>;
     status: z.ZodEnum<{
-        closed: "closed";
         blocked: "blocked";
+        closed: "closed";
         partial: "partial";
     }>;
     changedFiles: z.ZodArray<z.ZodString>;

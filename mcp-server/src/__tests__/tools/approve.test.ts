@@ -390,6 +390,7 @@ describe('runApprove', () => {
       },
       data: {
         kind: 'beads_approved',
+        pluginRoot: expect.any(String),
         launchMode: 'sequential',
         readyCount: 1,
         stop_reason: 'manual_start',
@@ -586,6 +587,7 @@ describe('runApprove', () => {
       },
       data: {
         kind: 'beads_approved',
+        pluginRoot: expect.any(String),
         launchMode: 'parallel',
         readyCount: 2,
         stop_reason: 'manual_start',
