@@ -349,6 +349,16 @@ describe('splitBeadsByProvider', () => {
 });
 
 describe('splitBeadsByProvider with the agy lane', () => {
+  it('defaults to Claude + AGY 50/50 even when Gemini and Pi are enabled', () => {
+    const plan = splitBeadsByProvider(SIX, withAgy());
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2', 'b3'] },
+      { provider: 'agy', beadIds: ['b4', 'b5', 'b6'] },
+    ]);
+    expect(plan.degraded).toBe(false);
+    expect(plan.warnings).toEqual([]);
+  });
+
   it('splits Claude and agy 3/3 when Pi and Gemini are switched off, without degrading', () => {
     const plan = splitBeadsByProvider(SIX, withAgy(piOff(geminiOff())));
     expect(plan.lanes).toEqual([
@@ -359,42 +369,38 @@ describe('splitBeadsByProvider with the agy lane', () => {
     expect(plan.warnings).toEqual([]);
   });
 
-  it('gives Claude the odd bead, and degrades when Pi and Gemini are missing rather than off', () => {
+  it('gives Claude the odd bead without degrading when Pi and Gemini are missing', () => {
     const plan = splitBeadsByProvider(['b1', 'b2', 'b3'], withAgy(caps({ pi: false, gemini: false })));
     expect(plan.lanes).toEqual([
       { provider: 'claude', beadIds: ['b1', 'b2'] },
       { provider: 'agy', beadIds: ['b3'] },
     ]);
-    expect(plan.degraded).toBe(true);
-    expect(plan.warnings).toHaveLength(2);
+    expect(plan.degraded).toBe(false);
+    expect(plan.warnings).toEqual([]);
   });
 
   it('hands every bead to agy when Claude is missing too', () => {
     const plan = splitBeadsByProvider(SIX, withAgy(caps({ claude: false, pi: false, gemini: false })));
     expect(plan.lanes).toEqual([{ provider: 'agy', beadIds: SIX }]);
     expect(plan.degraded).toBe(true);
+    expect(plan.warnings).toHaveLength(1);
   });
 
-  it('gives agy the Gemini seat when Gemini is off and Pi is on', () => {
-    const plan = splitBeadsByProvider(['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7'], withAgy(geminiOff()));
-    expect(plan.lanes).toEqual([
-      { provider: 'claude', beadIds: ['b1', 'b2', 'b3'] },
-      { provider: 'pi', beadIds: ['b4', 'b5'] },
-      { provider: 'agy', beadIds: ['b6', 'b7'] },
-    ]);
-    expect(plan.ratio).toBe('3:2:0');
-    expect(plan.degraded).toBe(false);
-  });
-
-  it('leaves agy unused while the Gemini lane runs', () => {
-    expect(splitBeadsByProvider(SIX, withAgy())).toEqual(splitBeadsByProvider(SIX, caps()));
+  it('describes Claude + AGY as the default with Pi opt-in when agy is available', () => {
+    expect(describeCapabilities(withAgy())).toBe(
+      'claude+agy available (default cc:agy 1:1); pi opt-in available; gemini available; codex fallback available',
+    );
+    expect(describeCapabilities(withAgy(geminiOff()))).toBe(
+      'claude+agy available (default cc:agy 1:1); pi opt-in available; gemini disabled; codex fallback available',
+    );
   });
 });
 
 describe('swarmMixFor', () => {
-  it('spawns agy panes in the Gemini seat when the Gemini lane is off', () => {
+  it('defaults to Claude + AGY 3:3 whenever agy is available (even when Gemini and Pi are enabled)', () => {
+    expect(swarmMixFor(withAgy())).toEqual({ label: 'cc:agy 3:3', spawnFlags: '--cc=3 --agy=3' });
+    expect(swarmMixFor(withAgy(geminiOff()))).toEqual({ label: 'cc:agy 3:3', spawnFlags: '--cc=3 --agy=3' });
     expect(swarmMixFor(withAgy(piOff(geminiOff())))).toEqual({ label: 'cc:agy 3:3', spawnFlags: '--cc=3 --agy=3' });
-    expect(swarmMixFor(withAgy(geminiOff()))).toEqual({ label: 'cc:pi:agy 2:2:2', spawnFlags: '--cc=2 --pi=2 --agy=2' });
   });
 
   it('names only the lanes a six-pane swarm spawns on this host', () => {

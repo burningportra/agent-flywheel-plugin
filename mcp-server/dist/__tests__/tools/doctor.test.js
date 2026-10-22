@@ -778,6 +778,17 @@ describe('pi_cli and swarm_model_ratio', () => {
         expect(ratio.message).toBe('claude+pi+gemini available; ratio 1:1:1 achievable; codex fallback available');
         expect(swarm).toEqual({ label: 'cc:pi:gmi 2:2:2', spawnFlags: '--cc=2 --pi=2 --gmi=2' });
     });
+    it('recommends Claude + AGY (cc:agy 3:3) by default when agy is on PATH even if Gemini and Pi are enabled', async () => {
+        const { ratio, swarm } = await sweep([
+            {
+                match: (cmd, args) => cmd === 'which' && args[0] === 'agy',
+                respond: { result: { code: 0, stdout: '/usr/local/bin/agy\n', stderr: '' } },
+            },
+        ]);
+        expect(ratio.severity).toBe('green');
+        expect(ratio.message).toBe('claude+agy available (default cc:agy 1:1); pi opt-in available; gemini available; codex fallback available');
+        expect(swarm).toEqual({ label: 'cc:agy 3:3', spawnFlags: '--cc=3 --agy=3' });
+    });
     it('yellow "not ready" for Pi and Gemini when pi is on PATH but the gateway auth check fails', async () => {
         const { pi, gemini, ratio, swarm } = await sweep([
             {

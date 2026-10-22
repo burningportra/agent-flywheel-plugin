@@ -1578,7 +1578,7 @@ async function checkSwarmModelRatio(
       0,
     );
     const unexpectedMissing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available && !caps[p].disabled);
-    if (unexpectedMissing.length === 0 && primaryAvailableCount > 0) {
+    if ((caps.agy?.available && caps.claude.available) || (unexpectedMissing.length === 0 && primaryAvailableCount > 0)) {
       return {
         name: 'swarm_model_ratio',
         severity: 'green',
@@ -1586,7 +1586,7 @@ async function checkSwarmModelRatio(
         durationMs: now() - start,
       };
     }
-    if (primaryAvailableCount === 0 && !caps.codex.available) {
+    if (primaryAvailableCount === 0 && !caps.codex.available && !caps.agy?.available) {
       return {
         name: 'swarm_model_ratio',
         severity: 'red',

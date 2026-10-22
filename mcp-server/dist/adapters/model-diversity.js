@@ -149,7 +149,7 @@ const FALLBACK_PRIORITY = {
  *     by caller: highest-priority → first lane slot)
  */
 export function splitBeadsByProvider(beadIds, caps) {
-    if (caps.agy?.available && !caps.gemini.available) {
+    if (caps.agy?.available) {
         return splitWithAgy(beadIds, caps);
     }
     const warnings = [];
@@ -206,20 +206,15 @@ export function splitBeadsByProvider(beadIds, caps) {
     return { lanes, warnings, degraded, ratio };
 }
 /**
- * The agy lane takes the Gemini seat: Claude, Pi, and agy split a third
- * each, or Claude and agy split half each when Pi can't run either. Codex
- * isn't used. `ratio` stays Claude:Pi:Gemini, so agy's beads don't show in it.
+ * Default swarm split when the Antigravity (agy) lane is available: Claude and
+ * agy split 50/50 (`cc:agy 1:1`) regardless of whether Gemini or Pi are
+ * enabled (Pi remains opt-in). If Claude is unavailable, agy takes all beads.
  */
 function splitWithAgy(beadIds, caps) {
-    const slots = caps.pi.available ? ['claude', 'pi', 'agy'] : ['claude', 'agy'];
+    const slots = ['claude', 'agy'];
     const assigned = new Map(slots.map((provider) => [provider, []]));
     const warnings = [];
-    const missing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available && !caps[p].disabled);
-    for (const p of missing) {
-        if (p === 'claude')
-            continue;
-        warnings.push(`${p} lane not available${caps[p].reason ? ` (${caps[p].reason})` : ''}; agy takes its seat`);
-    }
+    const claudeMissing = !caps.claude.available && !caps.claude.disabled;
     const n = beadIds.length;
     const base = Math.floor(n / slots.length);
     const extra = n % slots.length;
@@ -235,7 +230,7 @@ function splitWithAgy(beadIds, caps) {
         if (!provider)
             return;
         assigned.get(provider)?.push(...ids);
-        if (provider !== preferred) {
+        if (provider !== preferred && !caps[preferred]?.disabled) {
             warnings.push(`${preferred} lane not available${caps[preferred]?.reason ? ` (${caps[preferred]?.reason})` : ''}; reassigned ${ids.length} bead(s) to ${provider}`);
         }
     });
@@ -246,7 +241,7 @@ function splitWithAgy(beadIds, caps) {
             lanes.push({ provider, beadIds: ids });
     }
     const ratio = PRIMARY_PROVIDERS.map((p) => String(assigned.get(p)?.length ?? 0)).join(':');
-    return { lanes, warnings, degraded: missing.length > 0, ratio };
+    return { lanes, warnings, degraded: claudeMissing, ratio };
 }
 /** Each lane's `swarm-spawn.js` flag name. */
 const SPAWN_LANE = {
@@ -300,6 +295,21 @@ export function adaptPromptFor(provider, ctx) {
  *   Gemini off    → "claude+pi available; gemini disabled; ratio 1:1:0 achievable; codex fallback available"
  */
 export function describeCapabilities(caps) {
+    if (caps.agy?.available) {
+        const primary = [...(caps.claude.available ? ['claude'] : []), 'agy'];
+        const parts = [`${primary.join('+')} available (default cc:agy 1:1)`];
+        if (!caps.claude.available && !caps.claude.disabled)
+            parts.push('claude missing');
+        if (caps.pi.available)
+            parts.push('pi opt-in available');
+        if (caps.gemini.available)
+            parts.push('gemini available');
+        else if (caps.gemini.disabled)
+            parts.push('gemini disabled');
+        if (caps.codex.available)
+            parts.push('codex fallback available');
+        return parts.join('; ');
+    }
     const avail = PRIMARY_PROVIDERS.filter((p) => caps[p].available);
     const off = PRIMARY_PROVIDERS.filter((p) => caps[p].disabled);
     const miss = PRIMARY_PROVIDERS.filter((p) => !caps[p].available && !caps[p].disabled);
