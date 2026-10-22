@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.27.0] - 2026-10-22
+
+### Added
+
+- **First-class Claude + AGY default swarm lanes (`cc:agy 1:1`, Pi opt-in).** `detectCliCapabilities`, `splitBeadsByProvider`, `swarmMixFor`, `adaptPromptForAgy`, `buildImplementerDispatch`, and `flywheel_doctor` now default to a 50/50 **Claude + AGY** (`--cc=3 --agy=3`) swarm split whenever `agy` is available on `PATH` (even when Gemini and Pi are enabled), keeping **Pi (`--pi`)** as an explicit opt-in across `/start` (`_implement.md`, `_planning.md`, `_inflight_prompt.md`, `_reality_check.md`), `/flywheel-swarm`, and `skills/agent-flywheel/SKILL.md`. Added `lanes.agy` toggle in `flywheel.config.yaml` and native AGY implementer prompt adaptation (`run_command`, `read_file`, `edit_file`, `write_file`).
+- **`prompt_suggester_plugin` doctor check (#28).** `flywheel_doctor` now probes optional `prompt-suggester` installations across Claude Code and Antigravity (`~/.claude/plugins/prompt-suggester`, `~/.gemini/config/plugins/prompt-suggester`, `~/.gemini/antigravity/plugins/prompt-suggester`), validating manifests (`plugin.json` / `gemini-extension.json` / `.agy-plugin/plugin.json`) and `hooks/suggester-hook.mjs`.
+- **Goal-scoped bead commits (`scripts/commit-goal-beads.mjs`) and `beads_missing` diagnostics.** `scripts/commit-goal-beads.mjs` selectively commits only the active goal's labelled lines in `.beads/issues.jsonl` via a temporary index with a compare-and-swap `HEAD` check. `flywheel_approve_beads` now surfaces `expectedProgramLabel` and `untaggedActiveBeadIds` when no beads match the active goal label and strips `bv --robot-insights` per-bead `Stats`/`full_stats` maps (`withoutPerBeadStats`) during `converge-polish`.
+
+### Changed
+
+- **`version-sync.config.json` now tracks `agy/plugin.json`.** `node mcp-server/scripts/version-sync.mjs` keeps `mcp-server/package.json`, `.claude-plugin/plugin.json`, and `agy/plugin.json` aligned in a single pass.
+
 ## [3.26.0] - 2026-10-21
 
 ### Added
