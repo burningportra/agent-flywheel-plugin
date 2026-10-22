@@ -465,5 +465,28 @@ describe('runCli', () => {
       ],
       errors: [],
     });
+
+    const dryPi = io();
+    expect(
+      await runCli(
+        ['proj', '--label=impl-dry', '--cc=2', '--agy=2', '--pi=2', `--pi-model=${DEEPSEEK},${GLM}`, '--dry-run'],
+        { ...dryPi.deps, exec },
+      ),
+    ).toBe(0);
+    expect(exec).not.toHaveBeenCalled();
+    expect(JSON.parse(dryPi.out.join(''))).toEqual({
+      session: 'proj--impl-dry',
+      dryRun: true,
+      ntmArgs: ['spawn', 'proj', '--label', 'impl-dry', '--no-user', '--cc=2', '--agy=2', '--stagger-mode=smart'],
+      panes: [
+        { lane: 'cc', index: 0, paneId: 'dry-run-0', title: 'proj--impl-dry__cc_1' },
+        { lane: 'cc', index: 1, paneId: 'dry-run-1', title: 'proj--impl-dry__cc_2' },
+        { lane: 'agy', index: 2, paneId: 'dry-run-2', title: 'proj--impl-dry__agy_1' },
+        { lane: 'agy', index: 3, paneId: 'dry-run-3', title: 'proj--impl-dry__agy_2' },
+        { lane: 'pi', index: 4, paneId: 'dry-run-4', title: 'proj--impl-dry__pi_1', model: DEEPSEEK },
+        { lane: 'pi', index: 5, paneId: 'dry-run-5', title: 'proj--impl-dry__pi_2', model: GLM },
+      ],
+      errors: [],
+    });
   });
 });
