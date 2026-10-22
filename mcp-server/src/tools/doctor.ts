@@ -1509,7 +1509,7 @@ async function checkConvergenceStateValidity(
  */
 async function checkSwarmModelCli(
   checkName: 'claude_cli' | 'codex_cli' | 'gemini_cli' | 'pi_cli',
-  provider: ModelProvider,
+  provider: Exclude<ModelProvider, 'agy'>,
   capsPromise: Promise<CapabilitiesMap>,
   signal: AbortSignal,
   now: () => number,

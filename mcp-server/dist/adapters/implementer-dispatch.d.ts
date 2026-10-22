@@ -2,7 +2,7 @@ import { type CapabilitiesMap } from './model-diversity.js';
 import { type BeadComplexity } from '../model-routing.js';
 import type { ExecFn } from '../exec.js';
 import type { Bead } from '../types.js';
-export type NtmImplementationLane = 'cc' | 'cod' | 'gmi' | 'pi';
+export type NtmImplementationLane = 'cc' | 'cod' | 'gmi' | 'pi' | 'agy';
 export interface ImplementerLane {
     readonly lane: NtmImplementationLane;
     readonly beadIds: readonly string[];

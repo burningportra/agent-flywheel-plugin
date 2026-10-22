@@ -58,7 +58,7 @@ export interface BeadDispatchContext {
  */
 export interface AdaptedPrompt {
     /** The provider this prompt is tuned for. */
-    readonly provider: 'claude' | 'codex' | 'gemini' | 'pi';
+    readonly provider: 'claude' | 'codex' | 'gemini' | 'pi' | 'agy';
     /** The prompt body to send via `ntm send` / Agent(). */
     readonly prompt: string;
     /**

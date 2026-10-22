@@ -4,7 +4,7 @@ import { buildImplementerDispatch, } from '../../adapters/implementer-dispatch.j
 const unusedExec = async () => {
     throw new Error('capability probe should not run when capabilities are supplied');
 };
-function capabilities(gemini = true, pi = true) {
+function capabilities(gemini = true, pi = true, agy = false) {
     return {
         claude: { provider: 'claude', available: true, path: '/bin/claude' },
         codex: { provider: 'codex', available: true, path: '/bin/codex' },
@@ -14,6 +14,7 @@ function capabilities(gemini = true, pi = true) {
         pi: pi
             ? { provider: 'pi', available: true, path: '/bin/pi' }
             : { provider: 'pi', available: false, reason: 'not installed' },
+        ...(agy ? { agy: { provider: 'agy', available: true, path: '/usr/local/bin/agy' } } : {}),
     };
 }
 function beads(count) {
@@ -46,7 +47,7 @@ function completionReportExample(prompt) {
     return parsed;
 }
 function assertCompletionGate(prompt) {
-    if (prompt.lane === 'pi' || prompt.lane === 'gmi') {
+    if (prompt.lane === 'pi' || prompt.lane === 'gmi' || prompt.lane === 'agy') {
         expect(prompt.prompt).toContain("--project '/workspace/project'");
         expect(prompt.prompt).toContain(`--agent-name '${prompt.agentName}'`);
         expect(prompt.prompt).toContain("--to 'WindyBasin'");
@@ -140,6 +141,33 @@ describe('buildImplementerDispatch', () => {
             assertCompletionGate(prompt);
         expect(dispatch.prompts[2]?.prompt).toContain("program='codex'");
         expect(dispatch.prompts[2]?.prompt.endsWith('\n\n')).toBe(true);
+    });
+    it('splits Claude and agy 3/3 when Pi and Gemini are switched off', async () => {
+        const off = { available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' };
+        const dispatch = await buildImplementerDispatch({
+            exec: unusedExec,
+            cwd: '/workspace/project',
+            beads: beads(6),
+            coordinatorName: 'WindyBasin',
+            capabilities: {
+                ...capabilities(true, true, true),
+                gemini: { provider: 'gemini', ...off },
+                pi: { provider: 'pi', ...off },
+            },
+        });
+        expect(dispatch.lanes).toEqual([
+            { lane: 'cc', beadIds: ['bead-1', 'bead-2', 'bead-3'] },
+            { lane: 'agy', beadIds: ['bead-4', 'bead-5', 'bead-6'] },
+        ]);
+        expect(dispatch.degraded).toBe(false);
+        const agyPrompts = dispatch.prompts.filter((p) => p.lane === 'agy');
+        expect(agyPrompts).toHaveLength(3);
+        for (const prompt of agyPrompts) {
+            expect(prompt.prompt).toContain('Use AGY native tools:');
+            expect(prompt.prompt).toContain('--program agy --model agy');
+        }
+        for (const prompt of dispatch.prompts)
+            assertCompletionGate(prompt);
     });
     it('returns an empty dispatch without probing capabilities when there are no beads', async () => {
         const dispatch = await buildImplementerDispatch({

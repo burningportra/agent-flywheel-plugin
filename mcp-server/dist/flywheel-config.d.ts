@@ -30,8 +30,9 @@ export interface FlywheelConfigLanes {
     gemini: boolean;
     codex: boolean;
     pi: boolean;
+    agy: boolean;
 }
-export declare const CONFIGURABLE_LANES: readonly ["gemini", "codex", "pi"];
+export declare const CONFIGURABLE_LANES: readonly ["gemini", "codex", "pi", "agy"];
 export interface FlywheelConfig {
     convergence: FlywheelConfigConvergence;
     lanes: FlywheelConfigLanes;

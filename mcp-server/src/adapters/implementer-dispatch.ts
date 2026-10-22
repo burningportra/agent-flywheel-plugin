@@ -11,7 +11,7 @@ import type { ExecFn } from '../exec.js';
 import type { Bead } from '../types.js';
 import type { BeadDispatchContext } from './codex-prompt.js';
 
-export type NtmImplementationLane = 'cc' | 'cod' | 'gmi' | 'pi';
+export type NtmImplementationLane = 'cc' | 'cod' | 'gmi' | 'pi' | 'agy';
 
 export interface ImplementerLane {
   readonly lane: NtmImplementationLane;
@@ -52,6 +52,7 @@ const NTM_LANE = {
   codex: 'cod',
   gemini: 'gmi',
   pi: 'pi',
+  agy: 'agy',
 } as const satisfies Record<ModelProvider, NtmImplementationLane>;
 
 function beadToDispatchContext(

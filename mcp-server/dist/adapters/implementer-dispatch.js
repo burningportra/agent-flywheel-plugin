@@ -6,6 +6,7 @@ const NTM_LANE = {
     codex: 'cod',
     gemini: 'gmi',
     pi: 'pi',
+    agy: 'agy',
 };
 function beadToDispatchContext(bead, complexity, agentName, coordinatorName, projectKey, potetoMode) {
     const acceptance = bead.description

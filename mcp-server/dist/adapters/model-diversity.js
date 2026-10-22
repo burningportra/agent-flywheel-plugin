@@ -23,7 +23,7 @@
 import { errMsg } from '../errors.js';
 import { loadFlywheelConfig } from '../flywheel-config.js';
 import { checkPiLaneReady, checkPiProviderAuth, GEMINI_LANE_MODEL, providerOf } from '../pi-models.js';
-import { adaptPromptForClaude, adaptPromptForGemini, adaptPromptForPi } from './claude-prompt.js';
+import { adaptPromptForAgy, adaptPromptForClaude, adaptPromptForGemini, adaptPromptForPi } from './claude-prompt.js';
 import { adaptPromptForCodex } from './codex-prompt.js';
 // ─── CLI detection ────────────────────────────────────────────────────────
 const PROVIDER_BINARIES = {
@@ -31,6 +31,7 @@ const PROVIDER_BINARIES = {
     codex: 'codex',
     gemini: 'pi',
     pi: 'pi',
+    agy: 'agy',
 };
 /**
  * Probe `which <bin>` for each provider. A zero exit code and a non-empty
@@ -112,13 +113,14 @@ export async function detectCliCapabilities(exec, opts = {}) {
             return { ...found, available: false, reason: `claude auth status: ${errMsg(err)}` };
         }
     };
-    const [claude, codex, gemini, pi] = await Promise.all([
+    const [claude, codex, gemini, pi, agy] = await Promise.all([
         probeClaude(),
         probe('codex'),
         probeGemini(),
         probePi(),
+        probe('agy'),
     ]);
-    return { claude, codex, gemini, pi };
+    return { claude, codex, gemini, pi, agy };
 }
 // ─── Ratio math + split ───────────────────────────────────────────────────
 export const PRIMARY_PROVIDERS = ['claude', 'pi', 'gemini'];
@@ -127,6 +129,7 @@ const ROUTING_PROVIDERS = Object.freeze([
     'pi',
     'gemini',
     'codex',
+    'agy',
 ]);
 const FALLBACK_PRIORITY = {
     claude: ['pi', 'gemini', 'codex'],
@@ -146,8 +149,11 @@ const FALLBACK_PRIORITY = {
  *     by caller: highest-priority → first lane slot)
  */
 export function splitBeadsByProvider(beadIds, caps) {
+    if (caps.agy?.available && !caps.gemini.available) {
+        return splitWithAgy(beadIds, caps);
+    }
     const warnings = [];
-    const availableProviders = ROUTING_PROVIDERS.filter((p) => caps[p].available);
+    const availableProviders = ROUTING_PROVIDERS.filter((p) => caps[p]?.available);
     if (availableProviders.length === 0) {
         return {
             lanes: [],
@@ -181,7 +187,7 @@ export function splitBeadsByProvider(beadIds, caps) {
         cursor += count;
         if (ids.length === 0)
             continue;
-        const fallback = FALLBACK_PRIORITY[preferred].find((provider) => caps[provider].available);
+        const fallback = FALLBACK_PRIORITY[preferred].find((provider) => caps[provider]?.available);
         const provider = caps[preferred].available ? preferred : fallback;
         if (!provider)
             continue;
@@ -199,12 +205,56 @@ export function splitBeadsByProvider(beadIds, caps) {
     const ratio = PRIMARY_PROVIDERS.map((provider) => String(assigned.get(provider)?.length ?? 0)).join(':');
     return { lanes, warnings, degraded, ratio };
 }
+/**
+ * The agy lane takes the Gemini seat: Claude, Pi, and agy split a third
+ * each, or Claude and agy split half each when Pi can't run either. Codex
+ * isn't used. `ratio` stays Claude:Pi:Gemini, so agy's beads don't show in it.
+ */
+function splitWithAgy(beadIds, caps) {
+    const slots = caps.pi.available ? ['claude', 'pi', 'agy'] : ['claude', 'agy'];
+    const assigned = new Map(slots.map((provider) => [provider, []]));
+    const warnings = [];
+    const missing = PRIMARY_PROVIDERS.filter((p) => !caps[p].available && !caps[p].disabled);
+    for (const p of missing) {
+        if (p === 'claude')
+            continue;
+        warnings.push(`${p} lane not available${caps[p].reason ? ` (${caps[p].reason})` : ''}; agy takes its seat`);
+    }
+    const n = beadIds.length;
+    const base = Math.floor(n / slots.length);
+    const extra = n % slots.length;
+    let cursor = 0;
+    slots.forEach((preferred, i) => {
+        const ids = beadIds.slice(cursor, cursor + base + (i < extra ? 1 : 0));
+        cursor += ids.length;
+        if (ids.length === 0)
+            return;
+        const provider = caps[preferred]?.available
+            ? preferred
+            : slots.find((p) => p !== preferred && caps[p]?.available);
+        if (!provider)
+            return;
+        assigned.get(provider)?.push(...ids);
+        if (provider !== preferred) {
+            warnings.push(`${preferred} lane not available${caps[preferred]?.reason ? ` (${caps[preferred]?.reason})` : ''}; reassigned ${ids.length} bead(s) to ${provider}`);
+        }
+    });
+    const lanes = [];
+    for (const provider of ROUTING_PROVIDERS) {
+        const ids = assigned.get(provider) ?? [];
+        if (ids.length > 0)
+            lanes.push({ provider, beadIds: ids });
+    }
+    const ratio = PRIMARY_PROVIDERS.map((p) => String(assigned.get(p)?.length ?? 0)).join(':');
+    return { lanes, warnings, degraded: missing.length > 0, ratio };
+}
 /** Each lane's `swarm-spawn.js` flag name. */
 const SPAWN_LANE = {
     claude: 'cc',
     pi: 'pi',
     gemini: 'gmi',
     codex: 'cod',
+    agy: 'agy',
 };
 /**
  * The lanes a swarm of `panes` panes gets on this host, split the way
@@ -239,6 +289,8 @@ export function adaptPromptFor(provider, ctx) {
             return adaptPromptForGemini(ctx);
         case 'pi':
             return adaptPromptForPi(ctx);
+        case 'agy':
+            return adaptPromptForAgy(ctx);
     }
 }
 /**

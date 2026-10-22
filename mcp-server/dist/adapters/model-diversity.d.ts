@@ -23,7 +23,7 @@
 import type { ExecFn } from '../exec.js';
 import type { SwarmMix } from '../types.js';
 import type { AdaptedPrompt, BeadDispatchContext } from './codex-prompt.js';
-export type ModelProvider = 'claude' | 'codex' | 'gemini' | 'pi';
+export type ModelProvider = 'claude' | 'codex' | 'gemini' | 'pi' | 'agy';
 /** Per-provider availability signal. */
 export interface CliCapability {
     readonly provider: ModelProvider;
@@ -40,6 +40,8 @@ export interface CapabilitiesMap {
     readonly codex: CliCapability;
     readonly gemini: CliCapability;
     readonly pi: CliCapability;
+    /** Antigravity CLI. When it works, it takes the Gemini seat whenever the Gemini lane can't run. */
+    readonly agy?: CliCapability;
 }
 /** One lane in the split result — a provider + the beads assigned to it. */
 export interface DispatchLane {

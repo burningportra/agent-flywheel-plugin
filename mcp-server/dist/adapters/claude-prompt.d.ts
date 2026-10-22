@@ -13,4 +13,5 @@ export declare function adaptPromptForClaude(bead: BeadDispatchContext): Adapted
 export declare function adaptPromptForPi(bead: BeadDispatchContext): AdaptedPrompt;
 /** The Gemini lane is a Pi pane running {@link CURRENT_GEMINI_MODEL_ID}. */
 export declare function adaptPromptForGemini(bead: BeadDispatchContext): AdaptedPrompt;
+export declare function adaptPromptForAgy(bead: BeadDispatchContext): AdaptedPrompt;
 //# sourceMappingURL=claude-prompt.d.ts.map

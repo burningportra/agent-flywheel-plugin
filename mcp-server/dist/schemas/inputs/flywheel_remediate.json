@@ -38,7 +38,8 @@
         "projects_base_misconfig",
         "agy_cli",
         "agy_port_sync",
-        "pstack_plugin"
+        "pstack_plugin",
+        "prompt_suggester_plugin"
       ],
       "description": "The doctor check name to remediate"
     },

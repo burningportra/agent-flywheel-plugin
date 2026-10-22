@@ -1569,7 +1569,7 @@ export declare const TOOLS: ({
             };
             checkName: {
                 type: string;
-                enum: ("orphan_tender_daemons" | "mcp_connectivity" | "agent_mail_liveness" | "br_binary" | "bv_binary" | "ntm_binary" | "cm_binary" | "node_version" | "git_status" | "dist_drift" | "orphaned_worktrees" | "checkpoint_validity" | "claude_cli" | "codex_cli" | "gemini_cli" | "pi_cli" | "swarm_model_ratio" | "codex_config_compat" | "gemini_model_compat" | "rescues_last_30d" | "npm_marketplace_version_drift" | "convergence_state_validity" | "outcome_rubric_validity" | "projects_base_misconfig" | "agy_cli" | "agy_port_sync" | "pstack_plugin")[];
+                enum: ("orphan_tender_daemons" | "mcp_connectivity" | "agent_mail_liveness" | "br_binary" | "bv_binary" | "ntm_binary" | "cm_binary" | "node_version" | "git_status" | "dist_drift" | "orphaned_worktrees" | "checkpoint_validity" | "claude_cli" | "codex_cli" | "gemini_cli" | "pi_cli" | "swarm_model_ratio" | "codex_config_compat" | "gemini_model_compat" | "rescues_last_30d" | "npm_marketplace_version_drift" | "convergence_state_validity" | "outcome_rubric_validity" | "projects_base_misconfig" | "agy_cli" | "agy_port_sync" | "pstack_plugin" | "prompt_suggester_plugin")[];
                 description: string;
             };
             autoConfirm: {

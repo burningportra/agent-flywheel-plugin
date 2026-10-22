@@ -25,7 +25,7 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
-export const CONFIGURABLE_LANES = ['gemini', 'codex', 'pi'];
+export const CONFIGURABLE_LANES = ['gemini', 'codex', 'pi', 'agy'];
 /**
  * R-008 — known keys per nesting level. Adding a new field elsewhere
  * MUST update this map AND DEFAULT_CONFIG. Keep them lockstep.
@@ -43,6 +43,7 @@ export const DEFAULT_CONFIG = {
         gemini: true,
         codex: true,
         pi: true,
+        agy: true,
     },
 };
 const CONFIG_FILENAME = 'flywheel.config.yaml';
@@ -275,6 +276,7 @@ export function loadFlywheelConfigWithWarnings(cwd) {
             gemini: pickBoolean(layers, 'lanes', 'gemini', DEFAULT_CONFIG.lanes.gemini),
             codex: pickBoolean(layers, 'lanes', 'codex', DEFAULT_CONFIG.lanes.codex),
             pi: pickBoolean(layers, 'lanes', 'pi', DEFAULT_CONFIG.lanes.pi),
+            agy: pickBoolean(layers, 'lanes', 'agy', DEFAULT_CONFIG.lanes.agy),
         },
     };
     return {

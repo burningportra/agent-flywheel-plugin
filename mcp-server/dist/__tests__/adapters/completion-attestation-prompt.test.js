@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adaptPromptForClaude, adaptPromptForGemini } from '../../adapters/claude-prompt.js';
+import { adaptPromptForAgy, adaptPromptForClaude, adaptPromptForGemini } from '../../adapters/claude-prompt.js';
 import { adaptPromptForCodex, } from '../../adapters/codex-prompt.js';
 import { CompletionReportSchemaV1 } from '../../completion-report.js';
 const context = {
@@ -18,6 +18,7 @@ const adapters = [
     ['claude', adaptPromptForClaude],
     ['codex', adaptPromptForCodex],
     ['gemini', adaptPromptForGemini],
+    ['agy', adaptPromptForAgy],
 ];
 function completionReportExample(prompt) {
     const match = prompt.match(/## PRE-COMPLETION QUALITY GATE[\s\S]*?```json\n(?<json>[\s\S]*?)\n```/u);
@@ -57,6 +58,19 @@ describe.each(adapters)('%s completion attestation prompt', (_provider, adapt) =
         const report = CompletionReportSchemaV1.parse(completionReportExample(adapt(context).prompt));
         expect(report.beadId).toBe(context.beadId);
         expect(report.agentName).toBe(context.agentName);
+    });
+});
+describe('agy implementer prompt', () => {
+    it('points the pane at AGY native tools and the am CLI under program agy', () => {
+        const adapted = adaptPromptForAgy(context);
+        expect(adapted.provider).toBe('agy');
+        expect(adapted.prompt).toContain('Use AGY native tools:');
+        expect(adapted.prompt).toContain('--program agy --model agy');
+        expect(adapted.prompt.indexOf('Use AGY native tools:')).toBeLessThan(adapted.prompt.indexOf('0a. am macros start-session'));
+    });
+    it('leaves the AGY tool line out of other providers', () => {
+        expect(adaptPromptForGemini(context).prompt).not.toContain('Use AGY native tools:');
+        expect(adaptPromptForClaude(context).prompt).not.toContain('Use AGY native tools:');
     });
 });
 //# sourceMappingURL=completion-attestation-prompt.test.js.map

@@ -66,6 +66,14 @@ function geminiOff(base: CapabilitiesMap = caps()): CapabilitiesMap {
   return { ...base, gemini: { provider: 'gemini', available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' } };
 }
 
+function piOff(base: CapabilitiesMap = caps()): CapabilitiesMap {
+  return { ...base, pi: { provider: 'pi', available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' } };
+}
+
+function withAgy(base: CapabilitiesMap = caps()): CapabilitiesMap {
+  return { ...base, agy: { provider: 'agy', available: true, path: '/usr/local/bin/agy' } };
+}
+
 // ─── CLI detection ─────────────────────────────────────────────────────────
 
 describe('detectCliCapabilities', () => {
@@ -157,6 +165,22 @@ describe('detectCliCapabilities', () => {
       expect(result.gemini).toEqual({ provider: 'gemini', available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' });
       expect(result.pi.available).toBe(true);
       expect(exec.mock.calls.filter(([cmd, args]) => cmd === 'which' && args[0] === 'pi')).toHaveLength(1);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('probes agy with which, and skips it when lanes.agy is false', async () => {
+    const found = await detectCliCapabilities(makeWhichExec({ claude: '/usr/local/bin/claude', agy: '/usr/local/bin/agy' }));
+    expect(found.agy).toEqual({ provider: 'agy', available: true, path: '/usr/local/bin/agy' });
+
+    const cwd = mkdtempSync(join(tmpdir(), 'model-diversity-agy-'));
+    try {
+      writeFileSync(join(cwd, 'flywheel.config.yaml'), 'lanes:\n  agy: false\n');
+      const exec = vi.fn(makeWhichExec({ claude: '/usr/local/bin/claude', agy: '/usr/local/bin/agy' }));
+      const result = await detectCliCapabilities(exec, { cwd });
+      expect(result.agy).toEqual({ provider: 'agy', available: false, disabled: true, reason: 'disabled in flywheel.config.yaml' });
+      expect(exec.mock.calls.some(([cmd, args]) => cmd === 'which' && args[0] === 'agy')).toBe(false);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -324,7 +348,55 @@ describe('splitBeadsByProvider', () => {
   });
 });
 
+describe('splitBeadsByProvider with the agy lane', () => {
+  it('splits Claude and agy 3/3 when Pi and Gemini are switched off, without degrading', () => {
+    const plan = splitBeadsByProvider(SIX, withAgy(piOff(geminiOff())));
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2', 'b3'] },
+      { provider: 'agy', beadIds: ['b4', 'b5', 'b6'] },
+    ]);
+    expect(plan.degraded).toBe(false);
+    expect(plan.warnings).toEqual([]);
+  });
+
+  it('gives Claude the odd bead, and degrades when Pi and Gemini are missing rather than off', () => {
+    const plan = splitBeadsByProvider(['b1', 'b2', 'b3'], withAgy(caps({ pi: false, gemini: false })));
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2'] },
+      { provider: 'agy', beadIds: ['b3'] },
+    ]);
+    expect(plan.degraded).toBe(true);
+    expect(plan.warnings).toHaveLength(2);
+  });
+
+  it('hands every bead to agy when Claude is missing too', () => {
+    const plan = splitBeadsByProvider(SIX, withAgy(caps({ claude: false, pi: false, gemini: false })));
+    expect(plan.lanes).toEqual([{ provider: 'agy', beadIds: SIX }]);
+    expect(plan.degraded).toBe(true);
+  });
+
+  it('gives agy the Gemini seat when Gemini is off and Pi is on', () => {
+    const plan = splitBeadsByProvider(['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7'], withAgy(geminiOff()));
+    expect(plan.lanes).toEqual([
+      { provider: 'claude', beadIds: ['b1', 'b2', 'b3'] },
+      { provider: 'pi', beadIds: ['b4', 'b5'] },
+      { provider: 'agy', beadIds: ['b6', 'b7'] },
+    ]);
+    expect(plan.ratio).toBe('3:2:0');
+    expect(plan.degraded).toBe(false);
+  });
+
+  it('leaves agy unused while the Gemini lane runs', () => {
+    expect(splitBeadsByProvider(SIX, withAgy())).toEqual(splitBeadsByProvider(SIX, caps()));
+  });
+});
+
 describe('swarmMixFor', () => {
+  it('spawns agy panes in the Gemini seat when the Gemini lane is off', () => {
+    expect(swarmMixFor(withAgy(piOff(geminiOff())))).toEqual({ label: 'cc:agy 3:3', spawnFlags: '--cc=3 --agy=3' });
+    expect(swarmMixFor(withAgy(geminiOff()))).toEqual({ label: 'cc:pi:agy 2:2:2', spawnFlags: '--cc=2 --pi=2 --agy=2' });
+  });
+
   it('names only the lanes a six-pane swarm spawns on this host', () => {
     expect(swarmMixFor(caps())).toEqual({ label: 'cc:pi:gmi 2:2:2', spawnFlags: '--cc=2 --pi=2 --gmi=2' });
     expect(swarmMixFor(geminiOff())).toEqual({ label: 'cc:pi 2:4', spawnFlags: '--cc=2 --pi=4' });
@@ -354,6 +426,12 @@ describe('adaptPromptFor', () => {
     coordinatorName: 'SilentHarbor',
     projectKey: 'agent-flywheel-plugin',
   };
+
+  it('agy adapter points the pane at AGY native tools', () => {
+    const out = adaptPromptFor('agy', ctx);
+    expect(out.provider).toBe('agy');
+    expect(out.prompt).toContain('Use AGY native tools:');
+  });
 
   it('claude adapter emits a Step 0 bootstrap with macro_start_session', () => {
     const out = adaptPromptFor('claude', ctx);
